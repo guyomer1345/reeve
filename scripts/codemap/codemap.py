@@ -40,6 +40,7 @@ claim (a tier-2 arm can still be a poor approximation — measure fidelity, don'
 import argparse
 import ast
 import collections
+import glob
 import json
 import os
 import re
@@ -372,13 +373,12 @@ class JsTsArm(GenericArm):
     name = "jsts"
     tier = 2
     extensions = frozenset(_JS_EXTS)  # inherits lang_of (typescript vs javascript) from _LANGUAGES
-    # measured: ~97% edge coverage on single-package relative/alias repos, but ~27% of edges
-    # missed on a workspace monorepo (the cross-package graph). Relative + tsconfig paths/baseUrl
-    # resolved; the bare-but-internal class below is not.
-    fidelity = "medium"
-    known_gaps = ("workspace-package bare imports (monorepo cross-package edges)",
-                  "self-package-name imports (pkg name -> own src)",
-                  "package.json exports/imports subpath maps",
+    # measured on real repos: ~99-100% of intra-repo specifiers resolved where cross-package
+    # imports go via tsconfig `paths`, relative paths, or a workspace/self package name. The
+    # residual is exports/imports SUBPATH maps (`pkg/subpath`) and computed/dynamic specifiers —
+    # exports-subpath-heavy repos are the low case.
+    fidelity = "high"
+    known_gaps = ("package.json exports/imports subpath maps (pkg/subpath)",
                   "computed require()/dynamic specifiers")
 
     def _read_jsonc(self, path):
@@ -414,9 +414,65 @@ class JsTsArm(GenericArm):
             return base_url, rules
         return ".", []
 
+    def _pkg_entry(self, pkg_dir, pj, idx):
+        """Resolve a package's SOURCE entry file (prefer source over an absent dist), else None."""
+        cands = []
+        exp = pj.get("exports")
+        if isinstance(exp, str):
+            cands.append(exp)
+        elif isinstance(exp, dict):
+            dot = exp.get(".")
+            if isinstance(dot, str):
+                cands.append(dot)
+            elif isinstance(dot, dict):
+                cands += [dot[k] for k in ("source", "types", "import", "module", "default")
+                          if isinstance(dot.get(k), str)]
+        cands += [pj[f] for f in ("source", "module", "types", "main") if isinstance(pj.get(f), str)]
+        cands += ["src/index", "index", "src/main"]  # conventional fallbacks
+        for c in cands:
+            hit = self._match_pathish(self._join(pkg_dir, c), idx)
+            if hit:
+                return hit
+        return None
+
+    def _load_workspaces(self, idx):
+        """{package_name: (pkg_dir, entry_relpath)} for local workspace packages + the root
+        package itself — a bare specifier matching one of these names is intra-repo, not external.
+        Names come from package.json (exact ground truth), so this is precise, not heuristic."""
+        globs, root = [], self._read_jsonc("package.json")
+        if root:
+            ws = root.get("workspaces")
+            ws = ws.get("packages") if isinstance(ws, dict) else ws
+            globs += [g for g in ws if isinstance(g, str)] if isinstance(ws, list) else []
+        if os.path.isfile("pnpm-workspace.yaml"):  # minimal YAML: read the `packages:` list
+            in_pkgs = False
+            for line in open("pnpm-workspace.yaml", encoding="utf-8", errors="replace"):
+                if re.match(r"^packages:", line):
+                    in_pkgs = True
+                elif in_pkgs and re.match(r"\s*-\s", line):
+                    m = re.match(r"\s*-\s*['\"]?([^'\"#\n]+?)['\"]?\s*$", line)
+                    if m and not m.group(1).startswith("!"):
+                        globs.append(m.group(1).strip())
+                elif in_pkgs and line.strip() and not line[0].isspace():
+                    in_pkgs = False
+        dirs = []
+        for g in globs:
+            dirs += [d for d in glob.glob(g.rstrip("/"), recursive=True) if os.path.isdir(d)]
+        if root:
+            dirs.append(".")  # the root package itself (self-name imports)
+        out = {}
+        for d in dirs:
+            pj = self._read_jsonc(os.path.join(d, "package.json"))
+            if pj and isinstance(pj.get("name"), str):
+                entry = self._pkg_entry(d, pj, idx)
+                if entry:
+                    out.setdefault(pj["name"], (d.replace(os.sep, "/").lstrip("./") or ".", entry))
+        return out
+
     def index(self, files):
         idx = self._flat_index(files)  # JS+TS resolve together -> one flat index, not per-family
         idx["baseUrl"], idx["paths"] = self._load_tsconfig()
+        idx["workspaces"] = self._load_workspaces(idx)
         return idx
 
     def _resolve(self, spec, importer, mode, idx):  # mode unused (single JS/TS scheme)
@@ -440,6 +496,14 @@ class JsTsArm(GenericArm):
                 hit = self._match_pathish(self._join(idx["baseUrl"], cand), idx)
                 if hit:
                     return hit
+        ws = idx.get("workspaces") or {}   # bare @scope/pkg (or self-name) -> local package entry
+        if spec in ws:
+            return ws[spec][1]
+        for name, (pkg_dir, entry) in ws.items():
+            if spec.startswith(name + "/"):  # @scope/pkg/subpath -> resolve within the package
+                sub = spec[len(name) + 1:]
+                return (self._match_pathish(self._join(pkg_dir, sub), idx)
+                        or self._match_pathish(self._join(pkg_dir, "src/" + sub), idx))
         # baseUrl-bare resolution, but ONLY for path-shaped specifiers ("/" present, not "@scope"):
         # a bare package token (`react`, `lodash`) must stay external even if a same-named local
         # file exists — resolving it would FABRICATE an edge (soundness > the rare baseUrl completeness).

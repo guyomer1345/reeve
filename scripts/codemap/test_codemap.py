@@ -146,16 +146,28 @@ class JsTsPromises(unittest.TestCase):
         self.assertIn(("src/feature.ts", "src/components/Button.ts"), e)  # baseUrl-bare
         self.assertFalse(any("react" in t for _, t in e))                # bare external not fabricated
 
-    def test_workspace_bare_import_is_a_KNOWN_RESIDUAL(self):
-        # A bare `@acme/core` that resolves to a LOCAL workspace package — a real intra-repo
-        # edge this arm does NOT yet capture (bare = external). Asserted as a visible residual.
+    def test_workspace_bare_import_resolves_to_local_package(self):
+        # A bare `@acme/core` matching a local workspace package's name resolves to its source
+        # entry (exact name-match ground truth, not a heuristic). Self-name too.
+        g = run_codemap({
+            "package.json": '{"name":"root","workspaces":["packages/*"]}',
+            "packages/app/x.ts": "import {db} from '@acme/core';\nimport r from 'root';\n",
+            "packages/core/package.json": '{"name":"@acme/core","module":"src/index.ts"}',
+            "packages/core/src/index.ts": "export const db=1;\n",
+            "index.ts": "export const root=1;\n",  # root package self-name entry
+        })
+        e = edges(g)
+        self.assertIn(("packages/app/x.ts", "packages/core/src/index.ts"), e)  # workspace
+        self.assertIn(("packages/app/x.ts", "index.ts"), e)                    # self-name (root)
+
+    def test_workspace_name_collision_is_not_fabricated(self):
+        # An external package whose name is NOT a local package stays external (soundness).
         g = run_codemap({
             "package.json": '{"workspaces":["packages/*"]}',
-            "packages/app/x.ts": "import {db} from '@acme/core';\n",
-            "packages/core/package.json": '{"name":"@acme/core","main":"index.ts"}',
-            "packages/core/index.ts": "export const db=1;\n",
+            "packages/app/x.ts": "import React from 'react';\n",
+            "packages/app/react.ts": "export default 1;\n",  # coincidental local file, different name
         })
-        self.assertNotIn(("packages/app/x.ts", "packages/core/index.ts"), edges(g))
+        self.assertFalse(any("react" in t for _, t in edges(g)))
 
 
 class Fidelity(unittest.TestCase):
