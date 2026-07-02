@@ -40,7 +40,7 @@ claim (a tier-2 arm can still be a poor approximation — measure fidelity, don'
 import argparse
 import ast
 import collections
-import glob
+import fnmatch
 import json
 import os
 import re
@@ -381,6 +381,19 @@ class JsTsArm(GenericArm):
     known_gaps = ("package.json exports/imports subpath maps (pkg/subpath)",
                   "computed require()/dynamic specifiers")
 
+    @staticmethod
+    def _flat_index(files):
+        idx = GenericArm._flat_index(files)
+        # TS declaration files resolve by the name BEFORE `.d` (import './x' -> x.d.ts). Register
+        # that key too, without clobbering a real x.ts/x.js (setdefault -> concrete source wins).
+        for f in files:
+            low = f.lower()
+            for dext in (".d.ts", ".d.mts", ".d.cts"):
+                if low.endswith(dext):
+                    idx["by_noext"].setdefault(f[: -len(dext)].replace(os.sep, "/"), f)
+                    break
+        return idx
+
     def _read_jsonc(self, path):
         if not os.path.isfile(path):
             return None
@@ -435,6 +448,56 @@ class JsTsArm(GenericArm):
                 return hit
         return None
 
+    @staticmethod
+    def _pnpm_workspace_globs():
+        """Read the `packages:` block of pnpm-workspace.yaml (minimal YAML — block list only)."""
+        if not os.path.isfile("pnpm-workspace.yaml"):
+            return []
+        globs, in_pkgs = [], False
+        for line in open("pnpm-workspace.yaml", encoding="utf-8", errors="replace"):
+            if re.match(r"^packages:", line):
+                in_pkgs = True
+            elif in_pkgs and re.match(r"\s*-\s", line):
+                m = re.match(r"\s*-\s*['\"]?([^'\"#\n]+?)['\"]?\s*$", line)
+                if m:
+                    globs.append(m.group(1).strip())
+            elif in_pkgs and line.strip() and not line[0].isspace():
+                in_pkgs = False
+        return globs
+
+    @classmethod
+    def _glob_match(cls, pat_segs, path_segs):
+        """npm/pnpm workspace-glob match: `*` = one path segment, `**` = zero or more."""
+        if not pat_segs:
+            return not path_segs
+        head = pat_segs[0]
+        if head == "**":
+            return any(cls._glob_match(pat_segs[1:], path_segs[i:]) for i in range(len(path_segs) + 1))
+        if not path_segs:
+            return False
+        if fnmatch.fnmatchcase(path_segs[0], head):
+            return cls._glob_match(pat_segs[1:], path_segs[1:])
+        return False
+
+    @classmethod
+    def _pkg_dirs_matching(cls, globs):
+        """Dirs (excluding root) that hold a package.json AND match a workspace glob, found with
+        an EXCLUDE-pruned walk. NOT glob.glob: that descends node_modules/dist/... (slow on an
+        installed repo, and would read node_modules package.json — false workspace packages)."""
+        pats = [g.rstrip("/").split("/") for g in globs]
+        hits = []
+        for dp, dns, fns in os.walk("."):
+            dns[:] = [d for d in dns if d not in DEFAULT_EXCLUDE]
+            if "package.json" not in fns:
+                continue
+            rel = os.path.relpath(dp).replace(os.sep, "/")
+            if rel == "." or rel.startswith(".."):
+                continue
+            segs = rel.split("/")
+            if any(cls._glob_match(p, segs) for p in pats):
+                hits.append(dp)
+        return hits
+
     def _load_workspaces(self, idx):
         """{package_name: (pkg_dir, entry_relpath)} for local workspace packages + the root
         package itself — a bare specifier matching one of these names is intra-repo, not external.
@@ -444,20 +507,9 @@ class JsTsArm(GenericArm):
             ws = root.get("workspaces")
             ws = ws.get("packages") if isinstance(ws, dict) else ws
             globs += [g for g in ws if isinstance(g, str)] if isinstance(ws, list) else []
-        if os.path.isfile("pnpm-workspace.yaml"):  # minimal YAML: read the `packages:` list
-            in_pkgs = False
-            for line in open("pnpm-workspace.yaml", encoding="utf-8", errors="replace"):
-                if re.match(r"^packages:", line):
-                    in_pkgs = True
-                elif in_pkgs and re.match(r"\s*-\s", line):
-                    m = re.match(r"\s*-\s*['\"]?([^'\"#\n]+?)['\"]?\s*$", line)
-                    if m and not m.group(1).startswith("!"):
-                        globs.append(m.group(1).strip())
-                elif in_pkgs and line.strip() and not line[0].isspace():
-                    in_pkgs = False
-        dirs = []
-        for g in globs:
-            dirs += [d for d in glob.glob(g.rstrip("/"), recursive=True) if os.path.isdir(d)]
+        globs += self._pnpm_workspace_globs()
+        pos = [g for g in globs if not g.startswith("!")]  # exclusion globs left for the resolver
+        dirs = self._pkg_dirs_matching(pos) if pos else []
         if root:
             dirs.append(".")  # the root package itself (self-name imports)
         out = {}
@@ -466,7 +518,8 @@ class JsTsArm(GenericArm):
             if pj and isinstance(pj.get("name"), str):
                 entry = self._pkg_entry(d, pj, idx)
                 if entry:
-                    out.setdefault(pj["name"], (d.replace(os.sep, "/").lstrip("./") or ".", entry))
+                    pkg_dir = "." if d == "." else os.path.relpath(d).replace(os.sep, "/")
+                    out.setdefault(pj["name"], (pkg_dir, entry))
         return out
 
     def index(self, files):

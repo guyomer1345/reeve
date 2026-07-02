@@ -169,6 +169,32 @@ class JsTsPromises(unittest.TestCase):
         })
         self.assertFalse(any("react" in t for _, t in edges(g)))
 
+    def test_dts_declaration_file_resolves(self):
+        # `import './x'` resolves to x.d.ts (TS extension resolution) — the audit recall gap.
+        # A concrete x.ts still wins over x.d.ts (setdefault: real source before declaration).
+        g = run_codemap({
+            "src/a.ts": "import {t} from './types';\nimport {u} from './util';\n",
+            "src/types.d.ts": "export type t = number;\n",
+            "src/util.d.ts": "export const u: number;\n",   # only a .d.ts
+            "src/util.ts": "export const u = 1;\n",          # ...and a real source: source must win
+        })
+        e = edges(g)
+        self.assertIn(("src/a.ts", "src/types.d.ts"), e)     # .d.ts resolved
+        self.assertIn(("src/a.ts", "src/util.ts"), e)        # concrete source preferred over .d.ts
+        self.assertNotIn(("src/a.ts", "src/util.d.ts"), e)
+
+    def test_node_modules_package_is_not_a_workspace(self):
+        # SOUNDNESS: a package.json inside an excluded dir (node_modules) must NOT be picked up
+        # as a workspace package by the `packages/**` glob — else a bare `import 'lodash'` would
+        # fabricate an edge to the installed copy. The workspace walk prunes DEFAULT_EXCLUDE.
+        g = run_codemap({
+            "pnpm-workspace.yaml": "packages:\n  - 'packages/**'\n",
+            "packages/app/x.ts": "import _ from 'lodash';\n",
+            "packages/app/node_modules/lodash/package.json": '{"name":"lodash","main":"index.js"}',
+            "packages/app/node_modules/lodash/index.js": "module.exports = {};\n",
+        })
+        self.assertFalse(any("lodash" in t for _, t in edges(g)))
+
 
 class Fidelity(unittest.TestCase):
     """Every language carries an honest `fidelity` + `known_gaps`; `tier` is not trust."""
