@@ -102,7 +102,12 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   + `graph.json` contract (D74 revised D72: the default arm is a zero-dep resolver, not tree-sitter — tree-sitter is
   **reserved** for parse-hard languages, a graceful optional upgrade). Go pulled early for fast ROI (compiler-grade
   graph); C++ last in-wave (needs a compile-DB). `planner`/`debug` depend on it.
-  **[core — engine + tier-0 + Python + JS/TS arms done (D73/D74); Java/C#/C++/Go zero-dep resolver arms next]**
+  **Five precise arms now built + ground-truth measured (D77):** Python · JS/TS (+ exports/imports subpath) · **Go**
+  (100% intra recall, replaced a broken+unsound floor) · **Java** (two-pass, closes the measured 24% no-import gap) ·
+  **C#** (namespace-aware two-pass, 107→3731 edges on newtonsoft); C++ deliberately on the floor (compile-DB); Rust/PHP
+  remain. **Living code-map DESIGNED + verified (D78):** a durable *observed* layer (`graph.observed.json`, provenance
+  per edge) the loop accretes via `verify` runs — resolves regenerate-vs-incremental; impl rides Phase-2/3 (D70).
+  **[core — 5 arms done (D77); living-graph observed layer designed (D78); Rust/PHP + observed-layer build next]**
 - **Brownfield ingest** — **DESIGNED (D68); the `ingest` skill is being authored.** A thin `ingest` skill over
   existing leaves (`research` read → `document` write, no new agent) that seeds behavioural-core **intent from
   the existing `CLAUDE.md`/spec** (un-derivable from code), builds `docs/knowledge/` + a reconstructed

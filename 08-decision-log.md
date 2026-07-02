@@ -1165,8 +1165,102 @@ process gap.
 
 ---
 
+## D77 — Four more precise code-map arms (Go · Java · C# · JS/TS exports-subpath), measured on real repos **[DECIDED + BUILT — implements D72's prevalence build set; fidelity is measured, not asserted]**
+D72 set the build order Python → JS/TS → Java → C# → C++ then Go. This session built the next wave as
+**zero-dep resolver arms** on the D73 driver (D74's default mechanism), each pressure-tested with the D76
+loop — a blind promise-elicitation agent (that cannot see `codemap.py`) writes the resolution spec + property
+tests, then the arm is measured against **ground truth** (`_resolve` per specifier vs `package.json`/`go.mod`,
+NOT a proxy count):
+- **A prior-session audit first.** The prior "27% JS/TS monorepo gap" was a **measurement artifact** — a proxy
+  metric that counted external `node_modules` specifiers as misses. Corrected measurement (per-specifier vs
+  `package.json`): on express/vue/vite **0 fabricated edges** despite 1337 (vite) + 215 (vue) external specifiers
+  correctly dropped; relative recall ~87–100%, workspace ~95–100%. Fixed three real bugs the audit surfaced:
+  `.d.ts` extension resolution, a `glob.glob` that traversed `node_modules` on an installed repo (→ EXCLUDE-pruned
+  walk; a false-workspace-package + perf risk), and a `str.lstrip("./")` char-strip bug.
+- **`GoArm`** (package == directory): reads `go.mod` module paths, resolves module-prefixed imports to the target
+  dir, edges to every non-test `.go` file. **100% intra-repo recall (gin 31/31, cobra 11/11), 0 soundness bugs.**
+  Replaces a **broken + unsound** tier-0 floor — the `path` mode resolved **0%** of Go intra-imports AND
+  *fabricated* edges (`import "errors"`/"context" — Go stdlib — hit the repo's own `errors.go`/`context.go`).
+- **`JavaArm`** (two-pass symbol resolution): pass 1 indexes top-level types → FQN (brace-depth filters nested);
+  pass 2 resolves three channels — explicit imports **+ same-package simple-name refs + inline FQNs**. The latter
+  two carry **no import statement** and are a **measured 24%** of intra-repo type edges on gson (the "~50%"
+  estimate was repo-dependent; gson has disciplined imports). Wildcard `import pkg.*` resolves to *used* names
+  only. Soundness = every channel gates on repo-declared types, so `java.*`/third-party never edge.
+- **`CSharpArm`** (namespace-aware two-pass): namespace is decoupled from directory *and* file, so the floor was
+  near-useless (newtonsoft **945 files → 107 edges**). Pass 1 tracks a namespace stack (file-scoped `;` +
+  block-scoped `{`, nested) → `(namespace, type) → {files}` (partial types → a set); pass 2 resolves `using`
+  (to the **intersection** of the namespace's types with the file's used simple names — never the whole
+  namespace, or the graph is a hairball), same-namespace refs, inline FQNs, `using static`. **107 → 3731 edges**
+  (3.9/node, not a hairball), 0 non-`.cs` targets.
+- **JS/TS exports/imports subpath** (closes the documented `hono/jsx` residual): a local workspace package's
+  subpath (`@acme/core/jsx`, `hono/basic-auth`, `#db/client`) resolves via its `package.json` exports/imports map
+  — exact keys, `*` patterns, source-preferring conditions, and **dist→src derivation** when exports point at an
+  unbuilt dist (the common unbuilt-monorepo case). hono workspace-subpath **9 → 22/23**; register a workspace
+  package even without a resolvable main entry (vite 91 → 267). 0 fabricated edges.
+- **C++ stays on the floor** (deliberate, per D72): a precise arm needs `compile_commands.json`; the floor's
+  quoted-`#include` relative resolution is the sound subset.
+Every measured gap is fed into each arm's **`fidelity` + `known_gaps`** honestly (a tier-2 arm can still be a poor
+approximation — the fidelity signal, D-prefix in graph.json, is *measured*, not inferred from tier). *Rejected:*
+the proxy-count measurement (the 27% artifact); strict Node "encapsulation" for local subpaths (it *hurt* recall
+on unbuilt monorepos — a code map wants the real intra-repo dependency, not runtime encapsulation); tree-sitter
+(D74 — parsing was never the bottleneck). *Evidence:* the four blind specs + ground-truth measurements on
+gin/cobra/gson/newtonsoft/express/vue/vite/hono; 28/28 property tests. → `scripts/codemap/codemap.py`,
+`scripts/codemap/test_codemap.py`, `06`, `11`; implements D72, corrects the prior JS/TS measurement.
+
+---
+
+## D78 — The code-map is a LIVING artifact: a durable *observed* layer that self-corrects through the loop's own runs **[DESIGNED + EMPIRICALLY VERIFIED — implementation deferred; resolves `07` regenerate-vs-incremental; realises D70 flow-overlay + D68 `[D]`]**
+Premise (user): 80% static accuracy on a language is worthless if it *stays* 80% — the graph should improve as the
+loop works in the codebase. Static arms are precision-first but recall-imperfect (dynamic imports, DI, reflection,
+C# source-gen, Go build-tags, dynamic dispatch are structurally invisible to static analysis). The design makes the
+loop's *own activity* close that recall gap. **Design-first, then verified before adopting** (user: "do the tests
+and verifications before adopting").
+- **Two superimposed graphs, kept DISTINCT** (merging corrupts both): a **dependency graph** ("A needs B") = static
+  arms **+** observed runtime **+** observed debug-causal, precision-first; and a **temporal-coupling graph** ("A
+  changes with B") = co-edit affinity, correlational. "Changed together" ≠ "depends on." The D70 map overlays both.
+- **The load-bearing insight: activity buys RECALL, not precision.** Runtime/debug can *reveal* a missed edge (add
+  it); almost nothing the loop does can *retract* a fabricated one ("not exercised" ≠ "not a dependency"). False
+  negatives self-heal; false positives are sticky. ⇒ keep arms precision-first (this *validates* the D77 soundness
+  discipline) and let the loop accrete the missing recall.
+- **Two-layer storage → resolves regenerate-vs-incremental (`07`).** `graph.json` = the static layer, regenerated
+  freely by the arms. `graph.observed.json` = the **durable `[D]` layer** (D68), *accreted* from activity, keyed by
+  stable node IDs (the D70 reserved seam). Regenerate = re-run arms **+ merge** the durable layer whose endpoints
+  still exist. Neither pure-regen (loses learned truth) nor pure-incremental (static drifts). Every edge carries
+  **`provenance`** (`static-arm` | `observed-runtime` | `observed-debug`) + confidence — this subsumes the D77
+  `fidelity` signal (static edges inherit the arm's fidelity; observed edges are ground truth).
+- **Capture home = `verify`, as a pure OBSERVER.** `verify` already *executes the affected flow* end-to-end
+  (its charter: distrust the static artifact, observe real behaviour — the same principle as the observed layer).
+  So the execution cost is sunk; the marginal cost is harvesting what the run touched. `verify` stays artifact-only
+  (D76); the graph **write** lives in a thin post-step (`document`/`commit`). **Emergent property:** because
+  `verify` only exercises the *changed* flow, the graph becomes most accurate exactly where the project is most
+  active — where `planner` blast-radius and `debug` need it most; quiet regions never pay.
+- **`debug` is the premium supplement** — rarest, highest truth (a verified cause→effect link), writes
+  `provenance: observed-debug` at top confidence.
+- **Mechanism is the gate (empirically decisive).** A naive Python call hook (`sys.settrace`/`setprofile`) is **14×**
+  overhead — reject. `sys.monitoring` (3.12+) with **fire-once + `DISABLE`** (each call-site records once then
+  disables) is **1.0×** — adopt. Universal fallback where 3.12+/native is absent = **harvest the coverage artifact**
+  the test run already produces (~1.5×, often already on) → file co-execution. Trigger **selectively**: only where an
+  arm's own `known_gaps` flag dynamism (the static layer self-reports where the observed layer should look).
+- **Verified (Python prototype, before adopting):** a controlled fixture proved runtime catches a dynamic-dispatch
+  edge static *cannot* (`registry.py → plugins/alpha.py` via a runtime-populated dict), **soundly** (0 non-repo
+  edges; a stdlib `json` call correctly dropped), and *confirms* static edges (provenance overlap). On clean code
+  (requests, explicit imports) runtime added **0** new edges — **benefit is conditional on dynamism**, coverage per
+  run is narrow (12/65 exercised → "accurate where active"). Costs measured as above.
+*Rejected:* merging co-edit affinity into the dependency graph (corrupts dependency semantics); a bespoke Python
+tracer in `verify` (14× — and widens verify's charter); strict Node-encapsulation semantics for the observed layer;
+pure-regenerate or pure-incremental graph maintenance. *Open (next):* node-ID stability across renames; observed-edge
+staleness/decay (couples with retention D71 — a debug-causal edge decays far slower than a coverage co-activation);
+precision-retraction (accepted as unsolved — lean on precision-first); the non-Python capture mechanism per stack
+(coverage/native profiler — reasoned, not yet measured). *Evidence:* the prototype measurements (fixture +
+requests + `sys.monitoring` cost); the D77 fidelity signal it builds on; D70 (flow-overlay), D68 (`[D]` layer).
+→ `06`, `07`, `11`; implementation is Phase-2/3 with the console (D70).
+
+---
+
 ## Not yet decided (tracked in `07`)
-Knowledge graph regenerate-vs-incremental; model/effort map; collision **independence test** (waves grouping
+Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
+follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the
+open threads. Model/effort map; collision **independence test** (waves grouping
 decided, D36); Arbiter input contract; autonomous reset mechanism; website stack. Intake follow-ons:
 engineering-feasibility pass **designed as the proportional-rigor gate (D69), implementation deferred**;
 demo-skill mechanics; commitment-status storage. `init` follow-ons: brownfield

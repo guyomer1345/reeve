@@ -99,12 +99,47 @@ pulled early (compiler-grade graph, near-free), C++ sequences last in-wave (need
 Graphless artifacts (SQL, HTML/CSS, shell, JSON/YAML, Markdown, Dockerfile, HCL) are **not** arms — no
 file-to-file import graph. Arms are **not demand-gated** — validation is free (any public repo), so the common set
 is built up front; the Phase-4 demo forces exercising ≥1 non-Python arm.
-**Built (D73/D74):** the shared engine + tier-0 floor + two precise arms ship as `scripts/codemap/codemap.py` —
-one language-agnostic driver over pluggable arms (add a language = `extensions` + `index()` + `edges()`, driver
-untouched). Precise arms: **Python** (`ast`) and **JS/TS** (`JsTsArm` — tsconfig `paths`/`baseUrl` + extension/index
-resolution; beats the floor 4-vs-1 on an alias fixture; no tsconfig → == the floor). Every other recognized source
-language falls to the floor — noded regardless (D75), with edges where a regex exists. Next arms (Java, C#, Go, …)
-are zero-dep resolver arms like `JsTsArm`; tree-sitter stays reserved for parse-hard languages.
+**Built (D73/D74/D77):** the shared engine + tier-0 floor + **five precise arms** ship as
+`scripts/codemap/codemap.py` — one language-agnostic driver over pluggable arms (add a language = `extensions` +
+`index()` + `edges()`, driver untouched). Precise arms, each **measured against ground truth** (D77 — `_resolve`
+per specifier vs `package.json`/`go.mod`, not a proxy count), with a per-language **`fidelity` + `known_gaps`**
+that is measured, not inferred from tier:
+- **Python** (`ast`) — high; gaps = dynamic imports, `__init__` re-export aliasing.
+- **JS/TS** (`JsTsArm`) — tsconfig `paths`/`baseUrl`, extension/index/barrel, workspace packages (npm/pnpm/yarn) by
+  exact name, and `package.json` exports/imports **subpath** maps (incl. **dist→src** derivation for unbuilt
+  monorepos). On express/vue/vite/hono: **0 fabricated edges**, ~87–100% relative + ~95–100% workspace recall.
+- **Go** (`GoArm`, package==dir) — go.mod module-prefix → target dir → every non-test `.go` file. **100% intra
+  recall** (gin/cobra); replaced a **broken+unsound** floor (0% recall + fabricated stdlib edges).
+- **Java** (`JavaArm`, two-pass) — top-level-type FQN index; resolves imports **+ same-package + inline-FQN** refs
+  (the **measured 24%** of edges on gson that carry no import); soundness by repo-declared-only gating.
+- **C#** (`CSharpArm`, namespace-aware two-pass) — namespace stack (file-/block-scoped, nested), `using`→**used-name
+  intersection** (never the whole namespace), same-namespace, inline FQN, `using static`; partial types → all files.
+  newtonsoft **107 → 3731 edges** (3.9/node, not a hairball).
+Every other recognized source language falls to the floor — noded regardless (D75), with edges where a regex exists.
+**C++ stays on the floor deliberately** (needs `compile_commands.json`; the floor's quoted-`#include` relative
+resolution is the sound subset). Remaining build-set arms (Rust, PHP) are zero-dep resolver arms like these;
+tree-sitter stays reserved for parse-hard languages.
+
+## The graph is a LIVING artifact — a durable observed layer **[DESIGNED + VERIFIED — D78; impl Phase-2/3]**
+Static arms are precision-first but recall-imperfect (dynamic imports, DI, reflection, C# source-gen, dynamic
+dispatch are structurally invisible to *any* static analysis). D78 makes the loop's **own activity** close that
+recall gap so the graph improves as the project runs, rather than staying at its static ceiling.
+- **Two DISTINCT graphs** (merging corrupts both): a **dependency graph** ("A needs B") = static + observed-runtime
+  + observed-debug, precision-first; and a **temporal-coupling graph** ("A changes with B") = co-edit affinity.
+- **Load-bearing insight — activity buys RECALL not precision:** runtime/debug *add* a missed edge; nothing cheaply
+  *retracts* a false one ("not exercised" ≠ "not a dependency"). So arms stay precision-first (validates D77's
+  soundness discipline) and the loop accretes the missing recall.
+- **Two-layer storage:** `graph.json` (static, regenerated freely by arms) + `graph.observed.json` (the durable
+  `[D]` layer, accreted, stable-node-ID-keyed); regenerate = re-run arms **+ merge** the observed layer whose
+  endpoints survive. Every edge carries **`provenance`** (`static-arm`|`observed-runtime`|`observed-debug`) +
+  confidence — subsumes the D77 fidelity signal. This resolves the regenerate-vs-incremental question (below).
+- **Capture home = `verify` as a pure observer** (it already executes the affected flow; write lives in a
+  `document`/`commit` post-step, keeping verify artifact-only per D76); `debug` is the premium causal supplement.
+  Emergent: the graph is most accurate exactly where the project is most active.
+- **Mechanism (measured):** `sys.monitoring` fire-once+`DISABLE` (Py 3.12+) = **1.0×**; naive hook = 14× (rejected);
+  coverage-artifact harvest (~1.5×) is the universal fallback. Trigger **selectively** where an arm's `known_gaps`
+  flag dynamism. Verified on a Python fixture (catches a dynamic-dispatch edge static can't, soundly) + requests
+  (clean code → 0 new: benefit is conditional on dynamism).
 
 ## Granularity **[DECIDED]**
 Start file-level; leave a seam for symbol/function-level later.
@@ -116,4 +151,6 @@ each node's `# Sessions` is **cap-and-archived** — last-*K* raw entries on dis
 with a one-line archive pointer; a deterministic script does this, so the entry format is **strict/lint-parseable**
 (`## [date] kind | title`) to split entries mechanically. A `Lessons` zone (distilled patterns) is left as a
 **deferred** signal-quality feature. **Staleness** = a diff-based signal (code changed without its node) that
-schedules a doc-fix, not a prune. Still open: regenerate-vs-incremental for the graph (`07`).
+schedules a doc-fix, not a prune. **Regenerate-vs-incremental is resolved (D78):** the static layer regenerates
+(cannot drift), the durable *observed* layer accretes and is **merged** on regenerate (endpoints that survive);
+open D78 follow-ons = node-ID stability across renames + observed-edge staleness/decay.

@@ -63,7 +63,9 @@ Deliberately deferred — known unknowns, to close during build or later.
   bootstrap.
 
 ## Deferred (post-MVP or later)
-- **Knowledge graph regenerate-vs-incremental** (`06`) — shape decided (D38/D41), mechanism deferred.
+- **Knowledge graph regenerate-vs-incremental** (`06`) — **RESOLVED (D78):** static layer regenerates + the durable
+  *observed* layer is merged on regenerate. New open follow-ons from D78: node-ID stability across renames;
+  observed-edge staleness/decay (couples with retention D71); the non-Python runtime-capture mechanism (per stack).
 - **Model + effort routing** map (`01`).
 - **Collision-model independence test** (`01`/`02`) — waves grouping decided (D36).
 - **Arbiter** batch-vs-one input contract (`01`).
@@ -73,10 +75,11 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Project map + flow view (`03`, D70) — feature + architecture decided, these bits open.** (1) Map as its
   **own tab vs the console home/overview** (lean: home/overview — it's the structural face of the project-state
   view below). (2) A captured flow as a **first-class knowledge artifact** (versioned, regenerable, `06`) vs
-  **ephemeral** (on-demand, discarded). (3) The **runtime-capture mechanism** — differential trace is the working
-  direction, not decided; a static-slice approach may still win for some stacks; per-stack trace arm + the
-  capture **trigger/boundary** UX (leans on the QA harness) TBD. (4) **Remote-control auth** (Cloudflare Access /
-  token) — reserved, warning-only for now.
+  **ephemeral** (on-demand, discarded — but D78 leans **durable [D] layer**). (3) The **runtime-capture mechanism**
+  — **decided (D78):** `verify` is the observer (it already runs the affected flow); mechanism = `sys.monitoring`
+  fire-once (Py 3.12+, measured 1.0×) with coverage-harvest (~1.5×) as the universal fallback; trigger selectively
+  where an arm's `known_gaps` flag dynamism. Open: the per-stack mechanism for non-Python (reasoned, not measured).
+  (4) **Remote-control auth** (Cloudflare Access / token) — reserved, warning-only for now.
 - **Automated testing**, **test-from-anywhere**, **paid device/QA platform** (`04`) — designed-for,
   not built.
 - **Project-state view (`03`/`05`/`06`) — user-raised 2026-06-30.** No single synthesized "where is this
