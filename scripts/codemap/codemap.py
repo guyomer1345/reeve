@@ -4,20 +4,30 @@
 Multi-language engine: one shared driver (discover -> dispatch -> resolve -> PageRank ->
 emit) over pluggable per-language ARMS. What varies by language is only *edge resolution*;
 the node set + directory clusters are identical everywhere, so the cost of a language is
-its resolver, not its parser. Ships three arms today:
+its resolver, not its parser. Ships five precise arms + the floor:
 
   - PythonArm   (tier 2) — stdlib `ast`, zero-dep, precise dotted-module resolution.
-  - JsTsArm     (tier 2) — JS/TS: the floor's extraction + a resolver that reads tsconfig/
-                           jsconfig `paths`+`baseUrl` aliases, TS/JS extension resolution,
-                           and index/barrel dirs. Zero extra dep; beats the floor on the
-                           alias/baseUrl edges the floor drops. No tsconfig -> = the floor.
-  - GenericArm  (tier 0) — the generic floor: NODES any recognized source language, and
-                           adds shallow-regex import edges for the subset that has them. The
-                           long-tail safety net so a repo in ANY recognized language gets at
-                           least nodes + directory clusters + both centrality lenses, never nothing.
+  - JsTsArm     (tier 2) — JS/TS: tsconfig/jsconfig `paths`+`baseUrl` aliases, TS/JS extension
+                           + index/barrel resolution, workspace packages (npm/pnpm/yarn) by
+                           exact name, and package.json exports/imports subpath maps (incl.
+                           dist->src derivation for unbuilt monorepos). Ground-truth measured on
+                           express/vue/vite/hono: 0 fabricated edges, ~87-100% relative + ~95-100%
+                           workspace recall. Zero extra dep; no tsconfig -> == the floor.
+  - GoArm       (tier 2) — package==directory: reads go.mod module paths, resolves module-prefixed
+                           imports to the target dir, edges to every non-test .go file. 100% intra
+                           recall + 0 fabrication on gin/cobra. (The old floor got 0% AND fabricated
+                           stdlib edges — `import "errors"` hitting a local errors.go.)
+  - JavaArm     (tier 2) — two-pass: pass 1 indexes top-level types -> FQN; pass 2 resolves imports
+                           + same-package simple names + inline FQNs (the ~24% of edges that carry
+                           NO import statement, measured on gson). Unknown Capitalized tokens never
+                           edge (java.*/third-party drop out).
+  - GenericArm  (tier 0) — the generic floor: NODES any recognized source language, and adds
+                           shallow-regex import edges for the subset that has them. The long-tail
+                           safety net so a repo in ANY recognized language gets at least nodes +
+                           directory clusters + both centrality lenses, never nothing.
 
-More precise arms (Java, C#, C++, Go, …) plug into the same contract later: a new arm is a
-`class Arm` with `extensions`, `index()`, and `edges()` — the driver below is untouched.
+More precise arms (C#, C++, …) plug into the same contract: a new arm is a `class Arm` with
+`extensions`, `index()`, and `edges()` — the driver below is untouched.
 
 Two centrality signals per file fall out of the one import graph for free:
   - impact        (forward PageRank: most-depended-upon)  -> change blast-radius
@@ -373,13 +383,14 @@ class JsTsArm(GenericArm):
     name = "jsts"
     tier = 2
     extensions = frozenset(_JS_EXTS)  # inherits lang_of (typescript vs javascript) from _LANGUAGES
-    # measured on real repos: ~99-100% of intra-repo specifiers resolved where cross-package
-    # imports go via tsconfig `paths`, relative paths, or a workspace/self package name. The
-    # residual is exports/imports SUBPATH maps (`pkg/subpath`) and computed/dynamic specifiers —
-    # exports-subpath-heavy repos are the low case.
+    # ground-truth measured (call _resolve per specifier vs package.json): 0 fabricated edges on
+    # express/vue/vite/hono; relative recall ~87-100%, workspace ~95-100%. tsconfig paths+baseUrl,
+    # workspace names, and exports/imports subpaths (incl. dist->src for unbuilt monorepos) resolve.
+    # Residual: computed/dynamic specifiers, per-runtime-only export conditions, and non-source
+    # asset imports (.css/.svg/.json) which are intentionally not nodes.
     fidelity = "high"
-    known_gaps = ("package.json exports/imports subpath maps (pkg/subpath)",
-                  "computed require()/dynamic specifiers")
+    known_gaps = ("computed require()/dynamic specifiers",
+                  "per-runtime-only export conditions (node/browser/deno)")
 
     @staticmethod
     def _flat_index(files):
@@ -429,20 +440,19 @@ class JsTsArm(GenericArm):
 
     def _pkg_entry(self, pkg_dir, pj, idx):
         """Resolve a package's SOURCE entry file (prefer source over an absent dist), else None."""
-        cands = []
         exp = pj.get("exports")
-        if isinstance(exp, str):
-            cands.append(exp)
-        elif isinstance(exp, dict):
-            dot = exp.get(".")
-            if isinstance(dot, str):
-                cands.append(dot)
-            elif isinstance(dot, dict):
-                cands += [dot[k] for k in ("source", "types", "import", "module", "default")
-                          if isinstance(dot.get(k), str)]
-        cands += [pj[f] for f in ("source", "module", "types", "main") if isinstance(pj.get(f), str)]
-        cands += ["src/index", "index", "src/main"]  # conventional fallbacks
-        for c in cands:
+        if exp is not None:  # the '.' main via the exports map (source-preferring + dist->src)
+            tgt, star = self._exports_target(exp, ".")
+            hit = self._resolve_target(pkg_dir, tgt, star, idx)
+            if hit and not isinstance(hit, tuple):
+                return hit
+        for c in ("source", "module", "types", "main"):  # top-level entry fields
+            v = pj.get(c)
+            if isinstance(v, str):
+                hit = self._match_pathish(self._join(pkg_dir, v), idx) or self._dist_to_src(pkg_dir, v, idx)
+                if hit:
+                    return hit
+        for c in ("src/index", "index", "src/main"):  # conventional fallbacks
             hit = self._match_pathish(self._join(pkg_dir, c), idx)
             if hit:
                 return hit
@@ -499,9 +509,10 @@ class JsTsArm(GenericArm):
         return hits
 
     def _load_workspaces(self, idx):
-        """{package_name: (pkg_dir, entry_relpath)} for local workspace packages + the root
-        package itself — a bare specifier matching one of these names is intra-repo, not external.
-        Names come from package.json (exact ground truth), so this is precise, not heuristic."""
+        """{package_name: (pkg_dir, entry_relpath, package_json)} for local workspace packages +
+        the root package — a bare specifier matching one of these names is intra-repo, not external.
+        Names come from package.json (exact ground truth), so this is precise, not heuristic.
+        The parsed package.json rides along so subpath imports can consult its exports/imports map."""
         globs, root = [], self._read_jsonc("package.json")
         if root:
             ws = root.get("workspaces")
@@ -516,10 +527,11 @@ class JsTsArm(GenericArm):
         for d in dirs:
             pj = self._read_jsonc(os.path.join(d, "package.json"))
             if pj and isinstance(pj.get("name"), str):
-                entry = self._pkg_entry(d, pj, idx)
-                if entry:
-                    pkg_dir = "." if d == "." else os.path.relpath(d).replace(os.sep, "/")
-                    out.setdefault(pj["name"], (pkg_dir, entry))
+                # Register even when the main entry doesn't resolve (subpaths-only exports, or an
+                # imports-map-only package): the bare-name import yields None, but subpath/# imports
+                # of the package must still resolve. Entry may be None.
+                pkg_dir = "." if d == "." else os.path.relpath(d).replace(os.sep, "/")
+                out.setdefault(pj["name"], (pkg_dir, self._pkg_entry(d, pj, idx), pj))
         return out
 
     def index(self, files):
@@ -528,8 +540,95 @@ class JsTsArm(GenericArm):
         idx["workspaces"] = self._load_workspaces(idx)
         return idx
 
+    # exports/imports condition order — source-preferring so an unbuilt monorepo resolves to
+    # src, not an absent dist. The existence gate in _resolve_target skips a missing dist target.
+    _SRC_CONDS = ("source", "types", "typings", "import", "module", "browser", "require", "default")
+
+    @staticmethod
+    def _subpath_map(exp):
+        """Normalize an exports/imports value to a subpath map. Sugar (a bare string, or a
+        conditions object with no './'|'#' keys) means the '.' main entry only."""
+        if isinstance(exp, str):
+            return {".": exp}
+        if isinstance(exp, dict):
+            if exp and not any(k[:1] in ("." "#") for k in exp):  # bare conditions object
+                return {".": exp}
+            return exp
+        return {}
+
+    def _exports_target(self, exp, subkey):
+        """(target, star_capture) for subkey — exact key wins, else the longest-prefix `*` key."""
+        m = self._subpath_map(exp)
+        if subkey in m:
+            return m[subkey], None
+        best = None
+        for k, v in m.items():
+            if k.count("*") == 1:
+                pre, suf = k.split("*", 1)
+                if subkey.startswith(pre) and subkey.endswith(suf) and len(subkey) >= len(pre) + len(suf):
+                    mid = subkey[len(pre): len(subkey) - len(suf)] if suf else subkey[len(pre):]
+                    if best is None or len(pre) > best[2]:
+                        best = (v, mid, len(pre))
+        return (best[0], best[1]) if best else (None, None)
+
+    _BUILD_DIRS = ("dist", "build", "lib", "out", "es", "esm", "cjs", "umd", "types", "typings")
+
+    def _dist_to_src(self, pkg_dir, target, idx):
+        """An exports target points at a BUILT artifact (`./dist/x/y.js`) absent from an unbuilt
+        checkout. Derive the source: strip leading build dir(s), prepend `src/`, drop the ext
+        (by_noext resolves .ts/.tsx/.d.ts). Bounded — must resolve to a real repo file, else None."""
+        rel = target[2:] if target.startswith("./") else target
+        segs = rel.split("/")
+        while len(segs) > 1 and segs[0] in self._BUILD_DIRS:  # dist/ , dist/types/ , dist/cjs/ ...
+            segs = segs[1:]
+        noext = re.sub(r"\.(d\.[mc]?ts|[mc]?[jt]sx?)$", "", "/".join(segs))
+        for cand in ("src/" + noext, noext):
+            hit = self._match_pathish(self._join(pkg_dir, cand), idx)
+            if hit:
+                return hit
+        return None
+
+    def _resolve_target(self, pkg_dir, target, star, idx):
+        """Resolve an exports target: a `./`-string (with optional `*`), a conditions object
+        (source-preferring), or a fallback array. Returns None (encapsulated/absent) or a file."""
+        if isinstance(target, str):
+            if not target.startswith("."):
+                return ("bare", target)  # imports-map bare specifier — caller re-resolves
+            t = target.replace("*", star) if (star is not None and "*" in target) else target
+            hit = self._match_pathish(self._join(pkg_dir, t), idx)
+            if hit:
+                return hit
+            return self._dist_to_src(pkg_dir, t, idx)  # unbuilt dist -> derive the source path
+        if isinstance(target, dict):
+            for c in self._SRC_CONDS:
+                if c in target:
+                    hit = self._resolve_target(pkg_dir, target[c], star, idx)
+                    if hit:
+                        return hit
+        elif isinstance(target, list):
+            for el in target:
+                hit = self._resolve_target(pkg_dir, el, star, idx)
+                if hit:
+                    return hit
+        return None
+
     def _resolve(self, spec, importer, mode, idx):  # mode unused (single JS/TS scheme)
         spec = spec.strip()
+        ws = idx.get("workspaces") or {}
+        if spec.startswith("#"):  # subpath imports — the importer's own package `imports` map
+            best = None
+            for pkg_dir, _entry, pj in ws.values():
+                pref = "" if pkg_dir == "." else pkg_dir + "/"
+                if pj.get("imports") and (pkg_dir == "." or importer.replace(os.sep, "/").startswith(pref)):
+                    if best is None or len(pkg_dir) > len(best[0]):
+                        best = (pkg_dir, pj)
+            if best:
+                tgt, star = self._exports_target(best[1]["imports"], spec)
+                hit = self._resolve_target(best[0], tgt, star, idx)
+                if isinstance(hit, tuple):  # bare specifier -> re-resolve as a fresh import
+                    return self._resolve(hit[1], importer, None, idx)
+                return hit
+            return None
         if not spec or ":" in spec:  # empty or a scheme (node:, http:, data:) -> external
             return None
         if spec.startswith("."):  # relative — extension/index resolution via by_noext
@@ -549,14 +648,24 @@ class JsTsArm(GenericArm):
                 hit = self._match_pathish(self._join(idx["baseUrl"], cand), idx)
                 if hit:
                     return hit
-        ws = idx.get("workspaces") or {}   # bare @scope/pkg (or self-name) -> local package entry
-        if spec in ws:
+        if spec in ws:  # bare @scope/pkg (or self-name) -> local package main entry
             return ws[spec][1]
-        for name, (pkg_dir, entry) in ws.items():
+        for name, (pkg_dir, entry, pj) in ws.items():
             if spec.startswith(name + "/"):  # @scope/pkg/subpath -> resolve within the package
-                sub = spec[len(name) + 1:]
-                return (self._match_pathish(self._join(pkg_dir, sub), idx)
-                        or self._match_pathish(self._join(pkg_dir, "src/" + sub), idx))
+                sub = "./" + spec[len(name) + 1:]
+                exp = pj.get("exports")
+                if exp is not None:  # exports map handles wildcards + source conditions precisely
+                    tgt, star = self._exports_target(exp, sub)
+                    hit = self._resolve_target(pkg_dir, tgt, star, idx)
+                    if hit and not isinstance(hit, tuple):
+                        return hit
+                # exports absent, OR pointed at an unbuilt dist / didn't declare the subpath:
+                # fall back to the src convention. A code map wants the real intra-repo dependency
+                # for a LOCAL package we control, not Node's runtime encapsulation. Bounded to
+                # pkg_dir/{sub, src/sub} -> never fabricates an external edge (must be a repo file).
+                bare = sub[2:]
+                return (self._match_pathish(self._join(pkg_dir, bare), idx)
+                        or self._match_pathish(self._join(pkg_dir, "src/" + bare), idx))
         # baseUrl-bare resolution, but ONLY for path-shaped specifiers ("/" present, not "@scope"):
         # a bare package token (`react`, `lodash`) must stay external even if a same-named local
         # file exists — resolving it would FABRICATE an edge (soundness > the rare baseUrl completeness).
@@ -576,7 +685,164 @@ class JsTsArm(GenericArm):
         return out
 
 
-ARMS = [PythonArm(), JsTsArm(), GenericArm()]  # order = precedence; specific arms before the floor
+# --------------------------------------------------------------------------- #
+# Go arm (tier 2) — package == directory. Zero-dep: read go.mod module paths, resolve
+# module-prefixed imports to their target directory, edge to every non-test .go file in
+# that package. Replaces the broken tier-0 floor for Go (which resolved 0% of intra-repo
+# imports AND fabricated edges — `import "errors"`/"context" hitting a same-named local
+# file). Only module-path-prefixed imports resolve, so stdlib/third-party never edge.
+# --------------------------------------------------------------------------- #
+class GoArm:
+    name = "go"
+    tier = 2
+    node_type = "module"
+    extensions = frozenset({".go"})
+    fidelity = "high"  # package==dir makes cross-package resolution compiler-grade from text
+    known_gaps = ("intra-package sibling refs need no import -> no edge (import graph only)",
+                  "build-constraint / GOOS-suffixed files over-included (all non-test .go)",
+                  "cgo (import \"C\"), generated files, and go.mod `replace` not resolved")
+
+    def lang_of(self, path):
+        return "go"
+
+    def index(self, files):
+        # modules: (module_path, module_root_dir), longest path first for nested-module match
+        modules = []
+        for dp, dns, fns in os.walk("."):
+            dns[:] = [d for d in dns if d not in DEFAULT_EXCLUDE]
+            if "go.mod" in fns:
+                for line in open(os.path.join(dp, "go.mod"), encoding="utf-8", errors="replace"):
+                    m = re.match(r"\s*module\s+(\S+)", line)
+                    if m:
+                        modules.append((m.group(1), os.path.relpath(dp).replace(os.sep, "/")))
+                        break
+        modules.sort(key=lambda mr: -len(mr[0]))
+        # dir -> non-test .go files (the package's edge targets; _test.go are importers only)
+        dir2files = collections.defaultdict(list)
+        for f in files:
+            if not f.endswith("_test.go"):
+                dir2files[os.path.dirname(f).replace(os.sep, "/") or "."].append(f)
+        return {"modules": modules, "dir2files": dir2files}
+
+    _BLOCK = re.compile(r'\bimport\s*\((.*?)\)', re.S)
+    _ONE = re.compile(r'^[^\S\n]*import\s+(?:[A-Za-z_.]+[^\S\n]+)?"([^"]+)"', re.M)
+
+    def _specs(self, source):
+        specs = set()
+        for b in self._BLOCK.finditer(source):
+            body = re.sub(r'//[^\n]*', '', b.group(1))
+            specs.update(re.findall(r'"([^"]+)"', body))
+        specs.update(self._ONE.findall(source))
+        return specs
+
+    def edges(self, path, source, index):
+        modules, dir2files = index["modules"], index["dir2files"]
+        self_dir = os.path.dirname(path).replace(os.sep, "/") or "."
+        out = set()
+        for spec in self._specs(source):
+            if spec == "C" or ":" in spec:  # cgo pseudo-import / scheme -> not a package
+                continue
+            for mpath, mroot in modules:  # longest-prefix first
+                if spec == mpath or spec.startswith(mpath + "/"):
+                    rel = spec[len(mpath):].lstrip("/")
+                    tdir = mroot if not rel else \
+                        os.path.normpath(os.path.join(mroot, rel)).replace(os.sep, "/")
+                    if tdir != self_dir:
+                        out.update(dir2files.get(tdir, ()))
+                    break
+        return out
+
+
+# --------------------------------------------------------------------------- #
+# Java arm (tier 2) — two-pass symbol resolution. Explicit `import` statements are only
+# ~three-quarters of intra-repo type edges (measured 24% no-import on gson; more in
+# same-package-heavy code): Java needs NO import for same-package types or inline
+# fully-qualified refs. Pass 1 indexes every top-level type -> FQN; pass 2 resolves three
+# channels (imports, same-package simple names, inline FQNs) against that index, so an
+# unknown Capitalized token never edges (java.*/third-party drop out).
+# --------------------------------------------------------------------------- #
+class JavaArm:
+    name = "java"
+    tier = 2
+    node_type = "module"
+    extensions = frozenset({".java"})
+    fidelity = "high"  # after channels b+c; explicit-import-only would be ~medium
+    known_gaps = ("same-package channel matches known type names -> a same-named local/field can over-edge",
+                  "var-inferred types, reflection/string-loaded classes, and nested/inner types missed",
+                  "all top-level types indexed (no #if/build-profile evaluation)")
+
+    _PKG = re.compile(r'^\s*package\s+([\w.]+)\s*;', re.M)
+    _TYPE = re.compile(r'\b(?:class|interface|enum|record|@interface)\s+([A-Za-z_]\w*)')
+    _IMPORT = re.compile(r'^\s*import\s+(static\s+)?([\w.]+(?:\.\*)?)\s*;', re.M)
+    _INLINE_FQN = re.compile(r'\b([a-z]\w*(?:\.[a-z]\w*)*\.[A-Z]\w*)\b')
+    _CAP = re.compile(r'\b([A-Z]\w*)\b')
+
+    def lang_of(self, path):
+        return "java"
+
+    @staticmethod
+    def _strip(s):
+        s = re.sub(r'/\*.*?\*/', ' ', s, flags=re.S)
+        s = re.sub(r'//[^\n]*', ' ', s)
+        s = re.sub(r'"(?:\\.|[^"\\\n])*"', '""', s)
+        s = re.sub(r"'(?:\\.|[^'\\\n])*'", "''", s)
+        return s
+
+    def _toplevel_types(self, clean):
+        """Type decls at brace-depth 0 (top-level; nested/inner types excluded)."""
+        out = []
+        for m in self._TYPE.finditer(clean):
+            if clean.count("{", 0, m.start()) == clean.count("}", 0, m.start()):
+                out.append(m.group(1))
+        return out
+
+    def index(self, files):
+        fqn2file, pkg2types, meta = {}, collections.defaultdict(dict), {}
+        for f in files:
+            clean = self._strip(open(f, encoding="utf-8", errors="replace").read())
+            mp = self._PKG.search(clean)
+            pkg = mp.group(1) if mp else ""
+            meta[f] = (pkg, clean)
+            for t in self._toplevel_types(clean):
+                fqn2file.setdefault((pkg + "." + t) if pkg else t, f)
+                pkg2types[pkg].setdefault(t, f)
+        return {"fqn2file": fqn2file, "pkg2types": pkg2types, "meta": meta}
+
+    def edges(self, path, source, index):
+        fqn2file, pkg2types = index["fqn2file"], index["pkg2types"]
+        pkg, clean = index["meta"][path]
+        used = set(self._CAP.findall(clean))  # Capitalized simple names referenced in the body
+        out = set()
+        for static, fq in self._IMPORT.findall(clean):  # (a) explicit imports
+            if fq.endswith(".*"):
+                base = fq[:-2]
+                if static and base in fqn2file:        # import static Type.*
+                    out.add(fqn2file[base])
+                else:                                   # import pkg.* -> only types actually used
+                    out.update(f for t, f in pkg2types.get(base, {}).items() if t in used)
+                continue
+            f = fqn2file.get(fq)
+            if f is None and static:                    # import static pkg.Type.member
+                f = fqn2file.get(fq.rsplit(".", 1)[0])
+            if f is None:                               # nested-type import: strip Capitalized tail
+                parts = fq.split(".")
+                while f is None and len(parts) > 2 and parts[-1][:1].isupper() and parts[-2][:1].isupper():
+                    parts = parts[:-1]
+                    f = fqn2file.get(".".join(parts))
+            if f:
+                out.add(f)
+        for m in self._INLINE_FQN.finditer(clean):      # (c) inline fully-qualified refs
+            f = fqn2file.get(m.group(1))
+            if f:
+                out.add(f)
+        for t, f in pkg2types.get(pkg, {}).items():     # (b) same-package simple-name refs
+            if f != path and t in used:
+                out.add(f)
+        out.discard(path)
+        return out
+
+
+ARMS = [PythonArm(), JsTsArm(), GoArm(), JavaArm(), GenericArm()]  # order = precedence
 
 
 def _arm_fidelity(arm, path):

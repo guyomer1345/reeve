@@ -196,6 +196,124 @@ class JsTsPromises(unittest.TestCase):
         self.assertFalse(any("lodash" in t for _, t in edges(g)))
 
 
+class JsTsExportsSubpath(unittest.TestCase):
+    """Closing the exports/imports subpath residual (hono/jsx class) for LOCAL packages."""
+
+    def test_exact_and_wildcard_exports_subpath(self):
+        g = run_codemap({
+            "package.json": '{"name":"root","workspaces":["packages/*"]}',
+            "packages/core/package.json": '{"name":"@acme/core","exports":{'
+                '"./jsx":"./src/jsx/index.ts","./features/*":"./src/features/*.ts"}}',
+            "packages/core/src/jsx/index.ts": "export const jsx=1;\n",
+            "packages/core/src/features/auth.ts": "export const a=1;\n",
+            "packages/app/x.ts": "import {jsx} from '@acme/core/jsx';\n"
+                                 "import {a} from '@acme/core/features/auth';\n",
+        })
+        e = edges(g)
+        self.assertIn(("packages/app/x.ts", "packages/core/src/jsx/index.ts"), e)          # exact
+        self.assertIn(("packages/app/x.ts", "packages/core/src/features/auth.ts"), e)      # wildcard *
+
+    def test_conditional_dist_target_derives_to_source(self):
+        # exports point ONLY at unbuilt dist -> derive the src path (hono's real shape).
+        g = run_codemap({
+            "package.json": '{"name":"hono","exports":{"./basic-auth":{'
+                '"types":"./dist/types/middleware/basic-auth/index.d.ts",'
+                '"import":"./dist/middleware/basic-auth/index.js"}}}',
+            "src/middleware/basic-auth/index.ts": "export const b=1;\n",
+            "src/app.ts": "import {b} from 'hono/basic-auth';\n",
+        })
+        self.assertIn(("src/app.ts", "src/middleware/basic-auth/index.ts"), edges(g))
+
+    def test_subpath_of_external_package_not_fabricated(self):
+        # `react-dom/client` — react-dom is NOT a local package -> stays external (soundness).
+        g = run_codemap({
+            "package.json": '{"name":"root","workspaces":["packages/*"]}',
+            "packages/app/x.ts": "import c from 'react-dom/client';\n",
+            "packages/app/client.ts": "export default 1;\n",  # coincidental local file
+        })
+        self.assertFalse(any("client" in t for _, t in edges(g)))
+
+    def test_hash_imports_internal_specifier(self):
+        g = run_codemap({
+            "package.json": '{"name":"@acme/core","imports":{"#db/*":"./src/db/*.ts"}}',
+            "src/db/client.ts": "export const c=1;\n",
+            "src/service.ts": "import {c} from '#db/client';\n",
+        })
+        self.assertIn(("src/service.ts", "src/db/client.ts"), edges(g))
+
+
+class GoArmTests(unittest.TestCase):
+    def test_multi_package_fanout_and_test_exclusion(self):
+        g = run_codemap({
+            "go.mod": "module example.com/app\n",
+            "main.go": 'package main\nimport (\n\tbar "example.com/app/bar"\n\t_ "example.com/app/baz"\n)\n',
+            "bar/a.go": "package bar\n",
+            "bar/b.go": "package bar\n",
+            "bar/bar_test.go": "package bar\n",   # never an edge target
+            "baz/baz.go": "package baz\n",         # blank import still an edge
+        })
+        e = edges(g)
+        self.assertIn(("main.go", "bar/a.go"), e)
+        self.assertIn(("main.go", "bar/b.go"), e)          # whole-package fan-out
+        self.assertIn(("main.go", "baz/baz.go"), e)        # blank import
+        self.assertNotIn(("main.go", "bar/bar_test.go"), e)  # _test.go excluded as target
+
+    def test_soundness_stdlib_and_thirdparty_dropped(self):
+        # The old floor bug: `import "errors"` fabricated an edge to a local errors.go. Gone.
+        g = run_codemap({
+            "go.mod": "module m\n",
+            "context.go": 'package m\nimport (\n\t"errors"\n\t"context"\n\t"github.com/x/y"\n)\n',
+            "errors.go": "package m\n",
+        })
+        self.assertEqual(edges(g), set())  # stdlib + third-party never edge
+
+    def test_prefix_boundary_precision(self):
+        g = run_codemap({
+            "go.mod": "module github.com/me/proj\n",
+            "x.go": 'package x\nimport (\n\t"github.com/me/project/util"\n\t"github.com/me/proj/util"\n)\n',
+            "util/util.go": "package util\n",
+        })
+        # only the real-prefix import resolves; `project` is not a boundary prefix of `proj`
+        self.assertEqual(edges(g), {("x.go", "util/util.go")})
+
+
+class JavaArmTests(unittest.TestCase):
+    def test_same_package_reference_no_import(self):
+        # The core ~24% gap: same-package types need no import statement.
+        g = run_codemap({
+            "src/com/ex/A.java": "package com.ex;\nclass A { B b; void m(){ new B(); } "
+                                 "String s = \"B not real here\"; }\n",
+            "src/com/ex/B.java": "package com.ex;\nclass B { }\n",
+        })
+        e = edges(g)
+        self.assertIn(("src/com/ex/A.java", "src/com/ex/B.java"), e)
+        self.assertNotIn(("src/com/ex/B.java", "src/com/ex/A.java"), e)  # B never names A
+
+    def test_inline_fqn_no_import(self):
+        g = run_codemap({
+            "src/com/ex/Client.java": "package com.ex;\nclass Client { void m(){ com.ex.util.Helper.run(); } }\n",
+            "src/com/ex/util/Helper.java": "package com.ex.util;\npublic class Helper { public static void run(){} }\n",
+        })
+        self.assertIn(("src/com/ex/Client.java", "src/com/ex/util/Helper.java"), edges(g))
+
+    def test_wildcard_import_resolves_used_types_only(self):
+        g = run_codemap({
+            "src/com/app/Main.java": "package com.app;\nimport com.app.model.*;\nclass Main { User u; }\n",
+            "src/com/app/model/User.java": "package com.app.model;\npublic class User {}\n",
+            "src/com/app/model/Ghost.java": "package com.app.model;\npublic class Ghost {}\n",
+        })
+        e = edges(g)
+        self.assertIn(("src/com/app/Main.java", "src/com/app/model/User.java"), e)
+        self.assertNotIn(("src/com/app/Main.java", "src/com/app/model/Ghost.java"), e)  # unused
+
+    def test_soundness_jdk_and_unknown_dropped(self):
+        g = run_codemap({
+            "src/com/ex/Svc.java": "package com.ex;\nimport java.util.List;\nimport org.unknown.Widget;\n"
+                                   "class Svc { List<String> xs; Widget w; Foo local; }\n",
+        })
+        self.assertEqual(edges(g), set())  # nothing declared in-repo -> no edge
+
+
 class Fidelity(unittest.TestCase):
     """Every language carries an honest `fidelity` + `known_gaps`; `tier` is not trust."""
 
