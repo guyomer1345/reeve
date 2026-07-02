@@ -32,8 +32,10 @@ Usage:  codemap.py [ROOT] [--out PATH] [--exclude a,b,c]
   --out     output path (default: docs/knowledge/graph.json).
 
 graph.json per-node: path, type, lang, tier, impact, orchestration, in_degree, out_degree.
-The top-level `languages` map reports per-language file/edge counts + the arm tier that
-produced them, so a consumer knows which edges are precise (tier 2/1) vs best-effort (tier 0).
+The top-level `languages` map reports, per language, file/edge counts + a **`fidelity`** level
+(high / medium / low / nodes-only) and **`known_gaps`** — the honest trust signal a consumer
+must weight edges by. `tier` is only WHICH arm produced the edges; it is NOT a completeness
+claim (a tier-2 arm can still be a poor approximation — measure fidelity, don't infer it).
 """
 import argparse
 import ast
@@ -110,6 +112,8 @@ class PythonArm:
     tier = 2
     node_type = "module"
     extensions = frozenset({".py"})
+    fidelity = "high"  # explicit-import language + real parser (ast); edges ARE imports
+    known_gaps = ("dynamic imports (importlib/__import__)", "__init__ re-export aliasing")
 
     def lang_of(self, path):
         return "python"
@@ -228,9 +232,17 @@ class GenericArm:
     tier = 0
     node_type = "module"
     extensions = frozenset(_NODE_LANGS)  # broad: every recognized source language gets a node
+    fidelity = "low"  # best-effort shallow-regex; package-graph languages under-resolve
+    known_gaps = ("best-effort regex resolution", "no same-package / no-import edges")
 
     def lang_of(self, path):
         return _NODE_LANGS.get(os.path.splitext(path)[1].lower(), "unknown")
+
+    def fidelity_of(self, path):
+        ext = os.path.splitext(path)[1].lower()
+        if ext not in _LANGUAGES:  # recognized source language with no import regex
+            return ("nodes-only", ("no edges — nodes + directory clusters only",))
+        return (self.fidelity, self.known_gaps)
 
     @staticmethod
     def _flat_index(files):
@@ -360,6 +372,9 @@ class JsTsArm(GenericArm):
     name = "jsts"
     tier = 2
     extensions = frozenset(_JS_EXTS)  # inherits lang_of (typescript vs javascript) from _LANGUAGES
+    fidelity = "medium"  # relative + tsconfig aliases resolved; non-relative intra-repo not yet
+    known_gaps = ("monorepo workspace packages", "package.json exports/imports subpath maps",
+                  "computed require()/dynamic specifiers")
 
     def _read_jsonc(self, path):
         if not os.path.isfile(path):
@@ -437,6 +452,12 @@ class JsTsArm(GenericArm):
 
 
 ARMS = [PythonArm(), JsTsArm(), GenericArm()]  # order = precedence; specific arms before the floor
+
+
+def _arm_fidelity(arm, path):
+    """(level, known_gaps) for the file — the honest coverage of the arm that produced it."""
+    fn = getattr(arm, "fidelity_of", None)
+    return fn(path) if fn else (arm.fidelity, tuple(arm.known_gaps))
 
 
 def _ext_to_arm():
@@ -527,6 +548,7 @@ def main():
 
     lang_of = {key[p]: arm_of[p].lang_of(p) for p in files}
     tier_of = {key[p]: arm_of[p].tier for p in files}
+    fidelity_of = {key[p]: _arm_fidelity(arm_of[p], p) for p in files}
     node_records = [
         {
             "path": p,
@@ -545,10 +567,13 @@ def main():
         key=lambda e: (e["from"], e["to"]),
     )
 
-    # per-language coverage summary — lets a consumer know which edges are precise vs best-effort
+    # per-language coverage summary — `fidelity` (+ `known_gaps`) is the honest trust signal a
+    # consumer must weight edges by; `tier` is only which arm produced them, NOT a completeness claim.
     languages = {}
     for p in nodes:
-        lg = languages.setdefault(lang_of[p], {"tier": tier_of[p], "files": 0, "edges": 0})
+        lvl, gaps = fidelity_of[p]
+        lg = languages.setdefault(lang_of[p], {"tier": tier_of[p], "fidelity": lvl,
+                                               "known_gaps": sorted(set(gaps)), "files": 0, "edges": 0})
         lg["files"] += 1
         lg["edges"] += len(fwd_edges.get(p, []))
 

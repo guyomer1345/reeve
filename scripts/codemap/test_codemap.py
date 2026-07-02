@@ -120,5 +120,20 @@ class Resolution(unittest.TestCase):
         self.assertEqual(len(e), 1)  # absent + lodash both dropped
 
 
+class Fidelity(unittest.TestCase):
+    """Every language carries an honest `fidelity` + `known_gaps`; `tier` is not trust."""
+
+    def test_languages_carry_fidelity_and_gaps(self):
+        g = run_codemap({"pkg/__init__.py": "", "app.py": "import pkg\n"})
+        py = g["languages"]["python"]
+        self.assertEqual(py["fidelity"], "high")
+        self.assertIn("known_gaps", py)
+        self.assertIsInstance(py["known_gaps"], list)
+
+    def test_node_only_language_reports_nodes_only(self):
+        g = run_codemap({"lib/app.ex": "defmodule App do\nend\n"})  # Elixir: no edge regex
+        self.assertEqual(g["languages"]["elixir"]["fidelity"], "nodes-only")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
