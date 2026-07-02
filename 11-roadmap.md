@@ -102,12 +102,16 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   + `graph.json` contract (D74 revised D72: the default arm is a zero-dep resolver, not tree-sitter — tree-sitter is
   **reserved** for parse-hard languages, a graceful optional upgrade). Go pulled early for fast ROI (compiler-grade
   graph); C++ last in-wave (needs a compile-DB). `planner`/`debug` depend on it.
-  **Five precise arms now built + ground-truth measured (D77):** Python · JS/TS (+ exports/imports subpath) · **Go**
-  (100% intra recall, replaced a broken+unsound floor) · **Java** (two-pass, closes the measured 24% no-import gap) ·
-  **C#** (namespace-aware two-pass, 107→3731 edges on newtonsoft); C++ deliberately on the floor (compile-DB); Rust/PHP
-  remain. **Living code-map DESIGNED + verified (D78):** a durable *observed* layer (`graph.observed.json`, provenance
-  per edge) the loop accretes via `verify` runs — resolves regenerate-vs-incremental; impl rides Phase-2/3 (D70).
-  **[core — 5 arms done (D77); living-graph observed layer designed (D78); Rust/PHP + observed-layer build next]**
+  **Five precise arms built + independently ground-truth measured — arm build thread CLOSED (D77/D79):** Python
+  (flask: 40/40 sampled edges real) · JS/TS (+ exports/imports subpath) · **Go** (100% intra recall, replaced a
+  broken+unsound floor) · **Java** (two-pass, closes the measured 24% no-import gap; same-package precision ≈100%
+  on commons-lang/okhttp) · **C#** (namespace-aware two-pass; a **head-token precision filter** lifts intersection
+  precision 97.2→98.9% with 0 recall loss, D79 — residual ~1% declaration-name collision, stays `medium`).
+  **C++ / Rust / PHP stay on the tier-0 floor deliberately** (sound subset; a precise arm is built on demand by
+  prevalence, C++ needs a compile-DB). **Living code-map DESIGNED + verified (D78):** a durable *observed* layer
+  (`graph.observed.json`, provenance per edge) the loop accretes via `verify` runs — resolves regenerate-vs-
+  incremental; impl rides Phase-2/3 (D70).
+  **[core — arm build thread closed (D77/D79, all 5 measured); living-graph observed layer build next (D78)]**
 - **Brownfield ingest** — **DESIGNED (D68); the `ingest` skill is being authored.** A thin `ingest` skill over
   existing leaves (`research` read → `document` write, no new agent) that seeds behavioural-core **intent from
   the existing `CLAUDE.md`/spec** (un-derivable from code), builds `docs/knowledge/` + a reconstructed
@@ -160,8 +164,10 @@ ingest DESIGNED (D68, pressure-tested on a real repo); the `ingest` skill + the 
 (`scripts/codemap/`) authored, validated on the real repo, and wired into `/start` step 4. The **retention
 script** (`scripts/retention.py`, D71) built + wired. The code-map recast to a **shared engine + tier-0 generic
 floor + Python & JS/TS precise arms** (D73/D74) — any recognized language now gets a graph, and the default precise
-arm is a **zero-dep resolver** (tree-sitter reserved for parse-hard languages).** Remaining Phase-1: the
-Java/C#/C++/Go resolver arms + a guiding-doc coherence pass.)*
+arm is a **zero-dep resolver** (tree-sitter reserved for parse-hard languages). **2026-07-02/03: the Go/Java/C#
+resolver arms built + independently ground-truth-measured, and the C# head-token precision filter added — the
+code-map arm build thread is CLOSED (D77/D79, all five arms measured; C++/Rust/PHP stay on the floor by design).**
+Remaining Phase-1: a guiding-doc coherence pass.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /

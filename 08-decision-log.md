@@ -1165,7 +1165,7 @@ process gap.
 
 ---
 
-## D77 — Four more precise code-map arms (Go · Java · C# · JS/TS exports-subpath), measured on real repos **[DECIDED + BUILT — implements D72's prevalence build set; fidelity is measured, not asserted]**
+## D77 — Four more precise code-map arms (Go · Java · C# · JS/TS exports-subpath), measured on real repos **[DECIDED + BUILT — implements D72's prevalence build set; fidelity is measured, not asserted; C# arm amended by D79 (head-token precision filter)]**
 D72 set the build order Python → JS/TS → Java → C# → C++ then Go. This session built the next wave as
 **zero-dep resolver arms** on the D73 driver (D74's default mechanism), each pressure-tested with the D76
 loop — a blind promise-elicitation agent (that cannot see `codemap.py`) writes the resolution spec + property
@@ -1254,6 +1254,48 @@ precision-retraction (accepted as unsolved — lean on precision-first); the non
 (coverage/native profiler — reasoned, not yet measured). *Evidence:* the prototype measurements (fixture +
 requests + `sys.monitoring` cost); the D77 fidelity signal it builds on; D70 (flow-overlay), D68 (`[D]` layer).
 → `06`, `07`, `11`; implementation is Phase-2/3 with the console (D70).
+
+---
+
+## D79 — C# head-token precision filter; the D78 bias-precision rule applied to a measured-noisy channel **[DECIDED + BUILT — executes D78; closes the code-map arm build thread with all five arms measured on independent real repos]**
+The five precise arms (D77) had a measurement gap: Java + C# precision each rested on **one** repo with a
+self-consistent (not independent) check. This session measured the last two arms against **independent
+ground truth** (D77 discipline — real repos, edges sampled + classified by channel, not a proxy count) and
+applied the **D78 bias-precision rule** where a channel came back noisy:
+- **Java (`JavaArm`) — no change.** The same-package channel measured **≈100% precision** on commons-lang
+  (976 same-package edges) + okhttp: every flagged candidate resolved to a genuine reference. Java's
+  **camelCase members** make the theoretical PascalCase type/member collision structurally rare, so the
+  arm's stated over-edge risk essentially doesn't materialize. Fidelity comment updated with the number.
+- **C# (`CSharpArm`) — the fix.** On AutoMapper (a fluent-DSL worst case) the collision-prone type channels
+  (same-namespace + `using`-intersection) over-edged: C# member access is **PascalCase by convention**, so
+  `_CAP` matched fluent method calls (`.Include<>()`, `.ForPath()`), property access (`x.Order`), and enum
+  members (`MemberList.Source`) that collide with same-namespace **type** names. Fix (`_head_used`): a
+  capitalized token qualifies for the type channels only if it appears **≥1× as a HEAD token** — not
+  immediately preceded by a member-access `.`. A genuine type is always referenced head-position at least
+  once (`new Order`, `Order x`, `: Order`, `<Order>`); genuinely-qualified `Ns.Type` refs still resolve via
+  the untouched **inline-FQN channel**, so qualified type use isn't lost. Measured: precision **97.2 → 98.9%**
+  on AutoMapper (fluent-DSL worst case) with **0 recall loss** (every dropped edge verified a real FP), and
+  −2 FPs / 0 loss on eShopOnWeb (app code). **Residual ~1%** = a property/enum-member **DECLARED** with a
+  same-namespace type's name (`public string Source`) — a head token in a non-type position, unreachable by a
+  regex arm — so C# **stays `fidelity=medium`** (honest, not bumped). Locked with a regression test
+  **verified to fail without the filter** + a recall-preservation control.
+- **Python (`PythonArm`) — re-confirmed, no change.** Fresh ground-truth pass on flask: **40/40 sampled edges
+  real** (0 fabricated), both `known_gaps` present (8 dynamic-import files, 5 `__init__` edges — the exact
+  recall surface the D78 observed layer is meant to close).
+This makes **precision a bias, not an afterthought**, a **standing rule** for the static arms (now documented
+where the arms live): a fabricated edge is **sticky** (the D78 observed layer can only ADD missed edges, never
+retract a false one — "not exercised" ≠ "not a dependency"), while a missed edge **self-heals** through runtime
+capture, so a noisy channel is tightened toward precision at the cost of recall. **Rust (`mod`) / PHP
+(`require`) / C++** stay on the **tier-0 floor** deliberately (sound relative/sibling subset; precise arm
+built on demand by prevalence; C++ additionally needs `compile_commands.json`) — recorded as the one-line
+defer rationale. *Rejected:* leaving the noisy C# channel (D78 — sticky false positives mislead blast-radius /
+orchestration reads forever); a full type-position parser (heavier, risks recall — the head-token heuristic
+captured nearly all the gain for ~5 lines); bumping C# to `high` (dishonest — the declaration-name residual
+survives); an up-front Rust/PHP/C++ arm (prevalence-gated, floor covers them soundly today). *Evidence:*
+independent ground-truth measurements on AutoMapper / eShopOnWeb / commons-lang / okhttp / flask; the
+gate verified failing without the filter; 30/30 tests green; committed + pushed `39d391f`. → `scripts/codemap/
+codemap.py`, `scripts/codemap/test_codemap.py`, `06`; executes D78's bias-precision rule, completes D77's
+build set (**amends D77's C# description, which now describes the pre-filter arm**).
 
 ---
 
