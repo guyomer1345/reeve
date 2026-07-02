@@ -4,7 +4,7 @@
 Multi-language engine: one shared driver (discover -> dispatch -> resolve -> PageRank ->
 emit) over pluggable per-language ARMS. What varies by language is only *edge resolution*;
 the node set + directory clusters are identical everywhere, so the cost of a language is
-its resolver, not its parser. Ships five precise arms + the floor:
+its resolver, not its parser. Ships six precise arms + the floor:
 
   - PythonArm   (tier 2) — stdlib `ast`, zero-dep, precise dotted-module resolution.
   - JsTsArm     (tier 2) — JS/TS: tsconfig/jsconfig `paths`+`baseUrl` aliases, TS/JS extension
@@ -20,14 +20,35 @@ its resolver, not its parser. Ships five precise arms + the floor:
   - JavaArm     (tier 2) — two-pass: pass 1 indexes top-level types -> FQN; pass 2 resolves imports
                            + same-package simple names + inline FQNs (the ~24% of edges that carry
                            NO import statement, measured on gson). Unknown Capitalized tokens never
-                           edge (java.*/third-party drop out).
+                           edge (java.*/third-party drop out). Same-package precision measured ~100%
+                           on commons-lang (976 same-pkg edges) + okhttp — Java's camelCase members
+                           make a type/member name collision rare.
+  - CSharpArm   (tier 2) — namespace-aware two-pass; namespace decoupled from dir AND file. Resolves
+                           `using` (to the intersection of the namespace's types with the file's used
+                           HEAD tokens), same-namespace refs, inline FQNs, `using static`. A member-
+                           access token (`x.Order`, `.Include<>()`, `MemberList.Source`) is filtered
+                           out of the type channels. Intersection precision measured 98.9% (AutoMapper,
+                           fluent-DSL worst case) / ~99.5% harmful (eShopOnWeb app code).
   - GenericArm  (tier 0) — the generic floor: NODES any recognized source language, and adds
                            shallow-regex import edges for the subset that has them. The long-tail
                            safety net so a repo in ANY recognized language gets at least nodes +
                            directory clusters + both centrality lenses, never nothing.
 
-More precise arms (C#, C++, …) plug into the same contract: a new arm is a `class Arm` with
+More precise arms (C++, …) plug into the same contract: a new arm is a `class Arm` with
 `extensions`, `index()`, and `edges()` — the driver below is untouched.
+
+Standing rule — BIAS PRECISION over recall for the static arms. A fabricated edge is sticky:
+nothing the loop does can retract it (runtime observation only ADDS missed edges — "not
+exercised" != "not a dependency"), so a false positive persists and misleads blast-radius /
+orchestration reads forever. A missed edge self-heals: the durable observed layer accretes the
+recall the arms leave on the table where the code is actually exercised. So when a channel
+measures noisy, tighten toward precision (a type-position anchor, stricter matching) and accept
+the recall loss — e.g. the C# arm filters member-access tokens out of its type channels.
+
+Rust (`mod`) and PHP (`require`) stay on the tier-0 floor deliberately: the floor's relative /
+sibling resolution is the sound subset, and a precise arm is built only when a real repo needs
+one (build set by prevalence, not ease). C++ likewise stays on the floor — a precise arm needs
+`compile_commands.json`; the quoted-`#include` relative resolution is the sound subset.
 
 Two centrality signals per file fall out of the one import graph for free:
   - impact        (forward PageRank: most-depended-upon)  -> change blast-radius
@@ -123,7 +144,9 @@ class PythonArm:
     tier = 2
     node_type = "module"
     extensions = frozenset({".py"})
-    fidelity = "high"  # explicit-import language + real parser (ast); edges ARE imports
+    fidelity = "high"  # explicit-import language + real parser (ast); edges ARE imports.
+                       # Ground-truth re-confirmed on flask: 40/40 sampled edges are real resolved
+                       # imports (0 fabricated); both gaps below present (8 dynamic-import files, 5 __init__).
     known_gaps = ("dynamic imports (importlib/__import__)", "__init__ re-export aliasing")
 
     def lang_of(self, path):
@@ -847,19 +870,23 @@ class JavaArm:
 # from directory AND file (one namespace spans many files; one file holds many types;
 # `partial` splits a type across files). Pass 1 tracks a namespace stack (file-scoped `;`
 # and block-scoped `{`) to index top-level types -> (namespace, name) -> {files}. Pass 2
-# resolves `using` (to the INTERSECTION of the namespace's types with the simple names the
-# file actually uses — never the whole namespace, which would make a hairball), same-namespace
-# refs, inline FQNs, and `using static`. Replaces a near-useless floor (945 files -> 107 edges).
+# resolves `using` (to the INTERSECTION of the namespace's types with the HEAD simple names the
+# file uses — never the whole namespace, which would make a hairball; a member-access token like
+# `x.Order` is NOT a type ref, so head-only), same-namespace refs, inline FQNs, and `using static`.
+# Replaces a near-useless floor (945 files -> 107 edges).
 # --------------------------------------------------------------------------- #
 class CSharpArm:
     name = "csharp"
     tier = 2
     node_type = "module"
     extensions = frozenset({".cs"})
-    fidelity = "medium"  # namespace != dir/file; PascalCase type/member collisions; partial/generated
+    fidelity = "medium"  # measured 98.9% intersection precision (AutoMapper) after the head-token
+                         # filter; namespace != dir/file; residual declaration-name collisions; partial/gen
     known_gaps = ("source-generated / build-time partial types have no file -> missing edges",
                   "`using X.Y` resolves to used simple names only; nameof/reflection/attribute-only missed",
-                  "a PascalCase method/property colliding with a type name can over-edge; all #if branches kept")
+                  "member-access tokens (x.Order/.Include<>()/MemberList.Source) are filtered out, but a "
+                  "property/enum-member DECLARED with a same-namespace type's name (public string Source) "
+                  "still over-edges (~1% on AutoMapper); all #if branches kept")
 
     _KEYWORDS = frozenset({"where", "class", "struct", "interface", "enum", "record", "new", "default"})
     _TOKEN = re.compile(
@@ -881,6 +908,26 @@ class CSharpArm:
         s = re.sub(r'"(?:\\.|[^"\\\n])*"', '""', s)
         s = re.sub(r"'(?:\\.|[^'\\\n])*'", "''", s)
         return s
+
+    def _head_used(self, clean):
+        """Capitalized tokens with >= 1 occurrence NOT immediately preceded by a
+        member-access dot. Precision anchor for the collision-prone same-namespace /
+        using-intersection channels: a token that appears ONLY as `x.Order` (property),
+        `.Include<..>()` (fluent method), or `MemberList.Source` (enum member) is a member
+        reference, not a type reference, so it must not edge to a same-named type. A
+        genuine type is referenced at least once as a head token (`new Order`, `Order x`,
+        `: Order`, `<Order>`); qualified `Ns.Type` type-refs are still caught by the inline
+        FQN channel. Measured: drops ~2-3% same-namespace false positives (fluent-DSL /
+        PascalCase-property collisions) with no observed genuine-type recall loss on
+        AutoMapper + eShopOnWeb."""
+        head = set()
+        for m in self._CAP.finditer(clean):
+            i = m.start() - 1
+            while i >= 0 and clean[i] in " \t":  # bounded back-scan over whitespace only (not O(n) slice)
+                i -= 1
+            if i < 0 or clean[i] != ".":
+                head.add(m.group(1))
+        return head
 
     def _scan(self, clean):
         """(declared_namespaces, [(namespace, typename)]) for top-level types (brace-depth aware)."""
@@ -938,7 +985,7 @@ class CSharpArm:
         ns_types, fqn = index["ns_types"], index["fqn"]
         declared, meta = index["declared"], index["meta"]
         clean, file_ns_set = meta[path]
-        used = set(self._CAP.findall(clean))
+        used = self._head_used(clean)  # type-position anchor for the intersection channels
         out, plain_ns = set(), []
         usings = self._USING.findall(clean) + [("",) + u for u in index["globals"]]
         for g, static, alias, target in usings:

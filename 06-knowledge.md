@@ -104,7 +104,8 @@ is built up front; the Phase-4 demo forces exercising ≥1 non-Python arm.
 `index()` + `edges()`, driver untouched). Precise arms, each **measured against ground truth** (D77 — `_resolve`
 per specifier vs `package.json`/`go.mod`, not a proxy count), with a per-language **`fidelity` + `known_gaps`**
 that is measured, not inferred from tier:
-- **Python** (`ast`) — high; gaps = dynamic imports, `__init__` re-export aliasing.
+- **Python** (`ast`) — high; edges ARE imports. Re-confirmed on flask: **40/40 sampled edges real** (0
+  fabricated). Gaps (both present on flask) = dynamic imports (8 files), `__init__` re-export aliasing (5 edges).
 - **JS/TS** (`JsTsArm`) — tsconfig `paths`/`baseUrl`, extension/index/barrel, workspace packages (npm/pnpm/yarn) by
   exact name, and `package.json` exports/imports **subpath** maps (incl. **dist→src** derivation for unbuilt
   monorepos). On express/vue/vite/hono: **0 fabricated edges**, ~87–100% relative + ~95–100% workspace recall.
@@ -112,13 +113,24 @@ that is measured, not inferred from tier:
   recall** (gin/cobra); replaced a **broken+unsound** floor (0% recall + fabricated stdlib edges).
 - **Java** (`JavaArm`, two-pass) — top-level-type FQN index; resolves imports **+ same-package + inline-FQN** refs
   (the **measured 24%** of edges on gson that carry no import); soundness by repo-declared-only gating.
+  Same-package channel precision **≈100%** measured on commons-lang (976 same-pkg edges) + okhttp — Java's
+  camelCase members make a type/member name collision rare, so the theoretical over-edge doesn't materialize.
 - **C#** (`CSharpArm`, namespace-aware two-pass) — namespace stack (file-/block-scoped, nested), `using`→**used-name
   intersection** (never the whole namespace), same-namespace, inline FQN, `using static`; partial types → all files.
-  newtonsoft **107 → 3731 edges** (3.9/node, not a hairball).
+  newtonsoft **107 → 3731 edges** (3.9/node). Intersection precision measured on AutoMapper (fluent-DSL worst case)
+  + eShopOnWeb (app code): a **head-token filter** (a member-access token `x.Order` / `.Include<>()` /
+  `MemberList.Source` is NOT a type reference) lifts precision **97.2 → 98.9%** with **no recall loss**; the ~1%
+  residual = a property/enum-member *declared* with a same-namespace type's name (`public string Source`) — beyond a
+  regex arm, so C# stays **`medium`**.
 Every other recognized source language falls to the floor — noded regardless (D75), with edges where a regex exists.
-**C++ stays on the floor deliberately** (needs `compile_commands.json`; the floor's quoted-`#include` relative
-resolution is the sound subset). Remaining build-set arms (Rust, PHP) are zero-dep resolver arms like these;
-tree-sitter stays reserved for parse-hard languages.
+**Bias precision, standing rule for the static arms:** a fabricated edge is sticky (the observed layer, D78, can only
+ADD missed edges, never retract a false one — "not exercised" ≠ "not a dependency"), while a missed edge self-heals
+through runtime capture. So when a channel measures noisy, tighten toward precision and accept the recall loss (the
+C# head-token filter is the worked example).
+**Deferred arms (defer rationale):** **C++**, **Rust** (`mod`), and **PHP** (`require`) stay on the **tier-0 floor**
+— its relative/sibling resolution is the sound subset for each, and a precise arm is built **on demand by prevalence**
+when a real repo needs one, not up front (C++ additionally needs `compile_commands.json`). tree-sitter stays reserved
+for parse-hard languages.
 
 ## The graph is a LIVING artifact — a durable observed layer **[DESIGNED + VERIFIED — D78; impl Phase-2/3]**
 Static arms are precision-first but recall-imperfect (dynamic imports, DI, reflection, C# source-gen, dynamic

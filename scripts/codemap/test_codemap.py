@@ -356,6 +356,31 @@ class CSharpArmTests(unittest.TestCase):
         self.assertIn(("Screen.cs", "Widget.Core.cs"), e)
         self.assertIn(("Screen.cs", "Widget.Events.cs"), e)   # partial -> all declaring files
 
+    def test_member_access_token_is_not_a_type_reference(self):
+        # PRECISION (bias-precision rule): a PascalCase token that appears ONLY as member access
+        # (t.Order) or a fluent method call (t.Include<int>()) colliding with a same-namespace type
+        # name must NOT fabricate a type edge — only a HEAD occurrence is a type reference. Measured
+        # ~2% false-positive drop on AutoMapper. Fails without the _head_used filter.
+        g = run_codemap({
+            "Consumer.cs": "namespace App;\npublic class Consumer {\n"
+                           "  void M(Thing t) { var v = t.Order; t.Include<int>(); } }\n",
+            "Order.cs": "namespace App;\npublic class Order { }\n",
+            "Include.cs": "namespace App;\npublic class Include { }\n",
+            "Thing.cs": "namespace App;\npublic class Thing { public object Order; public void Include<T>(){} }\n",
+        })
+        e = edges(g)
+        self.assertNotIn(("Consumer.cs", "Order.cs"), e)    # t.Order = member access, not a type ref
+        self.assertNotIn(("Consumer.cs", "Include.cs"), e)  # t.Include<int>() = method call
+        self.assertIn(("Consumer.cs", "Thing.cs"), e)       # recall: genuine head-position param type kept
+
+    def test_head_position_type_reference_still_edges(self):
+        # RECALL control: a genuine type reference (return type + new) is a head token -> still edges.
+        g = run_codemap({
+            "Consumer.cs": "namespace App;\npublic class Consumer { public Order Make() => new Order(); }\n",
+            "Order.cs": "namespace App;\npublic class Order { }\n",
+        })
+        self.assertIn(("Consumer.cs", "Order.cs"), edges(g))
+
 
 class Fidelity(unittest.TestCase):
     """Every language carries an honest `fidelity` + `known_gaps`; `tier` is not trust."""
