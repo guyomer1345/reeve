@@ -372,8 +372,13 @@ class JsTsArm(GenericArm):
     name = "jsts"
     tier = 2
     extensions = frozenset(_JS_EXTS)  # inherits lang_of (typescript vs javascript) from _LANGUAGES
-    fidelity = "medium"  # relative + tsconfig aliases resolved; non-relative intra-repo not yet
-    known_gaps = ("monorepo workspace packages", "package.json exports/imports subpath maps",
+    # measured: ~97% edge coverage on single-package relative/alias repos, but ~27% of edges
+    # missed on a workspace monorepo (the cross-package graph). Relative + tsconfig paths/baseUrl
+    # resolved; the bare-but-internal class below is not.
+    fidelity = "medium"
+    known_gaps = ("workspace-package bare imports (monorepo cross-package edges)",
+                  "self-package-name imports (pkg name -> own src)",
+                  "package.json exports/imports subpath maps",
                   "computed require()/dynamic specifiers")
 
     def _read_jsonc(self, path):
