@@ -120,6 +120,44 @@ class Resolution(unittest.TestCase):
         self.assertEqual(len(e), 1)  # absent + lodash both dropped
 
 
+class JsTsPromises(unittest.TestCase):
+    """Locked property test for the JS/TS arm from the elicited promise — confirms what it
+    meets (barrels, .js->.ts, baseUrl-bare, no-false-positive) and documents the residual
+    (bare-but-internal workspace packages) as a visible gap, not a silent one."""
+
+    def test_handled_relative_barrel_nodenext_and_baseurl(self):
+        g = run_codemap({
+            "tsconfig.json": '{"compilerOptions":{"baseUrl":"./src"}}',   # baseUrl, no paths
+            "src/app.ts": ("import {b} from './b';\n"                     # relative
+                           "export * from './c';\n"                       # barrel re-export (P12)
+                           "import x from './d.js';\n"                     # NodeNext .js -> .ts (P11)
+                           "import ext from 'react';\n"),                  # bare external -> drop
+            "src/b.ts": "export const b=1;\n",
+            "src/c.ts": "export const c=1;\n",
+            "src/d.ts": "export const d=1;\n",
+            "src/react.ts": "export const r=1;\n",                         # P17: must NOT match bare 'react'
+            "src/feature.ts": "import {btn} from 'components/Button';\n",  # baseUrl-bare (P3)
+            "src/components/Button.ts": "export const btn=1;\n",
+        })
+        e = edges(g)
+        self.assertIn(("src/app.ts", "src/b.ts"), e)
+        self.assertIn(("src/app.ts", "src/c.ts"), e)                      # barrel
+        self.assertIn(("src/app.ts", "src/d.ts"), e)                      # .js -> .ts
+        self.assertIn(("src/feature.ts", "src/components/Button.ts"), e)  # baseUrl-bare
+        self.assertFalse(any("react" in t for _, t in e))                # bare external not fabricated
+
+    def test_workspace_bare_import_is_a_KNOWN_RESIDUAL(self):
+        # A bare `@acme/core` that resolves to a LOCAL workspace package — a real intra-repo
+        # edge this arm does NOT yet capture (bare = external). Asserted as a visible residual.
+        g = run_codemap({
+            "package.json": '{"workspaces":["packages/*"]}',
+            "packages/app/x.ts": "import {db} from '@acme/core';\n",
+            "packages/core/package.json": '{"name":"@acme/core","main":"index.ts"}',
+            "packages/core/index.ts": "export const db=1;\n",
+        })
+        self.assertNotIn(("packages/app/x.ts", "packages/core/index.ts"), edges(g))
+
+
 class Fidelity(unittest.TestCase):
     """Every language carries an honest `fidelity` + `known_gaps`; `tier` is not trust."""
 

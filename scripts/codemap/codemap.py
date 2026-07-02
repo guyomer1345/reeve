@@ -435,7 +435,10 @@ class JsTsArm(GenericArm):
                 hit = self._match_pathish(self._join(idx["baseUrl"], cand), idx)
                 if hit:
                     return hit
-        if idx["baseUrl"] not in (None, ""):  # bare specifier resolved from baseUrl (non-relative roots)
+        # baseUrl-bare resolution, but ONLY for path-shaped specifiers ("/" present, not "@scope"):
+        # a bare package token (`react`, `lodash`) must stay external even if a same-named local
+        # file exists — resolving it would FABRICATE an edge (soundness > the rare baseUrl completeness).
+        if idx["baseUrl"] not in (None, "") and "/" in spec and not spec.startswith("@"):
             hit = self._match_pathish(self._join(idx["baseUrl"], spec), idx)
             if hit:
                 return hit
