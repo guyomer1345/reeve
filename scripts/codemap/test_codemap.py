@@ -314,6 +314,49 @@ class JavaArmTests(unittest.TestCase):
         self.assertEqual(edges(g), set())  # nothing declared in-repo -> no edge
 
 
+class CSharpArmTests(unittest.TestCase):
+    def test_using_resolves_with_intersection_precision(self):
+        # `using App.Models` edges only to the type actually referenced (Order), not Customer.
+        g = run_codemap({
+            "Services/OrderService.cs": "namespace App.Services {\n using App.Models;\n"
+                                        " public class OrderService { public Order Get() => new Order(); } }\n",
+            "Models/Order.cs": "namespace App.Models {\n public class Order { } }\n",
+            "Models/Customer.cs": "namespace App.Models {\n public class Customer { } }\n",
+        })
+        e = edges(g)
+        self.assertIn(("Services/OrderService.cs", "Models/Order.cs"), e)
+        self.assertNotIn(("Services/OrderService.cs", "Models/Customer.cs"), e)  # in ns, not used
+
+    def test_same_namespace_no_using_and_file_scoped(self):
+        g = run_codemap({
+            "Handler.cs": "namespace App.Web;\nusing App.Data;\npublic class Handler { public Repo R; }\n",
+            "Repo.cs": "namespace App.Data;\npublic class Repo { }\n",
+            "Sibling.cs": "namespace App.Web;\npublic class Sibling { public Handler H; }\n",
+        })
+        e = edges(g)
+        self.assertIn(("Handler.cs", "Repo.cs"), e)          # cross-ns via file-scoped using
+        self.assertIn(("Sibling.cs", "Handler.cs"), e)       # same namespace, no using
+
+    def test_soundness_system_and_unused_dropped(self):
+        g = run_codemap({
+            "Thing.cs": "using System;\nusing System.Collections.Generic;\nnamespace App;\n"
+                        "public class Thing { public List<String> Names; public Guid Id; }\n",
+            "Other.cs": "namespace App;\npublic class Other { }\n",
+        })
+        e = edges(g)
+        self.assertEqual(e, set())  # System* not declared -> no edge; Other not referenced
+
+    def test_partial_type_edges_to_all_parts(self):
+        g = run_codemap({
+            "Widget.Core.cs": "namespace UI;\npublic partial class Widget { public void Init() { } }\n",
+            "Widget.Events.cs": "namespace UI;\npublic partial class Widget { public void Fire() { } }\n",
+            "Screen.cs": "namespace UI;\npublic class Screen { public Widget W = new Widget(); }\n",
+        })
+        e = edges(g)
+        self.assertIn(("Screen.cs", "Widget.Core.cs"), e)
+        self.assertIn(("Screen.cs", "Widget.Events.cs"), e)   # partial -> all declaring files
+
+
 class Fidelity(unittest.TestCase):
     """Every language carries an honest `fidelity` + `known_gaps`; `tier` is not trust."""
 

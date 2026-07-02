@@ -842,7 +842,134 @@ class JavaArm:
         return out
 
 
-ARMS = [PythonArm(), JsTsArm(), GoArm(), JavaArm(), GenericArm()]  # order = precedence
+# --------------------------------------------------------------------------- #
+# C# arm (tier 2) — two-pass, namespace-aware. Harder than Java: a namespace is decoupled
+# from directory AND file (one namespace spans many files; one file holds many types;
+# `partial` splits a type across files). Pass 1 tracks a namespace stack (file-scoped `;`
+# and block-scoped `{`) to index top-level types -> (namespace, name) -> {files}. Pass 2
+# resolves `using` (to the INTERSECTION of the namespace's types with the simple names the
+# file actually uses — never the whole namespace, which would make a hairball), same-namespace
+# refs, inline FQNs, and `using static`. Replaces a near-useless floor (945 files -> 107 edges).
+# --------------------------------------------------------------------------- #
+class CSharpArm:
+    name = "csharp"
+    tier = 2
+    node_type = "module"
+    extensions = frozenset({".cs"})
+    fidelity = "medium"  # namespace != dir/file; PascalCase type/member collisions; partial/generated
+    known_gaps = ("source-generated / build-time partial types have no file -> missing edges",
+                  "`using X.Y` resolves to used simple names only; nameof/reflection/attribute-only missed",
+                  "a PascalCase method/property colliding with a type name can over-edge; all #if branches kept")
+
+    _KEYWORDS = frozenset({"where", "class", "struct", "interface", "enum", "record", "new", "default"})
+    _TOKEN = re.compile(
+        r'namespace\s+(?P<ns>[\w.]+)\s*(?P<term>[;{])'
+        r'|(?P<kind>class|struct|interface|enum|record)\b(?:\s+(?:class|struct))?\s+(?P<name>[A-Za-z_]\w*)'
+        r'|(?P<brace>[{}])')
+    _USING = re.compile(r'^\s*(global\s+)?using\s+(static\s+)?(?:([A-Za-z_]\w*)\s*=\s*)?([\w.]+)\s*;', re.M)
+    _CAP = re.compile(r'\b([A-Z]\w*)\b')
+    _DOTTED = re.compile(r'\b([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+)\b')
+
+    def lang_of(self, path):
+        return "csharp"
+
+    @staticmethod
+    def _strip(s):
+        s = re.sub(r'/\*.*?\*/', ' ', s, flags=re.S)
+        s = re.sub(r'//[^\n]*', ' ', s)
+        s = re.sub(r'@"(?:[^"]|"")*"', '""', s)
+        s = re.sub(r'"(?:\\.|[^"\\\n])*"', '""', s)
+        s = re.sub(r"'(?:\\.|[^'\\\n])*'", "''", s)
+        return s
+
+    def _scan(self, clean):
+        """(declared_namespaces, [(namespace, typename)]) for top-level types (brace-depth aware)."""
+        depth, stack, file_ns = 0, [], None
+        types, namespaces = [], set()
+        for m in self._TOKEN.finditer(clean):
+            if m.group("ns") is not None:
+                if m.group("term") == ";":  # file-scoped namespace (whole file, content depth 0)
+                    file_ns = m.group("ns")
+                    namespaces.add(file_ns)
+                else:                        # block-scoped (may nest)
+                    namespaces.add(".".join([n for n, _ in stack] + [m.group("ns")]))
+                    stack.append((m.group("ns"), depth))
+                    depth += 1
+            elif m.group("kind") is not None:
+                name = m.group("name")
+                if name in self._KEYWORDS:  # `where T : class where ...` false match
+                    continue
+                if file_ns is not None:
+                    cur, content_depth = file_ns, 0
+                else:
+                    cur, content_depth = ".".join(n for n, _ in stack), len(stack)
+                if depth == content_depth:  # top-level only (nested types excluded)
+                    types.append((cur, name))
+            else:
+                if m.group("brace") == "{":
+                    depth += 1
+                else:
+                    depth -= 1
+                    while stack and depth <= stack[-1][1]:
+                        stack.pop()
+        return namespaces, types
+
+    def index(self, files):
+        ns_types = collections.defaultdict(lambda: collections.defaultdict(set))
+        fqn, declared, globals_ = collections.defaultdict(set), set(), set()
+        meta = {}
+        for f in files:
+            clean = self._strip(open(f, encoding="utf-8", errors="replace").read())
+            namespaces, types = self._scan(clean)
+            declared |= namespaces
+            file_ns = set()
+            for ns, name in types:
+                ns_types[ns][name].add(f)
+                fqn[(ns + "." + name) if ns else name].add(f)
+                file_ns.add(ns)
+            for g, static, alias, target in self._USING.findall(clean):
+                if g:  # `global using` applies to every file in the compilation
+                    globals_.add((static, alias, target))
+            meta[f] = (clean, file_ns)
+        return {"ns_types": ns_types, "fqn": fqn, "declared": declared,
+                "globals": globals_, "meta": meta}
+
+    def edges(self, path, source, index):
+        ns_types, fqn = index["ns_types"], index["fqn"]
+        declared, meta = index["declared"], index["meta"]
+        clean, file_ns_set = meta[path]
+        used = set(self._CAP.findall(clean))
+        out, plain_ns = set(), []
+        usings = self._USING.findall(clean) + [("",) + u for u in index["globals"]]
+        for g, static, alias, target in usings:
+            if alias:                                  # using A = X.Y(.Type)
+                out.update(fqn.get(target, ())) if target in fqn else plain_ns.append(target)
+            elif static:                               # using static X.Y.Type -> the enclosing type
+                out.update(fqn.get(target, ()))
+            else:                                      # plain using X.Y (a namespace)
+                plain_ns.append(target)
+        for ns in plain_ns:                            # (a) using -> intersection with used names
+            if ns in declared:
+                for name, files in ns_types.get(ns, {}).items():
+                    if name in used:
+                        out.update(files)
+        for ns in file_ns_set:                         # (b) same-namespace refs (no using needed)
+            for name, files in ns_types.get(ns, {}).items():
+                if name in used:
+                    out.update(files)
+        for m in self._DOTTED.finditer(clean):         # (c) inline fully-qualified refs
+            segs = m.group(1).split(".")
+            for k in range(len(segs) - 1, 0, -1):      # longest namespace prefix first
+                if segs[k][:1].isupper():
+                    key = ".".join(segs[: k + 1])
+                    if key in fqn:
+                        out.update(fqn[key])
+                        break
+        out.discard(path)
+        return out
+
+
+ARMS = [PythonArm(), JsTsArm(), GoArm(), JavaArm(), CSharpArm(), GenericArm()]  # order = precedence
 
 
 def _arm_fidelity(arm, path):
