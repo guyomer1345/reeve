@@ -42,6 +42,7 @@ act by hand, it failed.*
 ## Operating scope **[DECIDED]**
 Single local project, single user, single machine; the workflow runs inside the repo it's building.
 
-## This is spec-only (for now)
-No implementation yet. This folder is the project's permanent home and source of truth; the spec is
-edited here directly and is build-ready once the open items close.
+## Repo = spec + package
+This folder is the project's permanent home and source of truth; the spec is edited here directly, and the
+package it specifies (`skills/ agents/ rules/ hooks/ …`) is built here alongside it. For what's built vs still
+open, see `11-roadmap.md` (canonical status).

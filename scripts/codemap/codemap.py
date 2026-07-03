@@ -4,7 +4,7 @@
 Multi-language engine: one shared driver (discover -> dispatch -> resolve -> PageRank ->
 emit) over pluggable per-language ARMS. What varies by language is only *edge resolution*;
 the node set + directory clusters are identical everywhere, so the cost of a language is
-its resolver, not its parser. Ships six precise arms + the floor:
+its resolver, not its parser. Ships five precise arms + the floor:
 
   - PythonArm   (tier 2) — stdlib `ast`, zero-dep, precise dotted-module resolution.
   - JsTsArm     (tier 2) — JS/TS: tsconfig/jsconfig `paths`+`baseUrl` aliases, TS/JS extension

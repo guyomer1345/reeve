@@ -75,8 +75,8 @@ step only.)
     `document`. This is the layer that earns its tokens — the product.
 
 ## Multi-language coverage **[DECIDED — D72, research-ranked by prevalence]**
-Coverage is **three tiers**, not D70's arm-vs-fallback binary (whose fallback was never built — so *today* a
-non-Python repo gets no graph at all, empty not degraded). What varies by language is only **edge resolution**;
+Coverage is **three tiers**, not D70's arm-vs-fallback binary (whose fallback was never built — so before the
+tier-0 floor below landed, a non-Python repo got no graph at all, empty not degraded). What varies by language is only **edge resolution**;
 the node set + directory clusters are identical everywhere and the two lenses inherit edge quality — so the cost
 of a language is its **resolver**, not its parser.
 - **Tier 0 — generic floor** (dir tree + shallow-regex imports, zero-dep): the long-tail safety net so an
@@ -84,10 +84,10 @@ of a language is its **resolver**, not its parser.
   (D75): the floor *nodes* any recognized source language (so an exotic-language repo still gets nodes+clusters —
   "never nothing"), and adds *edges* only for the subset with an import regex; resolution is family-scoped
   (intra-language, C/C++ share). Graphless data/markup/config/doc artifacts are excluded (no import graph).
-- **The default precise arm = zero-dep** (D74): the floor's regex extraction + a real per-language **resolver**.
-  The cost is the resolver, not the parser — Python (stdlib `ast`) and **JS/TS** (tsconfig/jsconfig `paths`+`baseUrl`
-  aliases + TS extension/index/barrel resolution) are both this. A precise arm subclasses the floor, so no-config →
-  it degrades exactly to the floor.
+- **The default precise arm = zero-dep** (D74): a real per-language **resolver**, so the cost is the resolver,
+  not the parser — Python uses stdlib `ast`; **JS/TS** adds tsconfig/jsconfig `paths`+`baseUrl` aliases + TS
+  extension/index/barrel resolution. An arm that *subclasses* the floor (JS/TS) degrades exactly to the floor with
+  no config; the standalone arms (Python/Go/Java/C#) resolve independently.
 - **tree-sitter = reserved, not the mechanism** (D74 revises D72). Reach for it only where a language's *lexical
   structure* genuinely defeats regex extraction (e.g. C/C++ preprocessor/templates), shipped as a **graceful
   optional upgrade** (absent → the floor). Rejected as the default: the Python binding is version-fragile across

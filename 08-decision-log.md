@@ -492,7 +492,7 @@ memory is type-scoped.
 *Rejected:* a flat `.workflow/` (plan/changelog/verdict collide across items); leaving paths TBD (resume needs
 a defined `state.json`). *Evidence:* dogfood (had to invent `items/<id>/`). → `shared/schemas.md`, `05`.
 
-## D54 — Item-tail ordering: bookkeeping rides the item commit **[DECIDED]**
+## D54 — Item-tail ordering: bookkeeping rides the item commit **[DECIDED — amended by D66: a prerequisite-repair rides its own commit]**
 The completion tail flips the backlog item → **done** and rewrites `handoff.md` **before** `commit`, so the
 durable bookkeeping is captured by the item's own commit. (Sim-1 committed first and left them orphaned;
 sim-2 with flip-first produced a clean tree.) `close-issue` is the one **post-commit** step (it needs the
@@ -882,7 +882,7 @@ pass.** Implementation deferred (`11`).
 
 ---
 
-## D70 — Project map + flow view: a console tab over the code-map — static skeleton, dynamic overlay **[DECIDED — feature + architecture; the runtime-capture mechanism is a direction, tracked OPEN in `07`]**
+## D70 — Project map + flow view: a console tab over the code-map — static skeleton, dynamic overlay **[DECIDED — feature + architecture; the runtime-capture mechanism is a direction, tracked OPEN in `07`; the arm-vs-fallback coverage binary superseded by D72; the flow-overlay realised by D78]**
 The console gets a **project-map screen** rendering the code-map `graph.json` (D68) as a cluster diagram: nodes
 sized by the **impact lens**, grouped by the **directory tree**, with **semantic zoom** (cluster → file →
 [later] symbol). It is the structural face of the deferred **project-state view** (`07` — "how the pieces
@@ -976,7 +976,7 @@ D67 (the `checks.sh` shipped-mechanical-enforcer precedent), D68 (the sibling st
 "Python already required" fact). → `scripts/retention.py`, `skills/{document,decision-engineer,prioritize}`,
 `commands/start.md`, `shared/{schemas,memory-model}.md`, `11`; implements D61.
 
-## D72 — Multi-language code-map: three-tier coverage + a prevalence-ranked build set **[DECIDED — supersedes D70's arm-vs-fallback binary; research-backed]**
+## D72 — Multi-language code-map: three-tier coverage + a prevalence-ranked build set **[DECIDED — supersedes D70's arm-vs-fallback binary; research-backed; tier-1 mechanism revised by D74 to a zero-dep resolver, tree-sitter demoted to reserved]**
 D70 left non-Python coverage as a binary — a per-language *arm* or a *degraded fallback* — and gated arms on a
 real target arriving (validate-on-demand). Neither survives contact: the fallback was **never built** (only
 `python_codemap.py` exists), so **today a non-Python repo gets no graph at all** — empty, not degraded — and the
@@ -1024,7 +1024,7 @@ arm-vs-fallback + validate-on-demand.
 
 ---
 
-## D73 — Multi-language code-map BUILT: shared engine + tier-0 generic floor **[DECIDED + BUILT — implements D72's tier-0 + the arm skeleton; tier-1 tree-sitter follows]**
+## D73 — Multi-language code-map BUILT: shared engine + tier-0 generic floor **[DECIDED + BUILT — implements D72's tier-0 + the arm skeleton; the floor corrected by D75; tier-1 became a zero-dep resolver (D74), not tree-sitter]**
 Refactored the single-language `python_codemap.py` into `scripts/codemap/codemap.py` — a shared,
 language-agnostic driver (discover → dispatch → resolve → dual-lens PageRank → emit `graph.json`) over
 pluggable per-language **arms**. Adding a language is a `class` with `extensions` + `index()` + `edges()`;
@@ -1299,6 +1299,73 @@ build set (**amends D77's C# description, which now describes the pre-filter arm
 
 ---
 
+## Phase 1 close — guiding-doc coherence pass (session 2026-07-03)
+
+## D80 — Status is single-source via an OWNERSHIP MAP, not one file: derive-or-point + mechanical ownership gates + deliberate adoption of new sources **[DECIDED + BUILT (meta-repo); shipped side rides D70 — resolves D64's two prevention follow-ons; extends D38/D40/D65]**
+The 2026-07-03 coherence pass (a lightweight fan-out over the whole guiding-doc surface, the D63 method) found a
+**systemic status-drift regression**: ~10 sites across `README`/`00`/`CLAUDE.md`/`07`/`10`/`11`/`02` asserted a
+stale count / phase / done-vs-open. **Root cause (high-certainty):** status is *derived* data that had been
+**denormalised into hand-maintained prose across ~8 files with no single owner and no propagation** — the same
+disease D38's memory law cures for knowledge, never applied to the status layer. Three reinforcing mechanisms:
+(1) no single owner → the update set is unbounded and non-obvious, so a capturer updates some copies and misses
+the rest; (2) the capture ritual touched a decision's named `→ files`, not the transitive set that restated the
+status — **D64 designed exactly this "capture-time blast-radius sweep" and that follow-on was itself never tracked**
+(the disease shown on its own cure); (3) no mechanical status check, only prose, so drift stayed invisible until a
+human read across files (the project's own D38/D40/D64 thesis proven on itself).
+
+**A first cut ("designate `11-roadmap.md` as *the* single file") was pressure-tested and rejected as the frame:**
+it repeats the move that already failed (we had *declared* SSOT in D38 / `README` and it drifted anyway — a
+*declaration* is not a *mechanism*), it cannot answer a legitimately-new or brownfield source (rules break; real
+repos carry many status surfaces — a board, a CHANGELOG, release notes, the code), and the single file even
+drifted against *itself* (`11:125` vs `11:111`). The failure is never *multiplicity* — it is multiple
+*independently-maintained copies* (denormalisation); a *derived* surface is not a competing source. Calls
+(general — for **any** single-source-of-truth claim, not just status):
+- **Ownership map — one OWNER per fact-domain, not one file for everything.** Owners: roster count →
+  `10-roster.md`'s table (list = count) · decisions/why → `08` · open *design* questions → `07` · phase /
+  what's-left / build-status → `11-roadmap.md` · code structure → `graph.json`. Multiple owners are fine; multiple
+  *copies of one fact* are the bug. This is the partition the machine-state layer already runs on (loop-position →
+  `state.json`, open-work → `backlog.md`, issue-state → GitHub, history → `git`) — zero drift by construction.
+  Extends D38 (pointers > duplication).
+- **Derive-or-point, never a second copy.** Every non-owner surface *points* to the owner or is *generated* from
+  it; generation is the strongest form (a derived surface cannot drift) — the shipped project-state view (D70) is
+  this, the meta-repo uses pointer-collapse (a generator is disproportionate for a repo this size; revisit if `11`
+  keeps self-drifting).
+- **Mechanical ownership gates (detection, loud) — for what's checkable.** `scripts/check-status-coherence.sh`
+  fails a commit when (a) a roster count or `D1–DN` range drifts from the tree, or (b) a roadmap build-status tag
+  (`**[core]/[stageable]/[later]/[done]**`) surfaces **outside** its owner `11-roadmap.md` — (b) is what makes a
+  *new* status source trip the gate instead of waiting for the periodic scan. Companion to `check-no-spec-refs.sh`
+  (D40/D64: check, not advice). **Honest residual:** the gate covers *structured* status (counts, ranges, tags);
+  *prose* phase-narrative ("Phase 1 = start with X") is **detect-not-prevent** — the D63 alignment scan is its
+  enforcement, not the gate. Named, not hidden.
+- **Capture-time blast-radius sweep (prevention, upstream).** On capture: grep every guiding doc for the fact
+  just changed, update the source, repoint the rest — a judgment step in the `CLAUDE.md` working brief. Two tiers
+  (mechanical + judgment) exactly per D65.
+- **Deliberate adoption, not prohibition (rules break — handle it).** A genuinely-new source, or a brownfield
+  repo's pre-existing several, is handled by **discover → declare its owner (update the map) → derive/point the
+  rest** at a reconciliation checkpoint — never accreted silently. The D68 ingest / commitment model applied to
+  sources-of-truth; also the brownfield answer (you cannot collapse an existing repo to one file — you map it).
+- **The meta-repo dogfoods it.** A repo-local `.git/hooks/pre-commit` now runs both gates, closing the hole the
+  scan found — the no-refs gate was "mechanical, not advised" (D64) but nothing auto-ran it here.
+- **Shipped workflow (target projects): decided now, built with the console.** In a target project status is
+  **generated** — the project-state view / console (D70) over `state.json`+`backlog.md`+GitHub+`git`+`graph.json`,
+  never hand-written prose; the machine-state layer already has true single sources (D48/D55/D59). `document` owns
+  status-narration freshness. The generated status surface + the shipped status-coherence gate ride the console
+  build (Phase 2/3); the principle is fixed now.
+*Rejected:* the naive single-file framing (above — repeats a failed declaration, can't handle new/brownfield
+sources, ignores intra-source drift); generating a `STATUS.md` in the meta-repo now (a generator is
+disproportionate for a small repo; pointer-collapse + gate suffices, and the shipped generator rides D70);
+discipline-only with no gate (the root cause is that checklists get forgotten — D64's own follow-on proved it); a
+gate that polices arbitrary status *prose* (brittle / false-positive — the mechanical tier checks only counts,
+ranges, and bold tags; the judgment tier + the D63 scan cover the prose residual). *Evidence:* the 2026-07-03
+sweep — ~10 drift sites, one root cause; the new gate reproduced the drift then went green after the
+pointer-collapse, and blocks an injected out-of-owner tag; established practice (SSOT · derive-don't-store ·
+docs-in-CI freshness gates). → `11-roadmap.md` (phase/what's-left owner), `scripts/check-status-coherence.sh`,
+`.git/hooks/pre-commit`, `CLAUDE.md`, `README.md`, `00`, `07`, `09`, `10`, `02`, `06`; the shipped side → the
+console build (D70). Resolves D64's single-source-status + capture-time-blast-radius follow-ons; extends
+D38/D40/D65; complements D63.
+
+---
+
 ## Not yet decided (tracked in `07`)
 Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
 follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the
@@ -1306,7 +1373,7 @@ open threads. Model/effort map; collision **independence test** (waves grouping
 decided, D36); Arbiter input contract; autonomous reset mechanism; website stack. Intake follow-ons:
 engineering-feasibility pass **designed as the proportional-rigor gate (D69), implementation deferred**;
 demo-skill mechanics; commitment-status storage. `init` follow-ons: brownfield
-ingest **designed (D68) — the `ingest` skill is being authored**; console launch, full disk-layout protocols
+ingest **designed (D68); the `ingest` skill is authored**; console launch, full disk-layout protocols
 still open (the `spec/`+`.knowledge/` docs-root placement closed — D62). Skill-review follow-ons:
 incidental-issue-resolution detection — deferred; outward-action permission mechanics (D35). Adoption
 follow-ons: the **retention & archival law** is **closed** (D59–D60 write-law leaks + D61 cap-and-archive read
@@ -1314,7 +1381,8 @@ law) and the **retention script is built** (D71); what remains is **Sessions dis
 `K`/threshold tuning against real runs. Plus whether `verify` samples the real diff vs trusts the `changelog` (#8). **Two new (user-raised):**
 a synthesized **project-state view**, and a **framework version-update** skill. **Alignment pass (D63/D64):**
 authoring the alignment-scan **skill** is knowledge-gated (D63); two prevention follow-ons — **single-source
-status** and a **capture-time blast-radius sweep** — are undecided (D64). The **doc-authoring agent** is
+status** and a **capture-time blast-radius sweep** — are **resolved (D80)** (an ownership map + the
+`check-status-coherence.sh` gate + a capture-time blast-radius step). The **doc-authoring agent** is
 reserved (D65). The **drift-gate wiring** is **authored** (D65/D67 — `commit` mechanical step + `pre-commit`
 backstop + generated `checks.sh`); what remains is `checks.sh`'s per-stack generator, which rides the `/start`
 enforcement-wiring build. All → `07`.

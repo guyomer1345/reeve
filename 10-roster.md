@@ -42,7 +42,7 @@ overlap into one adjudicator.
 | adjudicate | skill (base) | gather views → judge → confidence-gate | `skills/adjudicate` |
 | discuss | skill | intake conversation → `spec` | `skills/discuss` |
 | create-demo | skill | throwaway sandbox for product approval | `skills/create-demo` |
-| prioritize | skill | order the backlog, emit the next item | `skills/prioritize` |
+| prioritize | skill | order the backlog, emit the next wave | `skills/prioritize` |
 | planner | skill | decompose → `roadmap` / plan one item → `plan` | `skills/planner` |
 | decision-engineer | skill | resolve an open build decision (adjudicate) | `skills/decision-engineer` |
 | research | agent | gather info (Investigation worker) | `agents/research` |
@@ -86,10 +86,10 @@ research                  (service, callable from anywhere)
 - item-complete tail: `verify`(pass) → `document` → `commit` → `close-issue`
 
 ## Build status
-- **All 17 capability files written** (`skills/`, `agents/`) + `shared/schemas.md`. Roster v1 complete
-  (added `close-issue`, D33).
-- **Authoring-format pass complete (D31/D34):** all 15 skills + 2 agents follow `shared/format.md` and
-  carry no spec-internal refs (grep-gated — `scripts/check-no-spec-refs.sh`).
+- **The full roster is written** (`skills/`, `agents/`) + `shared/schemas.md` — the table above is the source
+  (list = count); numbers aren't restated here, they drift. Roster v1 complete (added `close-issue`, D33).
+- **Authoring-format pass complete (D31/D34):** every skill + agent follows `shared/format.md` and
+  carries no spec-internal refs (grep-gated — `scripts/check-no-spec-refs.sh`).
 - **Dogfood-validated (D52):** the orchestrator design *drives* — a throwaway greenfield repo ran two tasks
   (happy + fail/decision) end-to-end; MVP install = loose `.claude/` files (D57). Findings → D53–D57.
 

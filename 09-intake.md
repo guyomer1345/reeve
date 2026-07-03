@@ -60,7 +60,7 @@ sandbox** (no backend, no realistic data) — a runnable alignment artifact surf
 - **What it de-risks:** the **product** question (did we agree *what* to build?). NOT the engineering
   question — a no-backend mock cannot validate data model / integration / stack. "Demo approved"
   certifies only the **visual/behavioral subset** of the spec. (Engineering risk → a separate
-  feasibility pass, **[OPEN]**, see `07`.)
+  feasibility pass — **[DESIGNED — D69: the proportional-rigor decision gate; implementation deferred]**, see `07`.)
 - **Spec-first, demo-validates:** conversation → written spec → demo *tests* the spec against the user's
   actual mental picture. The demo is generated *from* the spec; the user reacts with plain-language
   change requests → spec is edited → demo regenerated → retest (a refine mini-loop). The spec never lags

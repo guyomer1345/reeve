@@ -10,8 +10,8 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
 
 ## Ground yourself first (read before proposing anything)
 - **`11-roadmap.md`** — the complete by-space map of what's left + the phased build sequence (canonical status).
-- **`08-decision-log.md`** — every decision D1–D62: the call, why, what was rejected, the evidence.
-- Then the numbered spec docs `00`–`10` + `shared/` as the topic needs.
+- **`08-decision-log.md`** — every decision: the call, why, what was rejected, the evidence.
+- Then the numbered spec docs `00`–`11` + `shared/` as the topic needs.
 
 The **spec folder is the source of truth.** Don't duplicate what it already records.
 
@@ -24,8 +24,15 @@ The **spec folder is the source of truth.** Don't duplicate what it already reco
   rejected · evidence). **Never capture unprompted.**
 - The project's own memory law applies to its docs: lean files, pointers not duplication, history in git
   (`shared/memory-model.md`; D38 / D51 / D61).
+- **Status is derived — one OWNER per fact, never a second copy (D80).** Owners: roster count → `10-roster.md`'s
+  table · phase / what's-left → `11-roadmap.md` · decisions → `08` · open design-questions → `07` · structure →
+  `graph.json`. Every other doc *points* to the owner or is *generated* from it; a new source is **adopted**
+  deliberately (declare its owner), never accreted. **On capture, run the blast-radius sweep:** grep every guiding
+  doc for the fact you just changed, update its owner, repoint the rest — then `scripts/check-status-coherence.sh`
+  is the mechanical backstop (roster counts, `D1–DN` ranges, and roadmap `**[…]**` tags stay in their owner;
+  auto-runs at commit via `.git/hooks/pre-commit`). Same logic applies to any single-source-of-truth claim.
 
 ## Where we are
-Foundations + the whole doc-surface pass are closed (D46–D62). For the current phase, read **Recommended
-sequence** in `11-roadmap.md` — as of 2026-06-30, **Phase 1 (close the foundations): start with the D36–D45
-skill-body deltas.** The 4-phase order: close foundations → define website + demo → build website → build demo.
+**Status is single-source — read the current phase + what's left from `11-roadmap.md` (its _Recommended
+sequence_).** This section stays deliberately thin so it can't drift: the 4-phase order is close foundations →
+define website + demo → build website → build demo; *where inside that we are* lives in `11-roadmap.md`, not here.

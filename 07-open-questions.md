@@ -52,8 +52,7 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Package install** — loose `.claude/` files are MVP (D57); plugin packaging + `shared/` resolution open.
 - **Adoption follow-ons (D38–D51)** — the **retention & archival law** is **CLOSED**: Layer 0 write-law leak
   closures (D59–D60) + Layer 1 cap-and-archive read law (D61). What remains under it: **Sessions distillation**
-  (deferred — lossy/model-authored), `K`/threshold tuning, and **authoring the retention script** (depends on
-  the strict `# Sessions` format + the `decision-record` `status` + `handoff.base_sha` fields landing). Also:
+  (deferred — lossy/model-authored) and `K`/threshold tuning against real runs. Also:
   whether `verify` samples the real `git diff` vs trusts the `changelog` (#8).
 - **Rules baseline + `/start` enforcement wiring (D40) + two-tier drift defense (D65/D67) — AUTHORED
   2026-07-01.** The `rules/*.md` baseline (enforced-by tags), the `shared/format.md` rules convention, the

@@ -1,10 +1,12 @@
 # Dev-Workflow Spec — working draft
 
 **What this is:** the full specification for an autonomous, disciplined Claude-Code-native dev
-workflow ("the disciplined builder"). **Spec-only — nothing here is implemented.**
+workflow ("the disciplined builder"). The repo is **both the spec and the package being built** — the numbered
+docs design it; `skills/ agents/ rules/ hooks/ commands/ templates/ scripts/` implement it.
 
-**Status:** DRAFT (design started 2026-06-25). This folder is the source of truth — the spec lives and
-is edited here directly. Five open items (below) remain to close before build.
+**Status:** see `11-roadmap.md` — the canonical map of what's done, what's left, and the current phase. This
+folder is the source of truth; the spec lives and is edited here directly. (This README stays status-free by
+design — status is single-source.)
 
 > **Home:** `/mnt/c/Users/Guy Omer/Documents/dev-autonomous-workflow/` (permanent working directory).
 
@@ -22,6 +24,7 @@ is edited here directly. Five open items (below) remain to close before build.
   the commitment model. (Extends `01`.)
 - `10-roster.md` — Space 2 v1: the full capability roster (skills + agents), loop order, call-graph;
   per-capability contracts live in the package files below.
+- `11-roadmap.md` — **canonical status:** what's built, what's left, the phased build sequence.
 
 Package source (Claude-Code-native, D25): `skills/<name>/SKILL.md`, `agents/<name>.md`,
 `shared/schemas.md`. The repo is both the spec and the package being built.
@@ -31,14 +34,9 @@ Package source (Claude-Code-native, D25): `skills/<name>/SKILL.md`, `agents/<nam
 - **[OPEN]** — needs to be closed before build.
 - **[DEFERRED]** — known, intentionally not specced now (post-MVP or later).
 
-## Still to close before build
-1. Macro-loop control-flow — spine wired in `10`, interrupt model decided (pure queue, D26); remaining:
-   how reset/handoff slots in (`01`) and the `init`/bootstrap capability (D28).
-2. Website screen list (`03`).
-3. Which checkpoint help-features are MVP (`04`) — the checkpoint data model is now in `shared/schemas.md`.
-4. State/artifact disk paths (`05`) — package source layout is decided (D25).
-
-Closed this session: the agent roster v1 (`10`), the intake stage (`09`).
+## What's left
+See `11-roadmap.md` — the canonical, living map of remaining work by design-space and the phased build
+sequence. Kept there, not here, so status lives in exactly one place.
 
 ## Home
 Permanent home: `/mnt/c/Users/Guy Omer/Documents/dev-autonomous-workflow/` — the project's working

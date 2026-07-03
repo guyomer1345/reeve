@@ -10,7 +10,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   read→place→advance algorithm, the resume model (`state.json` / `handoff.md` / git), and the autonomous
   **permission model** (broad-allow + `ask` outward + `guard.sh`) — **dogfood-validated** end-to-end, zero
   local prompts after trust (D46–D58).
-- **Space 2 — Roster + contracts.** 15 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
+- **Space 2 — Roster + contracts.** 16 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
   the **D36–D45 skill-body deltas** authored (`prioritize` waves · `execute` divergence tiers +
   refuse-destructive · `planner` risk_class+backup + decision-coverage gate · `adjudicate`
   conjunction-of-signals · `commit` secret-scan) + the prerequisite-repair two-commit carve-out and
@@ -122,7 +122,6 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   prune), wired into `/start` (copy → `.claude/scripts/`) + `document` audit mode (invoke; and `document` writes
   the `promoted.json` prune-gate). Fixture-validated (caps fire, N accumulates, re-run no-op, git-recoverable).
   *Remaining:* `K`/threshold tuning against real runs; **Sessions distillation** deferred (D61). **[done]**
-- **Graph regenerate-vs-incremental** — the mechanism for keeping the generated graph current. **[later]**
 - **Spec↔implementation alignment scan** — a whole-project, fan-out reconciliation (decisions/spec ↔ code),
   each divergence classified by the commitment model (locked→drift · provisional→finalize · unspecified→
   steering) and scheduled by the D61 audit trigger (interval / threshold / after-big-change). Detection is the
@@ -167,7 +166,10 @@ floor + Python & JS/TS precise arms** (D73/D74) — any recognized language now 
 arm is a **zero-dep resolver** (tree-sitter reserved for parse-hard languages). **2026-07-02/03: the Go/Java/C#
 resolver arms built + independently ground-truth-measured, and the C# head-token precision filter added — the
 code-map arm build thread is CLOSED (D77/D79, all five arms measured; C++/Rust/PHP stay on the floor by design).**
-Remaining Phase-1: a guiding-doc coherence pass.)*
+**2026-07-03: the guiding-doc coherence pass is DONE** (a lightweight fan-out found + fixed a systemic status-drift
+regression) and **single-source status is adopted (D80)** — `11-roadmap.md` is the sole status authority, guarded
+by a `check-status-coherence.sh` gate + a capture-time blast-radius sweep (resolving D64's two prevention
+follow-ons). **Phase 1 (close the foundations) is COMPLETE.**)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /
