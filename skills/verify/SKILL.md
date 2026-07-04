@@ -47,3 +47,5 @@ Lean: for small changes, judge directly without fanning out workers.
 - **pass** → `document` / `commit`. If the `plan` declared any `human-qa` acceptance criteria, the
   orchestrator inserts a `checkpoint` (kind=qa) first; otherwise straight through — no blanket human QA.
 - **fail** → `debug`. A failed check is a valid debug trigger even with no live error.
+- **irreconcilable** (asked vs done can't be settled from the artifacts) → escalate → `checkpoint` (human) — the
+  `adjudicate` escalate branch, not a silent pass or an endless re-gather.

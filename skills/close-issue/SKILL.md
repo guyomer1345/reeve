@@ -17,7 +17,9 @@ At item completion, immediately after `commit`.
 
 ## Workflow
 1. Close the item's own GitHub issue — `gh issue close <github_ref>`.
-2. Comment the resolving commit SHA on the issue.
+2. Comment the resolving commit SHA on the issue — **only once the commit is pushed** (the SHA is local until
+   then; if the branch is unpushed, the comment waits for the push rather than referencing a SHA GitHub can't
+   resolve).
 
 ## Rules
 - Close only the completed item's own issue — 1:1. Detecting issues *incidentally* resolved by the change

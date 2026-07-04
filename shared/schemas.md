@@ -53,6 +53,12 @@ The product definition `discuss` produces and the whole build runs against.
   or missing `discharge` — the presence check behind the "no vacuous artifact-pass" rule (adequacy of a named
   discharge stays `verify`'s read + a deferred hardening, not this gate's).
 
+## plan-delta  · produced by `refine` · *item-scoped ephemeral in `.workflow/items/<id>/`*
+The correction `refine` hands to `planner` (plan-one) so a re-plan *amends* the existing `plan` instead of
+rebuilding it from scratch. `{ target_plan_ref, change — what to add/alter/drop, why — the failure/finding it
+answers, source ∈ { debug-report, checkpoint-fail, new-need } }`. `planner` (plan-one) takes it as an optional
+input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh plan-one.
+
 ## changelog  · produced by `execute` · *append within the item's lifetime; `.workflow/items/<id>/`; item-scoped ephemeral*
 - `plan_ref`
 - `actions[]` — `{ step, files, result }`
@@ -93,8 +99,9 @@ The product definition `discuss` produces and the whole build runs against.
 - `confidence`
 
 ## checkpoint  · the `checkpoint` gate · *RESERVED — `.workflow/checkpoints/` is demoted pending the outward-permission model; today the verdict is a bus message, not a written record*
-- `request` — `{ kind: demo|qa|setup, what, expected, how?(←setup-guide), blocking: true }`
-- `verdict` — `{ pass, notes }`  · pass → continue · fail → debug→refine
+- `request` — `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), blocking: true }`
+- `verdict` — `{ pass, notes }`  · pass → continue · **fail routes by kind** (qa→debug · demo→create-demo ·
+  setup→setup-guide/human · reconcile→ingest/discuss) — a rejection is not always a defect
 
 ## issue  · produced by `create-issue`, closed by `close-issue` · *filed into `backlog.md` — a **live open queue** (rewrite-in-place; closed entries leave, GC'd by `prioritize`), not append-only*
 - `{ title, kind: bug|feature|debt, description, severity, source }`

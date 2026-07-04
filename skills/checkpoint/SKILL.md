@@ -12,9 +12,10 @@ person to confirm the live app, the real "does it work" signal in MVP (autonomou
 - **demo** — approve a `create-demo` sandbox.
 - **qa** — test a built feature against its acceptance criteria.
 - **setup** — perform a manual external action; calls `setup-guide` for precise steps.
+- **reconcile** — confirm a brownfield-reconstructed `spec` before the build loop starts (from `ingest`).
 
 ## Inputs
-A `checkpoint.request` `{ kind, what, expected, how?(←setup-guide), blocking: true }`.
+A `checkpoint.request` `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), blocking: true }`.
 
 ## Workflow
 1. Assemble the `request`.
@@ -26,8 +27,13 @@ A `checkpoint.request` `{ kind, what, expected, how?(←setup-guide), blocking: 
 A `checkpoint.verdict` `{ pass, notes }`.
 
 ## Route
-- **pass** → `document` / `commit` (for kind=demo, lock the spec state instead).
-- **fail** → `debug` → `refine`.
+- **pass** → `document` / `commit` (kind=demo → lock the spec state instead; kind=reconcile → `prioritize`).
+- **fail — by kind** (a rejection is not always a defect, so `debug` is not the universal sink):
+  - **qa** → `debug` (behaviour ≠ intent) → `refine`.
+  - **demo** → `create-demo` (refine the sandbox / spec — a product-fit rejection, not a bug).
+  - **setup** → re-attempt the `checkpoint` (it re-guides via `setup-guide`) or escalate to the human (an
+    external step can't be debugged).
+  - **reconcile** → `ingest` (re-run) / `discuss`.
 
 ## Calls
 `setup-guide` (kind=setup).

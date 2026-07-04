@@ -67,20 +67,23 @@ overlap into one adjudicator.
 | align | skill | periodic spec↔code reconciliation scan (mechanical always-whole + scoped semantic) | `skills/align` |
 
 ## Loop order (the spine)
+`.workflow/loop.md` is the **authoritative** routing graph (D80); this is the summary spine. Edges added in the
+resolve phase — brownfield entry, per-item demo, fail-**by-kind**, `debug`/`verify` **escalate→checkpoint**,
+`idle`→`prioritize` wake, `execute` structural→re-plan — live there, not duplicated here.
 ```
-backlog
+brownfield: /start → ingest → checkpoint(reconcile) → prioritize    ┐ intake (09)
+greenfield: /start → discuss → create-demo (if the gate fires)      ┘
   → prioritize (pick next)
-  → discuss  ┐ intake (09)
-  → create-demo ┘ (if the gate fires)
-  → planner ──► decision-engineer ──► research
-  → execute (→ changelog)
+  → planner ──► decision-engineer ──► research   [per-item demo gate → create-demo → execute]
+  → execute (→ changelog; structural divergence → re-plan)
   → verify ──on-fail──► debug ──► refine (routes correction back to planner→execute)
-  → checkpoint (qa: only if the plan declared human-qa criteria; setup for kind=setup)
+      └ debug/verify no-resolution → escalate → checkpoint (human)
+  → checkpoint (qa only if the plan declared human-qa; setup for integrations; reconcile for brownfield)
   → document (→ Space 6 Sessions)
   → commit (the checkpoint marker)
   → close-issue (close the GitHub issue the item resolved)
 
-create-issue → backlog   (side-door, from anywhere)
+create-issue → backlog   (side-door, from anywhere; picked at next prioritize / idle-wake)
 research                  (service, callable from anywhere)
 ```
 

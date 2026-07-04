@@ -32,4 +32,6 @@ The problem/idea + its `kind` (bug|feature|debt), `severity`, and `source`.
 A backlog `issue` carrying its `github_ref`, mirrored by a real GitHub issue.
 
 ## Route
-→ backlog (side-door, from anywhere); `prioritize` re-runs.
+→ backlog (side-door, from anywhere). The item is picked at the **next `prioritize`** — immediately if the loop
+was `idle` (the idle→`prioritize` wake edge), otherwise at the next natural pick; it **never preempts** in-flight
+work (pure queue).

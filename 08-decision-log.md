@@ -1504,6 +1504,33 @@ physical reclassification → a dedicated future session.
 
 ---
 
+## D85 — Resolve phase, cluster 3: routing/contract gaps closed — brownfield routed, checkpoint fail-by-kind, a `reconcile` kind, escalation off-ramps **[DECIDED + BUILT]**
+Origin: the pressure-test **resolve phase** (cluster 3 — routing/contract gaps in `loop.md` × the skill Routes,
+the class `check_contracts.py` re-finds). **Design calls:**
+- **Brownfield is routed (G4).** `ingest` had no `loop.md` node. Added a brownfield **start-branch**:
+  `/start`(brownfield) → `ingest` → `checkpoint:reconcile` → `prioritize`. Chosen over "ingest is a bootstrap
+  step *outside* the loop" — routing it makes the graph total and satisfies the contract linter.
+- **A `reconcile` checkpoint kind (G11).** ingest's reconstructed-spec confirmation is neither a feature-test
+  (`qa`) nor a manual external step (`setup`) — a fourth kind `reconcile`, added to the checkpoint enum + skill +
+  loop.
+- **Checkpoint fail routes by KIND (S2).** All-fails→`debug` was wrong — a demo rejection or a failed manual
+  setup is not a defect. Now qa→`debug`, demo→`create-demo`, setup→`setup-guide`/human, reconcile→`ingest`/`discuss`.
+- **Escalation off-ramps (G21/G22/G25).** `adjudicate`'s `escalate?` was promised but unconsumed and `debug`'s
+  confidence loop could spin. Now `debug`/`verify` **escalate → a human `checkpoint`** when no resolution
+  survives a bounded retry budget (bounded, not infinite).
+- **Mechanical edges, same commit:** `execute` structural-divergence → `planner:plan-one` re-plan (G3); a
+  **per-item** `create-demo` gate → `execute` (G17); `idle`→`prioritize` wake on steering/side-door (G19);
+  `refine`'s input is a `debug-report` *via* `debug`, never a raw `verify-verdict` (S17); `plan-delta` defined in
+  `schemas.md` + accepted by `planner` (G14); create-issue "prioritize re-runs" reworded to the next-pick /
+  idle-wake truth (G30); close-issue comments the SHA only **post-push** (G29).
+*Rejected:* ingest-as-bootstrap-outside-the-loop (leaves the brownfield entry unrouted — the linter's whole
+point); all-fails→`debug` (conflates a product-fit rejection with a defect); an unbounded `debug` confidence loop
+(spins forever). *Evidence:* register §6 G3/G4/G11/G14/G17/G19/G21/G22/G25/G30/S2/S17; `loop.md` × the skill
+Routes; `check_contracts.py` re-finds the routing class. → `templates/loop.md`,
+`skills/{checkpoint,refine,planner,debug,verify,create-issue,close-issue}`, `shared/schemas.md`, `10-roster.md`.
+
+---
+
 ## Not yet decided (tracked in `07`)
 Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
 follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the

@@ -15,7 +15,8 @@ Core principle: produce the plan others execute against; raise any real build de
 
 ## Inputs
 - decompose: the `spec`.
-- plan-one: the picked backlog item + the project knowledge graph.
+- plan-one: the picked backlog item + the project knowledge graph. **Optionally a `plan-delta`** (from
+  `refine`) — when present, *amend* the item's existing `plan.md` per the delta rather than re-plan from scratch.
 
 ## Workflow
 1. Read the `spec` (decompose) or the item + knowledge graph (plan-one).
