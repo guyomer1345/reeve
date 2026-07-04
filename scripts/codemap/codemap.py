@@ -1068,9 +1068,22 @@ def discover(root, exclude, ext2arm):
 def main():
     ap = argparse.ArgumentParser(description="Multi-language code-map extractor -> graph.json")
     ap.add_argument("root", nargs="?", default=".")
-    ap.add_argument("--out", default="docs/knowledge/graph.json")
+    ap.add_argument("--out", default=None,
+                    help="graph.json path (default: <project_root>/docs/knowledge/graph.json, "
+                         "project_root read from .workflow/config.json, else ./docs/knowledge/graph.json)")
     ap.add_argument("--exclude", default="")
     args = ap.parse_args()
+
+    # Default the output under <project_root>/docs, not the repo root — a greenfield
+    # project lives in ./project, so its docs belong there, not at the launch root.
+    if args.out is None:
+        project_root = "."
+        try:
+            with open(os.path.join(".workflow", "config.json"), encoding="utf-8") as fh:
+                project_root = json.load(fh).get("project_root", ".")
+        except (FileNotFoundError, ValueError):
+            project_root = "."
+        args.out = os.path.join(project_root, "docs", "knowledge", "graph.json")
 
     exclude = set(DEFAULT_EXCLUDE) | {e for e in args.exclude.split(",") if e}
     ext2arm = _ext_to_arm()

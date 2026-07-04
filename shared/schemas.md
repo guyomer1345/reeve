@@ -123,9 +123,11 @@ input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh
 - `project_root` — `./project` (greenfield) | `.` (brownfield); makes code-touching skills path-agnostic
 - `run` — per-project run config (model/effort routing, wave caps — fields grow as those land)
 - `retention` — the memory-bound knobs the `audit` pass reads: `sessions_k` (per-node `# Sessions` cap — the
-  retention script's only knob) + the scheduling thresholds `prioritize` trips on (`decisions_active_n`,
-  `items_closed_m`, `every_p_items`). Absent → shipped defaults (sessions_k 10, decisions_active_n 30,
-  items_closed_m 10, every_p_items 15).
+  retention script's only knob) + the scheduling thresholds `prioritize` trips on (`decisions_superseded_n` —
+  **superseded** decision bodies awaiting GC, the count retention actually lowers, not the active count;
+  `items_closed_m`; `every_p_items`). Absent → shipped defaults (sessions_k 10, decisions_superseded_n 30,
+  items_closed_m 10, every_p_items 15). The Sessions trigger fires with a **margin** above `sessions_k` (the cap
+  restores headroom), so a single append can't re-trip the audit.
 - `align` — the drift-scan knobs, read by `prioritize` (trigger) + `align` (budget): `every_n_commits` (commits
   since `.workflow/align/anchor.json`'s `base_sha` before an `align` item is injected) + `max_agents` (hard cap
   on the semantic pass's fan-out; deferred surface rides the next scan). **Decoupled from `retention`** (drift

@@ -18,9 +18,12 @@ The backlog (items with `depends_on`, `kind`, `severity`).
 1. **GC the queue first:** drop done items so `backlog.md` stays a live *open* queue, not a ledger —
    roadmap items `commit` flipped done, and `issue` entries whose `github_ref` is closed on GitHub.
 2. **Schedule maintenance — two decoupled triggers** (memory pressure ≠ drift risk, so separate thresholds):
-   - *Retention/size* → inject a `document:audit` item: a retention threshold from `config.retention` is
-     tripped — a node's `# Sessions` > `sessions_k`, active `docs/decisions/` > `decisions_active_n`, or closed
-     `items/` > `items_closed_m` — or every `every_p_items` items.
+   - *Retention/size* → inject a `document:audit` item when a threshold retention can actually **reduce** is
+     tripped — a node's `# Sessions` exceeds `sessions_k` **by a margin** (retention caps back to `sessions_k`,
+     leaving headroom so the next single append doesn't immediately re-trip), **superseded** `docs/decisions/`
+     bodies awaiting GC > `decisions_superseded_n`, or closed+promoted `items/` > `items_closed_m` — or every
+     `every_p_items` items. Count the *superseded* decisions, not the active ones: GC removes superseded bodies,
+     so that is the count the audit lowers — an active count would never drop and would thrash.
    - *Drift* → inject an `align` item: `config.align.every_n_commits` commits since the last scan anchor
      (`.workflow/align/anchor.json`'s `base_sha`), or a phase/wave boundary just closed.
    Both are self-contained maintenance items (`loop.md` § Maintenance items) — they run their pass and flow

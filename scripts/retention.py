@@ -23,9 +23,9 @@ The git-log cold-start bound is a READ convention (handoff.base_sha), not an act
 Dead-node prune (deleted source -> delete node) is a staleness signal, owned by
 `document`, not this size-cap script.
 
-Deletions are made in the working tree and left staged for the `audit` item's commit
-(git add -A picks them up); the content stays recoverable in history. The only git call
-is reading HEAD for the archive anchor.
+Deletions are made in the working tree and left UNSTAGED for the `audit` item's commit
+to pick up (its `git add -A` stages them); the content stays recoverable in history. The
+only git call here is reading HEAD for the archive anchor.
 
 Usage:  retention.py [--workflow-dir DIR] [--project-root DIR] [--sessions-k K]
                      [--dry-run] [--json]
@@ -76,14 +76,23 @@ def load_config(workflow_dir):
 
 def split_sessions(lines):
     """Return (head, region, tail): the lines before `# Sessions`, the section body,
-    and any trailing top-level section. Returns None if the node has no `# Sessions`."""
+    and any trailing top-level section. Returns None if the node has no `# Sessions`.
+
+    A `# `-prefixed line *inside* a postmortem body (a markdown H1, a diff/comment line)
+    must NOT be mistaken for the section boundary — that would truncate the region and
+    leave later entries uncapped. So a top-level heading only ends the region if it
+    appears BEFORE the first `## ` entry; once entries have begun, the region runs to
+    EOF (by the node convention that `# Sessions` is the terminal section)."""
     start = next((i for i, ln in enumerate(lines)
                   if ln.rstrip() == "# Sessions" or ln.startswith("# Sessions ")), None)
     if start is None:
         return None
     end = len(lines)
+    seen_entry = False
     for i in range(start + 1, len(lines)):
-        if TOPLEVEL_RE.match(lines[i]):
+        if ENTRY_RE.match(lines[i]):
+            seen_entry = True
+        elif TOPLEVEL_RE.match(lines[i]) and not seen_entry:
             end = i
             break
     return lines[:start + 1], lines[start + 1:end], lines[end:]
@@ -152,14 +161,16 @@ INDEX_HEADER = "| id | title | status | ref |\n|---|---|---|---|\n"
 
 
 def read_index_rows(index_path):
-    """Return (preamble_lines, ordered {id: row_cells}). Row cells exclude the id."""
+    """Return (preamble_lines, ordered {id: row_cells}, postamble_lines). Row cells
+    exclude the id. Prose after the table (postamble) is preserved, not dropped."""
     rows = {}
     preamble = []
+    postamble = []
     try:
         with open(index_path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
     except FileNotFoundError:
-        return ["# Decision Index", ""], rows
+        return ["# Decision Index", ""], rows, []
     table_seen = 0
     for ln in lines:
         if ln.lstrip().startswith("|"):
@@ -171,14 +182,18 @@ def read_index_rows(index_path):
                 rows[cells[0]] = cells[1:]
         elif table_seen == 0:
             preamble.append(ln)
-    return preamble, rows
+        else:                        # non-table line after the table: human prose, keep it
+            postamble.append(ln)
+    return preamble, rows, postamble
 
 
-def write_index(index_path, preamble, rows):
+def write_index(index_path, preamble, rows, postamble=None):
     body = INDEX_HEADER
     for did, cells in rows.items():
         body += "| " + " | ".join([did] + cells) + " |\n"
     text = "\n".join(preamble).rstrip("\n") + "\n\n" + body
+    if postamble and any(ln.strip() for ln in postamble):
+        text += "\n" + "\n".join(postamble).strip("\n") + "\n"
     with open(index_path, "w", encoding="utf-8") as fh:
         fh.write(text)
 
@@ -186,7 +201,7 @@ def write_index(index_path, preamble, rows):
 def gc_decisions(decisions_dir, anchor, dry_run):
     if not os.path.isdir(decisions_dir):
         return []
-    preamble, rows = read_index_rows(os.path.join(decisions_dir, "index.md"))
+    preamble, rows, postamble = read_index_rows(os.path.join(decisions_dir, "index.md"))
     gcd = []
     for fn in sorted(os.listdir(decisions_dir)):
         if not fn.endswith(".md") or fn == "index.md":
@@ -204,7 +219,7 @@ def gc_decisions(decisions_dir, anchor, dry_run):
         if not dry_run:
             os.remove(path)
     if gcd and not dry_run:
-        write_index(os.path.join(decisions_dir, "index.md"), preamble, rows)
+        write_index(os.path.join(decisions_dir, "index.md"), preamble, rows, postamble)
     return gcd
 
 
