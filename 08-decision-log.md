@@ -1563,6 +1563,36 @@ lock-on-approval *behavior* suffices); a standalone promise-mirror gate (`align`
 
 ---
 
+## D87 — Resolve phase, cluster 5: guard/permission hardening — the ≥5 guard bypasses closed, obscured outward actions gated, staged-diff atomicity + a git-native backstop **[DECIDED + BUILT]**
+Origin: the resolve phase (cluster 5 — the highest-severity attacker surface: `guard.sh` was crossable ≥5 ways
+[S1], the outward gate had holes [G7], the commit-split was non-atomic [P8]). **The fixes (all tested):**
+- **guard.sh (S1):** (a) **fail-CLOSED without python3** — matches the raw hook payload when the parsed command
+  is empty, so removing python3 can't disable the gate; (b) **robust `git … commit` detection** — a regex that
+  tolerates `-c`/`--flag` args (`git -c core.pager=cat commit` no longer slips past the old literal
+  `*"git commit"*`); (c) **secret-scan expanded** — adds GitHub PAT (`gh[pousr]_`), Slack (`xox[baprs]-`), Google
+  (`AIza…`), Stripe (`[sr]k_live_`) to the AKIA/PEM/assignment set; (d) **verify-gate hardened** — a set item
+  with a **missing** verdict now blocks (not only a failing one), and the pass-regex tolerates markdown
+  (`- **pass:** false`) so a fail can't hide behind emphasis.
+- **Obscured outward actions (G7).** A *direct* `git push`/`gh` still goes to the settings `ask` prompt; guard.sh
+  now **blocks ones hidden in a chain/subshell** (`x && git push`, `$(git push)`, `; gh pr create`) — the
+  literal-prefix `ask` matcher can't see those, so they'd otherwise run under `allow`. Deploy/release scripts
+  (`npm run deploy`, `make release`, …) added to the `ask` list. **Accepted trade-off:** `WebFetch`/`WebSearch`
+  stay in `allow` — web egress is inherent to the autonomous research loop; the exfil-sensitive gate is on
+  outward *writes*, not reads.
+- **pre-commit.sh (P8 + the S1 git-native backstop).** Now (a) **validates the STAGED diff** — stashes unstaged
+  changes `--keep-index` (trap-restored) so a two-commit split stays atomic; and (b) carries the **secret-scan +
+  verify-gate itself**, so a commit via a path the PreToolUse hook never sees (a `make` target, an editor/IDE
+  commit) still hits both gates.
+*Rejected:* hard-blocking a *direct* `git push` (the design keeps push an `ask`, not a forbid — only obscured
+ones are blocked); moving `WebFetch`/`WebSearch` to `ask` (prompts on every research call → breaks autonomy); a
+bare-AWS-secret-key pattern (40-char base64 is false-positive-prone — the AKIA access-key id is the high-signal
+catch). *Evidence:* register §6 S1 (`guard.sh:15,26,29-30,37`), G7 (`settings.json:11-12,16`), P8
+(`pre-commit.sh`); tested — robust commit detection, obscured-outward blocked, all 5 secret patterns caught,
+markdown verdict handled, no false positive on `cat deploy.md &&`. → `hooks/guard.sh`, `hooks/pre-commit.sh`,
+`templates/settings.json`.
+
+---
+
 ## Not yet decided (tracked in `07`)
 Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
 follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the
