@@ -22,13 +22,20 @@ Claude-Code-native plugin source at the repo root:
 graph + diagram) + **`hooks/`** (the enforced gates). (Later: `.claude-plugin/plugin.json`.) The repo is now
 **both** the spec (`00`–`10`) and the package source.
 
-## Skill vs agent **[DECIDED — D24, D27]**
+## Skill vs agent **[DECIDED — D24, D27, D84]**
 - **skill** = a procedure / controller — run by the orchestrator; defines *how*; **may dispatch agents**.
 - **agent** = a **leaf worker** — its own tools, persistent/re-messageable (D4); does the heavy lifting;
   **never spawns sub-agents.**
 - Topology (closes `02`): **strict hub-and-spoke** — only skills/orchestrator fan out; agents are leaves.
 - Consequence: the only agents are `research` and `setup-guide`; all adjudicators (`verify`, `debug`,
   `decision-engineer`) are skills.
+- **Context-isolation axis (D84 — refines D27):** the line is drawn by *two* axes, not just fan-out. A skill runs
+  *inline in the orchestrator's context*; an agent runs *isolated* and returns a thin pointer. So a node is a
+  **leaf agent** when it does heavy autonomous work AND neither fans out nor holds the human conversation; it
+  stays a **skill** when it is a fan-out controller (leaves can't spawn — authored *thin*), human-interactive, or
+  thin bookkeeping. **Fan-out need beats heaviness** — a heavy adjudicator stays a skill. **Reclassification
+  pending (deferred to a dedicated session): `execute` + `create-demo` → leaf agents** (`document` stays a skill
+  for now; `ingest` stays a skill — it spawns `research`). Until then the table below reads the on-disk truth.
 
 ## The adjudicate pattern **[DECIDED — D24]**
 One base skill `adjudicate` (gather views → judge → confidence-gate → loop/escalate), specialized by
@@ -41,12 +48,12 @@ overlap into one adjudicator.
 | start (init) | command | bootstrap the workflow; greenfield/brownfield (D28/D29) | `commands/start` |
 | adjudicate | skill (base) | gather views → judge → confidence-gate | `skills/adjudicate` |
 | discuss | skill | intake conversation → `spec` | `skills/discuss` |
-| create-demo | skill | throwaway sandbox for product approval | `skills/create-demo` |
+| create-demo | skill *(→ agent, D84 — pending)* | throwaway sandbox for product approval | `skills/create-demo` |
 | prioritize | skill | order the backlog, emit the next wave | `skills/prioritize` |
 | planner | skill | decompose → `roadmap` / plan one item → `plan` | `skills/planner` |
 | decision-engineer | skill | resolve an open build decision (adjudicate) | `skills/decision-engineer` |
 | research | agent | gather info (Investigation worker) | `agents/research` |
-| execute | skill | run a plan, decide nothing → `changelog` | `skills/execute` |
+| execute | skill *(→ agent, D84 — pending)* | run a plan, decide nothing → `changelog` | `skills/execute` |
 | verify | skill | artifact conformance (adjudicate) | `skills/verify` |
 | debug | skill | root-cause behaviour ≠ intended (adjudicate) | `skills/debug` |
 | refine | skill | route corrections back through planner→execute | `skills/refine` |

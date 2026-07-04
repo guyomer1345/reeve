@@ -179,7 +179,10 @@ triggers.
 **Phase 3 — Build the website** (C1 console → C2 bus).
 **Phase 4 — Build the demo.**
 Everything `[stageable]`/`[later]` — waves coordination, the SDK overnight runner, model/effort routing,
-packaging, the state-view, the version-update skill — slots around these phases as it pays off.
+packaging, the state-view, the version-update skill, **and the D84 skill→agent reclassification** (`execute` +
+`create-demo` → leaf agents: the file moves, agent-format rewrites, orchestrator dispatch-by-kind wiring, and the
+`17 skills + 2 agents` → `15 + 4` count update — a dedicated session, validation-blocked until the loop runs) —
+slots around these phases as it pays off.
 
 ## The one-liner
 The engine **drives** and is now **self-maintaining** (retention + freshness + docs-root) and **disciplined**

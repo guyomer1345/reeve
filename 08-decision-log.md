@@ -1466,6 +1466,44 @@ concretely when the living code-map lands. → `skills/verify/SKILL.md`, `11-roa
 
 ---
 
+## D84 — The skill/agent line gains a context-isolation axis: heavy non-fan-out nodes are leaf agents; fan-out controllers stay thin skills (refines D27) **[DECIDED — rule + roster annotation; the physical reclassification is deferred to a dedicated session]**
+Origin: the pressure-test **resolve phase** (cluster 2 — the residual left when the D27 "skills-as-subagents
+barred" lead was *refuted*). D27 drew the skill/agent boundary on **one** axis — *does it fan out?* (adjudicators
+fan out → skills; leaves never spawn → agents). It missed the second: **a skill runs *inline in the
+orchestrator's context*; an agent runs *isolated* and returns a thin pointer.** So a heavy skill like `execute`
+(reads a plan, edits many files, runs tools) pollutes the very context the orchestrator brief swears to protect
+(`orchestrator:5-6`, `:11-15` — "thin router… context is the scarce resource"). **Calls:**
+- **The boundary is drawn by BOTH axes.** A node is a **leaf agent** (isolated) when it does heavy autonomous
+  work AND neither fans out nor holds the human conversation — its context cost stays off the hub. It stays an
+  **inline skill** when it is (a) a **fan-out controller** — *must* be a skill, since a leaf can't spawn
+  (`verify`/`debug`/`decision-engineer`/`planner`/`prioritize`/`align`); (b) **human-interactive**
+  (`discuss`/`checkpoint`); or (c) **thin bookkeeping** (`commit`/`create-issue`/`close-issue`/`refine`).
+- **Fan-out need beats heaviness** (maintainer's ruling). A heavy controller is **not** demoted to an agent —
+  that would break its view-gathering (a leaf can't spawn). The discipline instead is *authoring-thinness*: push
+  the heavy reads into the agents it spawns, hold only thin summaries inline (`orchestrator:13-14` already asks
+  this; D84 makes it the controllers' standing rule).
+- **Reclassification targets: `execute` + `create-demo` → leaf agents.** `execute` = heavy, zero-decision, no
+  fan-out (a structural divergence already escalates to the hub); `create-demo` = heavy sandbox build whose
+  `checkpoint` call is hub-sequenced anyway. `document` **stays a skill** for now (borderline weight). `ingest`
+  **stays a skill** — it spawns `research` (can't be a leaf), and its cost is a one-time brownfield-init, not
+  per-loop.
+- **Reclassifying CLEANS the node:** routing leaves the agent and lives in the hub/`loop.md` where it belongs (an
+  agent returns a result; the hub follows the edge — a leaf shouldn't own its own `Route`).
+- **Rule + roster annotation captured now; the physical work is DEFERRED to a dedicated session** —
+  validation-blocked (the context saving can't be measured until the loop runs; the bus is unbuilt). That session
+  does the `skills/{execute,create-demo}` → `agents/` file moves, the agent-format rewrites, the orchestrator's
+  **dispatch-by-kind** wiring, and the resulting `10` count + `11` (`17 skills + 2 agents` → `15 + 4`) update.
+*Rejected:* reclassify-by-heaviness-alone (demotes `verify`/`debug` to leaves → breaks fan-out → needs a
+two-level-agent topology, reopening D27); a **hub-mediated leaf-agent `ingest`** (adds hub round-trips to a
+one-time init path — deferred; S13's `ingest`↔`research` charter issue is a later cluster); doing the physical
+moves **now** (unvalidated until the loop runs — churn risk the maintainer chose to avoid). *Evidence:* register
+§2B D27 adjudication (refuted lead → this residual); `orchestrator:5-6,11-15` (thin-router invariant) vs the fact
+that skills run inline; the roster kinds (`10`). Refines D27 (adds the context-isolation axis); serves the master
+rule (protect the orchestrator's context). → `10-roster.md` (annotation), `11-roadmap.md` (deferred item); the
+physical reclassification → a dedicated future session.
+
+---
+
 ## Not yet decided (tracked in `07`)
 Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
 follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the
