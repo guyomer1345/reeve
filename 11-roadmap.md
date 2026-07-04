@@ -171,7 +171,11 @@ regression) and **single-source status is adopted (D80)** — an ownership map (
 count → `10`'s table · phase/what's-left → `11` · decisions → `08`), guarded by a `check-status-coherence.sh` gate
 + a capture-time blast-radius sweep (resolving D64's two prevention follow-ons). **Phase 1 (close the foundations)
 is COMPLETE.** 2026-07-04: the **`align` alignment-scan skill + `check_contracts.py` contract linter are built
-(D81)** — the mechanical layer validated against the pressure-test register; the semantic layer rides Phase 2/3.)*
+(D81)** — the mechanical layer validated against the pressure-test register; the semantic layer rides Phase 2/3.
+**2026-07-05: the pre-Phase-2 pressure-test RESOLVE PHASE is COMPLETE** — the ~57-finding register triaged +
+fixed + captured as **D82–D88** (6 clusters, all committed + pushed), adding two mechanical plan-coverage gates
+(`check_criterion_discharge`, `check_decision_coverage`); the sole deferred build-task is the D84 physical
+skill→agent moves, listed under `[stageable]` below.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /

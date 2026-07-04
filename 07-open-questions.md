@@ -7,7 +7,8 @@ Deliberately deferred — known unknowns, to close during build or later.
   the **orchestrator `CLAUDE.md` driver** is specced in `01` (D46); checkpoint = `04`, reset = the
   handoff/resume model (D48). *Intake stage closed in `09`.*
 - **Intake follow-ons** (`09`) — engineering-feasibility pass **designed as the proportional-rigor decision gate
-  (D69); implementation deferred to `11`**; demo-skill mechanics (serving,
+  (D69); implementation deferred to `11`** — **D88 recorded the wiring requirement (P3): the triage grades by
+  `risk_class` × blast-radius, not code-centrality alone**; demo-skill mechanics (serving,
   refine-round limits, on-disk location); commitment-status storage (spec doc vs Space 6 node frontmatter).
   *(Interrupt model closed: pure queue, D26.)*
 - **`init` / bootstrap capability** (`10`, D28) — greenfield is straightforward; brownfield **ingest**
@@ -34,11 +35,13 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Website screen list** (`03`).
 - **Disk layout** (`05`) — the full file tree + read/write protocols. *(Docs-root unified under
   `<project_root>/docs/` — spec + architecture + knowledge + decisions — D62; diagrams inline, D41.)*
-- **Orchestrator hooks** (D58) — `hooks/guard.sh` now enforces **secret-scan** + **verify-before-commit**
-  (hard blocks); **outward-action** gating is the settings `ask` rule (deliberate prompt). Still open:
-  **build-once-per-wave** (a wave-coordinator, not a command gate); **outward gating under full bypass**; and
-  the **command-chaining gap** — broad `Bash` allow + `ask` prefix-match misses `cd x && git push`, so the
-  robust outward gate ultimately needs the guard-hook/bus checkpoint-queue, not just `ask` rules.
+- **Orchestrator hooks** (D58) — `hooks/guard.sh` enforces **secret-scan** + **verify-before-commit** (hard
+  blocks), **hardened D87** (fails *closed* without python3, robust `git … commit` match, expanded secret
+  patterns, missing-verdict block, and it fires under bypassPermissions). **D87 closed the command-chaining gap
+  at the guard level** — an obscured `cd x && git push` / `$(…)` is now hard-blocked so it must run directly
+  (where the `ask` prompt fires); `pre-commit.sh` is the git-native backstop (secret + verify + staged-diff).
+  Still open: **build-once-per-wave** (a wave-coordinator, not a command gate); and the fuller **outward
+  checkpoint-queue** (batching / standing pre-auth via the bus) that the `ask`+guard pair only partly covers.
 - **First-launch workspace trust** (D58) — the shipped `settings.json` + hooks are **ignored until the folder
   is trusted**, and the trust **dialog doesn't render in some terminals (e.g. WSL)**; `/start` + setup docs must
   give the manual `hasTrustDialogAccepted` flag method, not just "accept the dialog." (Validated: after trust,
@@ -52,8 +55,9 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Package install** — loose `.claude/` files are MVP (D57); plugin packaging + `shared/` resolution open.
 - **Adoption follow-ons (D38–D51)** — the **retention & archival law** is **CLOSED**: Layer 0 write-law leak
   closures (D59–D60) + Layer 1 cap-and-archive read law (D61). What remains under it: **Sessions distillation**
-  (deferred — lossy/model-authored) and `K`/threshold tuning against real runs. Also:
-  whether `verify` samples the real `git diff` vs trusts the `changelog` (#8).
+  (deferred *mechanism* — lossy/model-authored; **D88 captured the rule (P2)** that a postmortem distills to a
+  one-line Lessons pointer *before* drop, so retention never evicts an "avoid" raw) and `K`/threshold tuning
+  against real runs. Also: whether `verify` samples the real `git diff` vs trusts the `changelog` (#8).
 - **Rules baseline + `/start` enforcement wiring (D40) + two-tier drift defense (D65/D67) — AUTHORED
   2026-07-01.** The `rules/*.md` baseline (enforced-by tags), the `shared/format.md` rules convention, the
   `/start` step-4 enforcement wiring, the `commit` mechanical-gate step, and the `prioritize` drift-ticket note
