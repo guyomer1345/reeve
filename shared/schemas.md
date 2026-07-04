@@ -100,6 +100,10 @@ The product definition `discuss` produces and the whole build runs against.
   retention script's only knob) + the scheduling thresholds `prioritize` trips on (`decisions_active_n`,
   `items_closed_m`, `every_p_items`). Absent → shipped defaults (sessions_k 10, decisions_active_n 30,
   items_closed_m 10, every_p_items 15).
+- `align` — the drift-scan knobs, read by `prioritize` (trigger) + `align` (budget): `every_n_commits` (commits
+  since `.workflow/align/anchor.json`'s `base_sha` before an `align` item is injected) + `max_agents` (hard cap
+  on the semantic pass's fan-out; deferred surface rides the next scan). **Decoupled from `retention`** (drift
+  risk ≠ memory pressure). Absent → shipped defaults (every_n_commits 20, max_agents 6).
 
 ## state.json  · the live loop pointer (volatile, gitignored) · *rewritten in place each iteration*
 - `status` ∈ `{ intake, building, idle }`

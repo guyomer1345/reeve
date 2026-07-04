@@ -57,6 +57,7 @@ overlap into one adjudicator.
 | commit | skill | git snapshot (Conventional Commit; the checkpoint marker) | `skills/commit` |
 | create-issue | skill | capture a problem/idea → backlog + GitHub issue | `skills/create-issue` |
 | close-issue | skill | close the GitHub issue a completed item resolved (commit tail) | `skills/close-issue` |
+| align | skill | periodic spec↔code reconciliation scan (mechanical always-whole + scoped semantic) | `skills/align` |
 
 ## Loop order (the spine)
 ```
@@ -84,6 +85,8 @@ research                  (service, callable from anywhere)
 - `debug` → `research`
 - any → `create-issue` · any → `research`
 - item-complete tail: `verify`(pass) → `document` → `commit` → `close-issue`
+- maintenance items (injected by `prioritize`): `document:audit` → `commit`; `align` → `create-issue` (per
+  semantic finding) → `prioritize`, mechanical fixes ride `commit` (D71/D81)
 
 ## Build status
 - **The full roster is written** (`skills/`, `agents/`) + `shared/schemas.md` — the table above is the source

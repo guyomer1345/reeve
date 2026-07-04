@@ -1364,6 +1364,49 @@ docs-in-CI freshness gates). → `11-roadmap.md` (phase/what's-left owner), `scr
 console build (D70). Resolves D64's single-source-status + capture-time-blast-radius follow-ons; extends
 D38/D40/D65; complements D63.
 
+## D81 — The alignment scan crystallized as the `align` skill + a decidable contract linter (`check_contracts.py`): two layers (mechanical-always-whole · semantic-scoped-budgeted), drift-triggered, principle-only panel **[DECIDED + BUILT (skill + mechanical layer + wiring); the semantic layer is specced, validated Phase 2/3 — realises D63/D76, closes the D63 cost lead, fixes G2]**
+Origin: the pre-Phase-2 adversarial pressure-test (2026-07-03/04; `pressure-test-2026-07/`) both harvested the
+scan's shape and produced a ~57-finding register that is now the skill's validation oracle. D63 designed the scan
+as a *lightweight fan-out, not a Workflow*; D76 grew its remit (promise-adequacy) without re-deriving that cost
+envelope — the pressure-test's own cost (~450 agents ≈ 3 usage windows over the whole surface) is the datum that
+forces the answer. **Calls:**
+- **Two layers with opposite scaling** — the trap D63/D76 left implicit. The **mechanical layer** (the package's
+  own wiring — routing graph, skill I/O, schema enums, coverage gates) is *fixed-size*, so it always runs WHOLE
+  and its findings are *facts* that hard-block. The **semantic layer** (spec↔code) *grows with the product*, so
+  it alone is scoped to the diff-since-anchor + capped at `config.align.max_agents` with honest truncation.
+  Conflating them is what would halt a large repo.
+- **`check_contracts.py` = a routing-graph linter, not a producer/consumer linter.** Decidable from `loop.md`'s
+  table structure: every routing target resolves, every invoked `node:mode` is routed, every skill is a node or a
+  side-door; commitment/kind tags stay in their schema enum. Hard-blocks a broken graph; advisories for
+  coverage/enum drift. Built + fixture-tested (11/11), wired into the meta-repo `.git/hooks/pre-commit` and
+  copied by `/start` for `align`'s mechanical layer.
+- **Trigger = drift, decoupled from retention.** `prioritize` injects an `align` maintenance item on
+  `config.align.every_n_commits`-since-anchor / a phase boundary — a *separate* threshold from `document:audit`'s
+  retention counts (memory pressure ≠ drift risk). Both are self-contained maintenance items that flow straight
+  to `commit` (`loop.md` § Maintenance items).
+- **Verify = principle-only, 2 orthogonal lenses.** Contract/decidable findings are settled by the read; only
+  *judgment* findings enter a small panel — occurrence + materiality (drop `mitigation`, it overlaps occurrence)
+  — dying on ≥1 solid refutation (precision-biased: a periodic scan that cries wolf gets muted). The D80
+  status-ownership + D76 promise↔plan-mirror lenses are baked in as standing checks.
+- **Wiring fixes G2 en route.** A single general maintenance-routing row routes `align` AND its sibling
+  `document:audit`, resolving the register's G2 (an injected maintenance mode with no `loop.md` edge);
+  `check_contracts.py` now guards that whole class.
+**Rejected:** a *producer/consumer* contract linter (would need a machine-readable skill-I/O manifest = a second
+copy of the prose Inputs/Output → a NEW drift surface `align` itself exists to catch: the disease posing as the
+cure); *whole-project* semantic scope (halts a large repo — the reason for the two-layer split); a
+*retention-coupled* trigger (conflates two independent signals); a *3-lens panel over every finding* (the
+pressure-test proved the panel earns its keep only on judgment attacks — it killed ~19 weak ones, but
+ground-truth reading adjudicated ~40 contract facts faster and at higher integrity). **Evidence:** the register
+is the oracle — a baseline run of `check_contracts.py` re-found **G2** (hard), **G4** + **S3** (advisory) with 0
+false positives, while correctly NOT firing on G11 (prose, not a token) or the producer/consumer class (out of
+decidable scope by design); post-wiring the gate is green and G2 is resolved. **Honest residual:** the *semantic*
+layer has no test surface yet (no built product) — specced, validated in Phase 2/3; the pressure-test's
+~57-finding register is triaged in a separate **resolve phase** (5 principle leads upheld with a direction, D27
+refuted → a resolve-phase skill→leaf-agent reclassification). → `skills/align/SKILL.md`,
+`scripts/check_contracts.py` (+ `test_`), `templates/loop.md`, `skills/prioritize`, `shared/schemas.md`,
+`commands/start.md`, `.git/hooks/pre-commit`; register + adjudications in
+`pressure-test-2026-07/EXPLORATION-LEDGER.md`.
+
 ---
 
 ## Not yet decided (tracked in `07`)
@@ -1380,9 +1423,10 @@ follow-ons: the **retention & archival law** is **closed** (D59–D60 write-law 
 law) and the **retention script is built** (D71); what remains is **Sessions distillation** (deferred) and
 `K`/threshold tuning against real runs. Plus whether `verify` samples the real diff vs trusts the `changelog` (#8). **Two new (user-raised):**
 a synthesized **project-state view**, and a **framework version-update** skill. **Alignment pass (D63/D64):**
-authoring the alignment-scan **skill** is knowledge-gated (D63); two prevention follow-ons — **single-source
-status** and a **capture-time blast-radius sweep** — are **resolved (D80)** (an ownership map + the
-`check-status-coherence.sh` gate + a capture-time blast-radius step). The **doc-authoring agent** is
+the alignment-scan **skill** (`align`) + its decidable contract linter are **built (D81)** — the semantic layer
+is validated Phase 2/3; two prevention follow-ons — **single-source status** and a **capture-time blast-radius
+sweep** — are **resolved (D80)** (an ownership map + the `check-status-coherence.sh` gate + a capture-time
+blast-radius step). The **doc-authoring agent** is
 reserved (D65). The **drift-gate wiring** is **authored** (D65/D67 — `commit` mechanical step + `pre-commit`
 backstop + generated `checks.sh`); what remains is `checks.sh`'s per-stack generator, which rides the `/start`
 enforcement-wiring build. All → `07`.

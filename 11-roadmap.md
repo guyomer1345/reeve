@@ -10,7 +10,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   read→place→advance algorithm, the resume model (`state.json` / `handoff.md` / git), and the autonomous
   **permission model** (broad-allow + `ask` outward + `guard.sh`) — **dogfood-validated** end-to-end, zero
   local prompts after trust (D46–D58).
-- **Space 2 — Roster + contracts.** 16 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
+- **Space 2 — Roster + contracts.** 17 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
   the **D36–D45 skill-body deltas** authored (`prioritize` waves · `execute` divergence tiers +
   refuse-destructive · `planner` risk_class+backup + decision-coverage gate · `adjudicate`
   conjunction-of-signals · `commit` secret-scan) + the prerequisite-repair two-commit carve-out and
@@ -122,22 +122,20 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   prune), wired into `/start` (copy → `.claude/scripts/`) + `document` audit mode (invoke; and `document` writes
   the `promoted.json` prune-gate). Fixture-validated (caps fire, N accumulates, re-run no-op, git-recoverable).
   *Remaining:* `K`/threshold tuning against real runs; **Sessions distillation** deferred (D61). **[done]**
-- **Spec↔implementation alignment scan** — a whole-project, fan-out reconciliation (decisions/spec ↔ code),
-  each divergence classified by the commitment model (locked→drift · provisional→finalize · unspecified→
-  steering) and scheduled by the D61 audit trigger (interval / threshold / after-big-change). Detection is the
-  backstop; prevention (the grep gate, single-source status, capture-time blast-radius checks) shrinks the
-  drift upstream. **Manual multi-agent scan runnable now** — proved out 2026-07-01, it found the D59–D62
-  ref-leak regression. **Crystallized into a skill after knowledge generation** (which upgrades it from
-  brute-force file reads to code-map-driven) and shipped as a **lightweight agent fan-out, not a Workflow** (a
-  periodic user-run skill must not consume most of a session). Relates to the project-state view + self-hosting.
-  **Promise-adequacy remit (D76):** the scan checks promise *adequacy*, not coverage — it **re-derives** each
-  decision's negative class from the design's purpose/archetypes (blind to the code, so it doesn't inherit the
-  builder's blind spot) and diffs it against what was exercised; plus an **over-delivery scan** (behaviour not
-  traceable to any promise — catches scope creep like graphless files becoming nodes) and a **cross-decision
-  invariant re-run** (satisfying promise P re-runs decision Q's invariant tests — catches "honouring one decision
-  broke another's"). This is the *late* backstop, not the gate — it already existed and missed the D75-class once;
-  the per-commit teeth are the promise-coverage gate + the boundary/property tests.
-  **[core; scan doable now, skill knowledge-gated]**
+- **Spec↔implementation alignment scan** — **BUILT as the `align` skill + `check_contracts.py` (D81).** Two
+  layers of opposite scaling: a **mechanical layer** (always-whole, decidable) — the routing-graph contract
+  linter (`check_contracts.py`, wired into the meta-repo pre-commit + copied by `/start`) plus the
+  coverage/status/no-refs gates — and a **semantic layer** scoped to the diff-since-anchor + budget-capped
+  (`config.align.max_agents`), each divergence classified by the commitment model (locked→drift ·
+  provisional→finalize · unspecified→steering). **Drift-triggered** (`config.align.every_n_commits` / phase
+  boundary, decoupled from the retention trigger), **principle-only 2-lens panel** (occurrence + materiality,
+  drop-on-≥1); a *lightweight fan-out, not a Workflow* (D63). **Promise-adequacy remit (D76)** carried in: it
+  re-derives each decision's negative class blind to the code + an **over-delivery scan** + a **cross-decision
+  invariant re-run** — the *late* backstop, not the gate (the per-commit teeth stay the promise-coverage +
+  boundary/property tests). **Validated** by re-finding the pressure-test register (G2/G4/S3, 0 false positives)
+  on the surface it scopes; the semantic layer's own validation rides Phase 2/3 (no built product yet). Relates
+  to the project-state view + self-hosting.
+  **[core — skill + mechanical layer BUILT (D81); semantic layer validated Phase 2/3]**
 
 ### Cross-cutting — packaging, validation, self-hosting
 - **Packaging/distribution** — plugin packaging (`.claude-plugin/`), `shared/` resolution, first-launch
@@ -167,9 +165,11 @@ arm is a **zero-dep resolver** (tree-sitter reserved for parse-hard languages). 
 resolver arms built + independently ground-truth-measured, and the C# head-token precision filter added — the
 code-map arm build thread is CLOSED (D77/D79, all five arms measured; C++/Rust/PHP stay on the floor by design).**
 **2026-07-03: the guiding-doc coherence pass is DONE** (a lightweight fan-out found + fixed a systemic status-drift
-regression) and **single-source status is adopted (D80)** — `11-roadmap.md` is the sole status authority, guarded
-by a `check-status-coherence.sh` gate + a capture-time blast-radius sweep (resolving D64's two prevention
-follow-ons). **Phase 1 (close the foundations) is COMPLETE.**)*
+regression) and **single-source status is adopted (D80)** — an ownership map (one owner per fact-domain: roster
+count → `10`'s table · phase/what's-left → `11` · decisions → `08`), guarded by a `check-status-coherence.sh` gate
++ a capture-time blast-radius sweep (resolving D64's two prevention follow-ons). **Phase 1 (close the foundations)
+is COMPLETE.** 2026-07-04: the **`align` alignment-scan skill + `check_contracts.py` contract linter are built
+(D81)** — the mechanical layer validated against the pressure-test register; the semantic layer rides Phase 2/3.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /

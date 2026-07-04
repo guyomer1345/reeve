@@ -40,7 +40,8 @@ built-in Claude Code command.
        knowledge/      # code map                            (committed)
        decisions/      # decision-records = ADRs (append-only) (committed)
    ```
-   `.workflow/items/<id>/` is **not** scaffolded here — `planner` `mkdir`s each per item on demand.
+   `.workflow/items/<id>/` and `.workflow/align/` are **not** scaffolded here — `planner` `mkdir`s each item
+   dir on demand, and `align` `mkdir`s `.workflow/align/` on its first run (writing `anchor.json`).
    Add `.workflow/state.json` to the target's `.gitignore`; everything else is committed.
 3. **Install the orchestrator brief** (the driver), from the package `templates/`:
    - **greenfield:** copy `templates/orchestrator-CLAUDE.md` → the launch-root **`CLAUDE.md`** (fill
@@ -63,6 +64,10 @@ built-in Claude Code command.
    - Copy the shipped **promise-coverage gate** (`scripts/check_promise_coverage.py`) → **`.claude/scripts/`** —
      the deterministic gate `checks.sh --check` invokes so a load-bearing promise can't ship with no resolvable /
      boundary test. Stack-agnostic (reads the workflow's own `promises.json`), so it ships fixed — not per-stack.
+   - Copy the shipped **contract linter** (`scripts/check_contracts.py`) → **`.claude/scripts/`** — the decidable
+     routing-graph check `align`'s mechanical layer invokes over `.workflow/loop.md` + the installed skills (via
+     `--loop`/`--skills-dir`/`--schemas`): every routing target resolves, every invoked `node:mode` is routed,
+     every skill is a node or side-door. Stack-agnostic (lints the workflow's own wiring), so it ships fixed.
    - **Surface the one-time permission message** to the human: *"This is an autonomous loop. Accept the
      workspace-trust dialog so the package can pre-approve the loop's local actions; outward actions
      (push / issues / deploy) will still ask — by design. You don't need `--dangerously-skip-permissions`."*
