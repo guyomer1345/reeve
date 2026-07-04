@@ -27,5 +27,7 @@ information it needs.
 - Never spawn sub-agents (leaf worker).
 
 ## Output
-`findings` — a sourced summary (the durable output; any heavy scratch notes are ephemeral, not a durable
-artifact).
+`findings` — a sourced summary **returned to the caller**, which distills it into *its* durable record (a
+`decision-record`'s `why` + `sources[]`, or a `debug-report`). `findings` itself is not independently
+persisted, and any heavy scratch notes are ephemeral — consistent with "the durable distillate is the caller's
+record" above.

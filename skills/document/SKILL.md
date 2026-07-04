@@ -23,7 +23,8 @@ judge intent-vs-actual divergence against the recorded intent).
    system/container structure — STABLE, changes only with the code. *(It lives at
    `<project_root>/docs/architecture.md`; resolve `<project_root>` from `config.json`.)*
 3. Append a per-file `# Sessions` entry where a postmortem applies (a `debug-report` maps directly:
-   symptom / cause / fix / avoid).
+   symptom / cause / fix / avoid). Each entry's header is **`## [date] kind | title`** — the strict,
+   lint-parseable form `retention.py` splits entries on; keep `# Sessions` the node's terminal section.
 4. Flag intent-vs-actual divergence as a signal.
 5. **Mark the item promoted** — once this item's essence is folded (the `# Sessions` entry written, its
    `decision-record`s already in `docs/decisions/`), write `.workflow/items/<id>/promoted.json`

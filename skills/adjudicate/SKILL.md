@@ -9,7 +9,8 @@ Core principle: the shared spine for every adjudication capability. An implement
 views** to gather and **how to judge**; the procedure and the I/O contract are fixed here.
 
 ## Inputs
-A question + a view-set (which realities to gather) + a confidence threshold.
+A question + a view-set (which realities to gather) + a confidence threshold (from `config.run`, else the
+implementation's shipped default — never an unsourced constant).
 
 ## Workflow
 1. **Fan out** workers to gather each view independently — heavy context stays with the workers; they

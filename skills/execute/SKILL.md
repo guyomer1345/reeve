@@ -16,8 +16,10 @@ A `plan` (goal, ordered verifiable `steps`, `acceptance_criteria`).
    `prod-touching`), refuse to run the destructive step unless the plan carries a `backup` block — run and
    verify the backup, record it in the `changelog`, *then* proceed. No verified backup → stop and escalate;
    an unattended executor never runs an irreversible op without a proven rollback.
-2. Work the plan's `steps` in order.
-3. Record every action in the `changelog` (`step, files, result`).
+2. Work the plan's `steps` in order — including **running each `artifact` criterion's discharging test/check**
+   (the `plan` named them), so `verify` reads a real signal rather than passing vacuously.
+3. Record every action in the `changelog` (`step, files, result`) — a failing discharge is a recorded result
+   (it routes `verify` → `debug`), never a silent skip.
 4. **Handle any divergence by tier** — never silently:
    - **cosmetic** (a helper moved, line drift): adapt, record it, continue.
    - **prerequisite-repair** (an in-scope-adjacent fix the plan didn't name): apply it, record it as a

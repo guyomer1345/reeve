@@ -5,7 +5,7 @@ name. On-disk paths are fixed; each schema notes its **write-mode** (rewrite-in-
 new-record-supersede · create-per-item) and **tier** (see `shared/memory-model.md`). *Retention bounds (the
 read law) live in `shared/memory-model.md`.*
 
-## spec  · *rewrite-in-place · STABLE (changes only with the code it specifies)*
+## spec  · *rewrite-in-place · STABLE (changes only with the code it specifies) · on disk at `<project_root>/docs/spec.md`*
 The product definition `discuss` produces and the whole build runs against.
 - `audience` — who it's for
 - `runtime` — where it runs
@@ -20,11 +20,16 @@ The product definition `discuss` produces and the whole build runs against.
 ## roadmap  · produced by `planner` (decompose mode) · *emitted as items into the live `backlog.md` queue*
 - `phases[]` — `{ name, goal, depends_on[], acceptance, commitment }`
 
-## plan  · produced by `planner` (plan-one mode) · *created per item under `.workflow/items/<id>/` (planner `mkdir`s it on demand); committed while the item is open (crash-survival), the dir pruned once closed by the audit pass*
+## plan  · produced by `planner` (plan-one mode) · *created per item under `.workflow/items/<id>/` (planner `mkdir`s it on demand); the item **dir** is committed while the item is open (crash-survival), pruned once closed by the audit pass*
+> **`committed while open` ≠ a second code commit.** What rides these interim commits is the item's `.workflow/`
+> *artifacts* (plan / changelog / verdict) — not the product code. The product code is still **one commit at
+> item close** (the one-commit-per-item rule); a mid-item reset re-runs only the uncommitted *code* work, while
+> the artifacts survive to rebuild position. Two different objects, no contradiction.
 - `goal`
 - `source_spec_ref`
 - `decisions[]` — refs (by `id`) to the `decision-record`s this plan implements; every one must map to ≥1
-  step or `planner` blocks the plan (coverage gate).
+  step or `planner` blocks the plan (coverage gate). `planner` writes the `{ id, steps }` mapping into
+  `promises.json` (`decisions[]`); `check_decision_coverage.py` blocks an unmapped one mechanically.
 - `risk_class` ∈ `{ code-only, data-additive, data-destructive, prod-touching }`.
 - `backup` — required when `risk_class` is destructive: `{ what, mechanism, verification, restore }`.
   `execute` refuses a destructive plan without it and runs+verifies it before the destructive step.

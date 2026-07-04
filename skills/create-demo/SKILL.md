@@ -31,8 +31,10 @@ The visual/behavioural slice of the `spec`.
 ## Rules
 - **Throwaway** — never reused as the real scaffold.
 - The spec state that produced the approved demo is what gets **locked**.
-- Each `provisional` item in the approved spec spawns a `create-issue` (kind=debt) — tracked debt. (On the
-  no-demo path, `discuss` files these instead.)
+- Each `provisional` item in the approved spec spawns a `create-issue` (kind=debt) — tracked debt. **The
+  sandbox gate (the `When` conditions) is evaluated once and owns which path runs**, so the debt is filed by
+  **exactly one** of {`discuss` on the no-demo path · `create-demo` here on approval} — never both, never
+  neither.
 
 ## Output
 An approved demo → spec commitment levels recorded.
@@ -41,4 +43,4 @@ An approved demo → spec commitment levels recorded.
 → `planner`.
 
 ## Calls
-`checkpoint` (kind=demo).
+`checkpoint` (kind=demo) · `create-issue` (kind=debt — one per `provisional` item on the approval path).

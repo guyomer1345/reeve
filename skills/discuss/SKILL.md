@@ -27,8 +27,9 @@ The user's intent (conversation) + any existing `spec` to extend.
 4. For any genuine engineering decision (stack, library, architecture), **do not decide** — record
    `TBD → decision-engineer` as a pointer. If the user states a firm preference, record it as `locked`.
 5. **Track provisional debt on the no-demo path:** at spec-completion, if the sandbox gate will not fire (no
-   demo for this item), spawn a `create-issue` (kind=debt) for each field left `provisional`, so no deferred
-   decision is silently lost. (When a demo does run, `create-demo` files these after approval instead.)
+   demo for this item — the gate being `create-demo`'s `When` conditions, the single source), spawn a
+   `create-issue` (kind=debt) for each field left `provisional`, so no deferred decision is silently lost. (When
+   a demo does run, `create-demo` files these after approval instead — exactly one path files, never both.)
 
 ## Rules
 - Requirements only — never resolve an engineering decision; leave a `TBD → decision-engineer` pointer.

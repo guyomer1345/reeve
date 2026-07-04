@@ -34,8 +34,9 @@ Core principle: produce the plan others execute against; raise any real build de
    destructive, author the required **`backup`** block (`what / mechanism / verification / restore`) —
    `execute` verifies it before the destructive step and refuses the plan without it.
 5. **Decision-coverage gate:** list every governing decision in `plan.decisions[]` and confirm each maps to
-   ≥1 step. An unmapped decision **blocks** the plan — escalate rather than let resolved intent silently
-   evaporate between the decision and execution.
+   ≥1 step. Write the `{ id, steps }` mapping into `.workflow/items/<id>/promises.json` (`decisions[]`);
+   `check_decision_coverage.py` (in `checks.sh --check`) **blocks** an unmapped decision mechanically — resolved
+   intent must not silently evaporate between the decision and execution.
 6. **Promise-coverage gate (impact-scoped):** for each impact-flagged decision, map every
    `decision-record.promises[]` entry to an `acceptance_criterion` (its `test_ref`). A `universal` promise's
    criterion must be **`boundary`-tagged** — a case drawn from *outside* the implementation's own enumerated

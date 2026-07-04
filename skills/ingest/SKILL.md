@@ -20,16 +20,20 @@ code alone.
 1. **Generate the structure.** Run the code-map extractor to build `docs/knowledge/graph.json`: typed
    import/call edges plus two centrality signals — *impact* (most-depended-upon → change blast-radius) and
    *orchestration* (composes many → where behaviour lives). Generated, never hand-authored.
-2. **Seed the nodes.** One node per source file: fill the generated skeleton (path, type, edge targets, the two
-   signals) and add a cheap extractive `purpose` (from signatures/docstrings) for the high-centrality set.
-   Leave the durable `why` and `# Sessions` empty — `document` authors those on first real touch.
-3. **Reconstruct the spec.** Dispatch `research` to read the existing `CLAUDE.md`/docs and the
-   orchestration-central files, and reconstruct the `spec` (audience, purpose, screens, features, data model).
-   Tag every reconstructed element `unspecified` — existing behaviour carries no recorded intent until a human
-   confirms it.
-4. **Reconcile.** Route to a blocking `checkpoint`: present the reconstructed understanding — what the app does,
-   its stack, its core flows — for the human to confirm or correct, and lock the load-bearing invariants they
-   name (those flip `unspecified → locked`). Corrections rewrite the spec before the loop starts.
+2. **Recover the behavioural core first** (so node seeding isn't driven by centrality). Dispatch `research` to
+   **gather** — read, not synthesize — the existing `CLAUDE.md`/docs/README + the orchestration-central files and
+   return `findings`; **`ingest` then synthesizes** the reconstructed `spec` from them (audience, purpose,
+   screens, features, data model). Synthesis is ingest's job, not `research`'s gather-only charter. Tag every
+   reconstructed element `unspecified`. **Fallback when the docs are thin/absent** (the common case): recover the
+   core from **entry-points + BOTH centrality lenses** (impact ∪ orchestration), tag even more `unspecified`, and
+   **widen the reconciliation checkpoint** — ask the human more, since less intent was recorded.
+3. **Seed the nodes.** One node per source file: fill the generated skeleton (path, type, edge targets, the two
+   signals) and add a cheap extractive `purpose` (from signatures/docstrings), prioritising the **recovered
+   spec-core ∪ high-centrality** set — never centrality *alone* (the import graph's most-central file is not the
+   app's core). Leave the durable `why` and `# Sessions` empty — `document` authors those on first real touch.
+4. **Reconcile.** Route to a blocking `checkpoint` (kind=reconcile): present the reconstructed understanding —
+   what the app does, its stack, its core flows — for the human to confirm or correct, and lock the load-bearing
+   invariants they name (those flip `unspecified → locked`). Corrections rewrite the spec before the loop starts.
 5. Hand to the normal loop.
 
 ## Rules

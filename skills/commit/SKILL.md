@@ -22,18 +22,26 @@ After `document`, per completed phase/item.
    escalate** — never commit the secret; once in history it lives there forever. (A guard hook re-checks this
    deterministically as the backstop — the step keeps it visible in the loop.)
 3. **Run the mechanical gate.** Run the project's check runner (`.workflow/checks.sh --fix`) — it reformats,
-   applies lint fixes, and strips a stale reference: the zero-judgment fixes a script can make safely. Re-stage
-   and re-run in check mode. **Log what it fixed** (in the commit body or the `changelog`) — never silently
-   mask a bad generator. Drift a script *cannot* safely fix — a stale/contradictory/over-claimed doc, a missing
-   owner, a symbol a doc still names that the code renamed — is **not** resolved here: file a `create-issue`
-   ticket with the evidence and the affected element's `commitment`, `severity` set from it (a locked
-   contradiction rides high; cosmetic drift sits low as `debt`), and let the commit proceed.
+   applies lint fixes, and strips a stale reference: the zero-judgment fixes a script can make safely. **Scope
+   `--fix` to the item's staged files** — never a repo-wide sweep, which would pull unrelated drift into this
+   atomic commit. Because these fixes are **zero-semantic** (format / lint / ref-strip), they need no re-verify;
+   anything that would change behaviour is never auto-fixed. Re-stage and re-run in check mode. **Log what it
+   fixed** (in the commit body or the `changelog`) — never silently mask a bad generator. Two failure paths from
+   `--check`:
+   - **a hard, non-auto-fixable error** (a type/lint error `--fix` couldn't resolve) → **do not proceed**: route
+     to `debug` → `refine` (it's a real defect, not doc drift).
+   - **doc↔code drift** a script *cannot* safely fix (a stale/contradictory/over-claimed doc, a missing owner, a
+     symbol a doc still names that the code renamed) → file a `create-issue` ticket with the evidence and the
+     affected element's `commitment`, `severity` set from it (a locked contradiction rides high; cosmetic drift
+     sits low as `debt`), and let the commit proceed.
 4. **Split out a prerequisite-repair, if any.** If the `changelog` recorded a `prerequisite-repair`
    divergence, commit that repair as its **own** commit first — typed and scanned like any other — so the
    stumbled-into fix stays reviewable and revertible apart from the planned change.
-5. Write the planned change as a **Conventional Commit** — `type(scope): summary`, type from the item's `kind`
-   (`bug → fix`, `feature → feat`, `debt → refactor`/`chore`).
-6. Add linking trailers:
+5. **Bookkeeping (before the commit captures it):** flip the backlog item's `done` state and rewrite
+   `handoff.md`, so the completing commit records them (after any prerequisite-repair commit).
+6. Write the planned change as a **Conventional Commit** — `type(scope): summary`, type from the item's `kind`
+   (`bug → fix`, `feature → feat`, `debt → refactor`/`chore`; **default `chore` if `kind` is absent**).
+7. Add linking trailers:
    - `Refs: item #<backlog-id>` — always.
    - `Closes: #<github-issue>` — when this item resolves a tracked issue.
 

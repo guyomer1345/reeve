@@ -1593,6 +1593,49 @@ markdown verdict handled, no false positive on `cat deploy.md &&`. → `hooks/gu
 
 ---
 
+## D88 — Resolve phase, cluster 6: ingest hardened, principle clarifications, a decision-coverage gate, and the P/S/G tail **[DECIDED + BUILT]**
+Origin: the resolve phase (cluster 6 — the principle tail, the retention/codemap script bugs [landed in the 6a
+commit], and the gap/skill tail). **Design calls:**
+- **Ingest hardened (S13/P9/G12) — one decision.** (a) `research` **gathers** only; **`ingest` synthesizes** the
+  reconstructed spec (S13 — respects research's gather-only charter); (b) the behavioural core is recovered
+  **first**, so node-purpose seeding prioritises **spec-core ∪ both centrality lenses, never centrality alone**
+  (P9 — honors D68's core≠central); (c) a **thin/absent-docs fallback** (the common case) — recover from
+  entry-points + both lenses, tag more `unspecified`, widen the reconcile checkpoint (G12).
+- **`--fix` ordering + scope (P5).** `checks.sh --fix` is **scoped to the item's staged files** (never a
+  repo-wide sweep into the atomic commit) and is **zero-semantic** (format/lint/ref-strip) so it needs no
+  re-verify; anything behavioural is never auto-fixed. A **hard, non-auto-fixable** check error now routes
+  `commit` → `debug`/`refine` (G23), not "proceed."
+- **D48/D54 reconciled (P7).** "Committed while the item is open" applies to the `.workflow/items/<id>/`
+  **artifacts** (crash-survival), not the product **code** — the code is still one commit at item close. Two
+  objects, no contradiction.
+- **Side-door boundary (P10) + drive-trigger (D50).** blocking-THIS-item's-DoD → in-loop (`debug`/`refine`); an
+  independent incidental find → `create-issue` → backlog, never a competing this-item failure. The orchestrator
+  drives only when `state.json.status` is an active run (`building`/`intake`), not merely because `.workflow/`
+  exists.
+- **A decision-coverage gate (G6).** `check_decision_coverage.py` (+ test) — the third mechanical plan-coverage
+  sibling — blocks a governing decision mapped to no plan step; `planner` writes the `{id,steps}` mapping to
+  `promises.json`; wired into `checks.sh`/`start.md`.
+- **Contract/skill tail:** `execute` runs each artifact criterion's **discharging test** (G5 — completes D82);
+  `document` ships the strict `## [date] kind | title` Sessions header retention parses (G24); the sandbox gate
+  is **single-owner** so debt is filed exactly once (G18); `create-demo` Calls += `create-issue` (S14);
+  `research` output is consistent — `findings` is returned, the caller persists the distillate (S16);
+  `adjudicate`'s threshold is sourced from `config.run` (G26); the `spec`'s on-disk path is pinned
+  (`docs/spec.md`, G28); `commit` type defaults `chore` when `kind` is absent + bookkeeping is a workflow step
+  (G23).
+- **Deferred (recorded, not lost):** P2 — retention **distills** a postmortem to a one-line Lessons pointer
+  before drop (rule captured; the Lessons mechanism stays deferred); P3 — wiring `risk_class` into the D69
+  proportional-rigor triage rides D69's deferred impl; P4 — the static impact-lens inversion for DI/indirection
+  code is an accepted limitation, mitigated by D78's observed layer; G16 owned by `align`'s semantic layer.
+  Script bugs (S4/S8/S9/S15, G27; **S10 refuted** — already disclosed as a `known_gap`) landed in the 6a commit.
+*Rejected:* research-synthesizes-the-spec (over-charter); seed-by-centrality (core≠central); re-verify after
+formatting (zero-semantic needs none); an active-decision retention trigger (retention can't reduce it → thrash).
+*Evidence:* register §6 P2/P3/P4/P5/P7/P9/P10/S13/S14/S16/G5/G6/G12/G18/G23/G24/G26/G28 + the D50 lead. →
+`skills/{ingest,commit,execute,document,create-demo,discuss,planner,adjudicate}`, `agents/research`,
+`templates/orchestrator-CLAUDE.md`, `shared/schemas.md`, `scripts/check_decision_coverage.py` (+ test),
+`commands/start.md`, `scripts/check-no-spec-refs.sh`; the script fixes are in the 6a commit.
+
+---
+
 ## Not yet decided (tracked in `07`)
 Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
 follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the
