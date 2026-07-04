@@ -61,9 +61,10 @@ built-in Claude Code command.
    - Copy the shipped **retention script** (`scripts/retention.py`) → **`.claude/scripts/`** — the deterministic
      `audit`-item enforcer `document` (audit mode) invokes to bound the append-only tier. Stack-agnostic (it edits
      only the workflow's own `.workflow/`+`docs/` layout), so it ships fixed — not generated per-stack.
-   - Copy the shipped **promise-coverage gate** (`scripts/check_promise_coverage.py`) → **`.claude/scripts/`** —
-     the deterministic gate `checks.sh --check` invokes so a load-bearing promise can't ship with no resolvable /
-     boundary test. Stack-agnostic (reads the workflow's own `promises.json`), so it ships fixed — not per-stack.
+   - Copy the shipped **coverage gates** (`scripts/check_promise_coverage.py` + `scripts/check_criterion_discharge.py`)
+     → **`.claude/scripts/`** — the deterministic gates `checks.sh --check` invokes so a load-bearing promise can't
+     ship with no resolvable / boundary test, and no `artifact` acceptance-criterion ships without a mechanical
+     `discharge`. Stack-agnostic (both read the workflow's own `promises.json`), so they ship fixed — not per-stack.
    - Copy the shipped **contract linter** (`scripts/check_contracts.py`) → **`.claude/scripts/`** — the decidable
      routing-graph check `align`'s mechanical layer invokes over `.workflow/loop.md` + the installed skills (via
      `--loop`/`--skills-dir`/`--schemas`): every routing target resolves, every invoked `node:mode` is routed,
@@ -86,9 +87,10 @@ built-in Claude Code command.
    - **Generate `.workflow/checks.sh`** — the one mechanical-gate runner both callers share: a
      `--fix` mode (format + lint-fix + strip a stale reference, for the `commit` skill to run in-loop) and a
      `--check` mode (fail non-zero on residual drift, for the git hook). It wraps the concrete tools just wired,
-     **plus the stack-agnostic `check_promise_coverage.py`** over each open item's
-     `.workflow/items/<id>/promises.json` — a load-bearing promise with no resolvable / boundary test fails the
-     commit (the mechanical sibling of the decision-coverage gate; teeth, not advice).
+     **plus the stack-agnostic `check_promise_coverage.py` and `check_criterion_discharge.py`** over each open
+     item's `.workflow/items/<id>/promises.json` — a load-bearing promise with no resolvable / boundary test, or
+     an `artifact` criterion with no `discharge`, fails the commit (the mechanical siblings of the
+     decision-coverage gate; teeth, not advice).
    - **Register the git backstop.** Install the shipped `pre-commit.sh` as git's `.git/hooks/pre-commit` (copy
      or symlink — git requires the exact name `pre-commit`) so a commit made *outside* the loop still hits
      `checks.sh --check`.

@@ -31,8 +31,14 @@ The product definition `discuss` produces and the whole build runs against.
 - `files_touched[]`
 - `steps[]` — ordered, each independently verifiable
 - `acceptance_criteria[]` — the definition-of-done; each `{ id, criterion, gate: artifact | human-qa,
-  boundary?: bool }`. `artifact` → checked by `verify`; `human-qa` → confirmed by a `checkpoint` (kind=qa).
-  **Every criterion is one or the other** — `planner` emits no un-checkable criterion. A plan with zero
+  boundary?: bool, discharge? }`. `artifact` → checked by `verify`; `human-qa` → confirmed by a `checkpoint`
+  (kind=qa). **`discharge` is required on every `artifact` criterion** — it names the concrete mechanical check
+  that settles it: a test ref, or a token `type` / `lint` / `structural` (a structural predicate the model can
+  point at). A criterion with **no nameable discharge is not artifact-checkable → it is `human-qa`** — the
+  classification is mechanical (*can you name a check?*), not a judgment call. This makes "**every criterion is
+  one or the other, `planner` emits no un-checkable criterion**" *enforceable* rather than aspirational: `verify`
+  **never passes an `artifact` criterion whose discharge produced no signal**, and
+  `check_criterion_discharge.py` blocks a plan whose `artifact` criterion lacks a discharge. A plan with zero
   `human-qa` criteria never triggers a QA checkpoint. `boundary: true` marks a criterion whose case is drawn
   from **outside the implementation's own enumerated set** (the discharge a universal promise requires).
 - `promises[]` — mirrors the impact-flagged `decision-record.promises[]` this plan implements; each promise's
@@ -42,6 +48,10 @@ The product definition `discuss` produces and the whole build runs against.
   (`check_promise_coverage.py`, run by `checks.sh --check`) **blocks** an unlinked or non-boundary promise — the
   mechanical sibling of the decision-coverage gate. It proves *linkage*, not adequacy: a universal's adequacy
   rests on a property/structural test drawn from outside the enumeration (e.g. the code-map floor invariant).
+  The same `promises.json` also carries the plan's `criteria[]` (`{ id, gate, discharge }`); its sibling gate
+  `check_criterion_discharge.py` (also in `checks.sh --check`) **blocks** an `artifact` criterion with an empty
+  or missing `discharge` — the presence check behind the "no vacuous artifact-pass" rule (adequacy of a named
+  discharge stays `verify`'s read + a deferred hardening, not this gate's).
 
 ## changelog  · produced by `execute` · *append within the item's lifetime; `.workflow/items/<id>/`; item-scoped ephemeral*
 - `plan_ref`

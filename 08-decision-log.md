@@ -1409,6 +1409,63 @@ refuted → a resolve-phase skill→leaf-agent reclassification). → `skills/al
 
 ---
 
+## D82 — The verifiability contract: every acceptance-criterion carries a mechanical `discharge`; `verify` never vacuously passes an `artifact` criterion; classification is mechanical, not a blind judgment **[DECIDED + BUILT]**
+Origin: the pressure-test **resolve phase** (cluster 1, "un-verifiable-in-autonomy": P1 + the D22/D17 & D30 leads,
+`pressure-test-2026-07/`). `schemas.md` already *asserted* the invariant "every criterion is one or the other;
+`planner` emits no un-checkable criterion" — but nothing enforced it, and `verify`'s conjunction rule (D45) let an
+untested `artifact` criterion pass **vacuously**: a behavioral-correctness criterion (e.g. "retry backs off
+exponentially") the model reads as wrong, but with no failing test / type error / plan↔changelog mismatch, was
+downgraded to advisory → auto-committed (P1). The design asserted the invariant; nothing made it true. **Calls:**
+- **`discharge` is a required field on every `artifact` criterion** (`acceptance_criteria[] { …, discharge }`) — it
+  names the concrete mechanical check (a test ref, or `type`/`lint`/`structural`). A criterion with **no nameable
+  discharge is not artifact-checkable → it is `human-qa`**. Classification becomes **mechanical** (*can you name a
+  check?*), which dissolves the D30 blind-author worry — the author *demonstrates a mechanism or fails to*, rather
+  than *judging* perceptibility. This **replaces** the ledger's "distinct classification pass" direction with
+  something leaner and crisper (maintainer's Q2 ruling).
+- **`verify` never vacuously passes.** An `artifact` criterion whose `discharge` produced *no signal* (its named
+  check didn't run or didn't pass) is a **hard fail**, not a silent pass. And a **sharpening of D45**: a
+  criterion↔artifact contradiction the model can *demonstrate* (point at the artifact) is itself a *structural*
+  deterministic signal → hard fail; only genuinely *inferential* suspicions stay advisory. This draws the
+  demonstrable/inferential line D45 always implied — it does **not** reopen D45.
+- **Default = author a test to keep it `artifact`; park is the rare fallback (D22/D17).** Soundness never
+  auto-commits an unverified criterion — but the loop's *autonomy* depends on most criteria staying mechanically
+  checkable, so `planner` prefers *authoring a discharging test*; `human-qa`→`checkpoint` (or `handoff.parked[]`
+  when unattended) is reserved for the genuinely perceptual/runtime. **Park over vacuous-pass, but test over park.**
+- **A mechanical presence gate.** `check_criterion_discharge.py` (+ test; in `checks.sh --check`, copied by
+  `/start`) **blocks** a plan whose `artifact` criterion lacks a `discharge` — the sibling of
+  `check_promise_coverage.py`, giving the invariant teeth pre-plan, not only at `verify`.
+*Rejected:* `verify` computing a `needs_human_qa` flag itself (D30 already killed that — keeps product-intent out
+of the artifact checker; here the classification lives in `planner`, `verify` only *gates* on the signal); a
+distinct adversarial *adequacy* pass (heavier — mechanical discharge-naming suffices; **Q2**); a procedural,
+no-field enforcement (leans on `verify`'s model-only judgment at gate time — the exact softness P1 flags; **Q1**);
+reusing the promise `test_ref` for every criterion (blurs the promise/criterion distinction; **Q1**). **Honest
+residual (deferred hardening):** a plausible-but-*insufficient* discharge (a "renders without error" test named
+for a "looks right" criterion) still slips the presence gate — adequacy stays `verify`'s read + a future
+adversarial adequacy lens (the one the promise `boundary` rule + `align`'s semantic layer use). *Evidence:*
+register §6 P1 (`adjudicate:18-21`, `verify:33`) + the D22/D17 & D30 leads (§2B); the maintainer ruled the two
+design forks (AskUserQuestion — explicit `discharge` field · discharge-naming self-suffices). Refines D45
+(demonstrable = signal) and D17/D30 (mechanical + enforced classification). → `shared/schemas.md`,
+`skills/{planner,verify}`, `scripts/check_criterion_discharge.py` (+ `test_`), `commands/start.md`,
+`scripts/check-no-spec-refs.sh`.
+
+---
+
+## D83 — `verify`'s artifact-purity governs its *verdict*, not its *observation*: it may drive a flow to capture the D78 observed layer **[DECIDED — small reconciliation; the concrete revisit rides the living code-map build, Phase 2/3]**
+Origin: the resolve phase (P6) — a live *spec-internal contradiction*, exactly the class `align` exists to catch.
+`verify`'s skill said "never run or **observe** the live app," while D78 makes `verify` the capture home for the
+living code-map's observed layer ("it already executes the affected flow", `06-knowledge.md:148`). **Call:**
+"artifact-only" governs `verify`'s **verdict/gate**, not its **observation** — `verify` **may drive** the affected
+flow to observe *which edges fire* (D78's `[D]` layer), but strictly as a **pure observer**: what it observes never
+feeds the conformance verdict; runtime *behaviour* correctness stays `debug`, live-app confirmation stays
+`checkpoint`. *Rejected:* keep `verify` fully pure + move D78's capture home elsewhere (reopens an
+empirically-settled decision — D78 chose `verify` *because* it exercises the flow); let `verify` judge runtime
+behaviour (collapses the D24 verify/debug split). *Evidence:* register P6 (`verify:9-10,30` vs D78;
+`06-knowledge.md:148`, which already frames `verify` as a "pure observer" and so stays consistent as written).
+**Phase-2 revisit:** the reconciliation is wording-level today (D78's observed layer is unbuilt) — revisited
+concretely when the living code-map lands. → `skills/verify/SKILL.md`, `11-roadmap.md` (deferred note).
+
+---
+
 ## Not yet decided (tracked in `07`)
 Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
 follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the

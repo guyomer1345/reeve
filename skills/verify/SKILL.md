@@ -17,7 +17,9 @@ job and live-app confirmation is `checkpoint`'s.
 ## Workflow — three checks
 1. **Plan ↔ changelog:** the changes the `plan` asked for match the changes the `changelog` records.
 2. **Intent met:** the `spec` intent and the plan's **`artifact`-gated** `acceptance_criteria` are reflected
-   and actually achieved (the definition-of-done gate).
+   and actually achieved (the definition-of-done gate). For each `artifact` criterion, its **`discharge` must
+   have produced a signal** — a criterion whose named check did not run or did not pass is **not met**; `verify`
+   never *vacuously passes* it.
 3. **Promise coverage (artifact check):** every `plan.promises[]` entry resolves to an `acceptance_criterion`,
    and a `universal` promise's criterion is `boundary`-tagged and backed by a **property/structural test** (not
    a single in-scope example). This is the artifact-level read of what `check_promise_coverage.py` gates
@@ -27,10 +29,16 @@ job and live-app confirmation is `checkpoint`'s.
 Lean: for small changes, judge directly without fanning out workers.
 
 ## Rules
-- Artifacts only — never run or observe the live app.
+- **The verdict is artifact-only** — `verify` never *judges* runtime behaviour (`debug`'s job) or confirms the
+  live app (`checkpoint`'s). It **may drive the affected flow to observe which edges fire** for the living
+  code-map's observed layer, but strictly as a pure observer — what it observes never feeds the
+  conformance verdict.
 - Never pass/fail a `human-qa`-gated criterion; those are confirmed by a `checkpoint` (kind=qa), not here.
 - **A `fail` gates only with a deterministic signal behind it** — a failing test, a type/lint violation, a
-  plan↔changelog mismatch. A mismatch the model merely suspects is advisory (low confidence), not a hard fail.
+  plan↔changelog mismatch, **or an `artifact` criterion whose `discharge` produced no signal** (a hard fail,
+  never a silent pass). A criterion↔artifact contradiction the model can **demonstrate** (point at the
+  offending artifact) is itself such a signal — a *structural* mismatch, hard fail. Only a mismatch the model
+  can merely *infer/suspect*, with nothing to point at, stays advisory (low confidence), not a hard fail.
 
 ## Output
 `verify-verdict { pass, mismatches[], confidence }`.

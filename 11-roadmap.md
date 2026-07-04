@@ -110,8 +110,10 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   **C++ / Rust / PHP stay on the tier-0 floor deliberately** (sound subset; a precise arm is built on demand by
   prevalence, C++ needs a compile-DB). **Living code-map DESIGNED + verified (D78):** a durable *observed* layer
   (`graph.observed.json`, provenance per edge) the loop accretes via `verify` runs — resolves regenerate-vs-
-  incremental; impl rides Phase-2/3 (D70).
-  **[core — arm build thread closed (D77/D79, all 5 measured); living-graph observed layer build next (D78)]**
+  incremental; impl rides Phase-2/3 (D70). **When built, revisit the `verify` observation charter (D83):** the
+  skill now licenses `verify` to *drive* a flow as a pure observer, verdict-still-artifact-only — a wording
+  reconciliation today, to be made concrete against the real capture mechanism when the observed layer lands.
+  **[core — arm build thread closed (D77/D79, all 5 measured); living-graph observed layer build next (D78), then the D83 charter revisit]**
 - **Brownfield ingest** — **DESIGNED (D68); the `ingest` skill is being authored.** A thin `ingest` skill over
   existing leaves (`research` read → `document` write, no new agent) that seeds behavioural-core **intent from
   the existing `CLAUDE.md`/spec** (un-derivable from code), builds `docs/knowledge/` + a reconstructed
