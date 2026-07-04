@@ -46,8 +46,9 @@ A populated `docs/knowledge/` (graph + seeded nodes) + a reconstructed, commitme
 reconciliation `verdict`.
 
 ## Calls
-`research` (read code + existing docs) · `document` (write knowledge nodes) · `checkpoint` (the reconciliation
-gate).
+`research` (read code + existing docs) · `checkpoint` (the reconciliation gate). *(`ingest` **seeds** the nodes
+itself, per step 2; `document` authors the durable `why` / `# Sessions` later, on first real touch — it is
+**not** called during ingest.)*
 
 ## Route
 reconcile pass → the normal loop (`prioritize`). corrections → rewrite the spec, re-present.

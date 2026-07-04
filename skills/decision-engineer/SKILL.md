@@ -13,7 +13,9 @@ An open decision blocks planning — a `TBD → decision-engineer` pointer in th
 by `planner` / `execute`.
 
 ## Inputs
-The open decision + the constraints from the `spec` (audience, runtime, scale, integrations).
+The open decision + the constraints from the `spec` (audience, runtime, scale, integrations) + the code-map
+**impact flag** for the nodes it touches (a high-blast-radius touch → triggers the promise-elicitation pass in
+step 4; absent it, the decision is treated as reversible tier-0).
 
 ## Workflow
 1. Frame the decision and the spec constraints.
@@ -28,12 +30,15 @@ The open decision + the constraints from the `spec` (audience, runtime, scale, i
    the invariant") and the decision's own **purpose vocabulary** ("floor" ⇒ covers-the-tail; "cache" ⇒
    correctness == source-of-truth; "migration" ⇒ preserves-existing-state). Record each surviving promise with a
    `falsifier` (the input that would break it — a promise with no interesting falsifier is a knob-restatement,
-   dropped, so the field can't fill with vacuous pass-the-gate text).
+   dropped, so the field can't fill with vacuous pass-the-gate text). Record each promise's `test_ref` as
+   **unbound (`null`)** — the acceptance-criterion that discharges it doesn't exist until `planner`; `planner`
+   binds it when it writes that criterion (the promise-coverage gate runs there, not here).
 5. confidence ≥ threshold → emit a `decision-record`; else gather more / escalate to the human.
 
 ## Output
-`decision-record` `{ question, options, chosen, why, confidence, sources, promises[] }` (`promises[]` only on
-impact-flagged decisions), plus its **active row** in
+`decision-record` `{ id, status: active, question, options, chosen, why, confidence, sources, promises[] }`
+(`promises[]` only on impact-flagged decisions; each promise's `test_ref` is unbound until `planner`), plus its
+**active row** in
 `docs/decisions/index.md` (`| <id> | <title> | active | - |` — the 4-column format retention later flips to a
 tombstone on supersede). The spec's `TBD` flips to `locked`.
 

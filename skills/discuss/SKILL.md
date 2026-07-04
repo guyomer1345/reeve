@@ -20,8 +20,10 @@ The user's intent (conversation) + any existing `spec` to extend.
    - **project (inception):** audience, runtime, purpose, screens, features, data_model, integrations,
      tech_stack.
    - **feature:** purpose, and visuals + acceptance criteria if it has a visible surface.
-3. Tag every field with a **commitment level** — locked / provisional / unspecified. Default detail and
-   styling to *provisional*; flow and scope to *locked-candidate*.
+3. Tag every field with a **commitment level** from the enum — locked / provisional / unspecified. Default
+   detail and styling to *provisional* (expected to change). Flow and scope are *provisional* too, but flag them
+   the **lock-on-approval** set — the demo / reconcile checkpoint promotes them to `locked` (a later deviation is
+   then a bug), while detail/styling stay provisional. Never emit a value outside the enum.
 4. For any genuine engineering decision (stack, library, architecture), **do not decide** — record
    `TBD → decision-engineer` as a pointer. If the user states a firm preference, record it as `locked`.
 5. **Track provisional debt on the no-demo path:** at spec-completion, if the sandbox gate will not fire (no

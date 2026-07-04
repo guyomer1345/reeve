@@ -1531,6 +1531,38 @@ Routes; `check_contracts.py` re-finds the routing class. → `templates/loop.md`
 
 ---
 
+## D86 — Resolve phase, cluster 4: schema producer/consumer contracts aligned — `boundary` on the criterion, unbound `test_ref`, one backlog ordering key, closeable local issues **[DECIDED + BUILT]**
+Origin: the resolve phase (cluster 4 — schema producer/consumer mismatches, mostly caught by ground-truth
+reading, not the linter). **Design calls:**
+- **`boundary` lives on the criterion, and is resolved there (S5).** `check_promise_coverage.py` read `boundary`
+  off the *promise*, but schemas/planner put it on the acceptance-*criterion* → false-block. The `promises.json`
+  `criteria[]` now carries `boundary`; the gate resolves a universal's boundary via its **linked criterion**
+  (legacy-promise fallback kept). +3 tests.
+- **Promise `test_ref` binds at `planner`, not `decision-engineer` (S7).** decision-engineer runs *pre*-planner,
+  so the criterion a promise discharges doesn't exist yet — it emits `test_ref: null`; `planner` binds it when it
+  writes that criterion (promise-coverage runs there).
+- **One uniform backlog ordering key (G13).** `prioritize` orders on `depends_on × kind × severity`, but no
+  producer emitted all three. Now `issue` carries `depends_on[]` and `planner:decompose` tags each phase-item
+  `kind` + `severity` — one key across both producers.
+- **Local-only issues are closeable (G8).** `github_ref` is now **optional**; a greenfield issue with no ref is
+  closed by its backlog **done-flip** (rides the item-tail commit) → `prioritize` GCs it, `close-issue` exits
+  quietly. No backlog leak.
+- **`locked-candidate` resolved into the enum (S3).** `discuss` tagged flow/scope `locked-candidate` (∉ the
+  three-state enum; nothing resolved it). Now flow/scope are `provisional` + flagged **lock-on-approval** (the
+  demo/reconcile gate flips them to `locked`); the linter's enum advisory clears.
+- **Contract fixes:** decision-engineer Output emits `id`/`status` (S6) + takes the code-map **impact flag** as
+  an Input (G15); `document` Inputs add the `spec`/`commitment` its own rules need (S11); `ingest` **seeds nodes
+  itself** — `document` is not called during ingest (S12).
+- **G16** (nothing mirrors `plan.promises` ↔ `decision-record.promises`) is owned by **`align`'s semantic layer**
+  (the promise↔plan-mirror lens baked in at D81) — no new mechanical gate.
+*Rejected:* boundary-on-the-promise (the tag's home is the criterion); a decision-time `test_ref` (points at a
+criterion that doesn't exist yet); a 4th commitment state for `locked-candidate` (the three-state enum + a
+lock-on-approval *behavior* suffices); a standalone promise-mirror gate (`align` covers it). *Evidence:* register
+§6 S3/S5/S6/S7/S11/S12/G8/G13/G15/G16. → `scripts/check_promise_coverage.py` (+ test),
+`skills/{discuss,decision-engineer,document,ingest,planner}`, `shared/schemas.md`.
+
+---
+
 ## Not yet decided (tracked in `07`)
 Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
 follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the

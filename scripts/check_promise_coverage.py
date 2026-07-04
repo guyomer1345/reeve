@@ -10,16 +10,19 @@ Input: a per-item manifest `.workflow/items/<id>/promises.json` that `planner` w
 impact-flagged decision-records:
 
     {
-      "known_tests": ["ac-1", "ac-2", ...],        # resolvable test / acceptance-criterion ids
+      "known_tests": ["ac-1", "ac-2", ...],        # (optional) extra resolvable test ids
+      "criteria": [                                 # the plan's acceptance_criteria — carries `boundary`
+        { "id": "ac-1", "gate": "artifact", "boundary": true }
+      ],
       "promises": [
-        { "id": "p1", "text": "...", "universal": true|false,
-          "test_ref": "ac-1", "boundary": true|false }
+        { "id": "p1", "text": "...", "universal": true|false, "test_ref": "ac-1" }
       ]
     }
 
 Blocks (exit 2) when a promise:
-  - has no `test_ref`, or a `test_ref` that does not resolve to a `known_tests` id      → unlinked;
-  - is `universal` but its linked test is not `boundary`-tagged                          → in-scope-only.
+  - has no `test_ref`, or a `test_ref` that resolves to no `known_tests`/`criteria` id   → unlinked;
+  - is `universal` but its LINKED CRITERION is not `boundary`-tagged                     → in-scope-only.
+    (`boundary` lives on the criterion, per schemas/planner — not on the promise.)
 
 HONEST CEILING (stated so no one mistakes this for more than it is): this proves the *linkage* is
 present and typed. It CANNOT prove the linked test is adequate — a test that exercises an in-scope
@@ -34,7 +37,12 @@ import sys
 
 
 def check(manifest):
-    known = set(manifest.get("known_tests", []))
+    # `boundary` lives on the acceptance-CRITERION (schemas + planner), not on the promise. Resolve it off the
+    # linked criterion; the criteria ids are also valid test_ref targets.
+    criteria = manifest.get("criteria", [])
+    crit_ids = {c.get("id") for c in criteria if c.get("id")}
+    crit_boundary = {c.get("id"): bool(c.get("boundary")) for c in criteria if c.get("id")}
+    known = set(manifest.get("known_tests", [])) | crit_ids
     failures = []
     for p in manifest.get("promises", []):
         pid = p.get("id") or p.get("text", "<unnamed>")
@@ -42,10 +50,11 @@ def check(manifest):
         if not ref:
             failures.append(f"promise {pid!r}: no test_ref (unlinked promise)")
         elif ref not in known:
-            failures.append(f"promise {pid!r}: test_ref {ref!r} does not resolve to a known test")
-        elif p.get("universal") and not p.get("boundary"):
+            failures.append(f"promise {pid!r}: test_ref {ref!r} does not resolve to a known test/criterion")
+        # fall back to the promise's own boundary only for legacy manifests that carry no criteria[]
+        elif p.get("universal") and not crit_boundary.get(ref, p.get("boundary")):
             failures.append(
-                f"promise {pid!r}: universal, but its test {ref!r} is not boundary-tagged "
+                f"promise {pid!r}: universal, but its criterion {ref!r} is not boundary-tagged "
                 f"(a universal needs a case drawn from OUTSIDE the build's enumeration)"
             )
     return failures

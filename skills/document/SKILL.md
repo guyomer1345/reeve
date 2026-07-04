@@ -12,7 +12,9 @@ the decisions behind it into the knowledge base.
 After a phase/item passes its checkpoint, before or with `commit`.
 
 ## Inputs
-`changelog` + `decision-record`s + `debug-report`s — the decision/event stream, not just the changelog.
+`changelog` + `decision-record`s + `debug-report`s — the decision/event stream, not just the changelog — plus
+the item's `spec` + each element's `commitment` (its own rules need them: never flag a `provisional` item, and
+judge intent-vs-actual divergence against the recorded intent).
 
 ## Workflow
 1. Update `docs/knowledge/` nodes for touched files — `purpose` (intent vs actual), typed edges with their

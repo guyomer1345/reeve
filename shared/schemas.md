@@ -48,7 +48,9 @@ The product definition `discuss` produces and the whole build runs against.
   (`check_promise_coverage.py`, run by `checks.sh --check`) **blocks** an unlinked or non-boundary promise — the
   mechanical sibling of the decision-coverage gate. It proves *linkage*, not adequacy: a universal's adequacy
   rests on a property/structural test drawn from outside the enumeration (e.g. the code-map floor invariant).
-  The same `promises.json` also carries the plan's `criteria[]` (`{ id, gate, discharge }`); its sibling gate
+  The same `promises.json` also carries the plan's `criteria[]` (`{ id, gate, discharge, boundary }`) — so
+  `check_promise_coverage.py` resolves a universal's `boundary` off its **linked criterion** (where the tag
+  lives), not off the promise; its sibling gate
   `check_criterion_discharge.py` (also in `checks.sh --check`) **blocks** an `artifact` criterion with an empty
   or missing `discharge` — the presence check behind the "no vacuous artifact-pass" rule (adequacy of a named
   discharge stays `verify`'s read + a deferred hardening, not this gate's).
@@ -90,7 +92,9 @@ input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh
   reversible tier-0 call carries none, so this stays empty on most records. Each `{ text, kind ∈ { universality,
   idempotence, preservation, monotonicity, graceful-degradation, isolation, backward-compat }, universal: bool,
   falsifier` (the input that would break it — a promise with no interesting falsifier is a knob-restatement,
-  dropped)`, test_ref` (the acceptance-criterion/test that discharges it) `}`. **Elicited adversarially by a pass
+  dropped)`, test_ref` (the acceptance-criterion that discharges it — **unbound (`null`) at decision time;
+  `planner` binds it when it writes that criterion**, since the criterion doesn't exist while `decision-engineer`
+  runs pre-`planner`) `}`. **Elicited adversarially by a pass
   distinct from the decision's author** (see `decision-engineer`), never self-listed — the author shares the
   blind spot that hid the promise, and a promise nobody writes is the one that ships untested.
 
@@ -104,11 +108,16 @@ input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh
   setup→setup-guide/human · reconcile→ingest/discuss) — a rejection is not always a defect
 
 ## issue  · produced by `create-issue`, closed by `close-issue` · *filed into `backlog.md` — a **live open queue** (rewrite-in-place; closed entries leave, GC'd by `prioritize`), not append-only*
-- `{ title, kind: bug|feature|debt, description, severity, source }`
-- `github_ref` — the mirrored GitHub issue number (`create-issue` opens it; `close-issue` closes it)
-- **open/closed state lives in GitHub** (source of truth) — the backlog holds only `github_ref`, never a
-  duplicated local `state`, so `close-issue` writes no local loop-bookkeeping; `prioritize` drops a
-  closed entry at pick time.
+- `{ title, kind: bug|feature|debt, description, severity, source, depends_on[] }` — `prioritize` orders on all
+  of `depends_on` × `kind` × `severity`; `depends_on` is `[]` for a standalone issue. **Roadmap-derived backlog
+  items carry the same three** — `planner:decompose` assigns each phase-item a `kind` + `severity` (a phase's
+  `depends_on` comes from the roadmap), so `prioritize` has one uniform ordering key across both producers.
+- `github_ref` — the mirrored GitHub issue number (`create-issue` opens it; `close-issue` closes it); **optional**
+  — present only when the outward mirror was approved.
+- **When mirrored, GitHub owns open/closed state** (the backlog holds only `github_ref`, no duplicated local
+  `state`). **A local-only item (no `github_ref`) is closed by its backlog `done`-flip** (which rides the
+  item-tail `commit`); `prioritize` GCs on the done-flip, so a greenfield issue with no ref is still closeable +
+  collectable — `close-issue` just exits quietly (nothing outward to close).
 
 ## config.json  · written once by `/start`, read on demand · *rewrite-in-place · static after init (committed)*
 - `project_root` — `./project` (greenfield) | `.` (brownfield); makes code-touching skills path-agnostic

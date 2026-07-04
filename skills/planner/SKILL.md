@@ -9,7 +9,8 @@ Core principle: produce the plan others execute against; raise any real build de
 
 ## Modes
 - **decompose** (new project / heavy change): `spec` → `roadmap` of phases, each with goal, deps,
-  acceptance. Each phase becomes a backlog item with its own plan → execute → verify → document sub-loop.
+  acceptance. Each phase becomes a backlog item with its own plan → execute → verify → document sub-loop, tagged
+  `kind` (feature/debt) + `severity` so `prioritize` orders it by the same key as an `issue`.
 - **plan-one** (a picked item): item + project knowledge graph → a `plan` (goal, files_touched, ordered
   verifiable steps, `acceptance_criteria` = the definition-of-done).
 
@@ -47,6 +48,9 @@ Core principle: produce the plan others execute against; raise any real build de
    *linkage/presence*, not adequacy — the boundary/property test is what makes the discharge real.
 7. Raise any genuine build decision to `decision-engineer` rather than guessing (e.g. a `TBD → stack`
    pointer left by `discuss`).
+8. **Setup gate:** when an item builds a `spec.integrations[]` entry (auth / payments / …), mark it so the
+   loop inserts a `setup` `checkpoint` for the manual external steps (it calls `setup-guide`) — the integration's
+   headline path, otherwise orphaned.
 
 ## Output
 `roadmap` (decompose) → backlog · or `plan` (plan-one) → `execute`. In plan-one, `planner` `mkdir`s
