@@ -134,14 +134,18 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   invariant re-run** — the *late* backstop, not the gate (the per-commit teeth stay the promise-coverage +
   boundary/property tests). **Validated** by re-finding the pressure-test register (G2/G4/S3, 0 false positives)
   on the surface it scopes; the semantic layer's own validation rides Phase 2/3 (no built product yet). Relates
-  to the project-state view + self-hosting.
+  to the project-state view + self-hosting. **Tier-2/3 drift defense added (D89):** a meta-repo
+  `check_enum_coherence.py` (enum + registry coherence, per-commit, beside `check-status-coherence.sh`) + the
+  full-surface `align` cold-audit adopted as a phase-boundary ritual; the `adjudicate` contract-linter
+  false-positive fixed (0 advisories).
   **[core — skill + mechanical layer BUILT (D81); semantic layer validated Phase 2/3]**
 
 ### Cross-cutting — packaging, validation, self-hosting
 - **Packaging/distribution** — plugin packaging (`.claude-plugin/`), `shared/` resolution, first-launch
   **trust-UX doc** (D57/D58). **[stageable]**
 - **Validation gaps** — real orchestrator→agent **dispatch** in a harness run; `@import`-survives-`/compact`;
-  whether `verify` samples the real `git diff` vs trusts the `changelog` (#8). **[stageable]**
+  whether `verify` samples the real `git diff` vs trusts the `changelog` (#8); **shipped bash glue assumes a
+  bash interpreter on the target OS — unverified on native Windows (D89; the D71 split stands, no refactor)**. **[stageable]**
 - **Commitment-status storage** — where locked/provisional/unspecified is recorded (spec vs node
   frontmatter, `09`). **[stageable]**
 - **Project-state view (user-raised)** — a synthesized "where is this project" surface (done · how it
@@ -173,7 +177,10 @@ is COMPLETE.** 2026-07-04: the **`align` alignment-scan skill + `check_contracts
 **2026-07-05: the pre-Phase-2 pressure-test RESOLVE PHASE is COMPLETE** — the ~57-finding register triaged +
 fixed + captured as **D82–D88** (6 clusters, all committed + pushed), adding two mechanical plan-coverage gates
 (`check_criterion_discharge`, `check_decision_coverage`); the sole deferred build-task is the D84 physical
-skill→agent moves, listed under `[stageable]` below.)*
+skill→agent moves, listed under `[stageable]` below. **2026-07-06:** a pre-Phase-2 `align` **cold-audit** fixed
+10 doc↔artifact coherence findings + built the **tier-2 `check_enum_coherence.py`** gate and the base-skill
+linter fix, and reaffirmed the D71 bash/python split (no refactor; the shipped-glue Windows-portability gap is
+tracked in `07`) — **D89**.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /

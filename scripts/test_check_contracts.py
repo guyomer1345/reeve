@@ -76,6 +76,12 @@ class Advisories(unittest.TestCase):
         self.assertEqual(hard, [])
         self.assertTrue(any("ingest" in a for a in adv))
 
+    def test_base_skill_exempt_from_coverage_gap(self):
+        # an abstract base skill is specialized, not routed → not a coverage gap
+        skills = dict(CLEAN, adjudicate="Base procedure ... Not invoked directly — specialized by verify.")
+        _, adv = c.check(LOOP, skills, SCHEMAS)
+        self.assertFalse(any("adjudicate" in a for a in adv))
+
     def test_commitment_hyphen_drift(self):
         skills = dict(CLEAN, discuss="tag flow to *locked-candidate*")
         _, adv = c.check(LOOP, skills, SCHEMAS)

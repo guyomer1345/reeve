@@ -86,6 +86,12 @@ Deliberately deferred — known unknowns, to close during build or later.
   (4) **Remote-control auth** (Cloudflare Access / token) — reserved, warning-only for now.
 - **Automated testing**, **test-from-anywhere**, **paid device/QA platform** (`04`) — designed-for,
   not built.
+- **Shipped-glue OS portability (D89)** — the shipped bash glue (`guard.sh`, generated `checks.sh`/`codemap.sh`)
+  assumes a **bash interpreter on the target OS**; unverified on **native Windows** (git-invoked `pre-commit.sh`
+  likely survives via Git-Bash; the Claude-Code-invoked glue is the risk). Fix later with a targeted fallback (a
+  thin Python launcher — `python3` is already a hard dependency — or a documented Git-Bash/WSL requirement),
+  **not** a `.sh→.py` refactor (the D71 bash-glue/python-logic split stands). Validate when a real target-OS
+  decision is forced.
 - **Project-state view (`03`/`05`/`06`) — user-raised 2026-06-30.** No single synthesized "where is this
   project" surface — *what's done · how the pieces connect · what's left*. The data exists but is scattered
   (`00–11` + `08` decisions + this register + `handoff.md` + `backlog.md` + the `docs/knowledge/` graph). The user

@@ -1634,6 +1634,45 @@ formatting (zero-semantic needs none); an active-decision retention trigger (ret
 `templates/orchestrator-CLAUDE.md`, `shared/schemas.md`, `scripts/check_decision_coverage.py` (+ test),
 `commands/start.md`, `scripts/check-no-spec-refs.sh`; the script fixes are in the 6a commit.
 
+## D89 — Doc↔artifact drift: a three-tier defense + the base-skill linter fix; bash/python split reaffirmed **[DECIDED + tier-2 BUILT]**
+The pre-Phase-2 `align` **cold-audit** (the full-surface read-only fan-out the `align` skill reserves as an
+explicit one-off, D81) found **10 doc↔artifact coherence findings** (+ the earlier `ingest`-"being authored"
+drift), all one root cause: a later decision **superseded a state** (checkpoint `reconcile` kind D68; five-arm
+closure D77/D79; interrupt-model close D26) and the **capture-time blast-radius sweep (D80) was skipped for the
+terse/secondary surfaces** (skill frontmatter, roster rows, roadmap snapshots). The existing mechanical gates are
+prose-blind (`check-status-coherence.sh` = counts/D-ranges/tags; `check_contracts.py` = routing graph), and most
+drift was **born before `align` existed** (2026-07-02/03 vs D81 2026-07-04), so diff-scoped `align` never saw it —
+the D80/D64 "honest residual" proven on the repo itself.
+- **Tier 1 — prevent at capture:** the D80 blast-radius sweep stays primary; tiers 2–3 back it, not replace it.
+- **Tier 2 — mechanize the decidable slice (per-commit, BUILT):** `scripts/check_enum_coherence.py` — **ENUM**
+  presence-coverage (owner declares the set: checkpoint `kind` in `shared/schemas.md` → every restating consumer
+  must mention every value) + **COUNT** (a registry's size: code-map precise arms in `codemap.py`'s `ARMS` → each
+  "N precise arms" claim must equal it). Presence/count only (prose stays `align`'s semantic layer); meta-repo only
+  (reads spec docs that never ship) → wired into `.git/hooks/pre-commit` beside `check-status-coherence.sh`.
+  Reproduced the fixed drift → green.
+- **Tier 3 — detect the rest (periodic):** the full-surface cold-audit adopted as a **phase-boundary ritual**,
+  since diff-scoped `align` is pre-anchor-blind.
+
+**Linter FP:** the `adjudicate` coverage-gap advisory was a false positive — `adjudicate` is an **abstract base
+skill** (specialized by `verify`/`debug`/`decision-engineer`, "not invoked directly"), consumed by inheritance not
+routing. `check_contracts.py` now exempts base skills → **0 advisories** (a standing false advisory trains you to
+ignore the gate).
+
+**Bash/python split reaffirmed (D71 stands, no refactor).** A maintainer question ("didn't we move everything to
+Python for all OSes?") was a scope error: D71 decided **thin glue = bash; parse/rewrite = Python** (cross-OS was
+the *Python* rationale for parse-heavy work, not a blanket move). The real residual is narrower and now tracked:
+the **shipped bash glue** (`guard.sh`, generated `checks.sh`/`codemap.sh`) assumes a **bash interpreter on the
+target OS**, unverified on **native Windows** (git-invoked `pre-commit.sh` likely survives via Git-Bash; the
+Claude-Code-invoked glue is the risk). Since `python3` is already a hard dependency, the eventual fix is a targeted
+fallback (thin Python launcher / documented Git-Bash requirement), NOT a rewrite.
+*Rejected:* a blanket `.sh→.py` refactor (contradicts D71, trades "needs bash" for "needs python3-in-hook",
+clumsier glue); a prose-negation lint flagging "remaining/stub" near an artifact (NLP-fragile, high false-positive
+→ stays `align`'s semantic layer); folding the enum check into the shipped `check_contracts.py` (it reads
+`10-roster.md`, which never ships → keep it a meta-repo gate).
+*Evidence:* the cold-audit register (10 findings across `checkpoint`/`create-demo`/`planner`/`commit`/`02`/`06`/
+`10`/`11`, 2 dropped as non-drift after reading `loop.md`); D80/D64, D71, D81/D63. → `scripts/check_enum_coherence.py`
+(+ test), `scripts/check_contracts.py` (+ test), `.git/hooks/pre-commit`, `07`, `11`.
+
 ---
 
 ## Not yet decided (tracked in `07`)
@@ -1648,7 +1687,9 @@ still open (the `spec/`+`.knowledge/` docs-root placement closed — D62). Skill
 incidental-issue-resolution detection — deferred; outward-action permission mechanics (D35). Adoption
 follow-ons: the **retention & archival law** is **closed** (D59–D60 write-law leaks + D61 cap-and-archive read
 law) and the **retention script is built** (D71); what remains is **Sessions distillation** (deferred) and
-`K`/threshold tuning against real runs. Plus whether `verify` samples the real diff vs trusts the `changelog` (#8). **Two new (user-raised):**
+`K`/threshold tuning against real runs. Plus whether `verify` samples the real diff vs trusts the `changelog` (#8); **shipped-glue Windows portability is a new open validation gap (D89)** — the
+shipped bash glue assumes a bash interpreter on the target OS, unverified on native Windows (the D71 split
+stands, no refactor). **Two new (user-raised):**
 a synthesized **project-state view**, and a **framework version-update** skill. **Alignment pass (D63/D64):**
 the alignment-scan **skill** (`align`) + its decidable contract linter are **built (D81)** — the semantic layer
 is validated Phase 2/3; two prevention follow-ons — **single-source status** and a **capture-time blast-radius

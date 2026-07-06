@@ -88,6 +88,16 @@ def parse_enums(schemas_text):
     return commitment, kinds
 
 
+# An abstract *base* skill (e.g. `adjudicate`) is specialized by other skills and
+# is never invoked directly, so it is deliberately neither a node nor a side-door —
+# consumed by inheritance, not routing, so it is exempt from the coverage-gap advisory.
+_BASE_SKILL = re.compile(r"not invoked directly|base procedure|abstract base", re.I)
+
+
+def _is_base_skill(body):
+    return bool(_BASE_SKILL.search(body))
+
+
 def check(loop_text, skills, schemas_text):
     """skills: {name: body}. Returns (hard, advisory) — lists of message strings."""
     hard, advisory = [], []
@@ -110,9 +120,12 @@ def check(loop_text, skills, schemas_text):
                     f"{name}: invokes {tok!r}, a node:mode that loop.md never routes"
                 )
 
-    # 3. coverage gap — a skill that is neither a node nor a side-door (advisory)
+    # 3. coverage gap — a skill that is neither a node nor a side-door (advisory).
+    #    Abstract base skills (specialized, never invoked directly) are exempt.
     covered = node_bases | side_doors
     for name in sorted(set(skills) - covered):
+        if _is_base_skill(skills[name]):
+            continue
         advisory.append(
             f"{name}: no loop.md node and not a declared side-door "
             f"(a called sub-skill is fine; an unrouted entry is drift)"
