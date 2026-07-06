@@ -13,10 +13,11 @@ Deliberately deferred — known unknowns, to close during build or later.
   *(Interrupt model closed: pure queue, D26.)*
 - **`init` / bootstrap capability** (`10`, D28) — greenfield is straightforward; brownfield **ingest**
   (build the knowledge base + reconstructed spec from existing code) is **DESIGNED (D68) and the `ingest` skill
-  is being authored** — the ingest *mechanics* (own per-stack generator, two lenses, three-tier seed,
-  `CLAUDE.md`-seeded intent, unspecified-default + reconciliation checkpoint) are closed; the **Python
-  code-map extractor is built + validated + wired into `/start`** — only other-language extractor arms remain
-  (same `graph.json` contract).
+  is AUTHORED** (`skills/ingest/SKILL.md`) — the ingest *mechanics* (own per-stack generator, two lenses,
+  three-tier seed, `CLAUDE.md`-seeded intent, unspecified-default + reconciliation checkpoint) are closed; the
+  **code-map arm build thread is CLOSED (D77/D79)** — five precise arms built + ground-truth-measured (Python,
+  JS/TS, Go, Java, C#); C++/Rust/PHP stay on the tier-0 floor by design. Residual is **runtime**: brownfield
+  `/start` is unexercised until a real bootstrap (validation-blocked).
 - **Commit-message convention** — **CLOSED (D32):** Conventional Commits + `Refs:`/`Closes:` trailers.
   Remaining sliver: whether the workflow's own generated commits carry the `Co-Authored-By` trailer.
 - **Agent roster v1** — **CLOSED in `10`** (names, I/O contracts, skill-vs-agent, topology). Remaining

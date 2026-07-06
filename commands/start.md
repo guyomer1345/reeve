@@ -116,10 +116,12 @@ built-in Claude Code command.
 - Hand off to **`discuss`** (inception) to build the spec from zero → then the normal loop
   (`prioritize → planner → …`).
 
-## 3. Brownfield (integrate existing codebase)  — mostly STUB (EXPAND)
+## 3. Brownfield (integrate existing codebase)  — flow specified; unexercised
 - **Rules + enforcement are already adopted** by shared step 4 (adopt existing configs, gap-fill the missing
-  enforcers, layer our `rules/` on top). That is the *habits* half of integration and is **supported now**;
-  the **docs → knowledge** half below is the part still stubbed.
+  enforcers, layer our `rules/` on top). That is the *habits* half of integration. The **docs → knowledge** half
+  below is **specified** too (the `ingest` skill body) — so this section is no longer a spec stub. The residuals
+  are **runtime, not spec**: it is unexercised until a real brownfield bootstrap, plus the shared **console
+  launch** (step 5) and the still-provisional disk layout (EXPAND).
 - **Run `ingest`.** The skill runs `.workflow/codemap.sh` to build the structural graph, seeds
   `docs/knowledge/` nodes, and reconstructs `docs/spec/` from the existing `CLAUDE.md`/docs + code (tagged
   `unspecified`). **Adopt an existing `docs/`** if present — write to known subpaths, never clobber; namespace

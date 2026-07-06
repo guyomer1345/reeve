@@ -114,11 +114,13 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   skill now licenses `verify` to *drive* a flow as a pure observer, verdict-still-artifact-only — a wording
   reconciliation today, to be made concrete against the real capture mechanism when the observed layer lands.
   **[core — arm build thread closed (D77/D79, all 5 measured); living-graph observed layer build next (D78), then the D83 charter revisit]**
-- **Brownfield ingest** — **DESIGNED (D68); the `ingest` skill is being authored.** A thin `ingest` skill over
-  existing leaves (`research` read → `document` write, no new agent) that seeds behavioural-core **intent from
-  the existing `CLAUDE.md`/spec** (un-derivable from code), builds `docs/knowledge/` + a reconstructed
-  `docs/spec/` (default **unspecified**, reconciliation checkpoint locks invariants). `/start` brownfield stays
-  a STUB until the skill + generator land. **[core for brownfield — being authored]**
+- **Brownfield ingest** — **DESIGNED (D68); the `ingest` skill is AUTHORED** (`skills/ingest/SKILL.md`). A thin
+  `ingest` skill over existing leaves (`research` *gathers* → `ingest` *synthesizes* the spec → reconciliation
+  `checkpoint`; `document` authors the durable `why`/Sessions later, **not** during ingest — no new agent) that
+  seeds behavioural-core **intent from the existing `CLAUDE.md`/spec** (un-derivable from code), builds
+  `docs/knowledge/` + a reconstructed `docs/spec/` (default **unspecified**, reconciliation checkpoint locks
+  invariants). Residual is **runtime, not spec**: brownfield `/start` (§3) is authored but **unexercised** until a
+  real bootstrap run (validation-blocked, like dispatch). **[core for brownfield — skill authored; unexercised]**
 - **Retention script** — **BUILT 2026-07-02 (D71):** `scripts/retention.py` (stdlib Python, idempotent) does the
   three deterministic caps (Sessions cap-and-archive · superseded-decision GC + index tombstone · promoted-item
   prune), wired into `/start` (copy → `.claude/scripts/`) + `document` audit mode (invoke; and `document` writes
