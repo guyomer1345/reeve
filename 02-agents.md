@@ -2,8 +2,8 @@
 
 > **Roster v1 CLOSED (2026-06-29) → `10-roster.md`.** The full skill + agent roster, I/O contracts in
 > the package files (`skills/`, `agents/`, `shared/schemas.md`), loop order + call-graph pinned. The notes
-> below are the original sketch, kept for provenance. Still open: the **collision model** and the
-> `prioritize` **interrupt model**.
+> below are the original sketch, kept for provenance. Still open: the **collision-model independence test** (the
+> `prioritize` **interrupt model** is closed — pure queue, D26).
 
 ## Key fact **[DECIDED]**
 Agents PERSIST — they hold their own context and can be continued via SendMessage. They are NOT

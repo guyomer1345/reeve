@@ -28,8 +28,9 @@ After `document`, per completed phase/item.
    anything that would change behaviour is never auto-fixed. Re-stage and re-run in check mode. **Log what it
    fixed** (in the commit body or the `changelog`) — never silently mask a bad generator. Two failure paths from
    `--check`:
-   - **a hard, non-auto-fixable error** (a type/lint error `--fix` couldn't resolve) → **do not proceed**: route
-     to `debug` → `refine` (it's a real defect, not doc drift).
+   - **a hard, non-auto-fixable error** (a type/lint error `--fix` couldn't resolve) → **do not proceed**: halt
+     and **escalate to the orchestrator** — a real defect (debug/refine territory), not doc drift, and it must not
+     ride a commit.
    - **doc↔code drift** a script *cannot* safely fix (a stale/contradictory/over-claimed doc, a missing owner, a
      symbol a doc still names that the code renamed) → file a `create-issue` ticket with the evidence and the
      affected element's `commitment`, `severity` set from it (a locked contradiction rides high; cosmetic drift

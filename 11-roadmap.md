@@ -87,21 +87,17 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **Symbol-level knowledge paths** — the seam left in Space-6 granularity. **[later]**
 
 ### Space 6 — Knowledge generation & ingest
-- **Knowledge generation** — **DESIGNED (D68, pressure-tested on a real repo):** an **own per-stack code-map
-  generator** (own script, emitted by `/start` like `checks.sh` — not an external tool), `graph.json`
+- **Knowledge generation** — **DESIGNED (D68, pressure-tested on a real repo):** a **single multi-language code-map engine** (`scripts/codemap/codemap.py`, shipped whole over pluggable arms —
+  not an external tool, and **not** per-stack-generated: `/start` emits only a thin `.workflow/codemap.sh` wrapper;
+  D72/D74 revised the original D68 per-stack framing), `graph.json`
   carrying **two centrality lenses** (impact + orchestration), and a **three-tier node seed** (`[G]` structural
-  eager · `[X]` extractive purpose · `[D]` durable `why`/Sessions on touch). **Engine + tier-0 floor + 2 precise
-  arms BUILT (D73/D74, 2026-07-02):** `scripts/codemap/codemap.py` — a shared language-agnostic driver over
-  pluggable arms. Precise arms: **Python** (`ast`, ported verbatim + exact regression) and **JS/TS** (`JsTsArm` —
-  tsconfig/jsconfig `paths`+`baseUrl` aliases + extension/index resolution; beats the floor **4-vs-1** on an alias
-  fixture; no tsconfig → == the floor). Every other recognized language falls to the **tier-0 generic floor**
-  (precision-first shallow-regex; D75 = nodes *any* source language, edges where a regex exists — "never nothing"). Any recognized language now gets nodes + clusters + both lenses; **`/start`
-  step 4's `codemap.sh`** is a single auto-dispatching call. Validated on real `express`/`query-string`/`mux` + a
-  13/13 multi-language fixture. *Remaining (D72 build set, research-ranked by prevalence):* the next precise arms —
-  **Java** → **C#** → **C++**, then **Go/Rust/PHP** — as **zero-dep resolver arms** like `JsTsArm` on the same driver
-  + `graph.json` contract (D74 revised D72: the default arm is a zero-dep resolver, not tree-sitter — tree-sitter is
-  **reserved** for parse-hard languages, a graceful optional upgrade). Go pulled early for fast ROI (compiler-grade
-  graph); C++ last in-wave (needs a compile-DB). `planner`/`debug` depend on it.
+  eager · `[X]` extractive purpose · `[D]` durable `why`/Sessions on touch). **Engine + tier-0 floor + precise
+  arms (D73/D74 engine → D77/D79 arms):** `scripts/codemap/codemap.py` — a shared language-agnostic driver over
+  pluggable **zero-dep resolver arms** (D74 revised D72: the default arm is a zero-dep resolver, not tree-sitter —
+  tree-sitter is **reserved** for parse-hard languages, a graceful optional upgrade). Every recognized language
+  *without* a precise arm falls to the **tier-0 generic floor** (precision-first shallow-regex; D75 = nodes *any*
+  source language, edges where a regex exists — "never nothing"), so any recognized language gets nodes + clusters
+  + both lenses; **`/start` step 4's `codemap.sh`** is a single auto-dispatching call. `planner`/`debug` depend on it.
   **Five precise arms built + independently ground-truth measured — arm build thread CLOSED (D77/D79):** Python
   (flask: 40/40 sampled edges real) · JS/TS (+ exports/imports subpath) · **Go** (100% intra recall, replaced a
   broken+unsound floor) · **Java** (two-pass, closes the measured 24% no-import gap; same-package precision ≈100%

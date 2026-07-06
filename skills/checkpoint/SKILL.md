@@ -1,6 +1,6 @@
 ---
 name: checkpoint
-description: Pause autonomous work to get a human verdict on the live app, then resume on the answer. Three kinds — demo (approve a sandbox), qa (test a built feature), setup (perform a manual external action). Blocks on the local bus; routes pass→continue, fail→debug.
+description: Pause autonomous work to get a human verdict on the live app, then resume on the answer. Four kinds — demo (approve a sandbox), qa (test a built feature), setup (perform a manual external action), reconcile (confirm a brownfield-reconstructed spec). Blocks on the local bus; routes by kind on both pass and fail (see Route).
 ---
 
 # Checkpoint — the human-in-the-loop gate

@@ -57,7 +57,7 @@ overlap into one adjudicator.
 | verify | skill | artifact conformance (adjudicate) | `skills/verify` |
 | debug | skill | root-cause behaviour ≠ intended (adjudicate) | `skills/debug` |
 | refine | skill | route corrections back through planner→execute | `skills/refine` |
-| checkpoint | skill | pause for a human verdict (demo / qa / setup) | `skills/checkpoint` |
+| checkpoint | skill | pause for a human verdict (demo / qa / setup / reconcile) | `skills/checkpoint` |
 | setup-guide | agent | precise human steps for a manual external task | `agents/setup-guide` |
 | document | skill | fold changes + decisions into the knowledge base | `skills/document` |
 | ingest | skill | brownfield: build the knowledge base + reconstructed spec from existing code | `skills/ingest` |
@@ -110,8 +110,8 @@ research                  (service, callable from anywhere)
 The bootstrap command (D10/D28). **greenfield** = repo-setup → scaffold → (stub) console → hand to
 `discuss`; **fully supported now.** **brownfield/integrate** = the shared scaffold plus the Space-6
 **`ingest` skill** + reconciliation checkpoint; ingest **mechanics decided (D68)**, the **`ingest` skill
-authored**, and the **Python code-map extractor built + wired into `/start` step 4** — brownfield now ingests
-Python stacks end-to-end; other-language extractor arms are the follow-on. Orchestrator `CLAUDE.md` driver now
+authored**, and the **shared code-map engine built + wired into `/start` step 4** (five precise arms + a
+tier-0 floor — arm build thread CLOSED, D77/D79) — brownfield ingests any recognized language (owner: `11` Space 6). Orchestrator `CLAUDE.md` driver now
 specced (D46–D49). Stubbed sub-steps to expand: console launch (`03`), full disk layout (`05`).
 
 ## Adoption deltas — workflow-kit + GSD (D36–D45, +D40/D65/D67)
@@ -134,6 +134,7 @@ Skill bodies **authored** (session 2026-07-01); each delta maps to its landed ho
 
 ## Still open
 - The **collision-model independence test** — when two items are independent enough to share a wave (`02` / `07`).
-- `init` **brownfield-ingest** — mechanics decided (D68); `ingest` skill + the Python code-map extractor built
-  and wired into `/start`. Remaining: other-language extractor arms (same `graph.json` contract).
+- `init` **brownfield-ingest** — mechanics decided (D68); `ingest` skill authored + the code-map engine (five
+  arms + tier-0 floor, thread CLOSED D77/D79) wired into `/start`. Remaining is **runtime** (unexercised until a
+  real bootstrap); open code-map follow-ons (living observed layer, D83 charter) live in `11` Space 6.
 - D41 freshness mechanisms (staleness signal, prune pass) + #8 (verify reads diff?) — `07`.

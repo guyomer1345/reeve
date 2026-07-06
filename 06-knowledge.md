@@ -49,10 +49,11 @@ non-derivable intent that earns its tokens. (Code Property Graph is overkill for
 step only.)
 
 ## Generation, the two lenses & the node seed **[DECIDED — D68, pressure-tested on a real repo]**
-- **Generator = an own script per stack, not an external tool.** `/start` emits a `.workflow/` code-map
-  generator the same way it emits `checks.sh`: Python via stdlib `ast`, other stacks via a zero-dep
-  regex-extraction + per-language resolver arm (tree-sitter reserved for parse-hard languages — D74). Regenerable,
-  near-zero-dep, cheap to re-run. *External tools were tested and rejected:*
+- **Generator = a single shipped multi-language engine, not an external tool** (D72/D74 revised the original
+  D68 per-stack framing). `/start` ships `scripts/codemap/codemap.py` and emits only a thin, stack-independent
+  `.workflow/codemap.sh` wrapper (one auto-dispatching call — *not* per-stack-generated the way `checks.sh` is):
+  Python via stdlib `ast`, other stacks via a zero-dep regex-extraction + per-language resolver arm (tree-sitter
+  reserved for parse-hard languages — D74). Regenerable, near-zero-dep, cheap to re-run. *External tools were tested and rejected:*
   `repomix` packs context (signatures + token counts), not a typed import graph; aider-repomap does the graph
   but is a heavyweight install to ship into every consuming project.
 - **`graph.json` carries TWO centrality lenses, not one "importance" rank** — both fall out of the same

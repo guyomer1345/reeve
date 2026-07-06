@@ -58,7 +58,8 @@ Core principle: produce the plan others execute against; raise any real build de
 `.workflow/items/<id>/` on demand and writes `plan.md` there — the first per-item artifact.
 
 ## Route
-→ `execute` (plan-one) · → backlog / `prioritize` (decompose).
+→ `execute` (plan-one) · → `create-demo` (plan-one, when the per-item sandbox gate fires) · → backlog /
+`prioritize` (decompose).
 
 ## Calls
 `decision-engineer` (when an open decision blocks the plan).

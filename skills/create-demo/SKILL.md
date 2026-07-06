@@ -40,7 +40,7 @@ The visual/behavioural slice of the `spec`.
 An approved demo → spec commitment levels recorded.
 
 ## Route
-→ `planner`.
+→ `planner:decompose` (inception path) · → `execute` (per-item demo approved).
 
 ## Calls
 `checkpoint` (kind=demo) · `create-issue` (kind=debt — one per `provisional` item on the approval path).
