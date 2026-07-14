@@ -8,13 +8,18 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_enum_coherence as e  # noqa: E402
 
 # An `integrations` kind: line BEFORE `request` — the anchor must not grab it.
+# The `inbox` kind: line has no `request`, so the checkpoint anchor skips it and
+# the inbox anchor (starts on `verdict|`) can't grab the demo|qa|… request line.
 SCHEMAS = """\
 - `integrations[]` — `{ name, kind: auth|payments, ... }`
 - `request` — `{ kind: demo|qa|setup|reconcile, what, blocking: true }`
+- inbox message is typed — `kind: verdict|intake|control` — one transport
 """
 CHECKPOINT = "Four kinds — demo, qa, setup, reconcile. Routes by kind."
 ROSTER_OK = "| checkpoint | skill | verdict (demo / qa / setup / reconcile) |"
 ROSTER_STALE = "| checkpoint | skill | verdict (demo / qa / setup) |"  # missing reconcile
+SHARED05_OK = "one typed inbox — verdict, intake, control — single consumer"
+SHARED05_STALE = "one typed inbox — verdict, intake — single consumer"  # missing control
 
 CODEMAP = "ARMS = [PythonArm(), JsTsArm(), GoArm(), JavaArm(), CSharpArm(), GenericArm()]  # precedence\n"
 ROADMAP_OK = "**Five precise arms built** — thread CLOSED (D77/D79)."
@@ -36,16 +41,22 @@ class Helpers(unittest.TestCase):
         vals = e.enum_values(SCHEMAS, e.ENUMS[0]["owner_re"])
         self.assertEqual(vals, ["demo", "qa", "setup", "reconcile"])
 
+    def test_inbox_owner_anchored_to_verdict(self):
+        # the inbox anchor picks the verdict|… line, never the demo|qa|… request
+        vals = e.enum_values(SCHEMAS, e.ENUMS[1]["owner_re"])
+        self.assertEqual(vals, ["verdict", "intake", "control"])
+
     def test_registry_count_excludes_generic(self):
         n = e.registry_count(CODEMAP, e.COUNTS[0]["owner_re"], {"GenericArm"})
         self.assertEqual(n, 5)
 
 
 class Enums(unittest.TestCase):
-    def _files(self, roster):
+    def _files(self, roster, shared05=SHARED05_OK):
         return {"shared/schemas.md": SCHEMAS,
                 "skills/checkpoint/SKILL.md": CHECKPOINT,
-                "10-roster.md": roster}
+                "10-roster.md": roster,
+                "05-shared-state.md": shared05}
 
     def test_clean_passes(self):
         self.assertEqual(e.check_enums(reader(self._files(ROSTER_OK))), [])
@@ -53,6 +64,10 @@ class Enums(unittest.TestCase):
     def test_missing_value_flagged(self):
         errs = e.check_enums(reader(self._files(ROSTER_STALE)))
         self.assertTrue(any("reconcile" in x and "10-roster.md" in x for x in errs))
+
+    def test_inbox_missing_value_flagged(self):
+        errs = e.check_enums(reader(self._files(ROSTER_OK, shared05=SHARED05_STALE)))
+        self.assertTrue(any("control" in x and "05-shared-state.md" in x for x in errs))
 
 
 class Counts(unittest.TestCase):

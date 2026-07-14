@@ -35,6 +35,14 @@ ENUMS = [
         "owner_re": r"request[^\n]*kind:\s*([a-z]+(?:\|[a-z]+)+)",
         "consumers": ["skills/checkpoint/SKILL.md", "10-roster.md"],
     },
+    {
+        "name": "inbox.kind",
+        "owner": "shared/schemas.md",
+        # the typed-inbox message kinds (D93); anchors on `verdict|` so it can't
+        # collide with the checkpoint `kind: demo|qa|…` line above.
+        "owner_re": r"kind:\s*(verdict(?:\|[a-z]+)+)",
+        "consumers": ["05-shared-state.md"],
+    },
 ]
 
 # --- COUNT invariants --------------------------------------------------------
