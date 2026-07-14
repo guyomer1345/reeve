@@ -116,9 +116,19 @@ input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh
 ## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
 - `{ ticket_id, token, worktree, branch, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }`
 
-## verdict-message  · appended to the inbox by the bus when a human posts a verdict · *`.workflow/inbox/<ts>-<uuid>.json`; append-only, durable (atomic write+rename), at-least-once*
-- `{ token, verdict: {pass, notes} }` — matched to a `parked-ticket` at a scheduler boundary **idempotently,
-  single-shot**; unknown/closed token → **dead-letter + surface** (never a silent resume); duplicate → no-op.
+## inbox-message  · appended to the inbox by the bus when the console POSTs · *`.workflow/inbox/<ts>-<uuid>-<pid>.json`; append-only, durable (atomic write+rename), at-least-once; RUNTIME, kept on a native filesystem*
+Every console→orchestrator message is **typed** — `kind: verdict|intake|control` — one uniform durable transport,
+dispatched at a scheduler boundary **by kind**. **Single consumer** (the one orchestrator) → no `processing/`
+claim-by-rename needed; matched **idempotently, single-shot** (duplicate → no-op). The bus returns `202 Accepted` +
+a `Location` ticket at POST time; any result surfaces via orchestrator-written state the console re-reads by ticket —
+the orchestrator **never responds synchronously** (it is a boundary batch-consumer, not an HTTP responder).
+- **`kind: verdict`** — `{ token, verdict: {pass, notes} }` — resumes a parked ticket; `token` matches a
+  `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume).
+- **`kind: intake`** — `{ ticket, ask, node_ids? }` — a new-work request; the orchestrator **promotes** it into
+  `backlog.md` through triage — **never a direct backlog write** (that would make the backlog two-writer).
+  `node_ids` present when the project-map screen emitted it.
+- **`kind: control`** — `{ ticket, op }` (e.g. `reprioritize`, `pause`) — a loop-control command honored at the next
+  boundary (non-preemptive).
 
 ## issue  · produced by `create-issue`, closed by `close-issue` · *filed into `backlog.md` — a **live open queue** (rewrite-in-place; closed entries leave, GC'd by `prioritize`), not append-only*
 - `{ title, kind: bug|feature|debt, description, severity, source, depends_on[] }` — `prioritize` orders on all
@@ -146,12 +156,19 @@ input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh
   on the semantic pass's fan-out; deferred surface rides the next scan). **Decoupled from `retention`** (drift
   risk ≠ memory pressure). Absent → shipped defaults (every_n_commits 20, max_agents 6).
 
-## state.json  · the live loop pointer (volatile, gitignored) · *rewritten in place each iteration*
+## bus.json  · written by the bus daemon at boot, read by `/start` + the browser · *`.workflow/bus.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
+- `{ pid, port, token, started_at }` — the daemon's discovery + auth record. `port` = a dynamic **loopback**
+  port (bind `127.0.0.1:0`, read back — the port is **not** a secret). `token` = the CSPRNG **capability token**
+  required as a header on every request (authentication; **distinct** from a checkpoint correlation `token`).
+  `/start` health-checks `port`+`token` to **adopt-or-spawn** the daemon; the daemon holds a `flock` for its
+  lifetime as the liveness authority.
+
+## state.json  · the live loop pointer (volatile, gitignored) · *published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
 - `status` ∈ `{ intake, building, idle }`
 - `node` — current loop node; value ∈ the `loop.md` node labels (e.g. `planner:plan-one`, `verify`)
 - `current_item` — backlog id or `null` · `wave` — wave id or `null` · `note` — human-readable cursor
 
-## handoff.md  · the durable resume anchor (committed) · *rewritten whole each handoff, never appended*
+## handoff.md  · the durable resume anchor (committed) · *rewritten whole each handoff, never appended; published atomically **and durably** (write-temp → `fsync(file)` → `rename` → `fsync(dir)`) — the one file where crash-durability, not just atomicity, is mandatory*
 - `current_item`, `loop_position`, `parked[]`, `base_sha` — the commit it was written against; a cold start
   reads this + `git log <base_sha>..HEAD` (bounded to one session's delta) and rebuilds position.
 

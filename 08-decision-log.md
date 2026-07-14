@@ -1768,6 +1768,100 @@ tool**; two fan-outs (auto-compact mechanics · long-loop context best-practice 
 long-running agents" + "context engineering", Manus, Cognition, context-rot benchmarks). Reuses D4/D48/D51; refines
 `01` Session-lifecycle. → `01`/`07`/`11`.
 
+## D93 — Bus contract: single-writer ownership + atomic-publish + a two-mechanism protocol (sync reads · async commands); one typed inbox — the orchestrator is never an HTTP responder **[DECIDED — Phase-2 A2, research-backed]**
+The A2 bus contract closes on three rules. **(1) Ownership = a single-writer partition, zero co-written files:** the
+orchestrator is the sole writer of `state.json` / `handoff.md` / `backlog.md` / `parked/` / `items/` + git; the bus is
+the sole writer of `inbox/`; everyone else reads. **UI-originated work never writes the backlog directly** (that would
+make it two-writer) — it lands in the bus-owned inbox and the orchestrator **promotes** it into `backlog.md` at a
+boundary (through D69 triage). `flock` is **unneeded** — single-writer removes the write-conflict class (and the
+advisory-lock minefield with it). **(2) Atomic-publish** (write-temp → `fsync` → `rename` → `fsync(dir)`) on **every**
+file that crosses the process boundary — including `state.json` (its "rewritten in place" is *logical*, not physical;
+a torn read is the failure mode), with `handoff.md` additionally needing the dir-fsync **durability** (the resume
+anchor). **(3) Protocol = two mechanisms, no third:** synchronous **reads** the bus serves straight from disk (GET, no
+orchestrator involvement) + asynchronous **commands** (`202 Accepted` + a `Location` ticket → append to `inbox/` →
+consumed at a scheduler boundary → result surfaces via orchestrator-written state the UI re-reads by ticket). **The
+orchestrator is never an HTTP responder** — the direct consequence of D90 (a boundary batch-consumer, not a server),
+so a synchronous request→orchestrator→response path *cannot exist*. **One typed inbox** (`kind: verdict|intake|control`),
+**single consumer** (the one orchestrator, so no `processing/`-claim dance), matched **idempotently, single-shot** (D91).
+SQLite-WAL is the **reserved escape hatch** — adopt only on a genuine cross-file atomic invariant / consistent
+multi-file snapshot / indexed large-backlog query, never hand-roll a second writer instead.
+- **Conversation model (the conversation corollary):** because the loop is a batch consumer, the console is **not and cannot be
+  a real-time chat**. New-feature *dialogue* happens at the **terminal** (the live session = the `discuss` stage); the
+  bus carries only *requests* (async intake → a D69-triaged backlog item) + *bounded clarifications* (an
+  orchestrator-parked checkpoint question). A future console "chat" would be async-turn-based (latency = the boundary
+  cadence), never live. So conversation isn't lost to the async reframe — it lives in the live session, not on the bus.
+- **Why:** single-writer + atomic-rename is the sound DB-free coordination substrate for a single host (Maildir/spool
+  discipline) and dissolves the advisory-lock problem entirely; "no synchronous orchestrator response" is *forced* by
+  A1, not chosen — naming it stops a later impossible build. The backlog is the one file that would otherwise be
+  two-writer; routing intake through the inbox is what preserves the invariant.
+*Rejected:* intake written straight to `backlog.md` (two-writer → corruption); `flock`/advisory locks (unreliable over
+NFS, silently drop on any-fd-close, unneeded under single-writer); a synchronous orchestrator endpoint (physically
+impossible); SQLite up front (premature — files suffice until a cross-file invariant appears); a real-time console chat
+(the batch loop forbids it — any console chat is async-turn-based).
+*Evidence:* a file-IPC / async-comms research fan-out — POSIX `rename` atomicity + the `write→fsync→rename→fsync-dir`
+recipe (lwn), Maildir + systemd-journal single-writer/lock-free discipline, at-least-once + idempotent-consumer,
+Microsoft **Async Request-Reply** (`202` + status-resource + correlation id), SSE-vs-poll (SSE is ergonomics not
+architecture for a batch worker), the `EXDEV`/Windows-`os.replace` caveats, and the SQLite-WAL escape trigger. Reuses
+D26/D48/D51/D69/D90/D91. → `03`/`04`/`05`/`shared/schemas.md`/`07`/`11`.
+
+## D94 — Website/bus lifecycle: a session-independent detached daemon, ensure-running via lock-authority, stop via HTTP + idle-janitor **[DECIDED — Phase-2 A3, research + empirical]**
+The bus is a **session-independent detached daemon** — its lifecycle is **decoupled** from the orchestrator
+conversation, because it must receive verdicts *while the orchestrator is parked or dead*. Detach with a **new session**
+(`setsid` / `start_new_session`, **not** `nohup`/`disown`) — empirically confirmed to survive `/clear`,
+`claude --resume`, and session death on `claude v2.1.209` (Claude Code does **not** reap background children and ships
+no cleanup). `/start` is **ensure-running (adopt-or-spawn), idempotent**: liveness authority is a **held `flock`**
+(kernel-released on death → race-free singleton election, PID-reuse-immune) **plus** a token'd `/health` 200; the daemon
+publishes `{pid, port, token, started_at}` to `.workflow/bus.json` (atomic write, gitignored, dynamic **loopback** port
+bound `127.0.0.1:0` and read back, per-project). **Never spawn-fresh per session** (drops in-flight verdicts). **Stop =
+an authenticated `POST /shutdown`** (OS-uniform; Windows has no SIGTERM) + a long, heartbeat-aware **idle-timeout
+self-shutdown** (the orphan janitor Claude Code doesn't provide). **WSL2 caveat (owner-accepted):** a detached Linux
+daemon can't hold the distro VM open, so on WSL the bus dies ~8s after the last terminal closes and re-spawns on the
+next `/start` — the durable inbox loses nothing already-written; `loginctl enable-linger` / `.wslconfig
+vmIdleTimeout=-1` are the documented opt-in upgrade.
+- **Why:** nothing may block a live session (D90), so the away-channel must outlive session churn and therefore can't be
+  a session child. Lock-as-liveness beats a pidfile (immune to PID reuse); HTTP-stop beats signals (cross-OS). Closest
+  real-world analog is **Syncthing** (loopback API on a discovered port, token in config, self-managed process,
+  service-install optional).
+*Rejected:* spawn-fresh-per-session (drops verdicts — a trap worth naming so nobody "simplifies" into it); a pidfile as
+liveness authority (PID reuse); a per-user service manager for MVP (systemd `--user` / launchd — only buys
+reboot-survival we don't need, with WSL the sole asterisk); `nohup`/`disown` (stay in-session, die on process-group
+reap).
+*Evidence:* a detached-daemon research fan-out (new-session vs SIGHUP-ignore mechanics, `flock` singleton +
+health-check adopt, ephemeral-`:0` + portfile discovery, idle-timeout precedent `git-credential-cache--daemon`, the
+WSL2 VM-lifecycle kill) + a Claude-Code process-reaping fan-out with **empirical v2.1.209 tests** (background children
+orphan to PID 1 and survive; `--resume` loads context not processes; `/clear` is context-only; no `SessionEnd` default
+cleanup). Reuses D48/D90/D92. → `03`/`05`/`07`/`11`.
+
+## D95 — Local-bus trust: the browser/network is the untrusted caller, not same-UID; capability token + Host-allowlist + loopback bind **[DECIDED — Phase-2 A4, research-backed]**
+The trust boundary is **not** "same-UID local processes" — a same-UID process can already `ptrace` the orchestrator and
+read its files, so defending against it is theater — it is **"the browser and the network are untrusted callers."** The
+MVP **loopback** stack (all mandatory; they compose to three independent failures for a rebinding attacker): a **CSPRNG
+capability token** (atomic **0600** create, *not* write-then-chmod; **header-only**, never in a URL — the Jupyter
+`?token=` CVE lineage; **no cookie** — a cookie re-opens CSRF; **required on read endpoints too** — a rebind must not
+scrape it); a **strict Host-header allowlist on every endpoint** (`127.0.0.1:<port>` / `localhost:<port>` only — the
+sole browser-independent DNS-rebinding defense every peer tool converged on after being bitten); **`Content-Type:
+application/json` + a custom header** (forces the CORS preflight a form-CSRF can't satisfy) with `Sec-Fetch-Site`
+reject-cross-site, fail-closed; explicit **`127.0.0.1` bind, never `0.0.0.0`**; IPv4/`::1` kept consistent. The
+**dynamic port is not a secret** (anyone `lsof`s it) — token + Host-check do the work. **Two distinct tokens, never
+conflated:** the **bus token = authentication** (the secret gating POST) vs the **checkpoint token = correlation only**
+(D91 — it lives in user-readable `parked/`, so it is *not* a secret). **Windows has no `0600`** → the token file needs
+explicit ACLs, folded into the **D89** "target OS/FS isn't POSIX-ext4" family. **Tunnel (owner-accepted):** D70
+stands unchanged — remote-control is opt-in / off by default / warning-only / **no auth**, an owner-accepted risk; the
+one hard rule retained is that the **loopback token is never reused as tunnel auth** (over the wire there is no 0600
+file to gate it → it degrades to a replayable bearer with no identity), so real tunnel auth (Cloudflare Access / HMAC
+short-lived requests) stays the reserved upgrade for when the risk is no longer acceptable.
+- **Why:** loopback ≠ authenticated, and a forged verdict/command drives an autonomous executor (privilege escalation);
+  the live vectors are the confused-deputy browser + DNS-rebinding, not same-UID code. Token-in-a-0600-file pins the
+  audience to the user's UID (= the workflow's own trust level), header placement doubles as CSRF defense, and the
+  Host-allowlist is the one rebinding defense that survives a same-origin post-rebind.
+*Rejected:* investing in same-UID isolation (already-game-over theater); token-in-URL (log/history/`Referer` leak — the
+Jupyter CVE class); a session cookie (re-opens CSRF); reusing the loopback token over the tunnel (unsound); treating the
+dynamic port as a secret (it isn't).
+*Evidence:* a loopback-security research fan-out — github.blog CORS/DNS-rebinding, Ollama **CVE-2024-28224**,
+Vite/webpack-dev-server/Chrome-CDP Host-check convergence, Jupyter `secure_write` 0600 + the `?token=` CVE lineage
+(2023-39968 / 2024-22421 / 2025-59842), OWASP CSRF + Fetch simple-request rules, Cloudflare Access deny-by-default.
+Reuses D35/D70/D89/D91. → `03`/`05`/`07`/`11`.
+
 ---
 
 ## Not yet decided (tracked in `07`)
@@ -1776,11 +1870,13 @@ follow-ons (node-ID stability across renames, observed-edge staleness/decay, non
 open threads. Model/effort map; collision **independence test** (**decided — D91 eligibility predicate:
 dependency-ready ∧ file-disjoint ∧ ¬1-hop-neighbor**; waves grouping D36); Arbiter input contract; **checkpoint
 block/resume + autonomous reset now decided (D90/D92 — durable park + `claude --resume`; the runner is the deferred
-autonomous path)**; website stack. Intake follow-ons:
+autonomous path)**; **the A2 bus contract / A3 lifecycle / A4 trust now decided (D93/D94/D95 — single-writer +
+atomic-publish + a two-mechanism protocol · a session-independent detached daemon · a capability-token +
+Host-allowlist loopback trust)**; website **stack** still open (B4). Intake follow-ons:
 engineering-feasibility pass **designed as the proportional-rigor gate (D69), implementation deferred**;
 demo-skill mechanics; commitment-status storage. `init` follow-ons: brownfield
-ingest **designed (D68); the `ingest` skill is authored**; console launch, full disk-layout protocols
-still open (the `spec/`+`.knowledge/` docs-root placement closed — D62). Skill-review follow-ons:
+ingest **designed (D68); the `ingest` skill is authored**; **console launch + disk-layout read/write protocols now
+decided (D94/D93)** (the `spec/`+`.knowledge/` docs-root placement closed — D62). Skill-review follow-ons:
 incidental-issue-resolution detection — deferred; outward-action permission mechanics (D35). Adoption
 follow-ons: the **retention & archival law** is **closed** (D59–D60 write-law leaks + D61 cap-and-archive read
 law) and the **retention script is built** (D71); what remains is **Sessions distillation** (deferred) and

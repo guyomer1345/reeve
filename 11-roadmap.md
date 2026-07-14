@@ -64,7 +64,8 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **C2 — comms bus** (the local HTTP loopback, Space 5) — **on the critical path for unattended autonomy:** the
   dogfood showed every step self-drives *except* the blocking qa `checkpoint`, which needs the bus to deliver
   the human verdict away from the terminal; it also unblocks the airtight outward-gate (the `cd x && push`
-  chaining-gap checkpoint-queue). **[core for unattended autonomy]**
+  chaining-gap checkpoint-queue). **The full contract is now DESIGNED (D93/D94/D95 — ownership · protocol · lifecycle
+  · trust, owned by `05`);** the build rides Phase 3. **[core for unattended autonomy — designed; build Phase 3]**
 - **C-map — project map + flow view** (D70) — a read-only cluster diagram over the code-map `graph.json`
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
@@ -85,8 +86,10 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **Automated testing · test-from-anywhere · paid device/QA platform** — designed-for, not built. **[later]**
 
 ### Space 5 — Shared state & bus
-- **Read/write ownership per file + the request/response protocol** — the bus contract (couples with Space 3
-  C2). **[core with C2]**
+- **Read/write ownership per file + the request/response protocol** — **DECIDED (D93):** a single-writer partition
+  (zero co-written files; intake promoted through the inbox, not written to the backlog) + atomic-publish + the
+  two-mechanism protocol (sync reads · async commands); **the orchestrator is never an HTTP responder.** Bus
+  lifecycle D94, trust D95. **[core — designed; build Phase 3]**
 - **Outward-action permission mechanics** — standing pre-auth vs per-action, batching/queuing; the robust gate
   (beyond `ask` prefix-match) needs the bus checkpoint-queue (D35). **[stageable → core with bus]**
 - **Symbol-level knowledge paths** — the seam left in Space-6 granularity. **[later]**
@@ -189,19 +192,22 @@ tracked in `07`) — **D89**.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /
-triggers. *(**IN PROGRESS — 2026-07-14: cluster A1 (the checkpoint/console runtime spine) is CLOSED — D90–D92,
-empirically verified on `claude v2.1.209`.** The next design questions, in dependency order, are in the agenda
-below.)*
+triggers. *(**IN PROGRESS — 2026-07-14: cluster A (the checkpoint/console runtime + bus substrate) is CLOSED —
+D90–D95.** A1 (block/resume + interleaving + context, D90–D92) empirically verified on `claude v2.1.209`; A2 bus
+contract (D93), A3 lifecycle (D94), A4 trust (D95) closed via four research fan-outs. **Next slice = cluster C
+(checkpoints).** The full agenda + per-item status is below.)*
 
 ### Phase 2 — design agenda & dependency sequence *(the resume map)*
-The website+demo design decomposes into five clusters; the dependency spine is **A1 → A3/A2 → C → B → D → E**
-(A1 was the linchpin — the runtime block/resume mechanism everything else hangs off). Status per item:
-- **A — bus / comms substrate.** **A1 block/resume mechanism — CLOSED (D90):** checkpoint = durable park, resume via
-  `claude --resume` (verdict-as-prompt), manual restart in MVP / local relaunch-runner later. **+ D91 interleaving,
-  D92 context** ride here. **A2 bus contract** — *partly seeded* (the durable verdict **inbox + token** correlation
-  is decided, D90/D91); the rest (read/write ownership per file, request/response for non-verdict messages) is open.
-  **A3 website/bus lifecycle** (boot/stop/survive-`/clear`, port) — open. **A4 local-bus trust** (any local process
-  can POST) — open.
+The website+demo design decomposes into five clusters; the dependency spine is **A → C → B → D → E**
+(A was the linchpin — the runtime block/resume + bus substrate everything else hangs off). Status per item:
+- **A — bus / comms substrate. CLOSED (D90–D95).** **A1 block/resume mechanism (D90):** checkpoint = durable park,
+  resume via `claude --resume` (verdict-as-prompt), manual restart in MVP / local relaunch-runner later; **+ D91
+  interleaving, D92 context.** **A2 bus contract (D93):** single-writer ownership + atomic-publish + a two-mechanism
+  protocol (sync reads · async commands) + one typed inbox (`verdict|intake|control`) — the orchestrator is never an
+  HTTP responder; the conversation corollary (dialogue = terminal, bus = requests + bounded clarifications).
+  **A3 website/bus lifecycle (D94):** a session-independent detached daemon, ensure-running via `flock`-authority +
+  token'd `/health`, `POST /shutdown` + idle-janitor; WSL2 dies-with-terminal. **A4 local-bus trust (D95):**
+  capability token + Host-allowlist + loopback bind; tunnel stays warning-only (D70, owner-accepted).
 - **B — console.** **B1 screen list + map tab-vs-home**; **B2 stream-vs-snapshot**; **B3 contact-orchestrator UX**
   (node→ticket reserved, D70); **B4 stack** (deferred, coupled to A2); **B5 attention/notification** — *seeded*
   (the `Notification` hook → desktop/opt-in-webhook is decided, D90); phone/tunnel later. All open.
@@ -214,8 +220,10 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   permission model** (`publish` kind, batching — couples to the bus/inbox, D35/D60); **E3 project-map residuals**
   (tab-vs-home → B1, ephemeral-vs-durable ≈ D78, remote-auth). Open.
 
-**Recommended next slice:** finish **A (A2 contract + A3 lifecycle + A4 trust)** — the inbox/token seam from D90/D91
-already constrains it — then **C (checkpoints)**, **B (console)**, **D (demo)**, **E (cross-cutting)**.
+**Recommended next slice:** **A is CLOSED (D90–D95).** Next is **C (checkpoints)** — C1 data model is mostly closed
+(schemas + the D90 park model + D91 token/parked/inbox); what's left is **C2 triggers** (demo/setup — qa = D30) and
+**C3 which help features are MVP** (doc-links / screenshots / screen-share / live-feedback) — then **B (console)**,
+**D (demo)**, **E (cross-cutting)**.
 **Phase 3 — Build the website** (C1 console → C2 bus).
 **Phase 4 — Build the demo.**
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, the **local relaunch-runner**

@@ -49,11 +49,13 @@ Deliberately deferred — known unknowns, to close during build or later.
   the dogfood run took **zero** local permission prompts.)
 - **`@import`-survives-`/compact`** — a one-session test; if it re-resolves, the brownfield install (D50) can
   switch from the inline marked block to a cleaner `@import`.
-- **Console + comms bus** (`03`/`05`) — the **critical-path runtime dependency**. **The block/resume *mechanism* is
-  now DECIDED (D90/D91):** checkpoint = durable park → verdict on the bus into a durable **append-only inbox** +
-  **token** correlation → resume via `claude --resume`. What remains is the rest of the **A2 bus contract**
-  (read/write ownership, non-verdict messages), **A3 lifecycle** (boot/stop/survive-`/clear`, port), **A4 local-bus
-  trust**, and the whole **console (B)** — tracked as the Phase-2 design agenda in `11`.
+- **Console + comms bus** (`03`/`05`) — the **critical-path runtime dependency**. **Cluster A is now CLOSED:** the
+  block/resume mechanism (D90/D91), the **A2 bus contract** (D93 — single-writer ownership + atomic-publish + a
+  two-mechanism protocol [sync reads · async commands] + one typed inbox; the orchestrator is never an HTTP
+  responder), the **A3 lifecycle** (D94 — a session-independent detached daemon, ensure-running via lock-authority,
+  HTTP-stop + idle-janitor), and the **A4 trust** model (D95 — capability token + Host-allowlist + loopback bind).
+  What remains is the whole **console (B)** — screen list / tab-vs-home / stream-vs-snapshot / stack — the next
+  Phase-2 slice after **C (checkpoints)**, tracked in `11`.
 - **Real dispatch validation** — the dogfood *simulated* the `research` agent dispatch; the orchestrator→agent
   call + structured return is validated in the harness-real run.
 - **Package install** — loose `.claude/` files are MVP (D57); plugin packaging + `shared/` resolution open.
@@ -92,12 +94,21 @@ Deliberately deferred — known unknowns, to close during build or later.
   (4) **Remote-control auth** (Cloudflare Access / token) — reserved, warning-only for now.
 - **Automated testing**, **test-from-anywhere**, **paid device/QA platform** (`04`) — designed-for,
   not built.
-- **Shipped-glue OS portability (D89)** — the shipped bash glue (`guard.sh`, generated `checks.sh`/`codemap.sh`)
-  assumes a **bash interpreter on the target OS**; unverified on **native Windows** (git-invoked `pre-commit.sh`
-  likely survives via Git-Bash; the Claude-Code-invoked glue is the risk). Fix later with a targeted fallback (a
-  thin Python launcher — `python3` is already a hard dependency — or a documented Git-Bash/WSL requirement),
-  **not** a `.sh→.py` refactor (the D71 bash-glue/python-logic split stands). Validate when a real target-OS
-  decision is forced.
+- **Target OS/FS portability family (D89 + D93/D94/D95)** — a cluster of "the target isn't POSIX-ext4" gaps, tracked
+  together:
+  - **Shipped-glue interpreter (D89)** — the shipped bash glue (`guard.sh`, generated `checks.sh`/`codemap.sh`)
+    assumes a **bash interpreter on the target OS**; unverified on **native Windows** (git-invoked `pre-commit.sh`
+    likely survives via Git-Bash; the Claude-Code-invoked glue is the risk). Fix later with a targeted fallback (a
+    thin Python launcher — `python3` is already a hard dependency — or a documented Git-Bash/WSL requirement),
+    **not** a `.sh→.py` refactor (the D71 bash-glue/python-logic split stands).
+  - **Runtime coordination on a native FS (D93)** — atomic `rename`/`fsync`/`inotify` are weak-to-broken on
+    network-style mounts (NFS; WSL2 `/mnt/c` DrvFs/9p). The runtime subtree (`state.json`/`bus.json`/`parked/`/
+    `inbox/`) is pinned to a native-FS path; `/start` detects a DrvFs/network mount and relocates-or-warns.
+  - **WSL2 bus lifecycle (D94)** — a detached daemon can't hold the distro VM open; the bus dies ~8s after the
+    last terminal closes and re-spawns on the next `/start` (owner-accepted; `enable-linger` / `vmIdleTimeout=-1`
+    the opt-in upgrade).
+  - **Token-file ACLs on Windows (D95)** — no `0600`; the bus capability token needs explicit `icacls` ACLs.
+  Validate the family together when a real target-OS decision is forced.
 - **Project-state view (`03`/`05`/`06`) — user-raised 2026-06-30.** No single synthesized "where is this
   project" surface — *what's done · how the pieces connect · what's left*. The data exists but is scattered
   (`00–11` + `08` decisions + this register + `handoff.md` + `backlog.md` + the `docs/knowledge/` graph). The user

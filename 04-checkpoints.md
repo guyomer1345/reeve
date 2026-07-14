@@ -18,6 +18,12 @@ starting from `handoff.md` + `git log` if the session store is gone. Restart tri
 prompt) → a **local relaunch runner** later. **Not** a hook exit-code trick (a `Stop` hook exiting 2 forces
 *continue*, not pause). While parked, the orchestrator **interleaves** to the next independent ticket (D91).
 
+**The away-channel for a bounded question (D93 conversation corollary).** A checkpoint is also how the orchestrator
+asks the *away* human a bounded question — it parks with the request, the human answers async via the bus, it
+resumes. Open-ended new-feature **dialogue** is *not* a checkpoint; it's a terminal activity (the live `discuss`
+session). The bus carries only bounded clarifications + `intake` requests, never a real-time chat (the loop is a
+batch consumer — see `05`).
+
 ## Motivating example (user)
 Setting up a Polar account: each time Claude said to change a setting, the human had to go find exactly
 where it lives in Polar's docs/UI. The workflow should instead surface the doc location / a screenshot,
