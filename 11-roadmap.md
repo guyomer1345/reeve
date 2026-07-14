@@ -27,10 +27,15 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 ## What's left — by space (every open thread)
 
 ### Space 1 — Orchestrator  *(core driver done)*
-- **Waves coordination** — `build-once-per-wave` + the **collision independence test** (when two items can
-  share a wave). Only bites once agents run in parallel. **[stageable]**
-- **True-overnight reset** — MVP is human-prompted `/clear` + restart from `handoff.md`; unattended overnight
-  needs the optional **SDK runner**. **[later]**
+- **Waves coordination** — the **collision independence test is now DECIDED (D91)** (dependency-ready ∧
+  file-disjoint ∧ ¬1-hop-neighbor); it powers both waves and **continue-while-parked interleaving (MVP, D91)**.
+  Residual: `build-once-per-wave` (a wave-coordinator, not a command gate). **[core — predicate done; build-once
+  stageable]**
+- **Context / checkpoint reset — DECIDED (D90/D92):** checkpoint = durable park + `claude --resume`; context is
+  disposable (subagents keep the orchestrator thin; auto-compact = within-run seatbelt). MVP = a **manual alert** to
+  `/clear` + re-run `/start`; **true overnight = a thin local relaunch-runner** (fresh `claude -p` per ticket — the
+  *only* self-`/clear`-free path; triple-solves context + checkpoint-resume + overnight; NOT the cloud Agent SDK).
+  **[mechanism decided; the runner build is [later]]**
 - **Model + effort routing** — per-task model/effort map (graph-maintenance cheap, planning expensive). **[later]**
 - **Arbiter input contract** — decide a batch in dependency order vs one at a time. **[later]**
 
@@ -184,10 +189,37 @@ tracked in `07`) — **D89**.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /
-triggers.
+triggers. *(**IN PROGRESS — 2026-07-14: cluster A1 (the checkpoint/console runtime spine) is CLOSED — D90–D92,
+empirically verified on `claude v2.1.209`.** The next design questions, in dependency order, are in the agenda
+below.)*
+
+### Phase 2 — design agenda & dependency sequence *(the resume map)*
+The website+demo design decomposes into five clusters; the dependency spine is **A1 → A3/A2 → C → B → D → E**
+(A1 was the linchpin — the runtime block/resume mechanism everything else hangs off). Status per item:
+- **A — bus / comms substrate.** **A1 block/resume mechanism — CLOSED (D90):** checkpoint = durable park, resume via
+  `claude --resume` (verdict-as-prompt), manual restart in MVP / local relaunch-runner later. **+ D91 interleaving,
+  D92 context** ride here. **A2 bus contract** — *partly seeded* (the durable verdict **inbox + token** correlation
+  is decided, D90/D91); the rest (read/write ownership per file, request/response for non-verdict messages) is open.
+  **A3 website/bus lifecycle** (boot/stop/survive-`/clear`, port) — open. **A4 local-bus trust** (any local process
+  can POST) — open.
+- **B — console.** **B1 screen list + map tab-vs-home**; **B2 stream-vs-snapshot**; **B3 contact-orchestrator UX**
+  (node→ticket reserved, D70); **B4 stack** (deferred, coupled to A2); **B5 attention/notification** — *seeded*
+  (the `Notification` hook → desktop/opt-in-webhook is decided, D90); phone/tunnel later. All open.
+- **C — checkpoints.** **C1 data model** — *mostly closed* (schemas + the D90 park model + D91 token/parked/inbox);
+  **C2 triggers** (demo/setup still open; qa = D30); **C3 which help features are MVP** (doc-links/screenshots/
+  screen-share/live-feedback). Open.
+- **D — demo skill.** **D1 serving/running the sandbox** (surfaced in the checkpoint console); **D2 refine-round
+  limits**; **D3 on-disk location**. Open.
+- **E — cross-cutting.** **E1 commitment-status storage** (spec-doc vs node frontmatter); **E2 outward-action
+  permission model** (`publish` kind, batching — couples to the bus/inbox, D35/D60); **E3 project-map residuals**
+  (tab-vs-home → B1, ephemeral-vs-durable ≈ D78, remote-auth). Open.
+
+**Recommended next slice:** finish **A (A2 contract + A3 lifecycle + A4 trust)** — the inbox/token seam from D90/D91
+already constrains it — then **C (checkpoints)**, **B (console)**, **D (demo)**, **E (cross-cutting)**.
 **Phase 3 — Build the website** (C1 console → C2 bus).
 **Phase 4 — Build the demo.**
-Everything `[stageable]`/`[later]` — waves coordination, the SDK overnight runner, model/effort routing,
+Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, the **local relaunch-runner**
+(D90/D92 — context-reset + overnight autonomy), model/effort routing,
 packaging, the state-view, the version-update skill, **and the D84 skill→agent reclassification** (`execute` +
 `create-demo` → leaf agents: the file moves, agent-format rewrites, orchestrator dispatch-by-kind wiring, and the
 `17 skills + 2 agents` → `15 + 4` count update — a dedicated session, validation-blocked until the loop runs) —

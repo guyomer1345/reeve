@@ -8,9 +8,15 @@ Structured **manual** checkpoints surfaced through the website. Flow:
 > Claude gives live feedback → human reports pass/fail + notes → bus delivers the verdict →
 > orchestrator resumes.
 
-## Block/resume mechanism **[DECIDED — A3 research]**
-A checkpoint is an **explicit orchestrator step that waits on the local bus** for the verdict — NOT a
-hook exit-code trick (a `Stop` hook exiting 2 forces *continue*, not pause).
+## Block/resume mechanism **[DECIDED — D90, empirically verified]**
+A checkpoint is a **durable park boundary**, not a live in-session wait (nothing inside Claude can self-wake — no
+background-exit re-invoke, no hook that wakes an idle model). The orchestrator writes the graceful handoff +
+verdict-request to disk and **yields**; the verdict lands on the local bus into a durable **append-only inbox**
+(D91 correlation); resume is **`claude --resume <id> -p "<verdict>"`** — the verdict rides as an *authoritative
+prompt* (a `SessionStart` hook only re-points to durable state; hook-injected context is under-weighted), cold-
+starting from `handoff.md` + `git log` if the session store is gone. Restart trigger = **manual in MVP** (a console
+prompt) → a **local relaunch runner** later. **Not** a hook exit-code trick (a `Stop` hook exiting 2 forces
+*continue*, not pause). While parked, the orchestrator **interleaves** to the next independent ticket (D91).
 
 ## Motivating example (user)
 Setting up a Polar account: each time Claude said to change a setting, the human had to go find exactly

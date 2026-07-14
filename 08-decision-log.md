@@ -1675,11 +1675,108 @@ clumsier glue); a prose-negation lint flagging "remaining/stub" near an artifact
 
 ---
 
+## D90 — Checkpoint block/resume: a checkpoint is a durable *park boundary*, resumed by `claude --resume` with the verdict as an authoritative prompt **[DECIDED — empirically verified, Phase-2 A1]**
+A blocking human checkpoint is a **durable park boundary**, not a live in-session wait. At a checkpoint the
+orchestrator writes the graceful handoff (park → `document` → `commit` → `handoff.md`) + the verdict-request to
+disk, then **yields**. Resume is **`claude --resume <id> -p "<verdict>"`** — the verdict rides as the *resume
+prompt* (an authoritative user message); a `SessionStart` hook only re-points to durable state (hook-injected
+context is treated as *untrusted background*, so it can **not** carry the load-bearing verdict). If the session
+store is gone, cold-start from `handoff.md` + `git log` (D48). The restart **trigger** scales with autonomy on one
+unchanged contract: **manual in MVP** (a console prompt) → an **OS-scheduler / headless-loop runner later**. Notify
+an away human via the `Notification` hook (desktop native; opt-in Slack/HTTP webhook; phone/tunnel later).
+- **Why:** nothing inside Claude can self-wake (no background-exit re-invoke, no hook that wakes an idle model, no
+  scheduler) — so "hold the session open and block" can never be the foundation; resurrection is inherently an
+  *external* trigger. The durable park reuses D48 and is crash-safe by construction. Verdict-as-prompt because
+  `SessionStart`-injected context is under-weighted by the model.
+- **Runner reframe:** the deferred autonomous-restart path is a **local relaunch loop**, NOT the Claude Agent SDK —
+  the SDK runs *cloud* managed agents and **cannot resume a local session** (verified); the only legal autonomous
+  path is a thin local process that relaunches `claude` on the user's own machine/auth (supersedes `01`'s "SDK
+  runner" wording).
+*Rejected:* an in-session blocking **MCP tool** as the foundation (~5-min idle ceiling, per-server timeout override
+currently broken, dies on machine sleep — kept only as an optional *user-present* fast-path); a **background-waiter
+/ wake-on-exit** (Claude Code does **not** re-invoke the loop when a background task exits — verified); a **cloud
+SDK / managed-agent** runner (off-machine, breaks local-only); a **model-driven poll loop** (token burn).
+*Evidence:* four research fan-outs (harness wake/blocking · MCP-as-bus · restart/resume/notify · divergent HITL
+patterns) + empirical tests on shipped **`claude v2.1.209`**: `--resume <id>` restores full context across process
+death (same session id); `SessionStart`/`Stop` fire headless (even untrusted); `SessionStart(source=resume)` injects
+context but the model flags it *untrusted*; `/clear` is scriptable but **not** self-invokable; store =
+`~/.claude/projects/<cwd>/<uuid>.jsonl`. Reuses D48; refines `01` Session-lifecycle + `04`. → `01`/`03`/`04`/`05`/`07`/`11`.
+
+## D91 — Continue-while-parked: the single orchestrator **interleaves** to the next *independent* ticket while one is checkpoint-parked (Design 2) **[DECIDED — Phase-2 A1 extension]**
+While a ticket is parked awaiting a human verdict, the **single** orchestrator continues to the next *independent*
+ticket rather than idling; the whole-loop park ("Design 1") is the **degenerate "nothing eligible"** case. It is
+**interleaving, not parallelism** — exactly one ticket in active development at a time, others suspended on disk.
+Mechanics (three ground-truth research fan-outs — industry standard, not reinvented):
+- **Isolation** — `git worktree`-per-ticket on its own branch + a `WIP:` park-commit for durability; park = leave
+  the dirty worktree on disk; resume = un-WIP (`reset --soft`) → `rebase` onto trunk (`rerere` on) → `verify` →
+  final commit → merge → `worktree remove`. Raw `git worktree` — **not** `claude --worktree` (which spawns a
+  session-per-worktree, violating the single-orchestrator call). **Reject `stash`** (private LIFO, not for an
+  hours-long hold).
+- **Independence predicate** (off the code-map `graph.json`) — a candidate is eligible iff **dependency-ready** ∧
+  **file-disjoint** from every parked ticket (*hard gate*) ∧ **not a 1-hop code-map neighbor** of a parked ticket's
+  files (*soft gate*). Pass all → clean start; pass-hard/trip-soft → start **flagged** for raised integration rigor
+  (full `verify` + rebase-onto-current-base = a local speculative-merge); fail hard → **never start**. No hard-clean
+  candidate → **park the whole loop**, spend the wait on read-only work (plan/research). Dependency graph, **not**
+  co-change (D78).
+- **Scheduler** — non-preemptive, **item-level**; boundary order = **resume-a-ready-parked-ticket first**
+  (oldest-verdict-first + **aging** anti-starvation) → start-new → sleep. The boundary check is **plain code, not an
+  LLM call**.
+- **Correlation** — a per-checkpoint **token** (`{ticket}:{step}:{uuid}`) + an on-disk parked record (token, resume
+  state, `predicted_outcome` (D69), deadline) + an **append-only file inbox** the bus writes into (atomic
+  write+rename = durable, at-least-once), matched at boundaries **idempotently, single-shot**; token→unknown/closed
+  ticket = **dead-letter + surface** (never a silent resume); duplicate = no-op; timeout → **escalate**. Crash
+  recovery rebuilds from `parked/` + `inbox/`.
+- **Bounded** ≤3 concurrent parked+active (DORA "≤3 active branches"); **prefer serial — interleave only when
+  forced by a park.**
+
+This **pulls Space-1 "waves" into MVP** as *bounded interleaving* (not a parallel farm) and **closes the long-open
+collision-independence test** (`01`/`10`/`07`).
+*Rejected:* preemption / mid-item interrupt (D26 pure-queue stands); real concurrency / parallel writers
+(Cognition's incoherence warning; single machine); a distributed token store / broker (files suffice); heartbeating
+(the decider is a human — a deadline timer is enough); per-item Claude sessions or a scheduler-daemon for the
+interleaving itself (single orchestrator).
+*Evidence:* three research fan-outs (execution isolation → worktrees, incl. Claude Code's native worktree support;
+task-independence → monorepo affected-set + merge-queue optimistic-integration; async-HITL scheduling+correlation →
+Step-Functions `.waitForTaskToken` shrunk to one machine). Reuses D24/D26/D48/D69/D78; extends `handoff.parked[]` to
+load-bearing; `prioritize` gains the predicate; `verify` owns the rebase/speculative-merge; the bus owns the inbox.
+→ `01`/`03`/`05`/`07`/`09`/`10`/`11`/`shared/schemas.md`.
+
+## D92 — Context management: the conversation is disposable; the orchestrator stays thin via subagents; auto-compact is a *within-run seatbelt*, not the cross-ticket strategy **[DECIDED — Phase-2 A1 extension]**
+The orchestrator's **conversation is disposable — `handoff.md` + git are authoritative** (D48/D51). Heavy per-ticket
+work runs in **fresh subagent windows** (each returns a thin summary), so the orchestrator's resident context stays
+thin and barely grows across tickets — the mature long-running-harness pattern (Anthropic: fresh window + progress
+file + git). **Auto-compact is a *within-run seatbelt* only — NOT the cross-ticket memory strategy.** In-session
+self-`/clear` is **impossible** (no `SlashCommand` tool; skills can't invoke slash commands; `/clear` waits for
+human input; `SessionStart` can't trigger an autonomous turn interactively) → the "skill that runs `/clear`+`/start`"
+idea is **dropped**. A true per-ticket clean-reset is a property of the **deferred headless-loop runner** (each
+ticket = a fresh `claude -p` process = a clean window for free; the loop lives in stateless bash/SDK, so nothing
+accumulates) — the **same** runner as D90's autonomous-resume path, now **triple-justified** (context-reset +
+autonomous checkpoint-resume + overnight). **MVP stopgap** for the single interactive session: a **manual alert**
+prompts the human to clear context + re-run `/start` (rehydrate from `handoff.md`) once the orchestrator is
+polluted — accepted; there is no autonomous in-session way around it for now.
+- **Why:** leaning on auto-compact cross-ticket imports real failure modes over hours-long unattended runs
+  (thrash-stall — a *safe hard-stop*, cross-ticket amnesia, silent constraint-drop, re-derivation) and context-rot;
+  we've already paid the expensive part (externalized state), so clean-reset is nearly free and keeps every ticket
+  in the model's high-accuracy short-context regime.
+*Rejected:* a skill that self-invokes `/clear`+`/start` (mechanically impossible — verified); auto-compact as the
+cross-ticket memory strategy (lossy, cumulative failure); pulling the runner into MVP (kept deferred to preserve the
+pure-config MVP — the manual-alert stopgap bridges it).
+*Evidence:* measured `/compact` reclaim **~63%** (66.9k→24.6k) on `claude v2.1.209`; `autoCompactEnabled` (on/off) +
+**`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`** (threshold) confirmed; a documented `Autocompact is thrashing` hard-stop (only
+on a single huge output — avoided by subagent/code-map offloading); official tools reference has **no `SlashCommand`
+tool**; two fan-outs (auto-compact mechanics · long-loop context best-practice → Anthropic "Effective harnesses for
+long-running agents" + "context engineering", Manus, Cognition, context-rot benchmarks). Reuses D4/D48/D51; refines
+`01` Session-lifecycle. → `01`/`07`/`11`.
+
+---
+
 ## Not yet decided (tracked in `07`)
 Graph regenerate-vs-incremental **now resolved (D78 — static-regenerate + durable-observed-merge)**; the D78
 follow-ons (node-ID stability across renames, observed-edge staleness/decay, non-Python capture mechanism) are the
-open threads. Model/effort map; collision **independence test** (waves grouping
-decided, D36); Arbiter input contract; autonomous reset mechanism; website stack. Intake follow-ons:
+open threads. Model/effort map; collision **independence test** (**decided — D91 eligibility predicate:
+dependency-ready ∧ file-disjoint ∧ ¬1-hop-neighbor**; waves grouping D36); Arbiter input contract; **checkpoint
+block/resume + autonomous reset now decided (D90/D92 — durable park + `claude --resume`; the runner is the deferred
+autonomous path)**; website stack. Intake follow-ons:
 engineering-feasibility pass **designed as the proportional-rigor gate (D69), implementation deferred**;
 demo-skill mechanics; commitment-status storage. `init` follow-ons: brownfield
 ingest **designed (D68); the `ingest` skill is authored**; console launch, full disk-layout protocols

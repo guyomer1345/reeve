@@ -49,8 +49,11 @@ Deliberately deferred — known unknowns, to close during build or later.
   the dogfood run took **zero** local permission prompts.)
 - **`@import`-survives-`/compact`** — a one-session test; if it re-resolves, the brownfield install (D50) can
   switch from the inline marked block to a cleaner `@import`.
-- **Console + comms bus** (`03`/`05`) — the **critical-path runtime dependency**: the dogfood showed every
-  step autonomy-drives *except* the blocking qa `checkpoint`, which needs the bus to deliver the human verdict.
+- **Console + comms bus** (`03`/`05`) — the **critical-path runtime dependency**. **The block/resume *mechanism* is
+  now DECIDED (D90/D91):** checkpoint = durable park → verdict on the bus into a durable **append-only inbox** +
+  **token** correlation → resume via `claude --resume`. What remains is the rest of the **A2 bus contract**
+  (read/write ownership, non-verdict messages), **A3 lifecycle** (boot/stop/survive-`/clear`, port), **A4 local-bus
+  trust**, and the whole **console (B)** — tracked as the Phase-2 design agenda in `11`.
 - **Real dispatch validation** — the dogfood *simulated* the `research` agent dispatch; the orchestrator→agent
   call + structured return is validated in the harness-real run.
 - **Package install** — loose `.claude/` files are MVP (D57); plugin packaging + `shared/` resolution open.
@@ -73,8 +76,11 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Model + effort routing** map (`01`).
 - **Collision-model independence test** (`01`/`02`) — waves grouping decided (D36).
 - **Arbiter** batch-vs-one input contract (`01`).
-- **Optional SDK "runner"** for fully-autonomous restart (`01`) — deferred add-on; MVP uses
-  human-prompted restart. Decided in principle; build + verify SDK auth (subscription vs API key) later.
+- **Local relaunch "runner"** for fully-autonomous restart (`01`, D90/D92) — deferred add-on; MVP uses
+  human-prompted restart (a **manual alert** to `/clear` + re-run `/start` once the single session is polluted).
+  **Reframed (D90):** it is a thin **local** loop that relaunches `claude` (a fresh `claude -p` per ticket = a clean
+  window + autonomous resume), **NOT** the cloud Agent SDK (which can't resume a local session). Triple-justified
+  (context-reset + autonomous checkpoint-resume + overnight). Build + verify auth (subscription vs API key) later.
 - **Website stack** (`03`).
 - **Project map + flow view (`03`, D70) — feature + architecture decided, these bits open.** (1) Map as its
   **own tab vs the console home/overview** (lean: home/overview — it's the structural face of the project-state

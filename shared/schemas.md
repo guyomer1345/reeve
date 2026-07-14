@@ -107,10 +107,18 @@ input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh
 - `symptom`, `cause`, `fix`, `avoid`
 - `confidence`
 
-## checkpoint  · the `checkpoint` gate · *RESERVED — `.workflow/checkpoints/` is demoted pending the outward-permission model; today the verdict is a bus message, not a written record*
-- `request` — `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), blocking: true }`
+## checkpoint  · the `checkpoint` gate · *a **durable park boundary**: the orchestrator writes handoff + the request, yields, and resumes via `claude --resume` with the verdict as an authoritative prompt*
+- `request` — `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), blocking: true, token }` —
+  **`token`** (`{ticket}:{step}:{uuid}`) correlates the async verdict back to this parked ticket.
 - `verdict` — `{ pass, notes }`  · pass → continue · **fail routes by kind** (qa→debug · demo→create-demo ·
   setup→setup-guide/human · reconcile→ingest/discuss) — a rejection is not always a defect
+
+## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
+- `{ ticket_id, token, worktree, branch, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }`
+
+## verdict-message  · appended to the inbox by the bus when a human posts a verdict · *`.workflow/inbox/<ts>-<uuid>.json`; append-only, durable (atomic write+rename), at-least-once*
+- `{ token, verdict: {pass, notes} }` — matched to a `parked-ticket` at a scheduler boundary **idempotently,
+  single-shot**; unknown/closed token → **dead-letter + surface** (never a silent resume); duplicate → no-op.
 
 ## issue  · produced by `create-issue`, closed by `close-issue` · *filed into `backlog.md` — a **live open queue** (rewrite-in-place; closed entries leave, GC'd by `prioritize`), not append-only*
 - `{ title, kind: bug|feature|debt, description, severity, source, depends_on[] }` — `prioritize` orders on all

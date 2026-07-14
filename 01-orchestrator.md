@@ -24,12 +24,19 @@ stopping to ask the human:
 - Arbiter open detail: decides a batch in dependency order vs one at a time (changes its input
   contract). **[OPEN]**
 
-## Concurrency **[DECIDED]**
+## Concurrency **[DECIDED — D36/D91]**
 Parallel by default — run as many agents concurrently as the work allows; serialize only when tasks
 collide. Realized as **waves** (D36): `prioritize` groups independent ready items into a wave, runs it in
 parallel, then re-picks; dependents fall to the next wave; build hooks run **once per wave** (parallel
-agents hitting build tools cause lock contention). Still needs a **collision model** — the independence
-test itself (file/module/area overlap). **[grouping DECIDED (D36); independence test OPEN — see 07]**
+agents hitting build tools cause lock contention).
+- **The collision / independence test is now DECIDED (D91):** a candidate is eligible iff **dependency-ready** ∧
+  **file-disjoint** from every in-flight/parked ticket (*hard gate*) ∧ **not a 1-hop code-map neighbor** of one
+  (*soft gate → start flagged for a speculative-merge verify*). It runs off the code-map `graph.json` (dependency
+  graph, not co-change — D78). This same predicate powers **continue-while-parked interleaving** (D91): while one
+  ticket is parked on a checkpoint, the single orchestrator picks the next eligible ticket (each in its own **git
+  worktree** + branch), capped ≤3 concurrent, **prefer-serial**; whole-loop park is the degenerate case. Scheduler:
+  non-preemptive, item-level, **resume-a-ready-parked-ticket first (+aging) → start-new → sleep**; the boundary
+  check is plain code, not an LLM call.
 
 ## Session lifecycle **[DECIDED / partly OPEN]**
 - PC must be on (Claude can't run with the machine off).
@@ -38,18 +45,25 @@ test itself (file/module/area overlap). **[grouping DECIDED (D36); independence 
   `handoff.md` as the **durable resume anchor** (current item + loop position + parked work). The split:
   `state.json` = volatile live pointer · `handoff.md` = durable anchor · **git history = the append-only
   completed-step log**; a new session resumes from `handoff.md` + `git log` (committed items never rerun).
-- **Reset mechanism [DECIDED — research definitive]:** Pure Claude Code **cannot** self-`/clear` or
-  auto-restart — `/clear` is a human-only TUI command; no hook/MCP/setting triggers it; `/compact` +
-  delegation only pushes the ceiling to ~300–500 turns (~2–4 hrs) before thrashing.
-  - **Shared by both paths:** the graceful handoff (park → document → commit → write `handoff.md`)
-    happens regardless. Spec it cleanly so the runner below is a small add-on, not a redesign.
-  - **MVP (pure config):** at the limit, the website prompts the human to `/clear` + restart from
-    `handoff.md`. One click — the only non-autonomous step.
-  - **Full autonomy (optional, deferred):** a thin **local SDK "runner"** wraps the session, detects
-    context-fill, triggers the handoff, and starts a fresh session from `handoff.md` — no human action.
-    The ONLY path to true overnight autonomy. Legal for personal use AND distributable (each user runs
-    it on their OWN auth — never routes *others'* Claude). Tradeoff = purity (config + a small program),
-    not legality. Caveat to verify later: SDK auth on subscription vs API key.
+- **Checkpoint park/resume [DECIDED — D90, empirically verified]:** a blocking checkpoint is a **durable park
+  boundary**, not a live wait (nothing inside Claude can self-wake). Park = write handoff + verdict-request to disk
+  and yield; resume = **`claude --resume <id> -p "<verdict>"`** (verdict rides as an *authoritative prompt*; a
+  `SessionStart` hook only re-points to durable state — hook-injected context is under-weighted), cold-starting from
+  `handoff.md` + `git log` if the session store is gone. Notify an away human via the `Notification` hook.
+- **Context / reset mechanism [DECIDED — D92, empirically verified]:** the conversation is **disposable** (handoff +
+  git authoritative). Heavy per-ticket work runs in **fresh subagent windows**, so the orchestrator stays thin and
+  barely grows. **Auto-compact is a within-run seatbelt only** (~63% reclaim; threshold via
+  `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`), **not** the cross-ticket strategy. Pure Claude Code **cannot** self-`/clear`
+  or auto-restart (no `SlashCommand` tool; `/clear` is human-only; `SessionStart` can't fire an autonomous turn).
+  - **MVP (pure config):** a **manual alert** prompts the human to `/clear` + re-run `/start` (rehydrate from
+    `handoff.md`) once the single session is polluted — the only non-autonomous step. The graceful handoff (park →
+    `document` → `commit` → write `handoff.md`) happens regardless, so the runner below is an add-on, not a redesign.
+  - **Full autonomy (optional, deferred):** a thin **local relaunch "runner"** — a fresh `claude -p` process **per
+    ticket** (a clean window for free; the loop lives in stateless bash/SDK, so nothing accumulates). This is the
+    ONLY path to true overnight autonomy AND it *triple-solves* context-reset + autonomous checkpoint-resume +
+    overnight. It is a **local relaunch loop, NOT the Agent SDK** (the SDK runs *cloud* managed agents and cannot
+    resume a local session — D90); each user runs it on their OWN auth. Tradeoff = purity (config + a small
+    program), not legality.
 
 ## The macro-loop **[DECIDED — spine in `10`; driver above]**
 The full spine (`prioritize → discuss/create-demo → planner → execute → verify → debug/refine → checkpoint

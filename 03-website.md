@@ -8,6 +8,10 @@ orchestrator only via the local bus + files — never by routing Claude.
 ## Comms **[DECIDED — see 05]**
 - Hosts the **local HTTP loopback bus** (its own backend) for website→orchestrator messages.
 - Reads `state.json` (and the knowledge base) to render live state.
+- **Verdict delivery (D90/D91):** a human verdict POSTs to the bus, which appends it to a durable **append-only
+  inbox** (`.workflow/inbox/`) keyed by the checkpoint **token**; the parked orchestrator matches it at a boundary
+  and resumes via `claude --resume`. The block/resume *mechanism* is decided; the rest of the bus contract +
+  console screens are the open Phase-2 design (`11` agenda).
 
 ## Launch **[DECIDED]**
 The orchestrator's start command boots the website as a local background process.

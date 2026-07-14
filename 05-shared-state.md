@@ -12,6 +12,12 @@ A **local HTTP loopback service** (the website's backend) is the message channel
 - orchestrator → website: orchestrator writes `state.json`; website reads it (inotify / poll).
 - File-watching is **rejected for control-flow** (fragile, polling, races); fine only for one-way
   state display.
+- **Verdict delivery — durable inbox + token correlation (D90/D91):** a checkpoint mints a **token**
+  (`{ticket}:{step}:{uuid}`); the bus appends each incoming verdict to an **append-only file inbox**
+  (`.workflow/inbox/`, atomic write+rename = durable, at-least-once). The orchestrator matches verdicts to parked
+  tickets **at boundaries, idempotently, single-shot**; a token for an unknown/closed ticket → **dead-letter +
+  surface** (never a silent resume); a stale deadline → **escalate**. The verdict resumes its ticket via
+  `claude --resume <id> -p "<verdict>"` (D90). This is the correlation half of continue-while-parked interleaving.
 - **Reserved action — `node/subgraph → ticket` (D70):** the project-map screen emits a scoped **backlog
   item** (payload: node ID(s) + the ask) — an ordinary D69-triaged intake item, never a privileged fast-path;
   UX deferred. Node IDs are the code-map's stable addressable keys (today relpath/module; symbol-level later).
@@ -28,7 +34,10 @@ A **local HTTP loopback service** (the website's backend) is the message channel
     handoff.md      # durable resume anchor                         (committed)
     backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed)
     checkpoints/    # RESERVED — demoted (D60); no writer yet
+    parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored
+    inbox/          # RUNTIME — append-only verdict queue the bus writes; matched at boundaries — D90/D91, gitignored
     items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed)
+  <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored
   <project_root>/   # the product (greenfield: project/ ; brownfield: the repo root)
     CLAUDE.md       # the product's own brief
     llms.txt        # thin agent entry point → points into docs/knowledge/  (committed)
@@ -39,8 +48,14 @@ A **local HTTP loopback service** (the website's backend) is the message channel
       decisions/    # decision-records = ADRs (append-only, global) (committed)
     <product code>
 ```
-**Commit policy:** everything durable is committed; only `.workflow/state.json` (a regenerable view for
-the console) is gitignored.
+**Commit policy:** everything durable is committed; the **runtime** view (`state.json`, `parked/`, `inbox/`, the
+per-ticket worktrees) is gitignored.
+
+**Continue-while-parked isolation (D91):** each in-flight ticket develops in its own **git worktree** on its own
+branch; a checkpoint parks it with a `WIP:` commit + a `parked/<id>` record, and the loop interleaves to the next
+independent ticket (≤3 concurrent, prefer-serial). `handoff.parked[]` lists every parked ticket so a cold start
+rebuilds them all from `parked/` + `inbox/`. Resume = un-WIP → `rebase` onto trunk (`rerere`) → `verify` → final
+commit → merge → `worktree remove`.
 
 **Memory tiers (D38 — `shared/memory-model.md`):** every durable file is **volatile** (rewrite freely:
 `state.json`, `handoff.md`, and `backlog.md` — a live *open* queue, closed items leave, D59), **stable**

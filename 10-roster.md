@@ -117,7 +117,9 @@ specced (D46–D49). Stubbed sub-steps to expand: console launch (`03`), full di
 ## Adoption deltas — workflow-kit + GSD (D36–D45, +D40/D65/D67)
 Skill bodies **authored** (session 2026-07-01); each delta maps to its landed home:
 - `prioritize` — **waves**: dependency-group the ready set; run a wave; re-pick (D36). **+ drift tickets ride
-  the normal queue at commitment-severity** (D65).
+  the normal queue at commitment-severity** (D65). **+ the D91 eligibility predicate + continue-while-parked
+  scheduler** (resume-a-ready-parked-ticket first +aging → start-new eligible → sleep; boundary check is plain
+  code, not an LLM call).
 - `execute` — **divergence tiers** (cosmetic / prerequisite-repair-as-separate-commit / structural-stop, D37);
   **refuse** a destructive `plan` with no verified `backup`, run+verify it first (D42).
 - `planner` — set `risk_class` + require `backup` when destructive (D42); **decision-coverage gate** —
@@ -133,7 +135,10 @@ Skill bodies **authored** (session 2026-07-01); each delta maps to its landed ho
   `shared/memory-model.md` (D38); `shared/schemas.md` plan `risk_class`/`backup`/`decisions[]`.
 
 ## Still open
-- The **collision-model independence test** — when two items are independent enough to share a wave (`02` / `07`).
+- The **collision-model independence test** — **DECIDED (D91):** eligible iff *dependency-ready ∧ file-disjoint
+  (hard) ∧ ¬1-hop code-map neighbor (soft → flagged speculative-merge)*. Powers both waves (D36) and
+  continue-while-parked interleaving. `prioritize` owns the predicate; `verify` owns the rebase-onto-trunk
+  speculative-merge on a parked ticket's resume.
 - `init` **brownfield-ingest** — mechanics decided (D68); `ingest` skill authored + the code-map engine (five
   arms + tier-0 floor, thread CLOSED D77/D79) wired into `/start`. Remaining is **runtime** (unexercised until a
   real bootstrap); open code-map follow-ons (living observed layer, D83 charter) live in `11` Space 6.

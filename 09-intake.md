@@ -122,7 +122,9 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
 - **Engineering-feasibility pass** — the spike that de-risks the technical unknowns the demo skips.
   **[DESIGNED — D69: the proportional-rigor decision gate; implementation deferred to `11`.]**
 - **Backlog / prioritization + interrupt model** — e.g. a bug found mid-feature: queue vs interrupt; how
-  urgency is assigned.
+  urgency is assigned. *(Interrupt model closed: pure queue, D26. **Continue-while-parked interleaving decided —
+  D91:** while a ticket is parked on a checkpoint, `prioritize` picks the next **eligible** ticket — dependency-ready
+  ∧ file-disjoint ∧ ¬1-hop-neighbor — capped ≤3, prefer-serial.)*
 - **Demo skill mechanics** — how the sandbox is served/run, refine-round limits, where it lives on disk.
 - **Commitment-status storage** — where locked/provisional/unspecified is recorded (spec doc vs Space 6
   node frontmatter).
