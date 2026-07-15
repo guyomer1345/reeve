@@ -74,6 +74,8 @@ reads; the demo (served under a `sandbox`-directive opaque origin — D102) join
   .workflow/
     config.json     # project_root (./project | .) + run config    (committed)
     loop.md         # routing graph + diagram (fixed topology)      (committed)
+    checks.sh       # mechanical-gate runner (generated per-stack; --fix / --check)  (committed)
+    codemap.sh      # code-map generator (generated per-stack; writes docs/knowledge/graph.json)  (committed)
     state.json      # live position (item/phase/wave) — RUNTIME (atomic-publish, D93), gitignored
     handoff.md      # durable resume anchor                         (committed)
     backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed)
@@ -82,6 +84,7 @@ reads; the demo (served under a `sandbox`-directive opaque origin — D102) join
     parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored
     inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control|release) the bus writes; matched at boundaries — D90/D91/D93/D105, gitignored
     items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed)
+    align/          # anchor.json — the drift-scan base_sha (align mkdir's it on first run) — committed
     demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves under a sandbox-CSP opaque origin; pruned on checkpoint-resolve — D102/D104, gitignored
   <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored
   <project_root>/   # the product (greenfield: project/ ; brownfield: the repo root)
@@ -94,8 +97,8 @@ reads; the demo (served under a `sandbox`-directive opaque origin — D102) join
       decisions/    # decision-records = ADRs (append-only, global) (committed)
     <product code>
 ```
-**Commit policy:** everything durable is committed; the **runtime** view (`state.json`, `bus.json`, `parked/`,
-`inbox/`, the per-ticket worktrees) is gitignored.
+**Commit policy:** everything durable is committed; the **runtime** view (`state.json`, `bus.json`, `outbox/`,
+`parked/`, `inbox/`, `demos/`, the per-ticket worktrees) is gitignored.
 
 **Runtime coordination on a native FS (D93).** The atomic-publish + inbox guarantees (POSIX `rename` atomicity,
 `fsync`, `inotify`) hold on a **local** filesystem and are weak-to-broken on network-style mounts (NFS; and on WSL2

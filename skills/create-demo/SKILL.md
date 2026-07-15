@@ -54,7 +54,9 @@ The visual/behavioural slice of the `spec`.
 An approved demo → spec commitment levels recorded.
 
 ## Route
-→ `planner:decompose` (inception path) · → `execute` (per-item demo approved).
+→ `planner:decompose` (inception path) · → `execute` (per-item demo approved) · → `discuss` (refine cap
+exhausted → live realignment, carrying the refine history).
 
 ## Calls
-`checkpoint` (kind=demo) · `create-issue` (kind=debt — one per `provisional` item on the approval path).
+`checkpoint` (kind=demo) · `create-issue` (kind=debt — one per `provisional` item on the approval path) ·
+`discuss` (escalation when the refine cap `config.demo.max_refine_rounds` is hit).

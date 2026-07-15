@@ -12,8 +12,9 @@ set -uo pipefail
 
 dirs=(skills agents shared commands templates hooks rules scripts/codemap scripts/retention.py scripts/check_promise_coverage.py scripts/test_check_promise_coverage.py scripts/check_criterion_discharge.py scripts/test_check_criterion_discharge.py scripts/check_decision_coverage.py scripts/test_check_decision_coverage.py scripts/check_contracts.py scripts/test_check_contracts.py)
 
-# Dxx decision IDs · "Space N"/"Space-N" labels · backtick-wrapped design-doc numbers 00-11.
-pattern='\bD[0-9]{1,2}\b|Space[ -][0-9]|`0[0-9]`|`1[01]`'
+# Dxx decision IDs (1-3 digits — the log crossed D100) · "Space N"/"Space-N" labels · backtick-wrapped
+# design-doc numbers 00-11. The hyphenated "D-001" decision-RECORD id still won't match (hyphen breaks \b).
+pattern='\bD[0-9]{1,3}\b|Space[ -][0-9]|`0[0-9]`|`1[01]`'
 
 hits="$(grep -rnE "$pattern" "${dirs[@]}" 2>/dev/null || true)"
 if [ -n "$hits" ]; then

@@ -129,7 +129,7 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   not always a defect — hence routing by kind, not a universal `debug` sink.
 
 ## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
-- `{ ticket_id, token, worktree, branch, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }`
+- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them.
 
 ## inbox-message  · appended to the inbox by the bus when the console POSTs · *`.workflow/inbox/<ts>-<uuid>-<pid>.json`; append-only, durable (atomic write+rename), at-least-once; RUNTIME, kept on a native filesystem*
 Every console→orchestrator message is **typed** — `kind: verdict|intake|control|release` — one uniform durable
@@ -197,6 +197,9 @@ fires it.
   since `.workflow/align/anchor.json`'s `base_sha` before an `align` item is injected) + `max_agents` (hard cap
   on the semantic pass's fan-out; deferred surface rides the next scan). **Decoupled from `retention`** (drift
   risk ≠ memory pressure). Absent → shipped defaults (every_n_commits 20, max_agents 6).
+- `demo` — the demo-sandbox knob read by `create-demo`: `max_refine_rounds` (the cap on demo regenerations
+  before the refine loop stops auto-proceeding and **escalates to a live `discuss`**). Absent → shipped default
+  (`max_refine_rounds` 3).
 - `outward` — the standing-pre-authorization allowlist for outward actions, in Claude Code's own
   `permissions.{allow, ask, deny}` shape (deny→ask→allow, first-match-wins), **coarse per-action-class**
   (`push` / `issue-create` / `issue-close` / later `deploy` / `send`). Absent → **all `ask`** (MVP-safe:

@@ -3,10 +3,11 @@
 ## MVP scope **[DECIDED]**
 Structured **manual** checkpoints surfaced through the website. Flow:
 
-> orchestrator hits a checkpoint → blocks (waits on the bus) → posts to the website WHAT to verify and
-> HOW (step-by-step, each step a verified deep-link + a breadcrumb path — see the help set below) → human
+> orchestrator hits a checkpoint → posts to the website WHAT to verify and HOW (step-by-step, each step a
+> verified deep-link + a breadcrumb path — see the help set below) → **parks** (writes the handoff +
+> verdict-request to disk and **yields**, interleaving to the next independent ticket — D90/D91) → human
 > reports an **outcome** (approve / changes / reject) + notes (+ any returned values) → bus delivers the
-> verdict → orchestrator resumes.
+> verdict → orchestrator **resumes via `claude --resume`**.
 
 ## Two boundary types (the taxonomy) **[DECIDED — D96]**
 A checkpoint sits at a boundary only a human can cross, of one of two types — this organizes every trigger and
@@ -43,7 +44,9 @@ batch consumer — see `05`).
 ## Motivating example (user)
 Setting up a Polar account: each time Claude said to change a setting, the human had to go find exactly
 where it lives in Polar's docs/UI. The workflow should instead surface the doc location / a screenshot,
-or take a screen-share and give live feedback.
+or take a screen-share and give live feedback. *(The original aspiration — the MVP help set ships the
+verified deep-link + breadcrumb step-list; screenshots / screen-share / live feedback are **Deferred**,
+see the Help set below.)*
 
 ## Triggers — who decides a checkpoint is needed **[DECIDED — D96]**
 Declared upstream wherever the intent lives, with setup's one exception:

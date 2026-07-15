@@ -42,7 +42,10 @@ built-in Claude Code command.
    ```
    `.workflow/items/<id>/` and `.workflow/align/` are **not** scaffolded here — `planner` `mkdir`s each item
    dir on demand, and `align` `mkdir`s `.workflow/align/` on its first run (writing `anchor.json`).
-   Add `.workflow/state.json` to the target's `.gitignore`; everything else is committed.
+   Add the **runtime** paths to the target's `.gitignore` — `state.json`, `bus.json`, `outbox/`, `parked/`,
+   `inbox/`, `demos/`, and the per-ticket worktrees (created at runtime by the bus/orchestrator, not scaffolded
+   here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`, `codemap.sh`, `handoff.md`, `backlog.md`,
+   `items/`, and `docs/`) are committed.
 3. **Install the orchestrator brief** (the driver), from the package `templates/`:
    - **greenfield:** copy `templates/orchestrator-CLAUDE.md` → the launch-root **`CLAUDE.md`** (fill
      `<project>`/`<project_root>`) and put the product under **`project/`** (its own `CLAUDE.md` left to the
@@ -99,12 +102,13 @@ built-in Claude Code command.
      (`.claude/scripts/codemap/codemap.py <project_root>`), which auto-dispatches each file to its language arm
      and writes `docs/knowledge/graph.json` (a typed import graph plus the *impact* and *orchestration* centrality
      signals per file, and a per-language coverage summary tagging each language's arm tier). **Python** (stdlib
-     `ast`) and **JS/TS** (`tsconfig`/`jsconfig` `paths`+`baseUrl` aliases + extension/index resolution) have precise
-     arms; every other recognized source language falls to the **tier-0 generic floor** (directory-cluster nodes +
-     shallow-regex imports, precision-first resolution, same `graph.json` contract) so a repo in any recognized
-     language gets at least nodes + clusters + both lenses — never nothing. (Further precise arms — Java, C#, Go, … —
-     are zero-dep resolver arms that plug into the same engine as they land; tree-sitter is reserved for parse-hard
-     languages, shipped as an optional upgrade.) Regenerable — the loop re-runs it and never hand-edits the graph.
+     `ast`), **JS/TS** (`tsconfig`/`jsconfig` `paths`+`baseUrl` aliases + extension/index resolution), **Go**,
+     **Java**, and **C#** have precise resolver arms; every other recognized source language falls to the **tier-0
+     generic floor** (directory-cluster nodes + shallow-regex imports, precision-first resolution, same `graph.json`
+     contract) so a repo in any recognized language gets at least nodes + clusters + both lenses — never nothing.
+     (Further precise arms are zero-dep resolvers that plug into the same engine as they land — C++ needs a
+     compile-DB, so it stays on the floor for now; tree-sitter is reserved for parse-hard languages, shipped as an
+     optional upgrade.) Regenerable — the loop re-runs it and never hand-edits the graph.
    - **Externals → checkpoint.** Anything needing an account or a provider choice (CI host, deploy creds) is an
      outward/setup step → raise `checkpoint`(kind=setup) → `setup-guide`, don't guess.
 5. **Launch the local console.** ⛔ STUB — website stack/screens still open.
@@ -133,10 +137,10 @@ built-in Claude Code command.
 - Then hand to the normal loop.
 
 ## Expand later
-- Additional **code-map language arms** — Python (`ast`), **JS/TS** (tsconfig resolver), and the **tier-0 generic
-  floor** (all other recognized languages) ship today; the next prevalence-ranked precise arms (Java · C# · C++,
-  then Go · Rust · PHP) are **zero-dep resolver arms** on the same engine + `graph.json` contract, each upgrading its
-  language from the floor's best-effort edges to precise resolution. tree-sitter is reserved for parse-hard languages
-  (optional upgrade — absent → the floor).
+- Additional **code-map language arms** — Python (`ast`), **JS/TS** (tsconfig resolver), **Go**, **Java**, and
+  **C#** precise arms plus the **tier-0 generic floor** (all other recognized languages) ship today; the next
+  prevalence-ranked precise arms (C++ — needs a compile-DB — then Rust · PHP) are **zero-dep resolver arms** on the
+  same engine + `graph.json` contract, each upgrading its language from the floor's best-effort edges to precise
+  resolution. tree-sitter is reserved for parse-hard languages (optional upgrade — absent → the floor).
 - The **console** launch.
 - The full **disk layout** — the tree above is a provisional first cut.

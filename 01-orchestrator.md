@@ -86,10 +86,11 @@ per-capability *how*), it encodes:
 - **The control algorithm** — *read* `state.json` (cold start: `handoff.md` + `git log`) → *place* (mid-item
   continue; between items `prioritize`) → *advance* (look up the node's edges, dispatch, follow the result,
   write `state.json`).
-- **Invariants split** — **enforced** (secret-scan + verify-before-commit = `hooks/guard.sh`; outward-action
-  gate = settings `ask` rule; build-once-per-wave deferred) vs **disposition** (hub-and-spoke; pure queue;
+- **Invariants split** — **enforced** (secret-scan + verify-before-commit = `hooks/guard.sh`; the outward-action
+  gate = the `config.outward`/outbox defer-and-release model over the `guard.sh` floor — the settings `ask` rule
+  is only the harness backstop, D105; build-once-per-wave deferred) vs **disposition** (hub-and-spoke; pure queue;
   resolve-don't-stall via `research`→`decision-engineer`; mind the tiers).
-- **Checkpoints** (block on the bus) and **handoff/resume**.
+- **Checkpoints** (durable park on the bus — D90) and **handoff/resume**.
 
 Driving model: `CLAUDE.md` is **advisory context, not enforced configuration** — so the loop *sequence* runs
 model-on-rails while the **hard gates are deterministic hooks**. Layout is per-mode (greenfield launch-root +
