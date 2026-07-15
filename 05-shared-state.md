@@ -52,7 +52,9 @@ is the opt-in upgrade.
 command drives an autonomous executor. The loopback stack (all mandatory): a **capability token** (in `bus.json`,
 0600 atomic-create, **header-only**, required on reads too, no cookie), a **strict Host-header allowlist** on every
 endpoint (the DNS-rebinding defense), **JSON-only + a custom header** (forces the CSRF-defeating preflight), explicit
-`127.0.0.1` bind. The **port is not a secret**; the **bus token (auth) is distinct from the checkpoint token
+`127.0.0.1` bind. The **served page additionally carries a strict `Content-Security-Policy: script-src 'self'`** — the
+console-side teeth of this posture; it forces the zero-build vanilla/Preact+htm frontend (no `unsafe-eval`), owned by
+D100/`03`. The **port is not a secret**; the **bus token (auth) is distinct from the checkpoint token
 (correlation)**. Windows lacks 0600 → token-file ACLs (the D89 OS/FS family). **Tunnel (D70, owner-accepted):** opt-in
 / warning-only / no auth — with the one rule that the loopback token is **never** reused as tunnel auth.
 

@@ -71,8 +71,9 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
   Structural face of the project-state view. Stageable read-only atop C1; overlay + capture need later arms.
   Plus **remote control** = opt-in Cloudflare-tunnel serve (warning-only now, auth later). **[stageable; overlay later]**
-- **Open design** — screen list (map **tab vs home**, D70/`07`); the "contact the orchestrator" UX (node→ticket
-  reserved); stream-live vs snapshots; the stack. **[design-first]**
+- **Open design** — **CLOSED (D99–D101):** the console model + screen list (map = **tab**, not home, not the first
+  cut) + snapshot-poll refresh + the contact-UX (verdict/intake forms + a "my requests" surface) (D99); the stack —
+  a stdlib-Python detached daemon + a zero-build CSP-clean page (D100); the two-event notification taxonomy (D101).
 
 ### Space 4 — Checkpoints & the demo skill
 - **Demo skill mechanics** — `create-demo`'s *body* exists, but **how the sandbox is served/run, the
@@ -193,11 +194,13 @@ tracked in `07`) — **D89**.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /
-triggers. *(**IN PROGRESS — cluster A CLOSED (D90–D95)** and **cluster C CLOSED (D96–D98).** A = the
+triggers. *(**IN PROGRESS — clusters A, C, and B CLOSED (D90–D101).** A = the
 checkpoint/console runtime + bus substrate (A1 block/resume + interleaving + context, D90–D92, empirically verified
 on `claude v2.1.209`; A2/A3/A4 bus contract/lifecycle/trust, D93–D95, four research fan-outs). C = checkpoints (C1
 data model, C2 triggers, C3 help set — the judgment/action taxonomy + verb-enum verdict + plural machine-verified
-setup gate + the MVP help set, via two research fan-outs). **Next slice = cluster B (console screens).** The full
+setup gate + the MVP help set, via two research fan-outs). B = the console (D99–D101 — a read-only supervision cockpit +
+screen list + snapshot-poll + "my requests" surface · a stdlib-Python detached daemon + zero-build CSP-clean page ·
+the two-event notification taxonomy, via two research fan-outs). **Next slice = cluster D (the demo skill).** The full
 agenda + per-item status is below.)*
 
 ### Phase 2 — design agenda & dependency sequence *(the resume map)*
@@ -211,9 +214,14 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   **A3 website/bus lifecycle (D94):** a session-independent detached daemon, ensure-running via `flock`-authority +
   token'd `/health`, `POST /shutdown` + idle-janitor; WSL2 dies-with-terminal. **A4 local-bus trust (D95):**
   capability token + Host-allowlist + loopback bind; tunnel stays warning-only (D70, owner-accepted).
-- **B — console.** **B1 screen list + map tab-vs-home**; **B2 stream-vs-snapshot**; **B3 contact-orchestrator UX**
-  (node→ticket reserved, D70); **B4 stack** (deferred, coupled to A2); **B5 attention/notification** — *seeded*
-  (the `Notification` hook → desktop/opt-in-webhook is decided, D90); phone/tunnel later. All open.
+- **B — console. CLOSED (D99–D101).** **B1/B2/B3 console model (D99):** MVP = a read-only supervision cockpit (home =
+  run-status; map = a **tab**, not home, not the first cut) + snapshot-poll refresh (chained-`setTimeout` + `version`/`ETag`
+  gate; no SSE in MVP) + the contact-UX (verdict + intake POST forms + a **"my requests"** async-feedback surface that
+  rides the polled state, keyed by `localStorage` ticket ids). **B4 stack (D100):** a single-file stdlib-Python daemon
+  (`http.server.ThreadingHTTPServer`, the D94 detached daemon) + a zero-build static page (vanilla default / Preact+htm
+  escape hatch), the daemon serving a strict `script-src 'self'` CSP — over-determined by A2/A3/A4 + the pure-config rule.
+  **B5 attention (D101):** notify on exactly two events (checkpoint-raised · loop hard-stop/escalation) over the D90
+  `Notification` hook; reminders ride the D97 timeout; phone/tunnel later.
 - **C — checkpoints. CLOSED (D96–D98).** **C1 data model** — the verb-enum verdict (`{outcome: approve|changes|
   reject, notes, returns?}`) + plural machine-verified setup gate (`request.tasks[]`, within-plan coalescing) atop
   the D90/D91 park model. **C2 triggers (D96)** — judgment/action taxonomy; declared-upstream (qa=D30, demo=D22
@@ -223,11 +231,11 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   limits**; **D3 on-disk location**. Open.
 - **E — cross-cutting.** **E1 commitment-status storage** (spec-doc vs node frontmatter); **E2 outward-action
   permission model** (`publish` kind, batching — couples to the bus/inbox, D35/D60); **E3 project-map residuals**
-  (tab-vs-home → B1, ephemeral-vs-durable ≈ D78, remote-auth). Open.
+  (tab-vs-home **resolved → tab, D99**; ephemeral-vs-durable ≈ D78; remote-auth still open). Open (E1/E2/E3-remainder).
 
-**Recommended next slice:** **A + C are CLOSED (D90–D98).** Next is **B (console screens)** — B1 screen list + map
-tab-vs-home, B2 stream-vs-snapshot, B3 contact-orchestrator UX, B4 stack, B5 attention/notification — then **D
-(demo skill)**, **E (cross-cutting)**.
+**Recommended next slice:** **A + C + B are CLOSED (D90–D101).** Next is **D (the demo skill)** — D1 serving/running the
+sandbox (surfaced in the checkpoint console), D2 refine-round limits, D3 on-disk location — then **E (cross-cutting)**
+(E1 commitment-status storage, E2 outward-action permission model, E3 project-map residuals).
 **Phase 3 — Build the website** (C1 console → C2 bus).
 **Phase 4 — Build the demo.**
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, the **local relaunch-runner**

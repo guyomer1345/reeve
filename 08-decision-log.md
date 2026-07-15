@@ -1964,6 +1964,93 @@ breadcrumb (link rot ~8%/yr + ungrounded-LLM fabrication 3–13% → a landmine)
 link-rot, WebVoyager/OSWorld agent success rates, Anthropic's own "experimental" computer-use framing. Reuses
 D90/D93. → `04`/`00`/`agents/setup-guide`/`skills/checkpoint`/`11`.
 
+## D99 — Console model: a read-only supervision cockpit (not an explorer); snapshot-poll refresh; async requests get a first-class "my requests" surface **[DECIDED — Phase-2 B (B1/B2/B3), research-backed]**
+The console has two latent modes — **supervise a live run** (A) and **explore the project** (B) — and **only Mode A is MVP** (the
+dogfood's one critical-path job: deliver a checkpoint verdict + status away from the terminal, C2).
+- **Home = a run-status cockpit:** current item · wave/parked tickets · **pending checkpoints** · recent activity — read
+  straight from the files the bus serves (`state.json` / `backlog.md` / `parked/` / `handoff.md` / git — D93 sync-reads).
+- **The project-map (D70) is a tab, not the home, and not the first cut** — Mode B's structural face, stageable, its value
+  gated on the deferred flow-overlay + later code-map arms. "Structural face of the project-state view" (`07`) is about the
+  *eventual* state-view, not the MVP console home — the two were being conflated.
+- **Screen list (MVP → later):** cockpit (home) · checkpoint console · **"my requests"** · roadmap/backlog (read-only) →
+  *later* tabs: project map, knowledge exploration.
+- **Refresh = snapshot polling, no SSE in MVP.** One chained-`setTimeout` loop (~2–5 s) reads the whole state JSON; a
+  monotonic `version`/`ETag` returns `304` → skip the re-render; polling pauses on `document.hidden`. inotify→SSE stays the
+  reserved "re-read" hint (D93). In-page freshness is deliberately lazy because urgency rides the Notification hook (D101),
+  not the page.
+- **Contact-orchestrator UX** (the D93 principle made concrete) = two POST forms + a feedback surface: a **verdict** form
+  (carries D97's `{outcome, notes, returns?}` / plural `tasks[]`; renders D98's steps + verified deep-links + breadcrumbs for
+  `setup`), an **intake** form (the D70 node→ticket click is a pre-filled intake), and the **"my requests" view** — each POST
+  returns `202` + a `Location` ticket saved to `localStorage`; the view is the same polled state *filtered* by my ticket ids,
+  so `pending→consumed→resolved` is legible with **no new endpoint** and no per-ticket polling.
+- **Why:** the MVP job is supervision, not browsing; map-as-home front-loads the heaviest, most-deferred, code-map-dependent
+  screen and buries the load-bearing checkpoint surface. Lazy poll is forced-correct by D93 (the bus serves state from disk;
+  the orchestrator is never an HTTP responder) and safe because the one latency-sensitive event is delivered out-of-band
+  (D101). The async model (D90/D93 — never a synchronous response) has **no feedback home without a requests view**; it's
+  nearly free (rides the existing state read).
+*Rejected:* map = home/overview (front-loads a deferred, code-map-dependent screen; conflates the eventual project-state view
+with the console home); a real-time chat console (D93 forbids it — dialogue lives at the terminal); SSE/file-watching as
+load-bearing MVP refresh (D93 keeps it rejected for control-flow; SSE is ergonomics-not-architecture for a batch worker);
+`setInterval` (overlapping reads on a slow read); clearing the form on POST with no requests surface (the async model then
+feels like a void).
+*Evidence:* D90/D93 + the dogfood's single critical-path finding; the file-IPC research (Async Request-Reply — `202` +
+status-resource + correlation id); the frontend research fan-out (chained-`setTimeout` single poll loop + `version`/`ETag`
+gate + `localStorage` ticket set + `document.hidden` pause = the standard 202→poll dashboard). Reuses D70/D90/D93/D97/D98.
+→ `03`/`05`/`07`/`11`.
+
+## D100 — Console stack: a stdlib-Python detached HTTP daemon + a zero-build, CSP-clean static page (vanilla default, Preact+htm escape hatch) **[DECIDED — Phase-2 B (B4), research-backed]**
+Closes B4 — and the coupling runs *from* A2/A3/A4, so the stack was more constrained than "deferred" implied, not less.
+- **Backend = a single-file stdlib-Python daemon on `http.server.ThreadingHTTPServer` + a custom `BaseHTTPRequestHandler`.
+  No vendored dependency, no framework.** It *is* the D94 detached daemon (dynamic loopback bind-and-read-back, `flock`
+  liveness, per-request token + Host checks, `202`+inbox, `POST /shutdown` + idle self-shutdown). Three footguns are part of
+  the build contract: (1) `POST /shutdown` spawns a **one-shot thread** to call `server.shutdown()` — never inline on the
+  `serve_forever` thread (documented deadlock); `daemon_threads=True` is already the `ThreadingHTTPServer` default so workers
+  never block exit. (2) The request body is **not** size-capped by default → read at most `Content-Length`, `413` on oversize,
+  set `handler.timeout` so a slow client can't pin a worker. (3) Leave `protocol_version` at **HTTP/1.0** (connection-per-request
+  is trivially correct at ~1 concurrency and kills a whole class of keep-alive `Content-Length` hang).
+- **Frontend = zero-build static files the daemon serves.** **Vanilla JS** (`<template>` clone + `textContent`) is the
+  default; **Preact+htm** (~4.5 KB, plain ESM, tagged-template → **no eval**) is the one pre-vetted escape hatch for when the
+  render layer sprawls.
+- **The daemon serves a strict `Content-Security-Policy: script-src 'self'` (no `unsafe-eval`)** — the concrete teeth of D95's
+  CSP posture on the page itself, and the *mechanism* that forces the frontend choice: it **disqualifies Alpine-standard and
+  petite-vue** (both use `new Function`/eval and would break silently under the policy). So B4's frontend is *downstream of
+  A4*, not an independent preference.
+- **The D70 map does not constrain this** — a lazy isolated later screen; when built, cytoscape.js is vendorable as one UMD
+  (built-in layouts CSP-clean; avoid the eval-using `spread` extension) or hand-rolled Canvas + a vendored `d3-force` module.
+- **Why:** the stack is over-determined, not chosen. **No install/build step we control** (the pure-config master rule) rules
+  out npm/bundlers/pip; **`python3` is already the one hard dependency** (D71 — shell glue = bash, logic = python); **CSP-tight
+  loopback** (D95) rules out CDNs + eval-libs — which triangulates to exactly this shape. Every comparable local-first tool
+  (Syncthing, Ollama, Jupyter) uses its language's *built-in* HTTP server, never a vendored framework — HTTP because a
+  *browser* consumes it (git-credential-cache uses a Unix socket, having no browser). The docs' "not for production" warning
+  targets `SimpleHTTPRequestHandler`'s file-serving surface, not a custom handler serving fixed files behind a token.
+*Rejected:* a web framework (Flask/FastAPI) or SPA toolchain (React/Vite) — break no-install / force an unrunnable build;
+vendoring `bottle.py` or threaded-`wsgiref` (zero capability gain at ~6 endpoints/~1 concurrency, a file to patch/audit,
+weakens install-free); Alpine-standard / petite-vue (need `unsafe-eval`; Alpine's CSP build works but forces a restricted
+dialect); htmx (CSP-clean but architecturally mismatched — HTML-fragment swaps vs JSON-from-disk); a Unix-domain socket
+(right only with no browser; we have one).
+*Evidence:* two research fan-outs — Python `http.server`/`socketserver` docs + CPython source (`daemon_threads=True`;
+`handle_error` prints + continues; the cross-thread `shutdown()` deadlock note); Syncthing/Ollama/Jupyter/git-credential-cache
+daemon patterns; a CSP eval-audit (Alpine-standard/petite-vue need eval, vanilla/Preact+htm/Lit don't); cytoscape UMD size +
+CSP notes. Depends on D71/D89/D93/D94/D95; realises D70 (deferred). → `03`/`05`/`07`/`11`.
+
+## D101 — Console attention: notify on exactly two events (checkpoint-raised · loop hard-stop/escalation); reminders ride the D97 timeout **[DECIDED — Phase-2 B (B5)]**
+Closes B5. The notification *mechanism* is settled (D90 — the `Notification` hook → desktop-native + opt-in Slack/HTTP
+webhook; phone/tunnel later); this fixes the MVP **event taxonomy**.
+- Fire on exactly **(1) a checkpoint being raised** (the reason the away-channel exists) and **(2) the loop hard-stopping /
+  an escalation** — a D92 thrash/auto-compact hard-stop, or a D91/D97 dead-letter / stale-deadline escalation.
+- **Reminders are not a new event** — they ride D97's timeout-resurfacing (a checkpoint deadline re-surfaces + reminds via
+  the Notification hook and its aging, D91; never auto-proceeds).
+- Everything else (per-step progress, per-item completion, the outward-action gate) is **out of MVP**.
+- **Why:** an away-channel's value is inversely proportional to its false-positive rate; the only events that justify
+  interrupting an away human are *something needs you* / *something broke*. The checkpoint ping is what makes unattended
+  autonomy unattended; the hard-stop ping is the safety valve for the D92/D91/D97 states that otherwise sit silent. Folding
+  reminders into D97's existing machinery avoids inventing a second aging system.
+*Rejected:* progress / per-item-done pings in MVP (high-frequency, low-actionability — trains the human to ignore the
+channel); a separate reminder/aging subsystem (D97 already owns deadline resurfacing); outward-gate notifications now (couple
+to the unbuilt E2 outward-permission model; deferred with it).
+*Evidence:* D90 (mechanism) · D91 (aging anti-starvation, dead-letter/timeout escalation) · D92 (thrash hard-stop) · D97
+(timeout re-surfaces, never auto-proceeds). → `03`/`04`/`11`.
+
 ---
 
 ## Not yet decided (tracked in `07`)
@@ -1974,7 +2061,9 @@ dependency-ready ∧ file-disjoint ∧ ¬1-hop-neighbor**; waves grouping D36); 
 block/resume + autonomous reset now decided (D90/D92 — durable park + `claude --resume`; the runner is the deferred
 autonomous path)**; **the A2 bus contract / A3 lifecycle / A4 trust now decided (D93/D94/D95 — single-writer +
 atomic-publish + a two-mechanism protocol · a session-independent detached daemon · a capability-token +
-Host-allowlist loopback trust)**; website **stack** still open (B4). Intake follow-ons:
+Host-allowlist loopback trust)**; **the console cluster B now decided (D99–D101 — a read-only supervision cockpit +
+screen list + snapshot-poll + "my requests" surface · a stdlib-Python detached daemon + zero-build CSP-clean page ·
+the two-event notification taxonomy)**, so the **website stack (B4) is closed**. Intake follow-ons:
 engineering-feasibility pass **designed as the proportional-rigor gate (D69), implementation deferred**;
 **checkpoint cluster C now decided (D96–D98 — judgment/action taxonomy + trigger rule · verb-enum verdict +
 plural machine-verified setup gate · MVP help set)**; demo-skill mechanics (cluster D) + commitment-status

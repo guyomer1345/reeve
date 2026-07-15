@@ -25,10 +25,11 @@ session death. Stop = an authenticated `POST /shutdown` + an idle-timeout self-s
 ~8s after the last terminal closes and re-spawns on the next `/start` (the durable inbox loses nothing already
 written). Full lifecycle in `05`.
 
-## Project map + flow view **[DECIDED — D70; build deferred to Phase 2/3]**
+## Project map + flow view **[DECIDED — D70; placement = a tab, D99; build deferred to Phase 2/3]**
 A **project-map screen** renders the code-map `graph.json` (D68) as a cluster diagram — nodes sized by the
 **impact lens**, clustered by the **directory tree**, semantic-zoom (cluster → file → [later] symbol). It is the
-structural face of the deferred **project-state view** (`07`). Two complementary layers:
+structural face of the deferred **project-state view** (`07`). **Placement resolved (D99): a tab, not the console
+home, and not the first cut** — it is Mode B (explore), whereas the MVP is Mode A (supervise). Two complementary layers:
 - **Static skeleton** — always available, no run needed.
 - **Flow overlay** — a **highlighted subgraph** ("watch a message get sent") captured by *observing an actual
   run* (differential trace; noise-filter + mechanism are a direction, OPEN — see D70/`07`), laid over the skeleton.
@@ -45,13 +46,45 @@ Local-served by default; opt-in **"remote control"** serves the console over a t
 token is **never** reused as tunnel auth (over the wire there is no 0600 file to gate it). Real tunnel auth
 (Cloudflare Access / HMAC) is the reserved upgrade for when the risk is no longer acceptable.
 
-## To close **[OPEN — cluster B]**
-- **B1 — the screen list** (candidate set: project dashboard, roadmap/todos, **project map — specified, D70**,
-  checkpoint console, activity/agent log, handoff/restart prompt) — and whether the map is a **tab or the
-  home/overview** (`07`).
-- **B3 — the "contact the orchestrator" UX** — resolved *in principle* (D93): dialogue is a terminal activity;
-  the console sends **intake** requests + answers **checkpoint** verdicts (the `node→ticket` action is an `intake`
-  message, D70/`05`). What's left is the concrete screen/affordance.
-- **B2 — stream vs snapshot** — informed by D93: snapshot-reads are the baseline (the bus serves state from disk);
-  an optional inotify/SSE "re-read" hint is an ergonomics add, never load-bearing. Final call open.
-- **B4 — Stack** **[DEFERRED]**.
+## Console model + screens **[DECIDED — D99 (closes B1/B2/B3)]**
+**MVP = a read-only supervision cockpit, not a project explorer.** The console has two latent modes — *supervise a
+live run* and *explore the project* — and only supervision is MVP (the dogfood's one critical-path job: deliver a
+checkpoint verdict + status away from the terminal).
+- **Home = a run-status cockpit:** current item · wave/parked tickets · **pending checkpoints** · recent activity —
+  rendered from the files the bus serves synchronously (`state.json` / `backlog.md` / `parked/` / `handoff.md` / git; D93).
+- **Screen list (MVP → later):** cockpit (home) · checkpoint console · **"my requests"** · roadmap/backlog
+  (read-only) → *later* tabs: the project map (above), knowledge exploration. **The map is a tab, not the home, and
+  not the first cut** — resolves the `07` tab-vs-home question: **tab** (D70 is stageable; its value needs the
+  deferred flow-overlay + later arms).
+- **Refresh = snapshot polling, no SSE in MVP** (B2): one chained-`setTimeout` loop (~2–5 s) reads the whole state
+  JSON; a monotonic `version`/`ETag` → `304` skips the re-render; polling pauses on `document.hidden`. inotify→SSE is
+  the reserved "re-read" ergonomics hint (D93), never load-bearing — safe because urgency rides the Notification hook
+  (below), not the page.
+- **Contact-orchestrator UX** (B3 — the D93 principle made concrete) = two POST forms + a feedback surface: a
+  **verdict** form (D97 `{outcome, notes, returns?}` / plural `tasks[]`; renders the D98 steps + verified deep-links +
+  breadcrumbs for `setup`), an **intake** form (the D70 node→ticket click is a pre-filled intake), and the **"my
+  requests" view** — each POST returns `202` + a `Location` ticket saved to `localStorage`; the view is the polled
+  state *filtered* by those ticket ids, so `pending→consumed→resolved` is legible with **no new endpoint**. This is
+  what keeps the async, not-a-chat model (D93) usable instead of a void.
+
+## Stack **[DECIDED — D100 (closes B4)]**
+A **daemon process + a static page it serves**, not a web app — the shape is forced by A2/A3/A4 + the pure-config
+master rule, so B4 was *more* constrained than "deferred" implied.
+- **Backend:** a single-file **stdlib-Python** daemon on `http.server.ThreadingHTTPServer` + a custom
+  `BaseHTTPRequestHandler` — no vendored dependency, no framework (it *is* the D94 detached daemon). Build-contract
+  footguns: `POST /shutdown` calls `server.shutdown()` from a **spawned thread** (never inline → deadlock); cap the
+  body at `Content-Length` + set `handler.timeout` (`413` on oversize); keep `protocol_version` at HTTP/1.0.
+- **Frontend:** **zero-build static files** — vanilla JS (`<template>` + `textContent`) by default, **Preact+htm**
+  (~4.5 KB ESM, no eval) the one pre-vetted escape hatch.
+- **CSP:** the daemon serves a strict **`Content-Security-Policy: script-src 'self'`** — the page-side teeth of D95,
+  and the reason Alpine-standard/petite-vue (both need `unsafe-eval`) are out.
+- **Why this and not a framework:** the pure-config package has no install/build step we control, `python3` is already
+  the one hard dependency (D71), and the D95 CSP rules out CDNs — every comparable local-first tool
+  (Syncthing/Ollama/Jupyter) uses its language's built-in HTTP server for exactly this reason.
+
+## Attention / notification **[DECIDED — D101 (closes B5)]**
+Mechanism settled in D90 (the `Notification` hook → desktop-native + opt-in Slack/HTTP webhook; phone/tunnel later).
+MVP **event taxonomy** = fire on exactly **(1) a checkpoint being raised** and **(2) the loop hard-stopping / an
+escalation** (a D92 thrash-stop, or a D91/D97 dead-letter / stale-deadline escalation). Reminders are **not** a new
+event — they ride D97's timeout-resurfacing + D91 aging. Per-step progress / per-item-done / outward-gate pings are
+out of MVP (false-positive noise trains the human to ignore the channel).

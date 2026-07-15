@@ -34,7 +34,9 @@ Deliberately deferred — known unknowns, to close during build or later.
   **`.workflow/checkpoints/` persistence rides here (D60):** whether outward/setup approvals get a durable
   approval ledger (and its retention) is decided with this model; qa/demo verdicts stay disposable bus messages.
   *Surfaced 2026-06-29 (live: the harness gated a push to `main`).*
-- **Website screen list** (`03`).
+- **Website screen list** (`03`) — **CLOSED (D99):** a read-only supervision cockpit (home) · checkpoint console ·
+  "my requests" · roadmap/backlog; the map is a **tab, not the home, not the first cut**; snapshot-poll refresh
+  (no SSE in MVP); the contact-UX = verdict + intake forms + the "my requests" async-feedback surface.
 - **Disk layout** (`05`) — the full file tree + read/write protocols. *(Docs-root unified under
   `<project_root>/docs/` — spec + architecture + knowledge + decisions — D62; diagrams inline, D41.)*
 - **Orchestrator hooks** (D58) — `hooks/guard.sh` enforces **secret-scan** + **verify-before-commit** (hard
@@ -55,8 +57,9 @@ Deliberately deferred — known unknowns, to close during build or later.
   two-mechanism protocol [sync reads · async commands] + one typed inbox; the orchestrator is never an HTTP
   responder), the **A3 lifecycle** (D94 — a session-independent detached daemon, ensure-running via lock-authority,
   HTTP-stop + idle-janitor), and the **A4 trust** model (D95 — capability token + Host-allowlist + loopback bind).
-  What remains is the whole **console (B)** — screen list / tab-vs-home / stream-vs-snapshot / stack — the next
-  Phase-2 slice after **C (checkpoints)**, tracked in `11`.
+  **Cluster B (the console) is now CLOSED (D99–D101):** the console model + screen list + snapshot-poll + "my requests"
+  surface (D99), the stack (D100), and the two-event attention taxonomy (D101). The next Phase-2 slice is **D (the demo
+  skill)**, tracked in `11`.
 - **Real dispatch validation** — the dogfood *simulated* the `research` agent dispatch; the orchestrator→agent
   call + structured return is validated in the harness-real run.
 - **Package install** — loose `.claude/` files are MVP (D57); plugin packaging + `shared/` resolution open.
@@ -84,10 +87,13 @@ Deliberately deferred — known unknowns, to close during build or later.
   **Reframed (D90):** it is a thin **local** loop that relaunches `claude` (a fresh `claude -p` per ticket = a clean
   window + autonomous resume), **NOT** the cloud Agent SDK (which can't resume a local session). Triple-justified
   (context-reset + autonomous checkpoint-resume + overnight). Build + verify auth (subscription vs API key) later.
-- **Website stack** (`03`).
+- **Website stack** (`03`) — **CLOSED (D100):** a stdlib-Python detached HTTP daemon (`http.server.ThreadingHTTPServer`)
+  + a zero-build, CSP-clean static page (vanilla default, Preact+htm escape hatch); the daemon serves a strict
+  `script-src 'self'` CSP. No install/build step; `python3` is the only added dependency (already required).
 - **Project map + flow view (`03`, D70) — feature + architecture decided, these bits open.** (1) Map as its
-  **own tab vs the console home/overview** (lean: home/overview — it's the structural face of the project-state
-  view below). (2) A captured flow as a **first-class knowledge artifact** (versioned, regenerable, `06`) vs
+  **own tab vs the console home/overview** — **DECIDED (D99): a tab, not the home, and not the first console cut**
+  (it is Mode B *explore*; the MVP is Mode A *supervise*). (2) A captured flow as a **first-class knowledge artifact**
+  (versioned, regenerable, `06`) vs
   **ephemeral** (on-demand, discarded — but D78 leans **durable [D] layer**). (3) The **runtime-capture mechanism**
   — **decided (D78):** `verify` is the observer (it already runs the affected flow); mechanism = `sys.monitoring`
   fire-once (Py 3.12+, measured 1.0×) with coverage-harvest (~1.5×) as the universal fallback; trigger selectively
