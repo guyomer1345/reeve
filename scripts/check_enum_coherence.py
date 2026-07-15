@@ -43,6 +43,14 @@ ENUMS = [
         "owner_re": r"kind:\s*(verdict(?:\|[a-z]+)+)",
         "consumers": ["05-shared-state.md"],
     },
+    {
+        "name": "checkpoint.verdict.outcome",
+        "owner": "shared/schemas.md",
+        # the checkpoint verdict verb-enum (D97); anchors on `outcome:` so it can't
+        # collide with either `kind:` enum above.
+        "owner_re": r"outcome:\s*(approve(?:\|[a-z]+)+)",
+        "consumers": ["skills/checkpoint/SKILL.md"],
+    },
 ]
 
 # --- COUNT invariants --------------------------------------------------------

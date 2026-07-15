@@ -13,9 +13,11 @@ import check_enum_coherence as e  # noqa: E402
 SCHEMAS = """\
 - `integrations[]` — `{ name, kind: auth|payments, ... }`
 - `request` — `{ kind: demo|qa|setup|reconcile, what, blocking: true }`
+- `verdict` — `{ outcome: approve|changes|reject, notes }`
 - inbox message is typed — `kind: verdict|intake|control` — one transport
 """
-CHECKPOINT = "Four kinds — demo, qa, setup, reconcile. Routes by kind."
+CHECKPOINT = "Four kinds — demo, qa, setup, reconcile. Routes by outcome — approve, changes, reject."
+CHECKPOINT_STALE = "Four kinds — demo, qa, setup, reconcile. Routes on approve, reject."  # missing changes
 ROSTER_OK = "| checkpoint | skill | verdict (demo / qa / setup / reconcile) |"
 ROSTER_STALE = "| checkpoint | skill | verdict (demo / qa / setup) |"  # missing reconcile
 SHARED05_OK = "one typed inbox — verdict, intake, control — single consumer"
@@ -46,6 +48,11 @@ class Helpers(unittest.TestCase):
         vals = e.enum_values(SCHEMAS, e.ENUMS[1]["owner_re"])
         self.assertEqual(vals, ["verdict", "intake", "control"])
 
+    def test_outcome_owner_anchored(self):
+        # the verdict-outcome anchor picks approve|changes|reject, no collision
+        vals = e.enum_values(SCHEMAS, e.ENUMS[2]["owner_re"])
+        self.assertEqual(vals, ["approve", "changes", "reject"])
+
     def test_registry_count_excludes_generic(self):
         n = e.registry_count(CODEMAP, e.COUNTS[0]["owner_re"], {"GenericArm"})
         self.assertEqual(n, 5)
@@ -68,6 +75,12 @@ class Enums(unittest.TestCase):
     def test_inbox_missing_value_flagged(self):
         errs = e.check_enums(reader(self._files(ROSTER_OK, shared05=SHARED05_STALE)))
         self.assertTrue(any("control" in x and "05-shared-state.md" in x for x in errs))
+
+    def test_outcome_missing_value_flagged(self):
+        files = self._files(ROSTER_OK)
+        files["skills/checkpoint/SKILL.md"] = CHECKPOINT_STALE  # drops "changes"
+        errs = e.check_enums(reader(files))
+        self.assertTrue(any("changes" in x and "checkpoint" in x for x in errs))
 
 
 class Counts(unittest.TestCase):
