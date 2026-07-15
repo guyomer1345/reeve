@@ -108,10 +108,25 @@ input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh
 - `confidence`
 
 ## checkpoint  · the `checkpoint` gate · *a **durable park boundary**: the orchestrator writes handoff + the request, yields, and resumes via `claude --resume` with the verdict as an authoritative prompt*
-- `request` — `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), blocking: true, token }` —
-  **`token`** (`{ticket}:{step}:{uuid}`) correlates the async verdict back to this parked ticket.
-- `verdict` — `{ pass, notes }`  · pass → continue · **fail routes by kind** (qa→debug · demo→create-demo ·
-  setup→setup-guide/human · reconcile→ingest/discuss) — a rejection is not always a defect
+A checkpoint sits at **a boundary only a human can cross** — either a **judgment** boundary (does this match intent:
+`demo`, `qa`, `reconcile` — the verdict is an opinion) or an **action** boundary (do something in the world the loop
+can't reach: `setup` — the verdict is "I did it" + a returned artifact, then machine-verified).
+- `request` — `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), tasks?[], blocking: true, token }`.
+  **`token`** (`{ticket}:{step}:{uuid}`) correlates the async verdict back to this parked ticket. **`tasks[]`** is the
+  *set* of setup items a `kind=setup` checkpoint carries (a lone setup is a one-element set); the orchestrator
+  coalesces a plan's foreseeable setups (spec `integrations[]`) into one checkpoint **at first-setup-contact** (not
+  front-loaded at intake) — an unforeseen setup is raised by `execute` on hitting the wall.
+- `verdict` — `{ outcome: approve|changes|reject, notes, returns? }` (`pass` ≡ `outcome=approve`); a `kind=setup`
+  verdict carries a **per-task** outcome, so a mixed reply routes each item on its own. **Routing keys off `outcome`,
+  per kind:**
+  - **demo** — approve → lock the spec state · changes → `create-demo` (refine) · reject → `discuss`.
+  - **qa** — approve → `document`/`commit` · reject → `debug` (`changes` ≡ reject here).
+  - **setup** — approve|changes → the orchestrator **verifies the external precondition actually works** (probe the
+    key/webhook) *before* proceeding; reject → replan or hard-stop. A `returns` value marked `sensitive` is written to
+    the gitignored secret store, **never logged**, and its inbox record **shredded after use**.
+  - **reconcile** — approve → `prioritize` · else → `ingest`/`discuss`.
+  A **timeout never auto-proceeds** — it re-surfaces + reminds (a missing credential can't be skipped). A rejection is
+  not always a defect — hence routing by kind, not a universal `debug` sink.
 
 ## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
 - `{ ticket_id, token, worktree, branch, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }`
@@ -122,8 +137,10 @@ dispatched at a scheduler boundary **by kind**. **Single consumer** (the one orc
 claim-by-rename needed; matched **idempotently, single-shot** (duplicate → no-op). The bus returns `202 Accepted` +
 a `Location` ticket at POST time; any result surfaces via orchestrator-written state the console re-reads by ticket —
 the orchestrator **never responds synchronously** (it is a boundary batch-consumer, not an HTTP responder).
-- **`kind: verdict`** — `{ token, verdict: {pass, notes} }` — resumes a parked ticket; `token` matches a
-  `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume).
+- **`kind: verdict`** — `{ token, verdict: {outcome, notes, returns?} }` — resumes a parked ticket; `token` matches a
+  `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume). A `returns` value marked
+  `sensitive` (a setup credential) is written to the gitignored secret store and this inbox record is **shredded after
+  consume** — a secret is never retained on the durable inbox or echoed to `state.json`/logs.
 - **`kind: intake`** — `{ ticket, ask, node_ids? }` — a new-work request; the orchestrator **promotes** it into
   `backlog.md` through triage — **never a direct backlog write** (that would make the backlog two-writer).
   `node_ids` present when the project-map screen emitted it.

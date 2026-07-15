@@ -78,9 +78,10 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **Demo skill mechanics** — `create-demo`'s *body* exists, but **how the sandbox is served/run, the
   refine-round limits, and where it lives on disk** are open (`09`). The product-alignment loop ("did we agree
   *what* to build") depends on it. **[core]**
-- **Checkpoint data model + triggers** — finalize "what a checkpoint IS" (more examples), the **demo/setup
-  triggers** (qa resolved via D30), and **which help features are MVP** (doc links / screenshots /
-  screen-share / live feedback). **[stageable]** *(richer help needs the bus.)*
+- **Checkpoint data model + triggers** — **DONE (D96–D98):** the judgment/action taxonomy + trigger rule (setup =
+  spec `integrations[]` + execute-discovered; qa=D30, demo=D22 gate, reconcile=ingest), the verb-enum verdict +
+  plural machine-verified setup gate, and the MVP help set (contextual steps + verified deep-links + breadcrumbs;
+  screenshots/screen-share/agent-automation deferred). **[done]**
 - **Engineering-feasibility pass** — the spike that de-risks the technical unknowns the demo deliberately
   skips (`09`). **[stageable]**
 - **Automated testing · test-from-anywhere · paid device/QA platform** — designed-for, not built. **[later]**
@@ -192,10 +193,12 @@ tracked in `07`) — **D89**.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /
-triggers. *(**IN PROGRESS — 2026-07-14: cluster A (the checkpoint/console runtime + bus substrate) is CLOSED —
-D90–D95.** A1 (block/resume + interleaving + context, D90–D92) empirically verified on `claude v2.1.209`; A2 bus
-contract (D93), A3 lifecycle (D94), A4 trust (D95) closed via four research fan-outs. **Next slice = cluster C
-(checkpoints).** The full agenda + per-item status is below.)*
+triggers. *(**IN PROGRESS — cluster A CLOSED (D90–D95)** and **cluster C CLOSED (D96–D98).** A = the
+checkpoint/console runtime + bus substrate (A1 block/resume + interleaving + context, D90–D92, empirically verified
+on `claude v2.1.209`; A2/A3/A4 bus contract/lifecycle/trust, D93–D95, four research fan-outs). C = checkpoints (C1
+data model, C2 triggers, C3 help set — the judgment/action taxonomy + verb-enum verdict + plural machine-verified
+setup gate + the MVP help set, via two research fan-outs). **Next slice = cluster B (console screens).** The full
+agenda + per-item status is below.)*
 
 ### Phase 2 — design agenda & dependency sequence *(the resume map)*
 The website+demo design decomposes into five clusters; the dependency spine is **A → C → B → D → E**
@@ -211,19 +214,20 @@ The website+demo design decomposes into five clusters; the dependency spine is *
 - **B — console.** **B1 screen list + map tab-vs-home**; **B2 stream-vs-snapshot**; **B3 contact-orchestrator UX**
   (node→ticket reserved, D70); **B4 stack** (deferred, coupled to A2); **B5 attention/notification** — *seeded*
   (the `Notification` hook → desktop/opt-in-webhook is decided, D90); phone/tunnel later. All open.
-- **C — checkpoints.** **C1 data model** — *mostly closed* (schemas + the D90 park model + D91 token/parked/inbox);
-  **C2 triggers** (demo/setup still open; qa = D30); **C3 which help features are MVP** (doc-links/screenshots/
-  screen-share/live-feedback). Open.
+- **C — checkpoints. CLOSED (D96–D98).** **C1 data model** — the verb-enum verdict (`{outcome: approve|changes|
+  reject, notes, returns?}`) + plural machine-verified setup gate (`request.tasks[]`, within-plan coalescing) atop
+  the D90/D91 park model. **C2 triggers (D96)** — judgment/action taxonomy; declared-upstream (qa=D30, demo=D22
+  gate, reconcile=ingest) + setup's spec-`integrations[]` + execute-discovered path. **C3 help set (D98)** —
+  MVP = contextual steps + verified deep-links + breadcrumbs; screenshots/screen-share/live/agent-automation deferred.
 - **D — demo skill.** **D1 serving/running the sandbox** (surfaced in the checkpoint console); **D2 refine-round
   limits**; **D3 on-disk location**. Open.
 - **E — cross-cutting.** **E1 commitment-status storage** (spec-doc vs node frontmatter); **E2 outward-action
   permission model** (`publish` kind, batching — couples to the bus/inbox, D35/D60); **E3 project-map residuals**
   (tab-vs-home → B1, ephemeral-vs-durable ≈ D78, remote-auth). Open.
 
-**Recommended next slice:** **A is CLOSED (D90–D95).** Next is **C (checkpoints)** — C1 data model is mostly closed
-(schemas + the D90 park model + D91 token/parked/inbox); what's left is **C2 triggers** (demo/setup — qa = D30) and
-**C3 which help features are MVP** (doc-links / screenshots / screen-share / live-feedback) — then **B (console)**,
-**D (demo)**, **E (cross-cutting)**.
+**Recommended next slice:** **A + C are CLOSED (D90–D98).** Next is **B (console screens)** — B1 screen list + map
+tab-vs-home, B2 stream-vs-snapshot, B3 contact-orchestrator UX, B4 stack, B5 attention/notification — then **D
+(demo skill)**, **E (cross-cutting)**.
 **Phase 3 — Build the website** (C1 console → C2 bus).
 **Phase 4 — Build the demo.**
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, the **local relaunch-runner**

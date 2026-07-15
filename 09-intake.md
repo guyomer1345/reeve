@@ -63,8 +63,9 @@ sandbox** (no backend, no realistic data) — a runnable alignment artifact surf
   feasibility pass — **[DESIGNED — D69: the proportional-rigor decision gate; implementation deferred]**, see `07`.)
 - **Spec-first, demo-validates:** conversation → written spec → demo *tests* the spec against the user's
   actual mental picture. The demo is generated *from* the spec; the user reacts with plain-language
-  change requests → spec is edited → demo regenerated → retest (a refine mini-loop). The spec never lags
-  the demo; **the spec state that produced the approved demo is what gets locked.**
+  change requests → spec is edited → demo regenerated → retest (a refine mini-loop). These intake-stage
+  spec edits are owned by **`create-demo`** (not `refine` — no plan exists pre-build; D96). The spec never
+  lags the demo; **the spec state that produced the approved demo is what gets locked.**
 - **Throwaway by default** — the sandbox is not reused as the real scaffold (avoids
   prototype-rots-into-production; an autonomous agent will not resist the shortcut unless told).
 - **Fidelity matches the question:** low-fi first for new projects (validate scope/flow; prevents
@@ -126,6 +127,11 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
   D91:** while a ticket is parked on a checkpoint, `prioritize` picks the next **eligible** ticket — dependency-ready
   ∧ file-disjoint ∧ ¬1-hop-neighbor — capped ≤3, prefer-serial.)*
 - **Demo skill mechanics** — how the sandbox is served/run, refine-round limits, where it lives on disk.
+  *(The demo **trigger** and the checkpoint data model / help set are now closed — D96–D98, `04`; this is the
+  sandbox **serving** mechanics only, cluster D.)*
+- **Setup checkpoints** — **closed (D96–D98, `04`):** foreseeable ones declared in the spec `integrations[]` +
+  an execute-discovered path; verb-enum verdict, machine-verified, plural+coalesced; MVP help = steps + verified
+  deep-links + breadcrumbs.
 - **Commitment-status storage** — where locked/provisional/unspecified is recorded (spec doc vs Space 6
   node frontmatter).
 - **Engineer agent** in the roster — **resolved (D69): no new agent** — the feasibility role is the

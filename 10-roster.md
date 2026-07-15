@@ -78,7 +78,7 @@ greenfield: /start → discuss → create-demo (if the gate fires)      ┘
   → execute (→ changelog; structural divergence → re-plan)
   → verify ──on-fail──► debug ──► refine (routes correction back to planner→execute)
       └ debug/verify no-resolution → escalate → checkpoint (human)
-  → checkpoint (qa only if the plan declared human-qa; setup for integrations; reconcile for brownfield)
+  → checkpoint (qa only if the plan declared human-qa; setup for spec integrations + execute-discovered; reconcile for brownfield)
   → document (→ Space 6 Sessions)
   → commit (the checkpoint marker)
   → close-issue (close the GitHub issue the item resolved)

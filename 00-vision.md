@@ -34,10 +34,11 @@ act by hand, it failed.*
 
 ## MVP scope **[DECIDED]**
 - **In:** the full loop; persistent agents; the local website (visualization + control); manual
-  checkpoints WITH help (doc links, screenshots of where settings live, screen-share + live Claude
-  feedback); the knowledge base; graceful session handoff.
-- **Out (designed-for, not built):** automated testing; "test-from-anywhere" (run-while-away → spin
-  test env → Cloudflare tunnel → ping phone); the paid device/QA platform.
+  checkpoints WITH help (contextual steps + verified deep-links + breadcrumb paths — D98); the knowledge
+  base; graceful session handoff.
+- **Out (designed-for, not built):** richer checkpoint help (screenshots of where settings live, screen-share
+  + live Claude feedback — D98); automated testing; "test-from-anywhere" (run-while-away → spin test env →
+  Cloudflare tunnel → ping phone); the paid device/QA platform.
 
 ## Operating scope **[DECIDED]**
 Single local project, single user, single machine; the workflow runs inside the repo it's building.

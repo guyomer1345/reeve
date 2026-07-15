@@ -23,8 +23,9 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Agent roster v1** — **CLOSED in `10`** (names, I/O contracts, skill-vs-agent, topology). Remaining
   sliver: the collision-model **independence test** (`02`) — waves decided the grouping (D36); the
   `prioritize` interrupt model is closed (pure queue, D26).
-- **What a checkpoint is** (`04`) — data model now in `shared/schemas.md` (demo/qa/setup + verdict).
-  Remaining: which help features are MVP.
+- **What a checkpoint is** (`04`) — **closed (D96–D98):** the judgment/action taxonomy + trigger rule, the
+  verb-enum verdict + plural machine-verified setup gate (`shared/schemas.md`), and the MVP help set (contextual
+  steps + verified deep-links + breadcrumbs; screenshots/screen-share/agent-automation deferred).
 - **Outward-action permission model** (`04`, D35) — mechanics of the local-autonomous / outward-gated
   boundary: per-action checkpoint vs standing pre-authorization (config allowlist), batching/queuing of
   pending outward actions, and whether this is a new checkpoint kind (`publish`) or a flavour of the

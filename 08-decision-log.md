@@ -1862,6 +1862,108 @@ Vite/webpack-dev-server/Chrome-CDP Host-check convergence, Jupyter `secure_write
 (2023-39968 / 2024-22421 / 2025-59842), OWASP CSRF + Fetch simple-request rules, Cloudflare Access deny-by-default.
 Reuses D35/D70/D89/D91. → `03`/`05`/`07`/`11`.
 
+## D96 — Checkpoint taxonomy = judgment vs action boundary; the trigger rule closes C2 **[DECIDED — Phase-2 C, research-backed]**
+A checkpoint is raised at **a boundary only a human can cross**, and there are exactly two boundary *types*, which
+organize every trigger and verdict:
+- **Judgment boundaries** ("is this what we meant?") — `demo` (spec vs mental picture, intake-stage), `qa`
+  (behaviour vs intent, build-tail), `reconcile` (reconstructed spec vs reality, brownfield-intake). Verdict is an
+  opinion.
+- **Action boundaries** ("do something in the world I can't reach") — `setup` (perform an external action, obtain a
+  credential). Verdict is "I did it" + a returned artifact, then **machine-verified** (D97).
+
+**Trigger rule — declared upstream wherever the intent lives**, with setup's one exception:
+- **qa** = `planner` declares a `human-qa` acceptance criterion (D30).
+- **demo** = the sandbox gate (D22) in `create-demo`'s `When`, evaluated per work-item — **the gate *is* the
+  trigger; there is no separate demo-trigger to invent.** The intake-stage demo refine-loop's spec edits are owned
+  by `create-demo` (it edits the spec slice it owns and regenerates — explicitly licensed to write the spec;
+  `refine`'s `plan-delta` machinery is build-stage and does not apply pre-plan).
+- **reconcile** = `ingest` after spec reconstruction (D68).
+- **setup** = **spec `integrations[]`** for the foreseeable (pre-declared → inherits the D97 deadline/reminder
+  machinery) **+ an execute-discovered path** for the unforeseen (a new licensed `execute → checkpoint(setup)` edge —
+  the outward-facing sibling of a `prerequisite-repair` divergence, D66). Even a discovered setup is materialized as
+  a **durable parked record**, never an in-memory block.
+
+Closes C2 (`04`'s "what triggers a checkpoint").
+- **Why:** the judgment/action split *predicts* the whole cluster — action boundaries return artifacts and need
+  verification, judgment boundaries don't, which is why only setup gets D97's richer machinery. Declared-upstream is
+  the near-universal model across Step Functions / Camunda / GitHub-GitLab gates / n8n; runtime-discovery is a
+  deliberate exception the mature engines still materialize durably — matching D90/D91's on-disk parked record.
+*Rejected:* a separate demo "trigger" (the D22 gate already is one); routing intake-stage demo edits through `refine`
+(no plan exists pre-build); enumerating all setups upfront (unforeseeable — hence the discovered path); an in-memory
+setup block (D90 forbids it).
+*Evidence:* two research fan-outs (external-action setup-gate patterns; async-HITL scheduling) + the cluster-A
+substrate. Reuses D22/D30/D66/D68/D90/D91. → `04`/`09`/`10`/`shared/schemas.md`/`skills/checkpoint`/`skills/create-demo`.
+
+## D97 — Checkpoint verdict is a verb-enum + a returns payload; setup is a plural, machine-verified action gate; timeout never auto-proceeds **[DECIDED — Phase-2 C, research-backed]**
+The checkpoint verdict data model + the setup lifecycle. Closes C1's remaining data-model gap.
+- **Verdict = a verb-enum, not a boolean.** `verdict { outcome ∈ {approve, changes, reject}, notes, returns? }`;
+  `pass` derives from `outcome=approve`. A boolean throws away the information the agent most needs
+  (industry-unanimous: LangChain approve/edit/reject, Temporal `CHANGES_REQUESTED`). Routing keys off `outcome` **per
+  kind**: demo approve→lock spec / changes→`create-demo` / reject→`discuss`; qa approve→`document`/`commit` /
+  reject→`debug` (changes≡reject); setup approve|changes→**verify-external** / reject→replan-or-hard-stop; reconcile
+  approve→`prioritize` / else→`ingest`/`discuss`. **Applied uniformly across all kinds** (one enum the coherence gate
+  guards; the changes/reject split earns its keep on demo too), *not* setup-only.
+- **Setup is machine-verified on resume — never trusted on "done."** approve/changes unblocks the agent to *probe the
+  external precondition actually works* (the key authenticates, the webhook fires); only then does it proceed; a
+  failed probe **re-guides (loop)**, it does not `debug`. Setup is the one kind whose human verdict is an *input to* a
+  `verify`, not the terminal signal — which simultaneously delivers resume-idempotency (a re-run-from-park must be
+  safe), handles "did it differently," and catches a premature "done."
+- **Setup checkpoint is plural (the no-refactor shape):** `request.tasks[]` — a *set* of setup items (a lone setup is
+  a one-element set), each with a per-task `{outcome, notes, returns?}` in the verdict, so a mixed reply (Stripe
+  `approve` + Clerk `reject`) routes each on its own. **Coalescing policy = within-plan, at first-setup-contact:** the
+  build is *not* front-loaded at intake; when it first hits setup territory, the orchestrator sweeps *this plan's*
+  declared-but-unraised `integrations[]` and bundles them into one checkpoint. **Cross-ticket coalescing** (one
+  verdict resuming several parked tickets) is **deferred** — the `tasks[]` schema accommodates it, so adopting it
+  later is additive, not a refactor.
+- **A returned secret rides the inbox, sensitive + shred:** a setup `returns` value marked `sensitive` is written by
+  the orchestrator to the **gitignored secret store**, **never echoed to `state.json`/logs**, and its inbox file is
+  **shredded post-consume** (not retained). Away-capable; the bus is already scoped to the user's own UID over
+  loopback (D95), so the residual exposure equals `.env` itself. (User-present terminal-only placement is the
+  documented hardening if the durable-inbox exposure is later unacceptable.)
+- **Timeout never auto-proceeds.** Invert the n8n/Zapier skip-and-continue default: a checkpoint deadline
+  **re-surfaces + reminds** (aging via the `Notification` hook, D91), never advances the work — a missing key cannot
+  be skipped.
+- **Why:** the whole point of an action boundary is a returned artifact + a real-world effect that must be *verified*,
+  not asserted; the verb-enum is what lets one reply carry done/can't/changed with the payload the agent needs;
+  plural-from-day-one buys the coalescing upgrade without a schema refactor.
+*Rejected:* a boolean verdict (loses done/can't/changed); trusting "done" without probing (premature-done +
+non-idempotent resume); a single-task setup request (forces an A→B refactor); front-loading all setups at intake
+(blocks early, mocks unreached work); secret placement gated to the terminal for MVP (defeats away-autonomy);
+timeout auto-skip (a missing credential can't be skipped).
+*Evidence:* two research fan-outs (setup-gate pending-request/verdict data models across Step Functions / Camunda /
+LangChain-LangGraph / Temporal / n8n-Zapier; guidance richness) — verb-enum outcome + a "done-differently" payload +
+verify-on-resume idempotency + deadline-in-the-record were unanimous. Extends the `checkpoint` + `inbox-message`
+schemas; reuses D90/D91/D93/D95. → `04`/`09`/`shared/schemas.md`/`skills/checkpoint`/`10`.
+
+## D98 — Checkpoint help set: MVP = contextual steps + a live-resolved, verified deep-link + breadcrumb; screenshots / screen-share / live-feedback / agent-automation deferred **[DECIDED — Phase-2 C, research-backed]**
+Closes C3 ("which help features are MVP"). The async/park model (D90/D93 — nothing live happens while parked;
+dialogue lives at the terminal) draws the line: only guidance that fits a durable request→verdict round-trip is MVP.
+- **MVP (async, durable, auto-generatable, self-healing):** a **contextual step-list** (one action per step,
+  delivered *at* the step — not front-loaded) + **per-step a deep-link resolved at guide-time via live web search and
+  verified to resolve, always paired with a human-readable breadcrumb** ("Settings → Payments → Webhooks") + the
+  search query. The breadcrumb is the graceful-degradation path — cheaper than a screenshot and robust to UI churn +
+  link rot; `setup-guide` (WebSearch/WebFetch) does the resolve-and-verify. This pair directly kills the "where does
+  this setting live?" hunt (the Polar motivating example).
+- **Deferred:** **screenshots** (image models can't faithfully render a current UI; the only accurate path is a
+  live-browser capture — infra, not one-shot — and it goes *silently* stale, mis-pointing a user who trusts it);
+  **screen-share + live-feedback** (intrinsically synchronous → needs a live watching model, which by D90 exists only
+  in the user-present terminal session, never on the parked bus — a "stuck" escalation, not the default);
+  **agent-driven browser automation that performs the setup** (30–60% real-site task-failure + a hard
+  credential/irreversibility trust gate — the human stays the actor).
+
+`setup-guide`'s "screenshot references / screen-share cues" wording is **dropped** (it now emits steps + verified
+deep-links + breadcrumbs); `00`'s vision list keeps screenshots/screen-share as the *designed-for* aspiration
+(deferred), not MVP.
+- **Why:** the cheap async channel should carry only guidance whose accuracy is *resolved-and-verified at generation
+  time* and that *degrades gracefully*; a controlled study (NN/G) found richer, front-loaded tutorials don't raise
+  success and make tasks feel harder — contextual *timing*, not media richness, is what helps.
+*Rejected:* auto-generated screenshots (hallucinated/garbled + silently stale); screen-share in MVP (synchronous,
+breaks the park model); agent-does-it-for-you (unreliable + unsafe for account settings); a bare deep-link with no
+breadcrumb (link rot ~8%/yr + ungrounded-LLM fabrication 3–13% → a landmine).
+*Evidence:* a guidance-richness research fan-out — NN/G tutorial study, Ahrefs link-hallucination + link-rot, Pew
+link-rot, WebVoyager/OSWorld agent success rates, Anthropic's own "experimental" computer-use framing. Reuses
+D90/D93. → `04`/`00`/`agents/setup-guide`/`skills/checkpoint`/`11`.
+
 ---
 
 ## Not yet decided (tracked in `07`)
@@ -1874,7 +1976,9 @@ autonomous path)**; **the A2 bus contract / A3 lifecycle / A4 trust now decided 
 atomic-publish + a two-mechanism protocol · a session-independent detached daemon · a capability-token +
 Host-allowlist loopback trust)**; website **stack** still open (B4). Intake follow-ons:
 engineering-feasibility pass **designed as the proportional-rigor gate (D69), implementation deferred**;
-demo-skill mechanics; commitment-status storage. `init` follow-ons: brownfield
+**checkpoint cluster C now decided (D96–D98 — judgment/action taxonomy + trigger rule · verb-enum verdict +
+plural machine-verified setup gate · MVP help set)**; demo-skill mechanics (cluster D) + commitment-status
+storage (cluster E) still open. `init` follow-ons: brownfield
 ingest **designed (D68); the `ingest` skill is authored**; **console launch + disk-layout read/write protocols now
 decided (D94/D93)** (the `spec/`+`.knowledge/` docs-root placement closed — D62). Skill-review follow-ons:
 incidental-issue-resolution detection — deferred; outward-action permission mechanics (D35). Adoption
