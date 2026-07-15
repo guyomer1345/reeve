@@ -42,7 +42,9 @@ Declared upstream wherever the intent lives, with setup's one exception:
 - **qa** — `planner` declares a `human-qa` acceptance criterion (D30).
 - **demo** — the sandbox gate (D22) in `create-demo`, evaluated per work-item; the gate *is* the trigger. The
   intake-stage refine loop's spec edits are owned by `create-demo` (it edits the spec slice and regenerates —
-  `refine`'s plan-delta machinery is build-stage, so it doesn't apply pre-plan).
+  `refine`'s plan-delta machinery is build-stage, so it doesn't apply pre-plan). The **sandbox is surfaced** in
+  the checkpoint page as a **bus-daemon-served, `sandbox`-CSP-isolated bundle beside the verdict form** (demo =
+  look, form = verdict); its serving / refine-cap / storage mechanics live in `09` (D102–D104).
 - **reconcile** — `ingest`, after brownfield spec reconstruction (D68).
 - **setup** — spec `integrations[]` for the foreseeable + an **execute-discovered** path for the unforeseen (a
   licensed `execute → checkpoint(setup)` edge). Either way it becomes a durable parked record, never an in-memory

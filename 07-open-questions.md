@@ -8,9 +8,9 @@ Deliberately deferred — known unknowns, to close during build or later.
   handoff/resume model (D48). *Intake stage closed in `09`.*
 - **Intake follow-ons** (`09`) — engineering-feasibility pass **designed as the proportional-rigor decision gate
   (D69); implementation deferred to `11`** — **D88 recorded the wiring requirement (P3): the triage grades by
-  `risk_class` × blast-radius, not code-centrality alone**; demo-skill mechanics (serving,
-  refine-round limits, on-disk location); commitment-status storage (spec doc vs Space 6 node frontmatter).
-  *(Interrupt model closed: pure queue, D26.)*
+  `risk_class` × blast-radius, not code-centrality alone**; **demo-skill mechanics CLOSED (D102–D104 —
+  serving/format · refine cap · on-disk location, `09`)**; commitment-status storage (spec doc vs Space 6 node
+  frontmatter) still open. *(Interrupt model closed: pure queue, D26.)*
 - **`init` / bootstrap capability** (`10`, D28) — greenfield is straightforward; brownfield **ingest**
   (build the knowledge base + reconstructed spec from existing code) is **DESIGNED (D68) and the `ingest` skill
   is AUTHORED** (`skills/ingest/SKILL.md`) — the ingest *mechanics* (own per-stack generator, two lenses,
@@ -58,8 +58,9 @@ Deliberately deferred — known unknowns, to close during build or later.
   responder), the **A3 lifecycle** (D94 — a session-independent detached daemon, ensure-running via lock-authority,
   HTTP-stop + idle-janitor), and the **A4 trust** model (D95 — capability token + Host-allowlist + loopback bind).
   **Cluster B (the console) is now CLOSED (D99–D101):** the console model + screen list + snapshot-poll + "my requests"
-  surface (D99), the stack (D100), and the two-event attention taxonomy (D101). The next Phase-2 slice is **D (the demo
-  skill)**, tracked in `11`.
+  surface (D99), the stack (D100), and the two-event attention taxonomy (D101). **Cluster D (the demo skill) is now
+  CLOSED (D102–D104 — serving/format + sandbox-CSP isolation · refine cap · on-disk location).** The next Phase-2
+  slice is **E (cross-cutting)**, tracked in `11`.
 - **Real dispatch validation** — the dogfood *simulated* the `research` agent dispatch; the orchestrator→agent
   call + structured return is validated in the harness-real run.
 - **Package install** — loose `.claude/` files are MVP (D57); plugin packaging + `shared/` resolution open.

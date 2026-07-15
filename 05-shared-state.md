@@ -57,6 +57,11 @@ console-side teeth of this posture; it forces the zero-build vanilla/Preact+htm 
 D100/`03`. The **port is not a secret**; the **bus token (auth) is distinct from the checkpoint token
 (correlation)**. Windows lacks 0600 → token-file ACLs (the D89 OS/FS family). **Tunnel (D70, owner-accepted):** opt-in
 / warning-only / no auth — with the one rule that the loopback token is **never** reused as tunnel auth.
+**Two serving classes (D102 clarification):** the token gates the **sensitive data/command class** (state reads +
+POSTs); the **static app-shell class** — the console page, its assets, and the **demo sandbox** (`/demo/*`) — is
+served **token-free under the Host-allowlist**, because a browser can't attach a token header to a document/iframe
+*navigation* and these files carry no secrets. So "token required on reads too" scopes to the sensitive *data*
+reads; the demo (served under a `sandbox`-directive opaque origin — D102) joins the static class.
 
 ## Disk layout **[layout DECIDED — D53/D62; read/write protocols EXPAND]**
 `init` (`commands/start.md`) scaffolds this layout in a target project:
@@ -74,6 +79,7 @@ D100/`03`. The **port is not a secret**; the **bus token (auth) is distinct from
     parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored
     inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control) the bus writes; matched at boundaries — D90/D91/D93, gitignored
     items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed)
+    demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves under a sandbox-CSP opaque origin; pruned on checkpoint-resolve — D102/D104, gitignored
   <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored
   <project_root>/   # the product (greenfield: project/ ; brownfield: the repo root)
     CLAUDE.md       # the product's own brief

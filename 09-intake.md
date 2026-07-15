@@ -95,6 +95,34 @@ than a wrong build.
 | "Move logout to top-right" | ✓ | ✓ | ✗ pinned | **No** |
 | "Add dark mode" | ✓ | ✓ | design-system-dependent | **Fence → ask** |
 
+## The sandbox — serving, refine loop, storage **[DECIDED — D102–D104]**
+The demo mechanics are **over-determined by the A/B substrate** (like the console stack was, D100): a demo is
+just *more files on disk*, so D93's "the daemon serves files; the orchestrator writes them, never responds"
+already answers who serves it.
+- **Format (D102):** a **build-free, self-contained static bundle** — **no external hosts, no `eval`** (the two
+  invariants that make it render identically local + over the tunnel, offline, never phoning home; the Claude
+  Artifacts discipline). **Vanilla JS + `<template>` + hash routing** by default; **htm + preact vendored
+  locally** (~10 KB, tagged templates, not JSX) as the escape hatch — the *same idiom the console uses* (D100).
+  Banned: CDN `<script>`, `@babel/standalone` / `text/babel` JSX (6 MB + needs `unsafe-eval`), npm/bundlers.
+- **Serve (D102):** the always-on **bus daemon (D94) serves it** — no sibling server, no second port. `create-demo`
+  writes the bundle **before the park** (D90). Isolation from the control surface = the daemon serves `/demo/*`
+  with **`Content-Security-Policy: sandbox allow-scripts allow-forms`** (the `sandbox` *directive* → an **opaque
+  origin** server-side: the demo can't touch the console's storage or token-gated endpoints, and it stays
+  isolated even when the D98 deep-link opens it **top-level** in an away tab), reinforced by the embedded iframe
+  `sandbox="allow-scripts allow-forms"` attribute — **never `allow-same-origin`**. **Demo = look, console = the
+  D97 verdict form around it** (the demo is read-only, no POST, no token). It joins the daemon's **static-asset
+  serving class** (Host-allowlisted, token-free — no secrets), distinct from the token-gated data/command class
+  (`05`). The **away human** reaches it over the *existing* console tunnel for free (remote seeing works; remote
+  verdict submission inherits D95's owner-accepted tunnel caveat).
+- **Refine cap (D103):** the change-request → regenerate mini-loop is bounded at **N regenerations**
+  (config-overridable `config.demo.max_refine_rounds`, **default 3**), counted plainly. On the cap it **never
+  auto-proceeds** (D97) — it **escalates to a live `discuss` session** (a low-bandwidth async channel that won't
+  converge *is* the signal the gap needs high-bandwidth conversation — D93), carrying the refine history.
+- **On disk (D104):** **`.workflow/demos/<item-id>/`** — gitignored runtime (not committed `items/<id>/`; not
+  `/tmp` scratch — it must survive an hours-long park), under the served tree, regenerated in place via atomic
+  write, a pointer in the `parked/<id>` record, **pruned on checkpoint-resolve** (throwaway → just delete; the
+  locked *spec* is the durable artifact, D21). Owner: `create-demo` writes, the audit prune deletes.
+
 ## Commitment model — locked / provisional / unspecified **[DECIDED — D23]**
 Every spec element carries a **commitment status** that tells the loop how to treat a later deviation:
 
@@ -126,9 +154,11 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
   urgency is assigned. *(Interrupt model closed: pure queue, D26. **Continue-while-parked interleaving decided —
   D91:** while a ticket is parked on a checkpoint, `prioritize` picks the next **eligible** ticket — dependency-ready
   ∧ file-disjoint ∧ ¬1-hop-neighbor — capped ≤3, prefer-serial.)*
-- **Demo skill mechanics** — how the sandbox is served/run, refine-round limits, where it lives on disk.
-  *(The demo **trigger** and the checkpoint data model / help set are now closed — D96–D98, `04`; this is the
-  sandbox **serving** mechanics only, cluster D.)*
+- **Demo skill mechanics** — **CLOSED (D102–D104, cluster D):** the sandbox is a build-free self-contained
+  bundle the D94 daemon serves under a `sandbox`-CSP opaque origin (§ *The sandbox — serving, refine loop,
+  storage*); the refine loop caps at 3 regenerations → escalate to `discuss`; it lives at
+  `.workflow/demos/<item-id>/`, pruned on resolve. (The demo **trigger** + checkpoint data model / help set
+  closed earlier — D96–D98, `04`.)
 - **Setup checkpoints** — **closed (D96–D98, `04`):** foreseeable ones declared in the spec `integrations[]` +
   an execute-discovered path; verb-enum verdict, machine-verified, plural+coalesced; MVP help = steps + verified
   deep-links + breadcrumbs.

@@ -76,9 +76,9 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   a stdlib-Python detached daemon + a zero-build CSP-clean page (D100); the two-event notification taxonomy (D101).
 
 ### Space 4 — Checkpoints & the demo skill
-- **Demo skill mechanics** — `create-demo`'s *body* exists, but **how the sandbox is served/run, the
-  refine-round limits, and where it lives on disk** are open (`09`). The product-alignment loop ("did we agree
-  *what* to build") depends on it. **[core]**
+- **Demo skill mechanics** — **DONE (D102–D104):** the sandbox is a build-free, self-contained bundle the D94
+  daemon serves under a `sandbox`-CSP opaque origin (D102); the refine loop caps at 3 → escalate to `discuss`
+  (D103); it lives at `.workflow/demos/<item-id>/`, pruned on resolve (D104). (`09`.) **[done]**
 - **Checkpoint data model + triggers** — **DONE (D96–D98):** the judgment/action taxonomy + trigger rule (setup =
   spec `integrations[]` + execute-discovered; qa=D30, demo=D22 gate, reconcile=ingest), the verb-enum verdict +
   plural machine-verified setup gate, and the MVP help set (contextual steps + verified deep-links + breadcrumbs;
@@ -194,14 +194,15 @@ tracked in `07`) — **D89**.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /
-triggers. *(**IN PROGRESS — clusters A, C, and B CLOSED (D90–D101).** A = the
+triggers. *(**IN PROGRESS — clusters A, C, B, and D CLOSED (D90–D104).** A = the
 checkpoint/console runtime + bus substrate (A1 block/resume + interleaving + context, D90–D92, empirically verified
 on `claude v2.1.209`; A2/A3/A4 bus contract/lifecycle/trust, D93–D95, four research fan-outs). C = checkpoints (C1
 data model, C2 triggers, C3 help set — the judgment/action taxonomy + verb-enum verdict + plural machine-verified
 setup gate + the MVP help set, via two research fan-outs). B = the console (D99–D101 — a read-only supervision cockpit +
 screen list + snapshot-poll + "my requests" surface · a stdlib-Python detached daemon + zero-build CSP-clean page ·
-the two-event notification taxonomy, via two research fan-outs). **Next slice = cluster D (the demo skill).** The full
-agenda + per-item status is below.)*
+the two-event notification taxonomy, via two research fan-outs). **D = the demo skill (D102–D104 — serving/format +
+sandbox-CSP isolation · refine cap · on-disk location, via two research fan-outs). Next slice = cluster E
+(cross-cutting).** The full agenda + per-item status is below.)*
 
 ### Phase 2 — design agenda & dependency sequence *(the resume map)*
 The website+demo design decomposes into five clusters; the dependency spine is **A → C → B → D → E**
@@ -227,15 +228,18 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   the D90/D91 park model. **C2 triggers (D96)** — judgment/action taxonomy; declared-upstream (qa=D30, demo=D22
   gate, reconcile=ingest) + setup's spec-`integrations[]` + execute-discovered path. **C3 help set (D98)** —
   MVP = contextual steps + verified deep-links + breadcrumbs; screenshots/screen-share/live/agent-automation deferred.
-- **D — demo skill.** **D1 serving/running the sandbox** (surfaced in the checkpoint console); **D2 refine-round
-  limits**; **D3 on-disk location**. Open.
+- **D — demo skill. CLOSED (D102–D104).** **D1 serving/format (D102):** a build-free, self-contained static
+  bundle (no external hosts / no eval; vanilla or vendored htm+preact — the D100 idiom) the D94 daemon serves
+  under a `sandbox`-directive CSP opaque origin + iframe-sandbox (isolated even top-level); demo = look, console =
+  verdict form; joins the daemon's static-asset (token-free) serving class; rides the console tunnel for free.
+  **D2 refine cap (D103):** ≤3 regenerations (`config.demo.max_refine_rounds`), never auto-proceed → escalate to
+  live `discuss`. **D3 on-disk (D104):** `.workflow/demos/<item-id>/`, gitignored runtime, pruned on resolve.
 - **E — cross-cutting.** **E1 commitment-status storage** (spec-doc vs node frontmatter); **E2 outward-action
   permission model** (`publish` kind, batching — couples to the bus/inbox, D35/D60); **E3 project-map residuals**
   (tab-vs-home **resolved → tab, D99**; ephemeral-vs-durable ≈ D78; remote-auth still open). Open (E1/E2/E3-remainder).
 
-**Recommended next slice:** **A + C + B are CLOSED (D90–D101).** Next is **D (the demo skill)** — D1 serving/running the
-sandbox (surfaced in the checkpoint console), D2 refine-round limits, D3 on-disk location — then **E (cross-cutting)**
-(E1 commitment-status storage, E2 outward-action permission model, E3 project-map residuals).
+**Recommended next slice:** **A + C + B + D are CLOSED (D90–D104).** Next is **E (cross-cutting)** — E1
+commitment-status storage, E2 outward-action permission model, E3 project-map residuals.
 **Phase 3 — Build the website** (C1 console → C2 bus).
 **Phase 4 — Build the demo.**
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, the **local relaunch-runner**
