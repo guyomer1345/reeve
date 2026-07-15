@@ -27,8 +27,9 @@ At item completion, immediately after `commit`.
 - **GitHub owns open/closed state** — the backlog holds only `github_ref`, never a duplicated local state;
   closing writes no loop-bookkeeping, so this stays a clean post-commit step (the item-tail done-flip already
   rode the commit).
-- Closing the GitHub issue is an **outward action** — gated behind explicit human permission (queued for
-  approval unless pre-authorized).
+- Closing the GitHub issue is an **outward action** — gated behind explicit human permission: unless
+  `config.outward` pre-authorizes it, the `gh issue close` is **queued to `.workflow/outbox/`** and released later via
+  a console `release` (idempotent — already-closed → no-op). The loop never stalls on it.
 - No `github_ref` (item came from steering, not an issue) → nothing to close; exit quietly.
 
 ## Output

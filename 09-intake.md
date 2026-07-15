@@ -136,6 +136,9 @@ Every spec element carries a **commitment status** that tells the loop how to tr
   declares up front "structure & flow = locked-candidate, all styling = provisional," so the user tags
   nothing and just reacts; they override specific items in feedback ("that brand color is final," "the
   onboarding is a placeholder").
+- **Where status lives (D106):** **inline on the spec element** (`screens[]`/`features[]`/`phases[]` `commitment`;
+  STABLE tier, human-owned) — the sole owner. **Never on nodes** (code-derived, regenerated); the drift check reads
+  it code→intent by resolving a node to its spec element. See D106.
 - **Why it matters:** this drives the test/audit phases *and* the Space 6 intent-vs-actual divergence
   check. **Provisional changes must not trip the drift alarm**, or the system spends its autonomy
   chasing ghosts.
@@ -162,7 +165,9 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
 - **Setup checkpoints** — **closed (D96–D98, `04`):** foreseeable ones declared in the spec `integrations[]` +
   an execute-discovered path; verb-enum verdict, machine-verified, plural+coalesced; MVP help = steps + verified
   deep-links + breadcrumbs.
-- **Commitment-status storage** — where locked/provisional/unspecified is recorded (spec doc vs Space 6
-  node frontmatter).
+- **Commitment-status storage** — **CLOSED (D106):** the **spec owns it inline** per element (STABLE, human-owned
+  intake), **never node frontmatter** (a second copy that drifts + gets clobbered on regen — D80/D78); the drift
+  check (`align`/`verify`/`audit`) resolves the changed code node → its spec element (via the node's `purpose.intent`)
+  and reads `commitment` on the **intent side**.
 - **Engineer agent** in the roster — **resolved (D69): no new agent** — the feasibility role is the
   proportional-rigor gate reusing `planner`/`decision-engineer`/`research` (`02`).

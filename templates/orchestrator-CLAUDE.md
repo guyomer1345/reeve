@@ -76,7 +76,7 @@ resumes from `handoff.md` + `git log` (completed items are committed, so nothing
 | `.workflow/backlog.md` | live open queue: issues + roadmap (closed leave) | volatile |
 | `.workflow/items/<id>/` | per-item plan / changelog / verdict / debug-report (planner mkdirs on demand; pruned closed in audit) | committed |
 | `<project_root>/docs/decisions/` | decision records / ADRs (global) | append-only |
-| `.workflow/checkpoints/` | RESERVED — demoted pending the outward-permission model | reserved |
+| `.workflow/outbox/` | pending outward-action queue (push/issue/deploy awaiting a console `release`) | runtime, gitignored |
 | `<project_root>/` | the product code | — |
 | `<project_root>/docs/` | spec · architecture.md · knowledge code-map | stable · generated + append-only `# Sessions` |
 | `.claude/skills/` · `.claude/agents/` · `.claude/commands/` | the capability package | stable |

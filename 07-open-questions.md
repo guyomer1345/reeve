@@ -9,8 +9,9 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Intake follow-ons** (`09`) — engineering-feasibility pass **designed as the proportional-rigor decision gate
   (D69); implementation deferred to `11`** — **D88 recorded the wiring requirement (P3): the triage grades by
   `risk_class` × blast-radius, not code-centrality alone**; **demo-skill mechanics CLOSED (D102–D104 —
-  serving/format · refine cap · on-disk location, `09`)**; commitment-status storage (spec doc vs Space 6 node
-  frontmatter) still open. *(Interrupt model closed: pure queue, D26.)*
+  serving/format · refine cap · on-disk location, `09`)**; **commitment-status storage CLOSED (D106, Phase-2 E1 —
+  spec-inline, human-owned; never node frontmatter; drift check reads code→intent).** *(Interrupt model closed: pure
+  queue, D26.)*
 - **`init` / bootstrap capability** (`10`, D28) — greenfield is straightforward; brownfield **ingest**
   (build the knowledge base + reconstructed spec from existing code) is **DESIGNED (D68) and the `ingest` skill
   is AUTHORED** (`skills/ingest/SKILL.md`) — the ingest *mechanics* (own per-stack generator, two lenses,
@@ -26,13 +27,13 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **What a checkpoint is** (`04`) — **closed (D96–D98):** the judgment/action taxonomy + trigger rule, the
   verb-enum verdict + plural machine-verified setup gate (`shared/schemas.md`), and the MVP help set (contextual
   steps + verified deep-links + breadcrumbs; screenshots/screen-share/agent-automation deferred).
-- **Outward-action permission model** (`04`, D35) — mechanics of the local-autonomous / outward-gated
-  boundary: per-action checkpoint vs standing pre-authorization (config allowlist), batching/queuing of
-  pending outward actions, and whether this is a new checkpoint kind (`publish`) or a flavour of the
-  existing gate. Affects `commit`'s deferred push, `create-issue` (`gh issue create`), `close-issue`
-  (`gh issue close`). MVP-safe default = always-gated per-action; the open part is standing auth + batching.
-  **`.workflow/checkpoints/` persistence rides here (D60):** whether outward/setup approvals get a durable
-  approval ledger (and its retention) is decided with this model; qa/demo verdicts stay disposable bus messages.
+- **Outward-action permission model** (`04`, D35) — **CLOSED (D105, Phase-2 E2):** it is **not** a checkpoint kind —
+  an outward action doesn't park the ticket, so it rides a **transactional-outbox** queue (`.workflow/outbox/`), not
+  the checkpoint gate. Two layers: `guard.sh` (non-overridable floor) + a coarse **`config.outward` allow|ask**
+  allowlist (standing pre-auth, default all `ask`); the loop **defers + continues**, and a console **`kind: release`**
+  batch-approval (explicit `action_ids`) drains the queue. State-bound + TTL'd + no durable ledger. **D60 resolved:**
+  `.workflow/checkpoints/` is **retired → `outbox/`** (setup lives in `parked/`, publish in `outbox/`; the external
+  consequence is the audit, so no ledger). Affects `commit`'s deferred push, `create-issue`, `close-issue`.
   *Surfaced 2026-06-29 (live: the harness gated a push to `main`).*
 - **Website screen list** (`03`) — **CLOSED (D99):** a read-only supervision cockpit (home) · checkpoint console ·
   "my requests" · roadmap/backlog; the map is a **tab, not the home, not the first cut**; snapshot-poll refresh
@@ -44,8 +45,9 @@ Deliberately deferred — known unknowns, to close during build or later.
   patterns, missing-verdict block, and it fires under bypassPermissions). **D87 closed the command-chaining gap
   at the guard level** — an obscured `cd x && git push` / `$(…)` is now hard-blocked so it must run directly
   (where the `ask` prompt fires); `pre-commit.sh` is the git-native backstop (secret + verify + staged-diff).
-  Still open: **build-once-per-wave** (a wave-coordinator, not a command gate); and the fuller **outward
-  checkpoint-queue** (batching / standing pre-auth via the bus) that the `ask`+guard pair only partly covers.
+  Still open: **build-once-per-wave** (a wave-coordinator, not a command gate). The fuller **outward-action queue**
+  (batching / standing pre-auth beyond the `ask`+guard pair) is **CLOSED — the D105 outbox model** (`config.outward`
+  allow|ask + `.workflow/outbox/` + a `release` batch-approval; `guard.sh` stays the non-overridable floor).
 - **First-launch workspace trust** (D58) — the shipped `settings.json` + hooks are **ignored until the folder
   is trusted**, and the trust **dialog doesn't render in some terminals (e.g. WSL)**; `/start` + setup docs must
   give the manual `hasTrustDialogAccepted` flag method, not just "accept the dialog." (Validated: after trust,
@@ -59,8 +61,9 @@ Deliberately deferred — known unknowns, to close during build or later.
   HTTP-stop + idle-janitor), and the **A4 trust** model (D95 — capability token + Host-allowlist + loopback bind).
   **Cluster B (the console) is now CLOSED (D99–D101):** the console model + screen list + snapshot-poll + "my requests"
   surface (D99), the stack (D100), and the two-event attention taxonomy (D101). **Cluster D (the demo skill) is now
-  CLOSED (D102–D104 — serving/format + sandbox-CSP isolation · refine cap · on-disk location).** The next Phase-2
-  slice is **E (cross-cutting)**, tracked in `11`.
+  CLOSED (D102–D104 — serving/format + sandbox-CSP isolation · refine cap · on-disk location).** **Cluster E
+  (cross-cutting) is now CLOSED (D105–D107 — the outward-action outbox · commitment-status storage · project-map
+  residuals + loopback-only-release), so the Phase-2 DESIGN is COMPLETE (next = Phase 3, `11`).**
 - **Real dispatch validation** — the dogfood *simulated* the `research` agent dispatch; the orchestrator→agent
   call + structured return is validated in the harness-real run.
 - **Package install** — loose `.claude/` files are MVP (D57); plugin packaging + `shared/` resolution open.
@@ -99,7 +102,11 @@ Deliberately deferred — known unknowns, to close during build or later.
   — **decided (D78):** `verify` is the observer (it already runs the affected flow); mechanism = `sys.monitoring`
   fire-once (Py 3.12+, measured 1.0×) with coverage-harvest (~1.5×) as the universal fallback; trigger selectively
   where an arm's `known_gaps` flag dynamism. Open: the per-stack mechanism for non-Python (reasoned, not measured).
-  (4) **Remote-control auth** (Cloudflare Access / token) — reserved, warning-only for now.
+  (4) **Remote-control auth** (Cloudflare Access / token) — reserved, warning-only for now. **E3 refinement (D107):**
+  outward-**release** (the D105 outbox) is loopback-only over the unauthed tunnel — read/verdict inherit the
+  owner-accepted caveat, but real tunnel auth is **required-before-remote-release** (the one interaction too
+  destructive for the unauthed tunnel). The other three residuals are confirmed correctly parked (tab-not-home D99;
+  durable-flow ≈ D78; capture-mechanism D78, non-Python open). *Project-map residuals CLOSED as E3.*
 - **Automated testing**, **test-from-anywhere**, **paid device/QA platform** (`04`) — designed-for,
   not built.
 - **Target OS/FS portability family (D89 + D93/D94/D95)** — a cluster of "the target isn't POSIX-ext4" gaps, tracked

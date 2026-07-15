@@ -30,7 +30,7 @@ built-in Claude Code command.
      state.json        # live position — RUNTIME, add to .gitignore
      handoff.md        # durable resume anchor          (committed)
      backlog.md        # live OPEN queue (issues + roadmap; closed leave) (committed)
-     checkpoints/      # RESERVED — demoted; no writer yet
+     outbox/           # RUNTIME — pending outward-action queue (push/issue awaiting a console release); add to .gitignore
    <project_root>/     # the product (greenfield: project/ ; brownfield: repo root)
      llms.txt          # thin agent entry point → docs/knowledge/  (committed)
      rules/            # engineering rules — specialized baseline, subtree-overridable (committed)

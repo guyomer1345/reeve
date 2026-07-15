@@ -69,5 +69,7 @@ A commit — the checkpoint marker. Its `Closes:` trailer names the issue that `
 
 ## References
 Remote push and the branch lifecycle (the parallel-work merge/conflict extension) sit beyond this skill.
-Commit is local and autonomous; **push is an outward action — gated behind explicit human permission** (the
-loop keeps committing and queues the push for approval).
+Commit is local and autonomous; **push is an outward action — gated behind explicit human permission**:
+unless `config.outward` pre-authorizes it (`allow`), the loop **queues the push to `.workflow/outbox/` and keeps
+committing** — a console `release` batch-approval fires it later (re-run through `guard.sh`). It never stalls on the
+push.

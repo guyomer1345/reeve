@@ -132,8 +132,8 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
 - `{ ticket_id, token, worktree, branch, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }`
 
 ## inbox-message  · appended to the inbox by the bus when the console POSTs · *`.workflow/inbox/<ts>-<uuid>-<pid>.json`; append-only, durable (atomic write+rename), at-least-once; RUNTIME, kept on a native filesystem*
-Every console→orchestrator message is **typed** — `kind: verdict|intake|control` — one uniform durable transport,
-dispatched at a scheduler boundary **by kind**. **Single consumer** (the one orchestrator) → no `processing/`
+Every console→orchestrator message is **typed** — `kind: verdict|intake|control|release` — one uniform durable
+transport, dispatched at a scheduler boundary **by kind**. **Single consumer** (the one orchestrator) → no `processing/`
 claim-by-rename needed; matched **idempotently, single-shot** (duplicate → no-op). The bus returns `202 Accepted` +
 a `Location` ticket at POST time; any result surfaces via orchestrator-written state the console re-reads by ticket —
 the orchestrator **never responds synchronously** (it is a boundary batch-consumer, not an HTTP responder).
@@ -146,6 +146,31 @@ the orchestrator **never responds synchronously** (it is a boundary batch-consum
   `node_ids` present when the project-map screen emitted it.
 - **`kind: control`** — `{ ticket, op }` (e.g. `reprioritize`, `pause`) — a loop-control command honored at the next
   boundary (non-preemptive).
+- **`kind: release`** — `{ action_ids[] }` — a human **batch-approval** of pending outward actions; the
+  orchestrator executes each named `outbox` entry (re-run through `guard.sh`) at the next boundary and marks it
+  `executed`. **Always by explicit `action_ids`** (a snapshot of what the human saw — items enqueued after the glance
+  are simply not in the set); never an "approve-all-pending" wildcard. Distinct from `verdict`: it resumes **no**
+  parked ticket (an outward action never parked the loop), it just fires a deferred side-effect.
+
+## outbox / pending-outward-action  · written by the orchestrator when a skill defers an outward action, cleared by the `release` consumer · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, single-writer (orchestrator); the mirror of the bus-owned `inbox/`*
+The **transactional-outbox** queue behind the "never stalls — queue the outward action, one approval releases a
+batch" rule. An outward action (`push`, `issue-create`, `issue-close`, later `deploy` / `send`) is **not** a
+checkpoint — it doesn't park the ticket (the commit is local, the ticket completes, the loop advances). When the
+skill's `config.outward` check (below) yields `ask`, it appends a record here and continues; a console `release`
+fires it.
+- `{ id, action ∈ { push, issue-create, issue-close, deploy, send }, args, item_ref, created_at, ttl, state_binding, status ∈ { pending, executed, rejected, dropped } }`.
+- **`state_binding`** — what the action was queued against, re-validated at release (TOCTOU defense): `push` binds
+  `{ branch, floor_sha }` (release re-scans the outgoing range through `guard.sh`; a rebased-away floor →
+  invalidate + re-surface); `issue-create` binds the local backlog item (closed meanwhile → **drop**); `issue-close`
+  is idempotent. **Divergent state invalidates + re-surfaces, never silently fires.**
+- **`ttl`** — a queued action **drops on expiry** (never silently fires stale); drop ≠ escalate (an outward action
+  isn't blocking). Config-overridable.
+- **Two-layer gate:** **Layer 1** = `guard.sh`, the non-overridable mechanical floor (secret-scan + verify-before-commit
+  + the command-chaining block), fires on execute regardless of config; **Layer 2** = `config.outward` (below), the
+  overridable human-approval layer. Standing pre-auth waives the human, never the checks.
+- **No durable ledger:** single-user = author-is-approver → segregation-of-duties moot → the action's own external
+  consequence (moved git ref / GitHub issue event / deploy record) is the audit; the away-run digest is the console
+  activity feed + `handoff.md`, not a new artifact.
 
 ## issue  · produced by `create-issue`, closed by `close-issue` · *filed into `backlog.md` — a **live open queue** (rewrite-in-place; closed entries leave, GC'd by `prioritize`), not append-only*
 - `{ title, kind: bug|feature|debt, description, severity, source, depends_on[] }` — `prioritize` orders on all
@@ -172,6 +197,13 @@ the orchestrator **never responds synchronously** (it is a boundary batch-consum
   since `.workflow/align/anchor.json`'s `base_sha` before an `align` item is injected) + `max_agents` (hard cap
   on the semantic pass's fan-out; deferred surface rides the next scan). **Decoupled from `retention`** (drift
   risk ≠ memory pressure). Absent → shipped defaults (every_n_commits 20, max_agents 6).
+- `outward` — the standing-pre-authorization allowlist for outward actions, in Claude Code's own
+  `permissions.{allow, ask, deny}` shape (deny→ask→allow, first-match-wins), **coarse per-action-class**
+  (`push` / `issue-create` / `issue-close` / later `deploy` / `send`). Absent → **all `ask`** (MVP-safe:
+  every outward action gated per-action, queued to `outbox/`). This is Layer 2 (human approval); it never waives
+  Layer 1 (`guard.sh`). **Fine-grained scoping** (e.g. never auto-push `main`) belongs in `guard.sh`, **not** a
+  config allow-pattern (Claude Code documents arg-constraining patterns as fragile → use deny + hooks). Optional
+  `outbox_ttl` sets the pending-action expiry.
 
 ## bus.json  · written by the bus daemon at boot, read by `/start` + the browser · *`.workflow/bus.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ pid, port, token, started_at }` — the daemon's discovery + auth record. `port` = a dynamic **loopback**
@@ -196,5 +228,5 @@ is open (crash-survival) and **pruned once closed** by the `audit` pass — but 
 its essence and writes a `promoted.json` (`{ "promoted": true }`) marker into the dir; without it the prune
 skips the dir, so retention never deletes un-promoted memory. `decision-record`s stay global +
 append-only under `<project_root>/docs/decisions/`, with a VOLATILE `index.md` + superseded bodies GC'd to git;
-`checkpoints/` is **reserved**. Rule: per-item ephemeral artifacts are item-scoped; cross-item memory is
-type-scoped.
+the previously-reserved `checkpoints/` is **retired → `outbox/`** (the pending-outward-action queue). Rule: per-item
+ephemeral artifacts are item-scoped; cross-item memory is type-scoped.

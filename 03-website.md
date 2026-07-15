@@ -10,7 +10,7 @@ orchestrator only via the local bus + files — never by routing Claude.
   trust — is owned by `05`; the console side is only a **client** of it.
 - **Two mechanisms (D93):** the console **reads** live state synchronously from the files the bus serves
   (`state.json` + the knowledge base), and **commands** are async — a POST gets `202 Accepted` + a ticket, lands in
-  the durable **typed inbox** (`verdict|intake|control`), and the orchestrator consumes it at a boundary. **The
+  the durable **typed inbox** (`verdict|intake|control|release`), and the orchestrator consumes it at a boundary. **The
   orchestrator never responds synchronously** (D90), so the console is a state-reader + command-sender, **not a
   chat**; a result surfaces as state the console re-reads by ticket.
 - **Verdict delivery (D90/D91):** a verdict POSTs → durable inbox keyed by the checkpoint **token** → the parked
@@ -46,6 +46,13 @@ Local-served by default; opt-in **"remote control"** serves the console over a t
 token is **never** reused as tunnel auth (over the wire there is no 0600 file to gate it). Real tunnel auth
 (Cloudflare Access / HMAC) is the reserved upgrade for when the risk is no longer acceptable.
 
+**Outward-release is loopback-only over an unauthed tunnel (D107).** The E2 outbox (D105) adds the highest-consequence
+console interaction: a forged *verdict* drives *local* work, but a forged **release** fires an *outward, irreversible*
+effect (push/deploy). So over the owner-accepted unauthed tunnel, **the release form is served/accepted on loopback
+only**; read + verdict inherit the pre-existing owner-accepted caveat (as demo-viewing did, D102). Real tunnel auth
+moves from *reserved-optional* to **required-before-remote-release** — the tunnel carries low-consequence interactions
+at owner-accepted risk, but not "authorize an outward side-effect" until auth lands.
+
 ## Console model + screens **[DECIDED — D99 (closes B1/B2/B3)]**
 **MVP = a read-only supervision cockpit, not a project explorer.** The console has two latent modes — *supervise a
 live run* and *explore the project* — and only supervision is MVP (the dogfood's one critical-path job: deliver a
@@ -60,12 +67,15 @@ checkpoint verdict + status away from the terminal).
   JSON; a monotonic `version`/`ETag` → `304` skips the re-render; polling pauses on `document.hidden`. inotify→SSE is
   the reserved "re-read" ergonomics hint (D93), never load-bearing — safe because urgency rides the Notification hook
   (below), not the page.
-- **Contact-orchestrator UX** (B3 — the D93 principle made concrete) = two POST forms + a feedback surface: a
+- **Contact-orchestrator UX** (B3 — the D93 principle made concrete) = POST forms + a feedback surface: a
   **verdict** form (D97 `{outcome, notes, returns?}` / plural `tasks[]`; renders the D98 steps + verified deep-links +
-  breadcrumbs for `setup`), an **intake** form (the D70 node→ticket click is a pre-filled intake), and the **"my
-  requests" view** — each POST returns `202` + a `Location` ticket saved to `localStorage`; the view is the polled
-  state *filtered* by those ticket ids, so `pending→consumed→resolved` is legible with **no new endpoint**. This is
-  what keeps the async, not-a-chat model (D93) usable instead of a void.
+  breadcrumbs for `setup`), an **intake** form (the D70 node→ticket click is a pre-filled intake), a **release** form
+  (D105 — the pending-outbox panel: the queued outward actions, batch-approved by explicit `action_ids` → a
+  `kind: release` POST), and the **"my requests" view** — each POST returns `202` + a `Location` ticket saved to
+  `localStorage`; the view is the polled state *filtered* by those ticket ids, so `pending→consumed→resolved` is
+  legible with **no new endpoint**. This is what keeps the async, not-a-chat model (D93) usable instead of a void.
+- **Pending outward actions (D105)** ride the cockpit as a **pull** surface (a count + the release form), **not** a
+  notification (D101 excluded outward-gate pings) — an outward action doesn't block the loop, so it doesn't interrupt.
 
 ## Stack **[DECIDED — D100 (closes B4)]**
 A **daemon process + a static page it serves**, not a web app — the shape is forced by A2/A3/A4 + the pure-config

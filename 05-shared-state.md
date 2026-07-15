@@ -22,7 +22,7 @@ catches a torn file — `state.json` included; `handoff.md` additionally fsyncs 
 **commands**: the bus returns `202 Accepted` + a `Location` ticket and appends the message to the **inbox**; the
 orchestrator consumes it at a scheduler boundary; any result surfaces via orchestrator-written state the console
 re-reads by ticket (Async Request-Reply). **The orchestrator is never an HTTP responder** (D90) — a synchronous
-request→orchestrator→response path cannot exist. Messages are **one typed inbox** — `kind: verdict|intake|control` —
+request→orchestrator→response path cannot exist. Messages are **one typed inbox** — `kind: verdict|intake|control|release` —
 single-consumer, idempotent, single-shot. File-watching stays **rejected for control-flow** (fragile, races); an
 optional inotify/SSE signal only ever means "re-read", never carries the load.
 - **`verdict`** resumes a parked ticket via `claude --resume <id> -p "<verdict>"` (D90); the checkpoint `token`
@@ -32,6 +32,9 @@ optional inotify/SSE signal only ever means "re-read", never carries the load.
   `intake` message (payload: node ID(s) + the ask), never a privileged fast-path. Node IDs are the code-map's stable
   keys (today relpath/module; symbol-level later).
 - **`control`** is a non-preemptive loop command (reprioritize / pause), honored at the next boundary (D26).
+- **`release`** is a human **batch-approval** of pending outward actions (D105) — `{ action_ids[] }`; the orchestrator
+  fires each named `outbox/` entry (re-run through `guard.sh`) at the next boundary. It resumes **no** parked ticket
+  (an outward action never parked the loop): a deferred side-effect, not a checkpoint verdict.
 - **Conversation vs command (D93):** the console is **not** a real-time chat — the loop is a batch consumer.
   New-feature **dialogue** happens at the terminal (the live `discuss` session); the bus carries only *requests*
   (intake) + *bounded clarifications* (an orchestrator-parked checkpoint question). A future console chat would be
@@ -74,10 +77,10 @@ reads; the demo (served under a `sandbox`-directive opaque origin — D102) join
     state.json      # live position (item/phase/wave) — RUNTIME (atomic-publish, D93), gitignored
     handoff.md      # durable resume anchor                         (committed)
     backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed)
-    checkpoints/    # RESERVED — demoted (D60); no writer yet
+    outbox/         # RUNTIME — pending-outward-action queue (push/issue/deploy the orchestrator deferred, awaiting a console `release`) — D105 (retires the D60-reserved checkpoints/), gitignored
     bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored
     parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored
-    inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control) the bus writes; matched at boundaries — D90/D91/D93, gitignored
+    inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control|release) the bus writes; matched at boundaries — D90/D91/D93/D105, gitignored
     items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed)
     demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves under a sandbox-CSP opaque origin; pruned on checkpoint-resolve — D102/D104, gitignored
   <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored
@@ -119,7 +122,27 @@ append-only completed-step log** (each item ends in a `commit`). Mid-run the orc
 a cold start reads `handoff.md` + `git log` and rebuilds. **Bounded by construction (D51):** every
 always-read file (`CLAUDE.md`, `state.json`, `handoff.md`, `loop.md`) holds current state only — never history.
 
-Still to close: symbol-level knowledge paths; outward-action permission mechanics (batching / standing pre-auth over
-the inbox — D35, couples to E2). *(Read/write ownership + the request/response protocol closed — D93 [single-writer +
-the two-mechanism protocol]; bus lifecycle — D94; bus trust — D95; retention/read law — D61; docs-root unified under
-`<project_root>/docs/` — D62.)*
+## Outward-action permission — the outbox **[DECIDED — D105/D35]**
+Local/reversible work runs autonomously; every **outward, side-effecting** action (`git push`, `gh issue create`,
+`gh issue close`, later deploys / message-sends) is gated — but **the loop never stalls** (D35). An outward action is
+**not** a checkpoint: it doesn't park the ticket (the commit is already local, the ticket completes, the loop
+advances). It is the **transactional-outbox** pattern:
+- **Defer, don't block.** The skill self-gates against **`config.outward`** (Claude Code's `permissions.{allow,ask,deny}`
+  shape, deny→ask→allow, coarse per-action-class, default all `ask`). Match `allow` → run the command (still through
+  `guard.sh`); else **append a record to `.workflow/outbox/` and continue** — never attempt-and-let-the-harness-`ask`
+  (that blocks + can't work away-from-terminal; the harness `ask`-prefix is only a backstop).
+- **Release drains it.** The console renders the pending `outbox/`; the human approves a batch → a **`kind: release`**
+  inbox message (explicit `action_ids`) → the orchestrator fires each at a boundary (re-run through `guard.sh`), marks
+  it `executed`. One approval releases a batch (D35).
+- **Two layers.** `guard.sh` = the non-overridable mechanical floor (Layer 1); `config.outward` = the overridable
+  human-approval layer (Layer 2). Standing pre-auth waives the human, never the checks. Fine-grained scoping (never
+  auto-push `main`) lives in `guard.sh`, not fragile config allow-patterns.
+- **Safety** (the outbox anti-patterns, closed up front): each entry is **state-bound** and re-validated on release
+  (divergent history invalidates + re-surfaces, never silently fires — TOCTOU); a **TTL** drops a stale entry (never
+  fires late); release is **always by explicit `action_id`** (batch snapshot). **No notification** (D101 — a pull
+  surface on the D99 cockpit, not a ping) and **no durable ledger** (the external consequence is the audit — D60).
+  Schema: `shared/schemas.md` *outbox* + *inbox-message* (`release`) + `config.outward`.
+
+Still to close: symbol-level knowledge paths. *(Read/write ownership + the request/response protocol closed — D93
+[single-writer + the two-mechanism protocol]; bus lifecycle — D94; bus trust — D95; **outward-action mechanics — D105**;
+retention/read law — D61; docs-root unified under `<project_root>/docs/` — D62.)*

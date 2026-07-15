@@ -16,6 +16,14 @@ verdict below:
 - **Action** ("do something in the world I can't reach") — `setup` (perform an external action, obtain a
   credential). The verdict is "I did it" + a returned artifact, then **machine-verified**.
 
+**Not a checkpoint: authorizing an *outward* action (D105).** Approving a `git push` / `gh issue create|close` /
+deploy is *not* a fifth checkpoint kind — the real fault line is **blocks-the-ticket (a checkpoint parks and resumes)
+vs defers-a-side-effect**. An outward action blocks nothing (the commit is local, the ticket completes, the loop
+advances — D35 never-stall), so it never parks; it rides the **outbox** queue (`05` / `shared/schemas.md`), gated by
+`config.outward` + `guard.sh` and released in batches over the `kind: release` inbox message. `setup` (the human
+*does* an external action the loop can't) is a genuine checkpoint; `publish` (the human *authorizes* the loop to do
+one) is not — don't conflate them.
+
 ## Block/resume mechanism **[DECIDED — D90, empirically verified]**
 A checkpoint is a **durable park boundary**, not a live in-session wait (nothing inside Claude can self-wake — no
 background-exit re-invoke, no hook that wakes an idle model). The orchestrator writes the graceful handoff +

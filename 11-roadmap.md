@@ -92,8 +92,10 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   (zero co-written files; intake promoted through the inbox, not written to the backlog) + atomic-publish + the
   two-mechanism protocol (sync reads · async commands); **the orchestrator is never an HTTP responder.** Bus
   lifecycle D94, trust D95. **[core — designed; build Phase 3]**
-- **Outward-action permission mechanics** — standing pre-auth vs per-action, batching/queuing; the robust gate
-  (beyond `ask` prefix-match) needs the bus checkpoint-queue (D35). **[stageable → core with bus]**
+- **Outward-action permission mechanics** — **DECIDED (D105, Phase-2 E2):** a **transactional-outbox** queue
+  (`.workflow/outbox/`, retiring the D60 `checkpoints/`), **not** a checkpoint; `guard.sh` floor + a coarse
+  `config.outward` allow|ask allowlist (standing pre-auth); the loop defers + continues, a console `kind: release`
+  batch-approval drains it (state-bound, TTL'd, no ledger). Build rides Phase 3 (with the bus). **[core — designed; build Phase 3]**
 - **Symbol-level knowledge paths** — the seam left in Space-6 granularity. **[later]**
 
 ### Space 6 — Knowledge generation & ingest
@@ -194,15 +196,16 @@ tracked in `07`) — **D89**.)*
 **Phase 2 — Define the website + demo (design, not build).** Close the Space-3 and Space-4 *design* questions
 as a complete spec: the website screen list / contact-UX / stream-vs-snapshot / stack, **and** the demo skill
 mechanics (serving/running the sandbox, refine limits, on-disk location) + the checkpoint data model /
-triggers. *(**IN PROGRESS — clusters A, C, B, and D CLOSED (D90–D104).** A = the
+triggers. *(**COMPLETE — all five clusters A–E CLOSED (D90–D107).** A = the
 checkpoint/console runtime + bus substrate (A1 block/resume + interleaving + context, D90–D92, empirically verified
 on `claude v2.1.209`; A2/A3/A4 bus contract/lifecycle/trust, D93–D95, four research fan-outs). C = checkpoints (C1
 data model, C2 triggers, C3 help set — the judgment/action taxonomy + verb-enum verdict + plural machine-verified
 setup gate + the MVP help set, via two research fan-outs). B = the console (D99–D101 — a read-only supervision cockpit +
 screen list + snapshot-poll + "my requests" surface · a stdlib-Python detached daemon + zero-build CSP-clean page ·
 the two-event notification taxonomy, via two research fan-outs). **D = the demo skill (D102–D104 — serving/format +
-sandbox-CSP isolation · refine cap · on-disk location, via two research fan-outs). Next slice = cluster E
-(cross-cutting).** The full agenda + per-item status is below.)*
+sandbox-CSP isolation · refine cap · on-disk location, via two research fan-outs). E = cross-cutting (D105–D107 —
+the outward-action outbox · commitment-status storage · project-map residuals, via one research fan-out).**
+**Phase-2 DESIGN COMPLETE → Phase 3 (build the website).** The full agenda + per-item status is below.)*
 
 ### Phase 2 — design agenda & dependency sequence *(the resume map)*
 The website+demo design decomposes into five clusters; the dependency spine is **A → C → B → D → E**
@@ -210,7 +213,7 @@ The website+demo design decomposes into five clusters; the dependency spine is *
 - **A — bus / comms substrate. CLOSED (D90–D95).** **A1 block/resume mechanism (D90):** checkpoint = durable park,
   resume via `claude --resume` (verdict-as-prompt), manual restart in MVP / local relaunch-runner later; **+ D91
   interleaving, D92 context.** **A2 bus contract (D93):** single-writer ownership + atomic-publish + a two-mechanism
-  protocol (sync reads · async commands) + one typed inbox (`verdict|intake|control`) — the orchestrator is never an
+  protocol (sync reads · async commands) + one typed inbox (`verdict|intake|control|release`) — the orchestrator is never an
   HTTP responder; the conversation corollary (dialogue = terminal, bus = requests + bounded clarifications).
   **A3 website/bus lifecycle (D94):** a session-independent detached daemon, ensure-running via `flock`-authority +
   token'd `/health`, `POST /shutdown` + idle-janitor; WSL2 dies-with-terminal. **A4 local-bus trust (D95):**
@@ -234,12 +237,17 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   verdict form; joins the daemon's static-asset (token-free) serving class; rides the console tunnel for free.
   **D2 refine cap (D103):** ≤3 regenerations (`config.demo.max_refine_rounds`), never auto-proceed → escalate to
   live `discuss`. **D3 on-disk (D104):** `.workflow/demos/<item-id>/`, gitignored runtime, pruned on resolve.
-- **E — cross-cutting.** **E1 commitment-status storage** (spec-doc vs node frontmatter); **E2 outward-action
-  permission model** (`publish` kind, batching — couples to the bus/inbox, D35/D60); **E3 project-map residuals**
-  (tab-vs-home **resolved → tab, D99**; ephemeral-vs-durable ≈ D78; remote-auth still open). Open (E1/E2/E3-remainder).
+- **E — cross-cutting. CLOSED (D105–D107).** **E2 outward-action permission model (D105):** a **transactional-outbox**
+  queue (`.workflow/outbox/`, retiring the D60 `checkpoints/`) — **not** a checkpoint (an outward action never parks
+  the ticket); `guard.sh` floor + a coarse `config.outward` allow|ask allowlist; the loop defers + continues, a
+  console **`kind: release`** batch-approval (explicit `action_ids`) drains it; state-bound + TTL'd + no durable ledger.
+  **E1 commitment-status storage (D106):** **spec-inline**, human-owned (never node frontmatter — a second copy that
+  drifts + regen-clobbers); the drift check reads it **code→intent**. **E3 project-map residuals (D107):** the four
+  D70 residuals confirmed parked (tab-not-home D99; durable-flow ≈ D78; capture D78; non-Python + remote-auth open) —
+  the one E2-forced call: **outward-release is loopback-only** over the unauthed tunnel (real tunnel auth
+  required-before-remote-release).
 
-**Recommended next slice:** **A + C + B + D are CLOSED (D90–D104).** Next is **E (cross-cutting)** — E1
-commitment-status storage, E2 outward-action permission model, E3 project-map residuals.
+**Recommended next slice:** **A + C + B + D + E are ALL CLOSED (D90–D107) → the Phase-2 DESIGN is COMPLETE.** Next is
 **Phase 3 — Build the website** (C1 console → C2 bus).
 **Phase 4 — Build the demo.**
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, the **local relaunch-runner**
