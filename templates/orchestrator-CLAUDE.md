@@ -21,18 +21,37 @@ The build loop is defined in `.workflow/loop.md` — the routing graph (nodes + 
 edges) and its diagram. You are always somewhere in it. Read it to decide the next node;
 don't carry the graph in your head.
 
-## Each turn: read → place → advance
-1. **Read** `.workflow/state.json` to find where you are. On a cold start (fresh session),
+## Each turn: drain → read → place → advance
+1. **Drain** `.workflow/inbox/` — the console's messages to you. List it, **skip any `message_id`
+   already in `handoff.md`'s consumed-set**, then apply the rest **by kind, in this order**:
+   - `control` (reprioritize / pause) — first, so it's honored by the pick you're about to make.
+   - `verdict` — resume the parked ticket whose `token` matches (oldest verdict first). An unknown
+     or already-closed token → **dead-letter and surface it**, never a silent resume.
+   - `intake` — promote into `backlog.md` through triage, stamping the message's id into the new
+     item's `source`. If an item already carries that id, it's already promoted: skip.
+   - `release` — fire each named `outbox/` entry (skip any already `executed`).
+
+   Record every applied id in the consumed-set and republish `handoff.md`. **Never delete an inbox
+   file** — the bus owns that directory and collects consumed messages itself once you publish the
+   `consumed_through` watermark. The **one** exception: a consumed message carrying a **sensitive**
+   value is unlinked immediately after you write that value to the secret store.
+
+   This step is what resumes parked work — skip it and a checkpoint never unparks.
+2. **Read** `.workflow/state.json` to find where you are. On a cold start (fresh session),
    read `.workflow/handoff.md` + `git log` instead and rebuild position.
-2. **Place** yourself: mid-item → continue that item's sub-loop. Between items → run
+3. **Place** yourself: mid-item → continue that item's sub-loop. Between items → run
    `prioritize` to pick the next item (or wave).
-3. **Advance**: look up the current node's out-edges in `loop.md`, dispatch that node's
+4. **Advance**: look up the current node's out-edges in `loop.md`, dispatch that node's
    skill, and on its output follow the matching edge. Write the new position to `state.json`.
 
 ## Invariants
 **Bounded by construction.** The files you read every turn — this file, `state.json`,
 `handoff.md`, `loop.md` — are rewritten in place, never appended to. They hold current
 state only, never history, within a small size budget. History lives in git.
+
+**One orchestrator per repo.** Nothing enforces this. Two sessions driving the same
+`.workflow/` will silently clobber each other's state — an atomic write stops a torn *read*,
+not a lost *update*. If a session is already driving this repo, do not start a second.
 
 **Enforced by hooks (you cannot cross these):**
 - No commit until `verify` passes for the item.
@@ -57,8 +76,10 @@ state only, never history, within a small size budget. History lives in git.
   code / append-only). Delegate the write to the skill that owns it.
 
 ## Checkpoints
-A checkpoint is an explicit pause: post what to verify and how to the console, then block
-and wait for the human's verdict on the bus. Pass → continue. Fail → `debug` → `refine`.
+A checkpoint is a **durable park**, not a live wait — nothing you run can sit and wait for a
+human. Post what to verify and how, write the parked record, then **yield**: move on to the next
+independent ticket if one is eligible, otherwise end the turn. The verdict arrives on the bus and
+unparks that ticket at a later **drain** (step 1 above) — never inside this turn.
 
 ## Handoff & resume
 When context runs low: finish or park the current item, run `document`, `commit`, then

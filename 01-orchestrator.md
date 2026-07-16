@@ -83,9 +83,15 @@ per-capability *how*), it encodes:
   reads every turn (`CLAUDE.md`, `state.json`, `handoff.md`, `loop.md`) are rewritten in place, never grown.
 - **The loop** — a *pointer* to `.workflow/loop.md` (routing graph + diagram), read on demand to route
   (definition vs position — `loop.md` is the fixed topology, `state.json` the live pin).
-- **The control algorithm** — *read* `state.json` (cold start: `handoff.md` + `git log`) → *place* (mid-item
-  continue; between items `prioritize`) → *advance* (look up the node's edges, dispatch, follow the result,
-  write `state.json`).
+- **The control algorithm** — *drain* (consume the inbox — see below) → *read* `state.json` (cold start:
+  `handoff.md` + `git log`) → *place* (mid-item continue; between items `prioritize`) → *advance* (look up the
+  node's edges, dispatch, follow the result, write `state.json`).
+- **The boundary drain [DECIDED — D108]** — at every scheduler boundary the orchestrator consumes `inbox/` before
+  it schedules, **all kinds, uniformly**: list `inbox/` → skip `message_id`s already in the `handoff.md`
+  consumed-set → **apply `control`** (so a reprioritize is honored by the pick that follows) → **resume a
+  ready-parked ticket** (oldest verdict first, +aging — D91) → **promote `intake`** into the backlog through triage
+  → **start-new** → **fire `release`** through `guard.sh` → sleep. Without this step an orchestrator following its
+  brief literally would park at a checkpoint and never consume the verdict that unparks it.
 - **Invariants split** — **enforced** (secret-scan + verify-before-commit = `hooks/guard.sh`; the outward-action
   gate = the `config.outward`/outbox defer-and-release model over the `guard.sh` floor — the settings `ask` rule
   is only the harness backstop, D105; build-once-per-wave deferred) vs **disposition** (hub-and-spoke; pure queue;

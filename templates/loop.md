@@ -41,6 +41,27 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 
 Side doors (callable from anywhere): `create-issue` → backlog · `research` (service).
 
+## Scheduler boundary — the inbox drain
+Between items (and before any pick) the orchestrator **drains `.workflow/inbox/`** — the console's typed
+messages to the loop. This is **plain control-flow, not a node**: no skill runs and no edge is followed, so it
+appears nowhere in the table above. Order within one boundary:
+
+`drain (skip already-consumed ids) → apply control → resume a ready-parked ticket (oldest verdict first, +aging)
+→ promote intake → start-new → fire release → sleep`
+
+What each kind does at the boundary, and the anchor that makes a repeat a no-op:
+- **verdict** — resumes the parked ticket whose `token` matches; an unknown or already-closed token → dead-letter
+  and surface it. *Anchor:* the token itself (already closed → no-op).
+- **intake** — promoted into `backlog.md` through triage, stamped with the source message id. *Anchor:* that stamp
+  (an item already carrying the id is already promoted → skip).
+- **control** — reprioritize / pause, honored here only (non-preemptive; never mid-item). *Anchor:* none possible,
+  so control ops are required to be idempotent.
+- **release** — fires the named `outbox/` entries through `guard.sh`. *Anchor:* the entry's status (already fired
+  → skip).
+
+A parked ticket resumes **only** via this drain. Applied ids are recorded in `handoff.md`'s consumed-set; the
+consumer **never deletes** an inbox file (the bus owns that directory and collects consumed messages itself).
+
 ## Maintenance items
 `prioritize` injects a **maintenance item** on a threshold (§ `prioritize`): a *retention/size* threshold →
 `document:audit` (bound the append-only tier); a *drift* threshold → `align` (reconcile spec/decisions/promises

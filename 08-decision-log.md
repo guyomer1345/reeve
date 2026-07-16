@@ -2097,6 +2097,85 @@ The D70 project-map/flow-view residuals, mostly confirmed correctly parked elsew
 *Rejected:* exposing release over the unauthed tunnel like read/verdict (release is a strictly larger blast radius — an outward irreversible effect, not local work); forcing real tunnel auth into MVP now (release-over-loopback needs none; the tunnel stays opt-in/off-by-default).
 *Evidence:* D70/D95 (tunnel warning-only, owner-accepted, token-never-reused-as-tunnel-auth); D99/D78 (tab, durable observed layer); the outward-gate research ("the approval channel must be at least as trusted as the action is destructive"). → `03`/`07`/`05`/`11`.
 
+## D108 — Inbox consume: a `handoff.md` consumed-set + a per-kind effect anchor; the consumer never deletes, the bus GCs on a watermark **[DECIDED — pre-Phase-3 F1; folds JF1 + JF9]**
+The inbox advertised "idempotent, single-shot" but only *implied* the mechanism, and only `verdict` (parked-token) and
+`release` (outbox `executed`) had a natural anchor — so a routine cold start re-read `inbox/` and **re-promoted an
+already-consumed intake** / re-fired a `control` op. The model closes on three rules:
+- **(1) Consume = record, never delete.** D93 makes the bus the *sole writer* of `inbox/`, so "delete-after-consume"
+  was a latent **D93 violation hiding in a footnote**. Instead the orchestrator keeps a durable **consumed-set** of
+  the bus-assigned `message_id` (the filename stem `<ts>-<uuid>-<pid>` — already unique, now canonical) on
+  **`handoff.md`**: each boundary it lists `inbox/`, skips ids in the set, applies the rest, records their ids,
+  atomically republishes. On `handoff.md` because that is *the* durable cold-start rebuild anchor — the exact moment
+  the set is load-bearing; `state.json` is volatile + republished per iteration (wrong tier). Ids only → small, no
+  secret, git-safe.
+- **(2) Two idempotency layers — neither alone suffices.** The consumed-set covers the normal path; apply-then-record
+  has a **crash window** (crash between → re-apply on restart), so each kind's *effect* must also be idempotent:
+  **verdict** → the parked token (already-closed → dead-letter/no-op) · **release** → the outbox `executed` status ·
+  **intake** → the **source `message_id` stamped on the promoted item** · **control** → a standing rule that
+  **control ops MUST be idempotent** (no durable artifact exists to anchor on; `reprioritize`/`pause` already are —
+  a non-idempotent op may not be added without bringing its own anchor).
+- **(3) Bounded by a watermark.** The orchestrator publishes `consumed_through`; the **bus** GCs inbox files ≤ it
+  (staying sole writer of its own partition) and the set prunes to ids above it — bounding inbox *and* set while
+  adding a second writer to neither. Volume is human-interaction-paced (the autonomous loop never writes the inbox),
+  so this is hygiene, not a hot path. **Sole carve-out:** a consumed **sensitive** record is unlinked by the
+  orchestrator immediately after the credential lands in the secret store (D111) — a secret's latency-to-zero must
+  not wait on a janitor.
+- **JF9 is the same mechanism, not a second one.** Intake's missing dedup anchor and "my requests"' missing
+  correlation key are one gap: the source-`message_id` stamp closes both. The register asked for two things; they
+  cost one field.
+- **JF1 wired — the drain step.** The boundary drain was fully decided (D91/D93/D26) yet present in **neither driver
+  artifact**: an orchestrator following its brief literally would park at a checkpoint and never consume the verdict
+  that unparks it. Now in `templates/orchestrator-CLAUDE.md` (read→place→advance becomes
+  **drain**→read→place→advance), `templates/loop.md` (a prose *Scheduler boundary* section — the drain is plain
+  control-flow, **not** a routing node, so the contract linter stays clean), and `01`. **Cadence = all kinds, every
+  boundary**; order = `drain → apply control → resume ready-parked (+aging) → promote intake → start-new → fire
+  release → sleep`.
+- **Why:** single-shot is advertised to the entire console→orchestrator contract and is the one correctness backbone
+  C2 cannot be built without — and the mechanism had to be one the single-writer partition actually permits, which
+  delete-on-consume did not.
+*Rejected:* delete-after-consume by the consumer (the register's own proposed wording — a D93 violation); a monotonic
+**cursor** (unsafe under at-least-once + out-of-order writes: an earlier-ts message written after the cursor advanced
+is skipped forever); a bus-side ack round-trip (the orchestrator is never in a synchronous path — D93); the
+consumed-set on `state.json` (volatile, wrong tier) or in a dedicated `consumed.json` (a second single-writer file +
+D80 owner for no gain); a separate consumed-intake ledger (redundant with the set + the stamp); `retention.py`
+sweeping `inbox/` (wrong owner — retention is orchestrator-side, the inbox bus-owned); leaving the inbox an unbounded
+durable log (an undefined bound is exactly the gap-class this pass exists to close).
+*Evidence:* the pre-Phase-3 pressure-test register F1 — **corroborated by 5 independent finders** (A2, foundations×2,
+buildability, E-outbox), the buildability instance verifier-CONFIRMED, every refutation conceding the residual
+("delete-on-consume is implied rather than stated"; "intake lacks an explicit dedup key"). Reuses
+D26/D48/D51/D69/D90/D91/D93/D105. → `01`/`05`/`shared/schemas.md`/`templates/orchestrator-CLAUDE.md`/`templates/loop.md`/`11`.
+
+## D109 — Single-orchestrator election: deliberately NOT enforced — an operator-guaranteed run-constraint; the liveness marker exists only as the runner's precondition **[DECIDED — pre-Phase-3 F2]**
+D93 removed `flock` on the premise "single-writer removes the write-conflict class" — but **nothing elects the single
+orchestrator**: two concurrent `/start`/`--resume` processes each believe they are sole writer, and atomic-publish
+stops a torn *read*, never a **lost update** (B advances item 3 and renames `state.json` over A's item-5 progress).
+**The call: do not defend against it.** Electing the orchestrator is **not the package's job** — it is a documented
+**run-constraint** (*run a single orchestrator per repo*), carried in `templates/orchestrator-CLAUDE.md`'s
+invariants. This sits on exactly the same footing as D93's own single-writer premise, which was always an **asserted
+invariant, not a mechanism** — so the call makes an existing assumption explicit rather than inventing machinery to
+police it.
+- **The scary vector is narrower than it looks:** F2's live case (an away human firing `claude --resume -p
+  "<verdict>"` at a still-live session) assumes a usage the design already routes elsewhere — the away path is the
+  **console POST → inbox** (D93/D99); `--resume` is D90's *restart* mechanism for a yielded/dead session, not a
+  live-session verdict channel.
+- **And a lock would cost something:** a hung (not dead) orchestrator holding a `flock` blocks a clean restart —
+  friction on precisely the recovery path D90 wants frictionless.
+- **The one exception (D113):** the relaunch-runner is *itself* a spawner, so a duplicate there would be **our**
+  defect rather than operator error — this decision's reasoning does not reach it. The runner therefore checks a
+  **liveness marker** before spawning; the marker is justified as *the runner's precondition* only, and nothing else
+  consults it.
+- **Honest residual (accepted):** an operator can still hand-start two `/start`s (e.g. over a session they believe
+  dead but which is merely hung) and silently clobber state. Documented, not fenced.
+*Rejected:* a held `flock` on `.workflow/orchestrator.lock` as a general election (the register's proposal — declined
+as out of scope, and it adds restart friction); a pidfile + liveness check (PID-reuse races — D94 already rejected
+this for the bus); a loser process that forwards its `-p "<verdict>"` prompt into the inbox (needs the verdict
+machine-extracted from a prompt; the console POST is already the designed away path — kept as a noted additive
+upgrade); silent undefined behaviour with no documented constraint (the gap between *documented constraint* and
+*undefined behaviour* is ~free to close).
+*Evidence:* the pre-Phase-3 pressure-test register F2 (verifier-corrected critical→high; the adjudicator concurred
+that D92's `/clear`+re-`/start` arm is same-session and therefore not a second writer). Reuses D48/D90/D92/D93/D94.
+→ `01`/`05`/`templates/orchestrator-CLAUDE.md`/`11`.
+
 ---
 
 ## Not yet decided (tracked in `07`)

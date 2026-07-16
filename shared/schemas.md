@@ -137,20 +137,51 @@ transport, dispatched at a scheduler boundary **by kind**. **Single consumer** (
 claim-by-rename needed; matched **idempotently, single-shot** (duplicate → no-op). The bus returns `202 Accepted` +
 a `Location` ticket at POST time; any result surfaces via orchestrator-written state the console re-reads by ticket —
 the orchestrator **never responds synchronously** (it is a boundary batch-consumer, not an HTTP responder).
+
+**`message_id`** — the filename stem (`<ts>-<uuid>-<pid>`) **is** the message's canonical, bus-assigned id.
+
+**Consume = record, never delete.** The bus is the sole writer of `inbox/`, so the consumer **never removes a
+message** (delete-on-consume would make the inbox two-writer). Instead the orchestrator keeps a durable
+**consumed-set** of `message_id`s in its own partition (`handoff.md`): at each boundary it lists `inbox/`, **skips
+ids already in the set**, applies the rest, adds their ids, and atomically republishes. A cold start re-lists
+`inbox/` and the set makes the re-read a no-op — this is what stops a restart from re-promoting an
+already-consumed intake or re-firing a control op.
+
+**Two idempotency layers.** The consumed-set covers the normal path. Because apply-then-record has a crash window
+(crash in between → re-apply on restart), **each kind's *effect* must also be idempotent** — its anchor is named
+per kind below. Layer 1 = the consumed-set (single-shot); Layer 2 = the per-kind effect anchor (crash-window
+safety). Neither alone is sufficient.
+
+**Bounded.** The orchestrator publishes a low-watermark (`consumed_through`) once every message at-or-below it is
+consumed; the **bus** GCs inbox files ≤ that watermark (staying the sole writer of its own partition), and the
+consumed-set is pruned to ids above it — bounding both the inbox and the set. Volume is human-interaction-paced
+(the autonomous loop never writes the inbox), so this is hygiene, not a hot path.
 - **`kind: verdict`** — `{ token, verdict: {outcome, notes, returns?} }` — resumes a parked ticket; `token` matches a
-  `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume). A `returns` value marked
-  `sensitive` (a setup credential) is written to the gitignored secret store and this inbox record is **shredded after
-  consume** — a secret is never retained on the durable inbox or echoed to `state.json`/logs.
+  `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume). **Anchor:** the parked
+  `token` — a re-applied verdict finds the ticket already resumed (token closed) → dead-letter/no-op. A `returns`
+  value marked `sensitive` (a setup credential) is written to the gitignored secret store and this inbox record is
+  **shredded immediately after consume** — a secret is never retained on the durable inbox or echoed to
+  `state.json`/logs. This shred is the **one exception** to *consume = record, never delete*: the orchestrator may
+  `unlink` a single consumed record **that carried a sensitive payload**, right after extracting it to the store, so
+  a secret's latency-to-zero never waits on the bus's GC pass. Nothing else in `inbox/` is ever consumer-deleted.
 - **`kind: intake`** — `{ ticket, ask, node_ids? }` — a new-work request; the orchestrator **promotes** it into
   `backlog.md` through triage — **never a direct backlog write** (that would make the backlog two-writer).
-  `node_ids` present when the project-map screen emitted it.
+  `node_ids` present when the project-map screen emitted it. **Anchor:** promotion **stamps the source `message_id`
+  into the new item's `source`**, and re-promotion is skipped when an item already carries it — the same stamp that
+  lets the console's "my requests" surface correlate an intake to the item it became.
 - **`kind: control`** — `{ ticket, op }` (e.g. `reprioritize`, `pause`) — a loop-control command honored at the next
-  boundary (non-preemptive).
+  boundary (non-preemptive). **Anchor:** none is possible (a control op leaves no durable artifact to check), so
+  **control ops MUST be idempotent** — re-applying one is a no-op by construction (`reprioritize` re-orders the same
+  backlog to the same order; `pause` re-sets a flag). A non-idempotent control op may not be added without bringing
+  its own anchor.
 - **`kind: release`** — `{ action_ids[] }` — a human **batch-approval** of pending outward actions; the
   orchestrator executes each named `outbox` entry (re-run through `guard.sh`) at the next boundary and marks it
   `executed`. **Always by explicit `action_ids`** (a snapshot of what the human saw — items enqueued after the glance
   are simply not in the set); never an "approve-all-pending" wildcard. Distinct from `verdict`: it resumes **no**
-  parked ticket (an outward action never parked the loop), it just fires a deferred side-effect.
+  parked ticket (an outward action never parked the loop), it just fires a deferred side-effect. **Anchor:** the
+  outbox entry's `status` — an entry already `executed` is skipped, so a re-applied release is a no-op. (The
+  *message* dedups here; an external side-effect with no natural idempotency — `issue-create` — carries its own
+  key on the outbox entry.)
 
 ## outbox / pending-outward-action  · written by the orchestrator when a skill defers an outward action, cleared by the `release` consumer · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, single-writer (orchestrator); the mirror of the bus-owned `inbox/`*
 The **transactional-outbox** queue behind the "never stalls — queue the outward action, one approval releases a
@@ -177,6 +208,10 @@ fires it.
   of `depends_on` × `kind` × `severity`; `depends_on` is `[]` for a standalone issue. **Roadmap-derived backlog
   items carry the same three** — `planner:decompose` assigns each phase-item a `kind` + `severity` (a phase's
   `depends_on` comes from the roadmap), so `prioritize` has one uniform ordering key across both producers.
+- `source` — where the item came from. For an item **promoted from an inbox `intake`** it carries that message's
+  bus `message_id`; that stamp is doing two jobs at once — it is the intake's **idempotency anchor** (a re-run
+  promotion finds the item already present and no-ops) *and* the key the console's **"my requests"** surface uses to
+  correlate a submitted request to the item it became.
 - `github_ref` — the mirrored GitHub issue number (`create-issue` opens it; `close-issue` closes it); **optional**
   — present only when the outward mirror was approved.
 - **When mirrored, GitHub owns open/closed state** (the backlog holds only `github_ref`, no duplicated local
@@ -223,6 +258,10 @@ fires it.
 ## handoff.md  · the durable resume anchor (committed) · *rewritten whole each handoff, never appended; published atomically **and durably** (write-temp → `fsync(file)` → `rename` → `fsync(dir)`) — the one file where crash-durability, not just atomicity, is mandatory*
 - `current_item`, `loop_position`, `parked[]`, `base_sha` — the commit it was written against; a cold start
   reads this + `git log <base_sha>..HEAD` (bounded to one session's delta) and rebuilds position.
+- `consumed[]` + `consumed_through` — the inbox **consumed-set** (bus-assigned `message_id`s already applied) and
+  its low-watermark. Lives here because this is the durable anchor a cold start rebuilds from — exactly the moment
+  the set is load-bearing (it makes the post-restart inbox re-read a no-op). Ids only, never message bodies, so it
+  stays small and carries no secret; pruned to ids above `consumed_through`.
 
 ## per-item artifacts  · on disk
 `plan` / `changelog` / `verify-verdict` / `debug-report` live under `.workflow/items/<id>/` — `planner`

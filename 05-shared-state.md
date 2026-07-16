@@ -17,6 +17,26 @@ at a boundary (D69 triage). No `flock` — single-writer removes the write-confl
 process boundary is **published atomically** (write-temp → `fsync` → `rename` → `fsync(dir)`) so a reader never
 catches a torn file — `state.json` included; `handoff.md` additionally fsyncs the dir for crash-durability.
 
+**One orchestrator is an operator-guaranteed invariant, not an enforced one (D109).** Nothing *elects* the single
+orchestrator: two concurrent `/start`/`--resume` processes would each believe they are the sole writer, and
+atomic-publish prevents a torn read but **not** a lost update. The package deliberately does **not** defend against
+that — it is a documented **run-constraint** (*run a single orchestrator per repo*), on the same footing as D93's
+own single-writer premise, which was always an asserted invariant rather than a mechanism. **The one exception is
+the relaunch-runner (D113):** because the runner is itself a spawner, a duplicate would be *our* defect rather than
+operator error, so the runner checks a liveness marker before it spawns — the marker exists solely as the runner's
+precondition, not as a general lock.
+
+**Consume = record, never delete (D108).** Since the bus solely writes `inbox/`, the orchestrator **never removes a
+consumed message**. It keeps a durable **consumed-set** of bus-assigned `message_id`s (+ a `consumed_through`
+low-watermark) on `handoff.md`, skipping ids already in the set at each boundary drain; the **bus** GCs inbox files
+at-or-below the published watermark, so neither partition gains a second writer and both the inbox and the set stay
+bounded. The consumed-set alone is not sufficient — apply-then-record has a crash window, so **every kind also
+carries an effect-level anchor** (verdict → the parked token · release → the outbox `executed` status · intake →
+the source `message_id` stamped on the promoted item · control → the standing rule that control ops are
+idempotent). The **sole** carve-out to never-delete: a consumed record carrying a **sensitive** payload is unlinked
+by the orchestrator immediately after the credential is extracted to the secret store (D111), so a secret never
+waits on a janitor.
+
 **Protocol — two mechanisms, no third (D93).** (1) Synchronous **reads** the bus serves straight from disk
 (`state.json` / `backlog.md` / `parked/` / `graph.json`) — no orchestrator involvement. (2) Asynchronous
 **commands**: the bus returns `202 Accepted` + a `Location` ticket and appends the message to the **inbox**; the
