@@ -10,8 +10,13 @@ Deliberately deferred — known unknowns, to close during build or later.
   (D69); implementation deferred to `11`** — **D88 recorded the wiring requirement (P3): the triage grades by
   `risk_class` × blast-radius, not code-centrality alone**; **demo-skill mechanics CLOSED (D102–D104 —
   serving/format · refine cap · on-disk location, `09`)**; **commitment-status storage CLOSED (D106, Phase-2 E1 —
-  spec-inline, human-owned; never node frontmatter; drift check reads code→intent).** *(Interrupt model closed: pure
-  queue, D26.)*
+  spec-inline, human-owned; never node frontmatter; drift check reads code→intent)** — but its **resolver
+  *mechanism* is OPEN (JF5)**: *how* the drift check resolves a changed code node → its spec element is **judgment**
+  (over the eager `[G]` graph + decision records + the STABLE spec), **not** the keyed `purpose.intent` lookup D106's
+  prose implied — `intent` is `06`'s tier-`[D]` layer, *authored on touch*, so an untouched node carries none, and
+  `purpose.actual` can't stand in (it is extracted *from* the code — circular). **Not a Phase-3 blocker** (none of
+  the six increments builds the drift check); settle it when the semantic layer is on the critical path, with
+  dogfooding evidence rather than ahead of it. *(Interrupt model closed: pure queue, D26.)*
 - **`init` / bootstrap capability** (`10`, D28) — greenfield is straightforward; brownfield **ingest**
   (build the knowledge base + reconstructed spec from existing code) is **DESIGNED (D68) and the `ingest` skill
   is AUTHORED** (`skills/ingest/SKILL.md`) — the ingest *mechanics* (own per-stack generator, two lenses,

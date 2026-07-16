@@ -169,7 +169,12 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
   deep-links + breadcrumbs.
 - **Commitment-status storage** — **CLOSED (D106):** the **spec owns it inline** per element (STABLE, human-owned
   intake), **never node frontmatter** (a second copy that drifts + gets clobbered on regen — D80/D78); the drift
-  check (`align`/`verify`/`audit`) resolves the changed code node → its spec element (via the node's `purpose.intent`)
-  and reads `commitment` on the **intent side**.
+  check (`align`/`verify`/`audit`) resolves the changed code node → its spec element and reads `commitment` on the
+  **intent side**. **The resolution is judgment, not a keyed lookup** — over the eager `[G]` graph + the decision
+  records + the STABLE spec, with the node's `purpose.intent` as **one input when present**, never a foreign key:
+  `intent` is `06`'s tier-`[D]` layer, *authored on touch* by `document`, so a node that has never been touched
+  carries none — while the drift check must resolve **any** changed node. (`purpose.actual` can't stand in: it is
+  extracted *from* the code, so keying on it to find the spec element is circular.) The **mechanism** is not yet
+  built or decided — `07`.
 - **Engineer agent** in the roster — **resolved (D69): no new agent** — the feasibility role is the
   proportional-rigor gate reusing `planner`/`decision-engineer`/`research` (`02`).

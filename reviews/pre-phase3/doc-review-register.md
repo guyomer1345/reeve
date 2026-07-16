@@ -1,6 +1,6 @@
 # Pre-Phase-3 Doc-Review Register (coherence cold-audit)
 
-> **STATUS: PARTLY RESOLVED (2026-07-16).** Folded into the D108–D113 capture: **JF1** (inbox-drain absent from the
+> **STATUS: FULLY RESOLVED (2026-07-16).** Folded into the D108–D113 capture: **JF1** (inbox-drain absent from the
 > drivers) → **D108**, wired into `orchestrator-CLAUDE.md` + `loop.md` + `01` (option (a), not the STUB — the drain
 > semantics were being pinned anyway); **JF2** (secret store homeless) → **D111** (`.workflow/secrets/`, owner +
 > pin + `0600`; its "audit-prune deletes" suggestion **corrected** — live credentials are not memory); **JF4**
@@ -12,8 +12,12 @@
 > `secrets/` to one pin list of two; `parked/` was pinned by `05` and not by `shared/schemas.md`), so the call was
 > **adoption, not addition**: `05`'s layout tree now owns per-path `bus:`/`pin` markers, every prose list is retired,
 > and three `check_enum_coherence.py` rules hold the two shipped consumers to it (all three historical drifts replay
-> red). **Still open: JF5** (`09`'s `purpose.intent` resolver wording), **JF8** (gate doesn't catch prose doc-slug
-> refs).
+> red); **JF5** → the `09`/D106 resolver phrasing corrected — and it was **not** merely imprecise: `purpose.intent`
+> is `06`'s tier-`[D]` layer, *authored on touch*, so an untouched node carries none while the drift check must
+> resolve *any* changed node; the resolution is judgment (mechanism still open → `07`); **JF8** → the leak gate now
+> catches prose doc-slug refs, with the slug set **derived from the docs that exist** rather than hard-listed (a
+> hand-kept list would be the very drift class D114 just retired). **Nothing open — this register is now a
+> historical record of the pass, not a live tracking surface.**
 
 **The D89-style phase-boundary `align` cold-audit — the closing coherence gate before Phase 3.**
 COHERENCE, not substance: does the whole surface agree with itself and with the built artifacts (the input
@@ -36,9 +40,11 @@ needs **judgment** (a design call, an ambiguous ownership, a substance gap) it i
 outward-action-is-not-a-checkpoint, park-and-yield) propagated cleanly; counts/enums/roster are single-source and
 gate-green; the shipped package is free of spec-internal reference leaks. The drift that existed was a cluster of
 **doc↔artifact mismatches the mechanical gates can't see** (a stale code-map arm list, a gitignore contradiction,
-a schema missing a decided key, pre-D90/pre-D105 phrasings) — all auto-fixed. The remaining items below are
-**judgment calls or known substance gaps**, none of which blocks starting Phase 3; several (JF1, JF5) should be
-pinned early in the C1→C2 build.
+a schema missing a decided key, pre-D90/pre-D105 phrasings) — all auto-fixed. The items below were left as
+**judgment calls or known substance gaps** for the maintainer; **all nine are now resolved** (see the status
+header) — JF1/JF2/JF4/JF9 into D108/D111, JF3 into D114, JF7 dissolved by D113, JF5/JF8 fixed directly. *(This
+paragraph's original "several should be pinned early in the C1→C2 build" is retired: D113 retired the C1→C2 split,
+and none of the items outlived this pass anyway.)*
 
 ---
 
@@ -87,7 +93,7 @@ All four meta-gates green after these edits (`check-status-coherence` · `check_
 - **Why not mechanical:** choosing the shipped-default deadline + reminder cadence is a **design call**. (Note: the away-*delivery* of that reminder is pressure-test F4 substance.)
 - **Options:** add `config.checkpoint.deadline_*` + a cadence to the shipped-default pattern (and to the `config.json` schema).
 
-### JF5 — `09:170` describes the commitment-status resolver as a keyed `purpose.intent` lookup *(LOW · = pressure-test completeness)*
+### JF5 — `09:170` describes the commitment-status resolver as a keyed `purpose.intent` lookup *(LOW · = pressure-test completeness)* — **RESOLVED (with D106 back-annotated): the phrase is not just loose — `intent` is tier-`[D]`, authored on touch, so it is usually absent; the resolver is judgment, mechanism open → `07`**
 - **Area:** `09-intake.md:170` "resolves the changed code node → its spec element (via the node's `purpose.intent`)" reads as a structured foreign key; the actual `align` resolver is **LLM judgment** over the eager `[G]` graph + decision records + the STABLE spec.
 - **Why not mechanical:** tightening the wording risks mischaracterizing a **mechanism that isn't built yet**; and a node *does* carry an extracted purpose, so the phrase isn't strictly wrong. A precision call for the maintainer.
 
@@ -99,7 +105,7 @@ All four meta-gates green after these edits (`check-status-coherence` · `check_
 - **Area:** Phase-3 *build* items (`11:61-72` — "C1 read-only console / C2 comms bus / C-map") vs Phase-2 *cluster-C checkpoint* sub-items (`11:229-233` — "C1 data model / C2 triggers / C3 help set"); `11:251` "(C1 console → C2 bus)" leans on the build sense. A pre-existing label collision (not introduced by D90–D107) that can misread.
 - **Why not mechanical:** relabeling (e.g. `P3-a`/`P3-b` for the build items) is an editorial choice the maintainer owns.
 
-### JF8 — `check-no-spec-refs.sh` doesn't catch prose doc-slug references *(LOW · gate-hardening)*
+### JF8 — `check-no-spec-refs.sh` doesn't catch prose doc-slug references *(LOW · gate-hardening)* — **RESOLVED: slug alternation added, DERIVED from the existing docs (not hard-listed); 12/12 slugs caught in both prose forms, false-positive probes clean, empty-slug guard fails closed**
 - **Area:** the gate catches backtick bare numbers (`` `05` ``) but a prose `see 08-decision-log.md` / `07-open-questions` would pass. Clean today; the most natural way a leak would actually be written.
 - **Why not auto-fixed:** adding a doc-slug alternation is a **pattern-breadth judgment** (false-positive risk). (The unambiguous half — the D100+ blind spot — WAS fixed, A13.) Recommend adding a slug alternation.
 
