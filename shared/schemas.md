@@ -304,15 +304,48 @@ the one place the loop keeps a secret.
 - **These are credentials, not memory — the retention/`audit` prune never sweeps them.** Retention bounds the
   append-only *memory* tier; a cap deleting a live key would break a working setup. Removal is **explicit**
   (rotation / teardown), never automatic.
-- Same atomic-`0600`-create discipline as the bus token (create *with* the mode, never write-then-`chmod`);
-  Windows has no `0600` → explicit ACLs, the same target-OS/FS family as the other runtime pins.
+- Same atomic-`0600`-create discipline as the bus token (create *with* the mode, never write-then-`chmod`) **and the
+  same verification**: the achieved mode is `stat`'d, because the create-with-mode discipline is a no-op on a mount
+  that ignores mode — the WSL repo mount returns `0777` for a `0600` create, silently. That is not a Windows-only
+  gap (the original framing); it is **any mount that ignores mode**, and it is why this path is pinned. Windows has
+  no `0600` → explicit ACLs, the same target-OS/FS family as the other runtime pins.
+
+## runtime.json  · written by `/start` when it relocates the runtime tree, read by every process that touches a runtime path · *`.workflow/runtime.json`; RUNTIME, gitignored, atomic write; deliberately NOT on a native filesystem — it is the pointer TO it*
+- `{ runtime_root }` — an absolute path. The workflow tree spans **two filesystems** whenever the repo lives on a
+  mount whose file-mode or `rename` guarantees are weak: the atomicity- and mode-sensitive runtime paths are
+  relocated to a native filesystem, while committed artifacts stay in the repo by construction. This pointer is what
+  makes that relocation **findable** — without it nothing could locate the relocated half, since the daemon's own
+  discovery record lives inside it.
+- **Absent ⇒ no relocation happened ⇒ the workflow dir IS the runtime root.** That is the common case and costs zero
+  indirection; the file exists only on a relocated install.
+- **Never committed, never pinned.** The path is machine-specific, so committing it would hand another machine a
+  wrong root; and it cannot itself be relocated, since it is the thing that says where the relocation went — it must
+  sit at a fixed, known spot on the repo mount.
+- A pointer naming a **missing** root is a hard error, never a fallback to the repo mount: falling back silently
+  would land the capability token and the inbox on the very filesystem the relocation exists to avoid.
+
+## bus.lock  · created and held by the bus daemon for its process lifetime · *`.workflow/bus.lock`; RUNTIME, gitignored, created-never-replaced; kept on a native filesystem*
+The daemon's **singleton election**. Holding it *is* the liveness claim: the kernel releases it when the holder dies,
+which is what makes it immune to the PID reuse a pidfile would suffer. Contains the holder's pid for humans; nothing
+reads that value as authority.
+- **It is a separate file from `bus.json`, and that is load-bearing, not tidy.** `bus.json` is republished by atomic
+  rename, and a rename **swaps the inode out from under a held lock** — the next daemon opens the *new* inode, finds
+  it unlocked, and starts. Two daemons, no error. (Measured true on ext4 *and* on the WSL 9p mount; a fixture test
+  pins it, so a platform change is a loud failure rather than a silent regression.) A lock file is therefore only
+  ever created and written in place — **never renamed over**.
+- Liveness = **the held lock plus a token'd `/health`**: the lock proves *someone* is alive, the health check proves
+  it is ours. A free lock means any `bus.json` is stale, whatever pid it names.
 
 ## bus.json  · written by the bus daemon at boot, read by `/start` + the browser · *`.workflow/bus.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ pid, port, token, started_at, remote_port?, remote_token? }` — the daemon's discovery + auth record. `port` =
   a dynamic **loopback** port (bind `127.0.0.1:0`, read back — the port is **not** a secret). `token` = the CSPRNG
   **capability token** required as a header on every request (authentication; **distinct** from a checkpoint
-  correlation `token`). `/start` health-checks `port`+`token` to **adopt-or-spawn** the daemon; the daemon holds a
-  `flock` for its lifetime as the liveness authority.
+  correlation `token`). `/start` health-checks `port`+`token` to **adopt-or-spawn** the daemon; the daemon holds the
+  `bus.lock` (above) for its lifetime as the liveness authority — **never a lock on this file**, which it renames.
+- **The token file is created 0600 and then `stat`'d to confirm it.** A mode is a request, not a guarantee: on the
+  WSL repo mount a 0600 create silently returns 0777, so the token would be readable by other users on the machine
+  with nothing reporting a failure. This is the primary reason this path is pinned. If the achieved mode is looser
+  than asked, the daemon **surfaces it to the human** rather than pretending the file is protected.
 - `remote_port` / `remote_token` — present **only** when `config.remote` declares an identity transport. This is
   the **reduced remote surface** (reads · opinion verdicts · the static demo); the operator points their
   `cloudflared` / `tailscale serve` at `remote_port`, and **never** at `port` — `port` is the full-surface loopback

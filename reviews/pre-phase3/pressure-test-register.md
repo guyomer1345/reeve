@@ -6,9 +6,22 @@
 > F14→**D113**. Three findings were **corrected** in the resolving: F3's "project config into settings.json" cannot
 > work (the away-release forbids any static `ask`); F6's per-endpoint **Host policy** is not a boundary (a
 > proxy-controlled header, silently failing) → a structural two-socket split; and F4's "audit-prune deletes the
-> secret store" conflates live credentials with memory. **The remaining MEDIUM/LOW findings (F5, F7–F13) are NOT
-> resolved** and stay open input for a later pass. This register is a historical artifact — the decisions are the
-> owner of what was settled (`08`), and status lives in `11`.
+> secret store" conflates live credentials with memory. This register is a historical artifact — the decisions are
+> the owner of what was settled (`08`), and status lives in `11`.
+>
+> **UPDATE 2026-07-16 — the Phase-3 build closed two more: F10→D116** (the daemon ships as a per-project
+> `.claude/scripts/bus.py`, which *dissolves* the keying question rather than answering it) and **F11→D116** (idle is
+> a conjunction of per-job votes that an open checkpoint suppresses; the heartbeat is never the orchestrator's).
+> F6's conceded **local token-bootstrap** residual closed too (D116). **The remaining MEDIUM/LOW findings (F5,
+> F7–F9, F12, F13) are NOT resolved** and stay open input for a later pass.
+>
+> **Two calibration notes, recorded against this register's own method.** (1) **F10 was ranked MEDIUM and was the
+> hardest increment-1 blocker** — the daemon could not be built without it; the ranking mis-read which findings the
+> build would hit first. (2) Building increment 1 found what **no layer of this register did**: the runtime
+> substrate was **unbuildable as specced** (a pinned path could not be *found* — the discovery record is itself
+> pinned), and two stated mechanisms are **measurably false** (`flock` does not fail on the repo mount; file *mode*
+> does, silently and open). All three are D115. None were reachable by re-reading — the mount reports success in
+> both failing cases — which is the standing argument for driving the real thing over interrogating the text.
 
 **Autonomous design interrogation of the whole six-space design, weighted to Phase-2 (D90–D107).**
 Substance only (is the design right / complete / coherent / buildable) — **not** a doc↔artifact coherence pass

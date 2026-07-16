@@ -16,14 +16,16 @@ orchestrator only via the local bus + files — never by routing Claude.
 - **Verdict delivery (D90/D91):** a verdict POSTs → durable inbox keyed by the checkpoint **token** → the parked
   orchestrator matches it at a boundary and resumes via `claude --resume`.
 
-## Launch **[DECIDED — D94]**
+## Launch **[DECIDED — D94; BUILT — D115/D116]**
 The bus is a **session-independent detached daemon**, not a session child — it must receive verdicts while the
-orchestrator is parked or dead. `/start` **ensures it is running** (adopt-or-spawn, idempotent: a held `flock` +
-a token'd `/health` is the liveness authority; it publishes `{pid, port, token, started_at}` to `.workflow/bus.json`
-on a dynamic loopback port). Spawned **detached in a new session** (`setsid`) so it survives `/clear` / `--resume` /
-session death. Stop = an authenticated `POST /shutdown` + an idle-timeout self-shutdown. **On WSL2** the bus dies
-~8s after the last terminal closes and re-spawns on the next `/start` (the durable inbox loses nothing already
-written). Full lifecycle in `05`.
+orchestrator is parked or dead. `/start` **ensures it is running** (adopt-or-spawn, idempotent: a held `flock` on its
+own `bus.lock` + a token'd `/health` is the liveness authority; it publishes `{pid, port, token, started_at}` to
+`bus.json` on a dynamic loopback port). Spawned **detached in a new session** (`setsid`) so it survives `/clear` /
+`--resume` / session death — **verified end-to-end** (own session leader; outlives the terminal that spawned it).
+Stop = an authenticated `POST /shutdown` + an idle-timeout self-shutdown that an **open checkpoint suppresses**
+(D116). **On WSL2** the bus dies ~8s after the last terminal closes and re-spawns on the next `/start` (the durable
+inbox loses nothing already written). It ships as **`.claude/scripts/bus.py`**, a per-project copy like every other
+shipped script — which is also what keys it per project (D116). Full lifecycle + the runtime-path resolver in `05`.
 
 ## Project map + flow view **[DECIDED — D70; placement = a tab, D99; build deferred to Phase 2/3]**
 A **project-map screen** renders the code-map `graph.json` (D68) as a cluster diagram — nodes sized by the

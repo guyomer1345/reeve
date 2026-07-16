@@ -137,15 +137,22 @@ Deliberately deferred — known unknowns, to close during build or later.
     likely survives via Git-Bash; the Claude-Code-invoked glue is the risk). Fix later with a targeted fallback (a
     thin Python launcher — `python3` is already a hard dependency — or a documented Git-Bash/WSL requirement),
     **not** a `.sh→.py` refactor (the D71 bash-glue/python-logic split stands).
-  - **Runtime coordination on a native FS (D93)** — atomic `rename`/`fsync`/`inotify` are weak-to-broken on
-    network-style mounts (NFS; WSL2 `/mnt/c` DrvFs/9p). The runtime paths `05`'s layout tree marks **`pin`** are
-    relocated to a native-FS path (the tree owns that set — D114; this register does not restate it, which is how
-    this copy sat stale, missing `secrets/`, from D111 until D114); `/start` detects a DrvFs/network mount and
-    relocates-or-warns.
+  - **Runtime coordination on a native FS (D93; measured + resolved — D115)** — atomic `rename`/`fsync`/`inotify`
+    are weak-to-broken on network-style mounts (NFS; WSL2 `/mnt/c` DrvFs/9p). The runtime paths `05`'s layout tree
+    marks **`pin`** are relocated to a native-FS path (the tree owns that set — D114; this register does not restate
+    it, which is how this copy sat stale, missing `secrets/`, from D111 until D114); `/start` detects a
+    DrvFs/network mount and relocates-or-warns, recording where via the gitignored `runtime.json` pointer. **What
+    was measured (D115): file *mode* is the guarantee that actually fails on 9p (a 0600 create returns 0777,
+    silently) — `flock` does not fail at all, so "flock is unreliable on DrvFs" is retired as a reason to pin.**
   - **WSL2 bus lifecycle (D94)** — a detached daemon can't hold the distro VM open; the bus dies ~8s after the
     last terminal closes and re-spawns on the next `/start` (owner-accepted; `enable-linger` / `vmIdleTimeout=-1`
     the opt-in upgrade).
-  - **Token-file ACLs on Windows (D95)** — no `0600`; the bus capability token needs explicit `icacls` ACLs.
+  - **Restricted file modes are not portable (D95; widened by D115 from "Windows" to "any mount that ignores
+    mode")** — native Windows has no `0600` (the bus token needs explicit `icacls` ACLs), **and the WSL `/mnt/c`
+    mount ignores the mode outright** — measured, from Linux, silently, returning `0777`. The shipped rule is
+    therefore *verify, never assume*: create with the mode, then `stat` it, and surface a filesystem that ignored it
+    instead of reporting a protection that does not exist. The daemon does this today; the residual is the Windows
+    ACL path, still unexercised.
   Validate the family together when a real target-OS decision is forced.
 - **Project-state view (`03`/`05`/`06`) — user-raised 2026-06-30.** No single synthesized "where is this
   project" surface — *what's done · how the pieces connect · what's left*. The data exists but is scattered

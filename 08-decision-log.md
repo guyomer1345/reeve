@@ -1804,7 +1804,7 @@ Microsoft **Async Request-Reply** (`202` + status-resource + correlation id), SS
 architecture for a batch worker), the `EXDEV`/Windows-`os.replace` caveats, and the SQLite-WAL escape trigger. Reuses
 D26/D48/D51/D69/D90/D91. → `03`/`04`/`05`/`shared/schemas.md`/`07`/`11`.
 
-## D94 — Website/bus lifecycle: a session-independent detached daemon, ensure-running via lock-authority, stop via HTTP + idle-janitor **[DECIDED — Phase-2 A3, research + empirical]**
+## D94 — Website/bus lifecycle: a session-independent detached daemon, ensure-running via lock-authority, stop via HTTP + idle-janitor **[DECIDED — Phase-2 A3, research + empirical; BUILT and three arms corrected by D115/D116: (1) the lock lives on its own `bus.lock` — a lock held on the atomically-renamed `bus.json` is silently defeated, measured on both filesystems, and this entry named no lock path at all; (2) the "`flock` on DrvFs is weak-to-broken" premise behind pinning it native-FS is **false as measured** — `flock` excludes correctly and releases on death on 9p, so the pin survives on *mode* and *rename*, not this; (3) "heartbeat-aware idle-timeout" defined neither word — D116 makes idle a conjunction of per-job votes that an open checkpoint suppresses, and the heartbeat is explicitly never the orchestrator's]**
 The bus is a **session-independent detached daemon** — its lifecycle is **decoupled** from the orchestrator
 conversation, because it must receive verdicts *while the orchestrator is parked or dead*. Detach with a **new session**
 (`setsid` / `start_new_session`, **not** `nohup`/`disown`) — empirically confirmed to survive `/clear`,
@@ -1832,7 +1832,7 @@ WSL2 VM-lifecycle kill) + a Claude-Code process-reaping fan-out with **empirical
 orphan to PID 1 and survive; `--resume` loads context not processes; `/clear` is context-only; no `SessionEnd` default
 cleanup). Reuses D48/D90/D92. → `03`/`05`/`07`/`11`.
 
-## D95 — Local-bus trust: the browser/network is the untrusted caller, not same-UID; capability token + Host-allowlist + loopback bind **[DECIDED — Phase-2 A4, research-backed; the loopback stack STANDS unmodified on the full-surface socket, but two arms are revised by D112: the *unauthed tunnel* is retired (it contradicted this decision's own token rule), and "token never in a URL" is sharpened to "never in the query/path" — a URL *fragment* never leaves the browser and is the QR pairing channel]**
+## D95 — Local-bus trust: the browser/network is the untrusted caller, not same-UID; capability token + Host-allowlist + loopback bind **[DECIDED — Phase-2 A4, research-backed; the loopback stack STANDS unmodified on the full-surface socket, but two arms are revised by D112: the *unauthed tunnel* is retired (it contradicted this decision's own token rule), and "token never in a URL" is sharpened to "never in the query/path" — a URL *fragment* never leaves the browser and is the QR pairing channel. Two further arms completed by D115/D116: (1) **the "atomic 0600 create" discipline is a NO-OP on a mount that ignores mode** — measured, the WSL repo mount returns 0777 silently, so a faithful implementation of this entry yields a world-readable token and reports success; the rule becomes *create with the mode, then `stat` it and surface a filesystem that ignored it*, and "Windows has no 0600" widens to "any mount that ignores mode" (this entry's framing made it read as a portability footnote about a platform we don't ship on — it is live on the maintainer's own machine); (2) the **local page's token bootstrap**, left unspecified here and conceded in the register, is a `<meta>`-tag injection whose concession is now stated: whoever can GET the page from an allowlisted Host holds the token, which is exactly the audience the token-free static class already conceded, and the *Host check* — not the token — is what stops a rebound page]**
 The trust boundary is **not** "same-UID local processes" — a same-UID process can already `ptrace` the orchestrator and
 read its files, so defending against it is theater — it is **"the browser and the network are untrusted callers."** The
 MVP **loopback** stack (all mandatory; they compose to three independent failures for a rebinding attacker): a **CSPRNG
@@ -2526,3 +2526,109 @@ blast-radius step). The **doc-authoring agent** is
 reserved (D65). The **drift-gate wiring** is **authored** (D65/D67 — `commit` mechanical step + `pre-commit`
 backstop + generated `checks.sh`); what remains is `checks.sh`'s per-stack generator, which rides the `/start`
 enforcement-wiring build. All → `07`.
+
+## D115 — The runtime substrate made resolvable + verifiable: a `runtime.json` pointer, a separate `bus.lock`, and mode-verified-not-requested **[DECIDED + BUILT — Phase-3 increment 1; corrects D93/D94's pin rationale and completes D95's token discipline; three findings MEASURED, not reasoned]**
+The pin marker was **declared but never actionable**, and the reasons given for it were substantially wrong. Both
+surfaced on the first line of the first build increment, and all three findings below are **measurements on the real
+`/mnt/c` 9p mount**, not arguments.
+- **(1) A pinned path could not be FOUND — the design was unbuildable here.** D93/D114 say every runtime path marked
+  `pin` is relocated to a native filesystem and "the tree is one logical layout, not one mount". Nothing recorded
+  *where* the relocation went, and nothing could compute it. The circularity is exact: **`bus.json` is itself
+  pinned**, so the discovery record lived inside the tree you needed it in order to discover — the daemon could not
+  publish, `/start` could not adopt, the browser could not be pointed anywhere, and a cold-start orchestrator could
+  not find `parked/`. **The call: a gitignored `.workflow/runtime.json` pointer** (`{runtime_root}`) written by
+  `/start`; **absent ⇒ `.workflow/` is the runtime root** (the common non-WSL case, zero indirection). A pointer
+  naming a missing root **fails loudly** — a silent fallback to the repo mount would land the token and the inbox on
+  the exact filesystem the relocation exists to avoid.
+- **(2) You cannot `flock` the file you atomically rename — MEASURED, on ext4 *and* 9p.** A rename swaps the inode
+  out from under a held lock: the next daemon opens the **new** inode, finds no contention, and starts. Two daemons,
+  no error, on the mechanism that D94 makes the singleton election. Nothing in the spec named the lock's path at all,
+  so "lock `bus.json`" was the obvious build — and it is broken. **The call: a separate `bus.lock`, created and
+  written in place, never renamed over.** A fixture test pins the measurement so a platform change fails loudly
+  rather than silently re-opening the hole.
+- **(3) A mode is a request, not a guarantee — the silent, open failure.** On `/mnt/c`, a file created `0600` comes
+  back **`0777`**: from Linux, with no error. So D95's "atomic 0600 create, never write-then-`chmod`" is **a no-op on
+  that mount** — necessary, but not sufficient. A faithful implementation yields a **world-readable capability token
+  and reports success**. **The call: `stat` the achieved mode after creation and surface a filesystem that ignored
+  it**, never assume it. This widens past the token: `secrets/` holds live credentials under the same discipline, and
+  was protected only by the luck of its placement, since the rule was never generalized. It also **re-frames the
+  D89 family** — this was filed under "Windows lacks 0600", which read as a portability footnote about a platform we
+  don't ship on; it is live on the maintainer's own machine, and the honest statement is **any mount that ignores
+  mode**.
+- **Two of the pin's three stated reasons were wrong; the pin survives on the third.** Measured on 9p: **mode FAILS**
+  (the strongest reason, previously mis-filed as a Windows concern) · **`rename` atomicity** stands as the D93
+  concern · **`flock` DOES NOT FAIL** — it excludes correctly and the kernel releases on death, exactly as on ext4.
+  So **"flock is weak-to-broken on DrvFs" is false as stated** and is retired as a reason to pin anything. It is a
+  Linux-kernel-mediated lock within one distro — which is precisely the only case that matters, since the daemon and
+  `/start` are both Linux processes there. It would not coordinate with a *Windows* process: a real limit, and a
+  different claim than the one that was made. `bus.lock` stays pinned for **co-location** with the record it guards,
+  and that reason is stated rather than borrowed.
+- **Why one entry, not three:** they are one root — the substrate's paths were declared (`pin`, `0600`) without
+  anything making them **resolvable or verifiable**. D114 retired the hand-kept pin *lists* because they drifted, but
+  never asked whether the marker could be *acted on*. The tree said `pin`; no process could obey it.
+- **Why measurement, not review:** this is the third consecutive session where the design was right about the *gap*
+  and wrong about the *mechanism* (F3's config projection, F6's Host policy, D87's push-floor claim). Two of the
+  three findings here are the reverse of what the spec asserts, and **no amount of re-reading would have produced
+  them** — the 9p mount reports success in both failing cases. The discipline that earned them is driving the real
+  thing on the real filesystem.
+*Rejected:* `config.json` gaining a `runtime_root` key (it is **committed**, and this is a machine-specific absolute
+path — a clone would carry another machine's `/home/...`; the option that looks obvious and is wrong, named here so
+it is not re-proposed); **deriving** the runtime root from a hash of the repo path (no state, but a repo move or
+rename silently orphans live parked tickets, invisibly and unfixably by hand); **symlinking** each pinned path from
+`.workflow/` (preserves one literal tree and rename stays native, but depends on DrvFs symlink support, confuses
+Windows-side tooling, and needs repair on every `/start`); locking `bus.json` itself (measured broken); trusting the
+mode argument (measured broken, and it fails *open*); pinning `bus.lock` for `flock`'s sake (the measurement says
+otherwise — the honest reason is co-location).
+*Evidence:* direct measurement on the maintainer's WSL2 machine (`/mnt/c` = 9p, `/` = ext4), both filesystems, each
+probe run as separate processes: second-holder exclusion, kernel release on `kill -9`, lock-vs-rename, and achieved
+`0600` mode. Re-pinned as fixture tests in `scripts/test_bus.py`. Reuses D53/D62/D80/D89/D93/D94/D95/D114. →
+`03`/`04`/`05`/`07`/`shared/schemas.md`/`commands/start.md`/`scripts/bus.py`/`11`.
+
+## D116 — The daemon's build contract: a per-project copy, a jobs frame whose idle is a conjunction, and a meta-tag token bootstrap **[DECIDED + BUILT — Phase-3 increments 1+2; closes register F10 + F11; closes the local half of the F6 token-bootstrap residual]**
+The three calls the daemon could not be built without, none of which had an owner.
+- **F10 — where the daemon lives.** `start.md`'s copy list enumerates every shipped script and contained **no
+  daemon**; the layout tree had `bus.json` (the record) but no daemon *path*; step 5 was still a stub. **The call: a
+  per-project copy at `.claude/scripts/bus.py`**, exactly like `retention.py` / `codemap/` / the gates. That
+  consistency is worth more than the copy it saves, and it **dissolves F10's keying question** rather than answering
+  it: lock, record, and port all derive from that project's runtime root, so two projects cannot collide by
+  construction. The frontend is **embedded in the same file** (a placeholder-substituted page + its script and
+  style, served as separate responses so `script-src 'self'` holds) — one file to copy, and no asset-resolution
+  class of bug. Revisit if it outgrows the single file; the code-map's directory is the precedent.
+- **F11 — what "idle" means.** D94 said "heartbeat-aware idle-timeout" and defined neither word. F11's horn is real:
+  key the janitor on an **orchestrator** heartbeat and it starves exactly when the orchestrator is dead — the state
+  the daemon exists to cover. **The call: the daemon owns JOBS, and `is_idle()` is the conjunction of their votes**
+  (plus no HTTP for T; default 72h). Each job answers "anything outstanding?" — so the notifier and the runner each
+  add a **term**, not a rewrite. An **open, within-deadline checkpoint suppresses shutdown**: reaping the away
+  channel while a verdict is owed defeats the daemon's purpose in the one scenario it was built for. The
+  `parked/` scan therefore ships in increment 1 **even though nothing alerts yet** — the janitor is correct from the
+  first line instead of being wrong-by-construction until increment 4. `status` names *which* job is holding it open,
+  so the predicate is legible rather than a mystery.
+- **The local token bootstrap** — conceded in F6, closed for remote only by D112 (QR + fragment), left open for the
+  loopback page. The page cannot be token-gated (a browser cannot set a header on a document navigation), yet every
+  read needs the token. **The call: the daemon injects it as a `<meta>` tag** when serving the page. Not a script, so
+  no nonce and no `unsafe-inline`; no secret ever printed. **The concession is stated, not hidden:** whoever can GET
+  the page from an allowlisted Host holds the token — which is a local browser, the token's intended audience anyway.
+  It adds no surface D95 did not already concede when it put the page in the token-free static class; the **Host
+  check, not the token, is what stops a rebound page** from reaching that far.
+- **Verified by driving, never by type-checking** — the failures here are all invisible to a static read: a
+  deadlocked shutdown is a *hang*, a defeated lock is *silence*, an ignored mode is *success*. Driven end-to-end:
+  detachment (own session leader, outlives the spawning terminal) · 5 concurrent `ensure` → exactly one daemon, one
+  listener, one lock holder · `kill -9` recovery through a stale record naming a plausible pid · `POST /shutdown`
+  actually exits · token / Host / cross-site / 415 / 413 all refuse · ETag 200→304→200 · the pointer relocating the
+  runtime half while committed files stay put · an open checkpoint suppressing the reap, and the suppression lifting.
+  **Windows→WSL loopback preserves the `Host` header** (tested from the Windows side), so the allowlist does not
+  reject the operator's own browser — the one deployment risk flagged before the build.
+*Rejected:* a shared `~/.claude/scripts/bus.py <project_root>` (saves N copies, but invents an invocation shape with
+no precedent in the package and makes cross-project lock/port collision a live question the per-project copy simply
+does not have); the daemon under `.workflow/` (that tree is state, not code); loose frontend assets (a second
+copy-path and an asset-resolution question, for editing comfort); an idle timer keyed on the orchestrator (starves
+when the orchestrator dies — F11's own horn); a serve-only daemon with the notifier retrofitted (the janitor would
+be wrong until increment 4); printing the token in the console URL as a fragment, mirroring D112 (one mechanism for
+both sockets is genuinely attractive — but it puts the token in terminal scrollback **and the session transcript**,
+widening the audience D95 bounds to a 0600 file); token-free reads behind the Host check alone (collapses one of
+D95's three independent failures).
+*Evidence:* the pre-Phase-3 register F10 (independently confirmed against `start.md`'s copy list + `scripts/`) and
+F11 (the verifier named the heartbeat-vs-survive-death tension as a genuine residual); F6's conceded token-bootstrap
+residual. Driven end-to-end on WSL2 + verified from the Windows host; 39 fixture tests in `scripts/test_bus.py`
+(gate suite 89 → 128). Depends on D94/D95/D99/D100/D115; reuses D71/D80/D102/D111/D112/D114. →
+`03`/`05`/`commands/start.md`/`scripts/bus.py`/`scripts/test_bus.py`/`11`.

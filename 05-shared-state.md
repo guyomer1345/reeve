@@ -63,16 +63,18 @@ optional inotify/SSE signal only ever means "re-read", never carries the load.
   (intake) + *bounded clarifications* (an orchestrator-parked checkpoint question). A future console chat would be
   async-turn-based (latency = the boundary cadence), never live.
 
-**Lifecycle — a session-independent detached daemon (D94).** Because the bus must receive verdicts *while the
-orchestrator is parked or dead*, its lifecycle is **decoupled** from the orchestrator conversation. It is spawned
-**detached in a new session** (`setsid` — survives `/clear` / `--resume` / session death, since Claude Code doesn't
-reap children), binds a dynamic **loopback** port, and publishes `{pid, port, token, started_at}` to
-`.workflow/bus.json`. `/start` is **ensure-running (adopt-or-spawn), idempotent** — liveness authority is a held
-`flock` + a token'd `/health`, **never spawn-fresh** (that drops in-flight verdicts). Stop = an authenticated
-`POST /shutdown` + a heartbeat-aware idle-timeout self-shutdown (the orphan janitor). **WSL2:** a detached
-daemon can't hold the distro VM open, so the bus dies ~8s after the last terminal closes and re-spawns on the next
-`/start` (the durable inbox loses nothing already-written); `loginctl enable-linger` / `.wslconfig vmIdleTimeout=-1`
-is the opt-in upgrade.
+**Lifecycle — a session-independent detached daemon (D94; BUILT — D115/D116).** Because the bus must receive
+verdicts *while the orchestrator is parked or dead*, its lifecycle is **decoupled** from the orchestrator
+conversation. It is spawned **detached in a new session** (`setsid` — survives `/clear` / `--resume` / session
+death, since Claude Code doesn't reap children), binds a dynamic **loopback** port, and publishes
+`{pid, port, token, started_at}` to `bus.json`. `/start` is **ensure-running (adopt-or-spawn), idempotent** —
+liveness authority is a held `flock` **on its own `bus.lock`** + a token'd `/health`, **never spawn-fresh** (that
+drops in-flight verdicts). The lock is a separate file *by necessity*, not tidiness (D115): a lock held on the
+atomically-renamed `bus.json` is silently defeated by the next publish. Stop = an authenticated `POST /shutdown` +
+an **idle-timeout self-shutdown** whose definition is D116's (an open checkpoint suppresses it; the heartbeat is
+never the orchestrator's). **WSL2:** a detached daemon can't hold the distro VM open, so the bus dies ~8s after the
+last terminal closes and re-spawns on the next `/start` (the durable inbox loses nothing already-written);
+`loginctl enable-linger` / `.wslconfig vmIdleTimeout=-1` is the opt-in upgrade.
 
 **The daemon is also the notifier (D111) — notification was never the Claude hook's job.** D90/D101 hung the alert
 on the harness `Notification` hook, which is the one mechanism that structurally *cannot* do it: it is event-bound
@@ -94,12 +96,17 @@ D94 already gave it janitor duty, and being always-alive is exactly the property
 
 **Trust — the browser/network is the untrusted caller, not same-UID (D95).** Loopback ≠ authenticated, and a forged
 command drives an autonomous executor. The loopback stack (all mandatory): a **capability token** (in `bus.json`,
-0600 atomic-create, **header-only**, required on reads too, no cookie), a **strict Host-header allowlist** on every
+0600 atomic-create **whose achieved mode is then verified, never assumed** — D115, **header-only**, required on reads too, no cookie), a **strict Host-header allowlist** on every
 endpoint (the DNS-rebinding defense), **JSON-only + a custom header** (forces the CSRF-defeating preflight), explicit
 `127.0.0.1` bind. The **served page additionally carries a strict `Content-Security-Policy: script-src 'self'`** — the
 console-side teeth of this posture; it forces the zero-build vanilla/Preact+htm frontend (no `unsafe-eval`), owned by
 D100/`03`. The **port is not a secret**; the **bus token (auth) is distinct from the checkpoint token
-(correlation)**. Windows lacks 0600 → token-file ACLs (the D89 OS/FS family). **Remote access — a structural two-socket split
+(correlation)**. **A mode is a request, not a guarantee (D115 — measured):** Windows lacks 0600 (→ token-file ACLs),
+*and* the WSL repo mount silently returns **0777** for a 0600 create — from Linux, with no error. So the create-with-
+the-mode discipline is necessary but **not sufficient**: the achieved mode is **stat'd after creation**, and a
+filesystem that ignored it is surfaced to the human rather than trusted. This is why `bus.json` is pinned **first for
+mode, second for atomicity** — and it is the same rule the secret store leans on (the D89 OS/FS family, widened from
+"Windows" to "any mount that ignores mode"). **Remote access — a structural two-socket split
 (D112, superseding the D70/D107 unauthed warning-only tunnel):** the unauthed tunnel could not be built (D95's
 "the loopback token is never tunnel auth" and D107's "read/verdict ride the tunnel" are mutually exclusive, since
 those endpoints are token-gated), and a `Host`-header policy is no boundary at all — it hands a security decision
@@ -132,6 +139,7 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
   CLAUDE.md         # orchestrator brief (greenfield: here; brownfield: a marked block in the existing one)
   .workflow/
     config.json     # project_root (./project | .) + run config    (committed) · bus:none
+    runtime.json    # RUNTIME — the pointer to the pinned runtime root; absent ⇒ this dir IS the runtime root (the no-relocation case). Machine-specific absolute path ⇒ never committed. NEVER pinned itself: it is *how* the pinned tree is found, so it must sit at a fixed spot on the repo mount — D115, gitignored · bus:none · no-pin
     loop.md         # routing graph + diagram (fixed topology)      (committed) · bus:none
     checks.sh       # mechanical-gate runner (generated per-stack; --fix / --check)  (committed) · bus:none
     codemap.sh      # code-map generator (generated per-stack; writes docs/knowledge/graph.json)  (committed) · bus:none
@@ -139,7 +147,8 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     handoff.md      # durable resume anchor                         (committed) · bus:read (the D108 consumed_through watermark — the bus GCs the inbox on it)
     backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed) · bus:read
     outbox/         # RUNTIME — pending-outward-action queue (push/issue/deploy the orchestrator deferred, awaiting a console `release`) — D105 (retires the D60-reserved checkpoints/), gitignored · bus:read (the console's release panel) · pin
-    bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored · bus:write · pin
+    bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored · bus:write · pin (for the 0600-honouring mount FIRST, atomicity second — D115)
+    bus.lock        # RUNTIME — the daemon's singleton-election lock, held for process lifetime. A SEPARATE file from bus.json by necessity: bus.json is republished by rename, and a rename swaps the inode out from under a held lock, so a second daemon would find the new inode unlocked and start (measured, both filesystems) — D115, gitignored · bus:write · pin (co-location with the record it guards; flock itself does NOT require it — D115)
     parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored · bus:read · pin
     inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control|release) the bus writes; matched at boundaries — D90/D91/D93/D105, gitignored · bus:write · pin
     secrets/        # RUNTIME — live credentials returned at a setup checkpoint; 0600/ACL, atomic write; orchestrator writes+reads; NEVER retention-swept — D111, gitignored · bus:none · pin (for the 0600-honouring mount, not for atomicity)
@@ -161,12 +170,32 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
 is the tree's, not a second list here — `commands/start.md`'s gitignore scaffold is its one shipped restatement,
 gate-held to the tree.)
 
-**Runtime coordination on a native FS (D93).** The atomic-publish + inbox guarantees (POSIX `rename` atomicity,
-`fsync`, `inotify`) hold on a **local** filesystem and are weak-to-broken on network-style mounts (NFS; and on WSL2
-the repo's `/mnt/c` DrvFs/9p mount — the same class). So every runtime path the tree marks **`pin`** is relocated to
-a **native-FS path** (e.g. under `$HOME` on ext4), not the repo mount; `/start` detects a DrvFs/network mount and
-relocates-or-warns. The pinned set is **not restated here** (D114): a hand-kept second copy is precisely how
-`outbox/` never reached it and how `secrets/` reached one copy of it and not the other.
+**Runtime coordination on a native FS (D93; the *reasons* corrected by measurement — D115).** The atomic-publish +
+inbox guarantees (POSIX `rename` atomicity, `fsync`, `inotify`) hold on a **local** filesystem and are weak-to-broken
+on network-style mounts (NFS; and on WSL2 the repo's `/mnt/c` DrvFs/9p mount — the same class). So every runtime path
+the tree marks **`pin`** is relocated to a **native-FS path** (e.g. under `$HOME` on ext4), not the repo mount;
+`/start` detects a DrvFs/network mount and relocates-or-warns. The pinned set is **not restated here** (D114): a
+hand-kept second copy is precisely how `outbox/` never reached it and how `secrets/` reached one copy of it and not
+the other.
+
+**Which guarantee actually fails, measured on the real 9p mount (D115) — the pin stands, two of its three stated
+reasons did not.** The pin was justified by a *bundle* of "weak-to-broken" guarantees, and the bundle is wrong:
+- **File mode — FAILS, silently and open.** A 0600 create returns **0777**. This is the pin's *strongest* reason and
+  it was previously filed under "Windows", so it read as a portability footnote rather than a live exposure on the
+  maintainer's own machine. It is why `bus.json` and `secrets/` cannot sit on the repo mount.
+- **`rename` atomicity — the pin's real second reason** (unchanged; a torn read across the mount is the D93 concern).
+- **`flock` — DOES NOT fail.** It excludes a second holder correctly and the kernel releases it on death, on 9p
+  exactly as on ext4. **"`flock` is unreliable on DrvFs" is false as stated** and must not be repeated as the reason
+  to pin anything: the lock is Linux-kernel-mediated within one distro, which is precisely the only case that
+  matters (the daemon and `/start` are both Linux processes there). It would not coordinate with a *Windows* process
+  — a real limit, and a different claim.
+
+**How a pinned path is found — the resolver (D115).** The marker was declared but never made *actionable*: nothing
+recorded where a relocation went, and nothing could compute it. `bus.json` is itself pinned, so the discovery record
+lived inside the tree you needed it to discover. The resolution is a **gitignored `runtime.json` pointer** on the
+repo mount (`{runtime_root}`), written by `/start`; **absent ⇒ `.workflow/` is the runtime root** — the common
+non-WSL case, at zero indirection. A pointer naming a missing root **fails loudly**: silently falling back to the
+repo mount would put the token and the inbox on the exact filesystem the relocation exists to avoid.
 
 The **committed** durable artifacts stay in the repo and are therefore **never pinned** — a committed file lives on
 the repo mount by construction, so `pin` is a RUNTIME-only question. **This is not because "git doesn't need

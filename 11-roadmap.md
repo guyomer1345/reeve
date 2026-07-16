@@ -68,13 +68,24 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   deliver the console's one critical-path job (a verdict needs the POST + drain). Sequence, value-ordered — each
   step adds a real capability, and **no MVP goal is met until step 3**, so step 2 is a de-risking checkpoint, *not*
   a shippable milestone:
-  1. **Daemon skeleton** — detached (`setsid`), `flock` liveness, `bus.json`, loopback bind, capability token (D94/D95/D100).
-  2. **Reads + the cockpit page** — live loop state from files that already exist (`state.json`/`backlog`/`handoff`/`parked`/git); visibility, and it de-risks the stack (*the old "C1"*).
+  1. **Daemon skeleton** — **BUILT 2026-07-16 (D115/D116)**: detached (`setsid`), `flock` liveness on its own
+     `bus.lock`, `bus.json`, loopback bind, capability token, `POST /shutdown` + the jobs-frame idle janitor
+     (D94/D95/D100). Ships as `scripts/bus.py` → copied to `.claude/scripts/` (closes register F10); idle is a
+     conjunction of per-job votes an open checkpoint suppresses (closes F11). **The substrate it needed did not
+     exist and is now built (D115):** the `runtime.json` pointer (a pinned path could not be *found* — `bus.json`
+     is itself pinned), a separate `bus.lock` (a lock on the renamed record is silently defeated), and
+     mode-verified-not-requested (a 0600 create returns 0777 on the repo mount, silently).
+  2. **Reads + the cockpit page** — **BUILT 2026-07-16 (D116)**: the synthesized ETag'd snapshot over
+     `state.json`/`parked/`/`outbox/`/`backlog.md` + `git log`, and the zero-build vanilla page (embedded in the
+     daemon; `<meta>`-tag token bootstrap, strict `script-src 'self'`, chained-`setTimeout` poll). *(The old "C1".)*
+     **Residual: nobody has rendered the page in a browser** — correctness is driven, legibility is not.
   3. **POST → inbox + the orchestrator drain** — the verdict job actually lands here (D93 protocol + the D108 consume model) (*the old "C2"*).
   4. **The notifier** — `parked/` watch + webhook/reminders/escalation (D111): away becomes *triggerable*.
   5. **The remote socket** — the reduced surface behind a declared identity transport (D112): away becomes *actionable*.
   6. **The relaunch-runner** — (D113): away becomes *completing*.
-  **[core for unattended autonomy — fully designed (D93/D94/D95 + D108/D111/D112/D113); build = Phase 3]**
+  **[core for unattended autonomy — fully designed (D93/D94/D95 + D108/D111/D112/D113); build = Phase 3.
+  **Increments 1+2 BUILT 2026-07-16 (D115/D116** — `scripts/bus.py` + 39 fixture tests, gate suite 89 → 128);
+  **increment 3 (POST → inbox + drain — the verdict job, the first to meet an MVP goal) is next.**]**
 - **C-map — project map + flow view** (D70) — a read-only cluster diagram over the code-map `graph.json`
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
@@ -273,10 +284,15 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **Phase-2 design CLOSED (D90–D107), and the pre-Phase-3 gate is now CLOSED too
-(D108–D113).** Next is **Phase 3 — Build the website**, as the **six value-ordered increments** under *Space 3*
-above (daemon skeleton → reads+page → POST+drain → notifier → remote socket → runner), **not** the retired
-"C1 → C2" split.
+**Recommended next slice:** **Phase 3 is UNDERWAY — increments 1+2 are BUILT (D115/D116, 2026-07-16).** Next is
+**increment 3 — POST → inbox + the orchestrator drain**: the verdict job lands there, and it is the **first
+increment that meets an MVP goal** (1+2 were the de-risking checkpoint, exactly as this section says). Then
+notifier → remote socket → runner.
+*(**The build is pressure-testing the design, as intended.** Increment 1 alone found the substrate unbuildable as
+specced — a pinned path could not be *found* — and **measured two stated mechanisms to be wrong**: `flock` does not
+fail on the repo mount, while file *mode* does, silently and open. Both are the reverse of what the spec asserted,
+and neither was reachable by re-reading; the 9p mount reports success in both failing cases. Expect the same of the
+increments below — drive them on the real filesystem.)*
 **Phase 4 — Build the demo.**
 
 **The MVP away-autonomy boundary (D113 — locked, eyes open).** With the runner in, away-autonomy is **real

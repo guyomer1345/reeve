@@ -71,7 +71,8 @@ Declared upstream wherever the intent lives, with setup's one exception:
   foreseeable setups are bundled **within-plan at first-setup-contact** (not front-loaded). Cross-ticket coalescing
   is deferred (the schema already fits it — additive, not a refactor).
 - **A returned secret rides the inbox, sensitive + shred** — written to the gitignored **secret store**, now
-  located and owned (D111): **`.workflow/secrets/`**, native-FS-pinned, atomic `0600`/ACL create, orchestrator
+  located and owned (D111): **`.workflow/secrets/`**, native-FS-pinned, atomic `0600`/ACL create **whose achieved
+  mode is verified, not assumed** (D115 — a 0600 create silently returns 0777 on the WSL repo mount), orchestrator
   writes + reads, **never logged and never retention-swept** (live credentials are not memory — a memory cap
   deleting a working key is a bug, so removal is explicit). The inbox record that carried it is **unlinked
   immediately after that write** — the single carve-out to the never-delete inbox rule (D108), so a secret's
