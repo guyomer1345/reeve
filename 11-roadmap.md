@@ -79,13 +79,22 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      `state.json`/`parked/`/`outbox/`/`backlog.md` + `git log`, and the zero-build vanilla page (embedded in the
      daemon; `<meta>`-tag token bootstrap, strict `script-src 'self'`, chained-`setTimeout` poll). *(The old "C1".)*
      **Residual: nobody has rendered the page in a browser** — correctness is driven, legibility is not.
-  3. **POST → inbox + the orchestrator drain** — the verdict job actually lands here (D93 protocol + the D108 consume model) (*the old "C2"*).
+  3. **POST → inbox + the orchestrator drain** — **BUILT 2026-07-16 (D117/D118/D119)**: `POST
+     /api/{verdict,intake,control,release}` → validate → atomic append → `202` + a `Location` ticket that **is** the
+     `message_id`; the console's forms + a "my requests" surface that resolves off the per-kind effect anchors (so it
+     still answers after GC); inbox GC on the watermark; and the drain **split** — its bookkeeping is `scripts/drain.py`
+     (`list` → apply → `record`/`secret`), its apply stays the brief. *The verdict job lands here — the first
+     increment to meet an MVP goal* (D93 protocol + the D108 consume model) (*the old "C2"*).
+     **Residual (carried from increment 2, now twice): nobody has rendered the page in a browser** — the forms were
+     added to an unreviewed surface; correctness is driven, legibility is not.
   4. **The notifier** — `parked/` watch + webhook/reminders/escalation (D111): away becomes *triggerable*.
   5. **The remote socket** — the reduced surface behind a declared identity transport (D112): away becomes *actionable*.
   6. **The relaunch-runner** — (D113): away becomes *completing*.
   **[core for unattended autonomy — fully designed (D93/D94/D95 + D108/D111/D112/D113); build = Phase 3.
   **Increments 1+2 BUILT 2026-07-16 (D115/D116** — `scripts/bus.py` + 39 fixture tests, gate suite 89 → 128);
-  **increment 3 (POST → inbox + drain — the verdict job, the first to meet an MVP goal) is next.**]**
+  **increment 3 BUILT 2026-07-16 (D117/D118/D119** — `scripts/drain.py` + the POST surface; gate suite 128 → 177).
+  **The first MVP goal is met: a verdict now lands durably and unparks the loop.** Next is **increment 4 — the
+  notifier** (`parked/` watch + webhook/reminders/escalation, D111): away becomes *triggerable*.]**
 - **C-map — project map + flow view** (D70) — a read-only cluster diagram over the code-map `graph.json`
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
@@ -284,15 +293,20 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **Phase 3 is UNDERWAY — increments 1+2 are BUILT (D115/D116, 2026-07-16).** Next is
-**increment 3 — POST → inbox + the orchestrator drain**: the verdict job lands there, and it is the **first
-increment that meets an MVP goal** (1+2 were the de-risking checkpoint, exactly as this section says). Then
-notifier → remote socket → runner.
+**Recommended next slice:** **Phase 3 is UNDERWAY — increments 1+2+3 are BUILT (D115/D116 · D117/D118/D119,
+2026-07-16), and the first MVP goal is met**: a verdict POSTed from the console lands durably on the inbox and
+unparks the loop at the next boundary. Next is **increment 4 — the notifier** (`parked/` watch + webhook /
+reminders / escalation, D111): away becomes *triggerable*. Then remote socket → runner.
 *(**The build is pressure-testing the design, as intended.** Increment 1 alone found the substrate unbuildable as
 specced — a pinned path could not be *found* — and **measured two stated mechanisms to be wrong**: `flock` does not
 fail on the repo mount, while file *mode* does, silently and open. Both are the reverse of what the spec asserted,
-and neither was reachable by re-reading; the 9p mount reports success in both failing cases. Expect the same of the
-increments below — drive them on the real filesystem.)*
+and neither was reachable by re-reading; the 9p mount reports success in both failing cases. **Increment 3 held the
+pattern, and widened it past the filesystem:** the D108 watermark was measured to **delete a message nobody
+consumed** (it rested on an ordering guarantee nothing provided — D118), and the drain's rule (3) was **followed by
+1 of 3 real sessions** because it lived in this log and never reached the driver artifacts (D117). Both were found
+by *driving*, not reading — and the watermark's second bug survived 27 green unit tests, surfacing only when a real
+session recorded ids one at a time, exactly as the brief asks. **Drive them on the real filesystem, with a real
+model.**)*
 **Phase 4 — Build the demo.**
 
 **The MVP away-autonomy boundary (D113 — locked, eyes open).** With the runner in, away-autonomy is **real

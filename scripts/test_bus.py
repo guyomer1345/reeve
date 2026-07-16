@@ -247,9 +247,28 @@ class Jobs(Tmp):
 
     def test_idle_is_not_keyed_on_an_orchestrator_heartbeat(self):
         """Keying the janitor on the orchestrator would starve it precisely when the
-        orchestrator is dead — the state this daemon exists to cover."""
-        names = [j.name for j in self.d.jobs]
-        self.assertEqual(sorted(names), ["parked", "serve"])
+        orchestrator is dead — the state this daemon exists to cover.
+
+        Jobs are expected to arrive (each one adds an idle TERM, which is the whole
+        point of the frame), so this pins the property rather than the roster: no job
+        may vote on the orchestrator's liveness.
+        """
+        names = sorted(j.name for j in self.d.jobs)
+        self.assertEqual(names, ["inbox-gc", "parked", "serve"])
+        self.assertNotIn("heartbeat", " ".join(names))
+
+    def test_unconsumed_inbox_does_not_hold_the_daemon_open(self):
+        """A durable message loses nothing when the daemon reaps itself — /start
+        respawns it and the orchestrator drains at its next boundary. Voting busy here
+        would instead keep the daemon alive forever whenever the orchestrator is gone,
+        which is most of the time. (An open CHECKPOINT is the opposite case, and does
+        hold it open: there a verdict is actively owed.)"""
+        self.d.last_request = 0
+        with open(os.path.join(self.w, "inbox", "20260716T120000.000001Z-aaaaaaaa-1.json"),
+                  "w") as fh:
+            json.dump({"kind": "intake", "ask": "x"}, fh)
+        idle, blockers = self.d.idle_check()
+        self.assertTrue(idle, blockers)
 
 
 # --- a real server ----------------------------------------------------------
@@ -354,6 +373,252 @@ class LiveServer(Tmp):
         self.assertEqual(rec["port"], self.port)
         self.assertEqual(rec["token"], self.d.token)
         self.assertIsNotNone(bus.health(self.port, self.d.token))
+
+    # -- POST: the async command half --
+    def post(self, path, payload, token=None, host=None, ctype="application/json"):
+        h = {"Host": host or ("127.0.0.1:%d" % self.port), "Content-Type": ctype}
+        h[bus.TOKEN_HEADER] = token if token is not None else self.d.token
+        data = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+        req = urllib.request.Request("http://127.0.0.1:%d%s" % (self.port, path),
+                                     method="POST", data=data, headers=h)
+        try:
+            with urllib.request.urlopen(req, timeout=5) as res:
+                return res.status, json.loads(res.read() or b"{}"), dict(res.headers)
+        except urllib.error.HTTPError as e:
+            body = e.read()
+            try:
+                body = json.loads(body or b"{}")
+            except ValueError:
+                body = {}
+            return e.code, body, dict(e.headers)
+
+    def test_verdict_post_lands_durably_and_returns_a_ticket(self):
+        code, body, headers = self.post("/api/verdict", {
+            "token": "item-1:qa:abc", "verdict": {"outcome": "approve", "notes": "ok"}})
+        self.assertEqual(code, 202, body)
+        ticket = body["ticket"]
+        # The ticket IS the message id IS the filename stem — one canonical id.
+        path = os.path.join(self.w, "inbox", ticket + ".json")
+        self.assertTrue(os.path.exists(path), "202 returned but nothing was written")
+        self.assertEqual(headers["Location"], "/api/requests/" + ticket)
+        rec = bus.read_json(path)
+        self.assertEqual(rec["kind"], "verdict")
+        self.assertEqual(rec["message_id"], ticket)
+        self.assertEqual(rec["verdict"]["outcome"], "approve")
+
+    def test_every_kind_is_accepted(self):
+        for path, payload in (
+                ("/api/verdict", {"token": "t", "verdict": {"outcome": "reject"}}),
+                ("/api/intake", {"ask": "add a CSV export"}),
+                ("/api/control", {"op": "pause"}),
+                ("/api/release", {"action_ids": ["act-1"]})):
+            code, body, _ = self.post(path, payload)
+            self.assertEqual(code, 202, "%s: %s" % (path, body))
+
+    def test_a_write_needs_the_token_and_a_sane_host(self):
+        self.assertEqual(self.post("/api/intake", {"ask": "x"}, token="wrong")[0], 401)
+        self.assertEqual(self.post("/api/intake", {"ask": "x"}, host="evil.com")[0], 403)
+
+    def test_bad_bodies_are_refused_with_a_reason(self):
+        for path, payload, want in (
+                ("/api/verdict", {"token": "t", "verdict": {"outcome": "maybe"}}, "outcome"),
+                ("/api/verdict", {"verdict": {"outcome": "approve"}}, "token"),
+                ("/api/verdict", {"token": "t"}, "verdict"),
+                ("/api/intake", {"ask": "   "}, "ask"),
+                ("/api/control", {"op": "rm -rf"}, "op"),
+                ("/api/release", {"action_ids": []}, "action_ids"),
+                ("/api/release", {"action_ids": "act-1"}, "action_ids")):
+            code, body, _ = self.post(path, payload)
+            self.assertEqual(code, 400, "%s %s was accepted" % (path, payload))
+            self.assertIn(want, body.get("error", ""))
+        self.assertEqual(len(os.listdir(os.path.join(self.w, "inbox"))), 0,
+                         "a refused message still reached the durable inbox")
+
+    def test_malformed_json_is_refused(self):
+        code, body, _ = self.post("/api/intake", b"{not json")
+        self.assertEqual(code, 400)
+        self.assertIn("JSON", body.get("error", ""))
+
+    def test_control_ops_are_a_closed_set(self):
+        """A control op has no durable artifact to anchor on, so a redelivered one is
+        safe ONLY because re-applying it is a no-op. A new op has to be admitted
+        deliberately, never by a caller."""
+        self.assertEqual(self.post("/api/control", {"op": "deploy"})[0], 400)
+        for op in bus.CONTROL_OPS:
+            self.assertEqual(self.post("/api/control", {"op": op})[0], 202)
+
+    def test_setup_verdict_carries_per_task_outcomes(self):
+        code, _, _ = self.post("/api/verdict", {"token": "t", "verdict": {"tasks": [
+            {"id": "stripe", "outcome": "approve"},
+            {"id": "clerk", "outcome": "reject", "notes": "no account"}]}})
+        self.assertEqual(code, 202)
+        code, body, _ = self.post("/api/verdict", {"token": "t", "verdict": {"tasks": [
+            {"id": "stripe", "outcome": "done"}]}})
+        self.assertEqual(code, 400)
+        self.assertIn("outcome", body["error"])
+
+    def test_ticket_resolves_over_http(self):
+        _, body, _ = self.post("/api/intake", {"ask": "x"})
+        code, raw, _ = self.get("/api/requests/" + body["ticket"], token=self.d.token)
+        self.assertEqual(code, 200)
+        self.assertEqual(json.loads(raw)["status"], "queued")
+
+    def test_location_ticket_is_not_a_path_traversal(self):
+        code, _, _ = self.get("/api/requests/../../etc/passwd", token=self.d.token)
+        self.assertEqual(code, 404)
+
+    def test_oversize_and_wrong_ctype_are_refused_on_a_real_kind(self):
+        code, _, _ = self.post("/api/intake", {"ask": "x"},
+                               ctype="application/x-www-form-urlencoded")
+        self.assertEqual(code, 415)
+        code, _, _ = self.post("/api/intake", b"x" * (bus.MAX_BODY + 1))
+        self.assertEqual(code, 413)
+
+
+# --- the inbox writer -------------------------------------------------------
+class InboxOrdering(Tmp):
+    """The measured contract behind the watermark: filename order == VISIBILITY order."""
+
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        self.writer = bus.InboxWriter(bus.Paths(self.w))
+
+    def test_ids_are_unique_and_monotonic_under_concurrency(self):
+        got, lock = [], threading.Lock()
+
+        def go(i):
+            mid = self.writer.append("intake", {"ask": "n%d" % i})
+            with lock:
+                got.append(mid)
+
+        threads = [threading.Thread(target=go, args=(i,)) for i in range(40)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(len(set(got)), 40, "the bus issued a duplicate message id")
+        self.assertEqual(got, sorted(got),
+                         "ids were not issued in the order they became visible")
+
+    def test_visibility_order_matches_filename_order(self):
+        """The exact race that eats a message: a thread that names itself FIRST is
+        descheduled and renames LAST. If that can happen, the orchestrator publishes a
+        watermark above a message it never saw, and the GC deletes it. Measured — this
+        is why allocation and publication share one lock."""
+        visible, lock = [], threading.Lock()
+
+        def go(i, stall):
+            real = bus.atomic_write
+
+            def slow(path, data, mode=0o600):
+                time.sleep(stall)
+                real(path, data, mode)
+            bus.atomic_write = slow if stall else real
+            try:
+                mid = self.writer.append("intake", {"ask": "n%d" % i})
+            finally:
+                bus.atomic_write = real
+            with lock:
+                visible.append(mid)
+
+        a = threading.Thread(target=go, args=(1, 0.25))
+        a.start()
+        time.sleep(0.02)
+        b = threading.Thread(target=go, args=(2, 0.0))
+        b.start()
+        a.join()
+        b.join()
+        on_disk = sorted(n[:-5] for n in os.listdir(os.path.join(self.w, "inbox")))
+        self.assertEqual(visible, on_disk,
+                         "a message became visible below one already visible — the "
+                         "watermark would collect an unconsumed message")
+
+    def test_sequence_survives_a_restart_and_a_backwards_clock(self):
+        """A daemon restart under an NTP step must not re-issue a name below one
+        already consumed — that is the same message loss through another door."""
+        first = self.writer.append("intake", {"ask": "a"})
+        fresh = bus.InboxWriter(bus.Paths(self.w))  # a "restarted" daemon
+        real = time.time
+        time.time = lambda: real() - 3600  # the clock jumps an hour backwards
+        try:
+            second = fresh.append("intake", {"ask": "b"})
+        finally:
+            time.time = real
+        self.assertGreater(second, first,
+                           "a restart re-issued an id below an existing one")
+
+    def test_message_id_is_the_filename_stem(self):
+        mid = self.writer.append("intake", {"ask": "a"})
+        self.assertTrue(os.path.exists(
+            os.path.join(self.w, "inbox", mid + ".json")))
+        self.assertTrue(bus.MESSAGE_ID_RE.fullmatch(mid), mid)
+
+    def test_a_collected_inbox_still_floors_new_ids_at_the_watermark(self):
+        """The steady state of a working inbox is EMPTY — collecting it is the GC's
+        job. So the disk cannot be the only floor: a daemon restarting into an empty
+        inbox under a backwards clock step would issue an id below the watermark, and
+        the janitor would collect that message before the orchestrator ever drained it.
+        """
+        mark = "20990716T120000.000001Z-ffffffff-1"  # far in the future
+        with open(os.path.join(self.w, "handoff.md"), "w") as fh:
+            fh.write(bus.render_handoff_block(
+                {"consumed": [], "consumed_through": mark, "dead_letters": []}))
+        self.assertEqual(os.listdir(os.path.join(self.w, "inbox")), [],
+                         "fixture assumes a collected inbox")
+        fresh = bus.InboxWriter(bus.Paths(self.w))
+        mid = fresh.append("verdict", {"token": "t", "verdict": {"outcome": "approve"}})
+        self.assertGreater(mid, mark,
+                           "the bus issued an id at or below the watermark — the GC "
+                           "would delete this message before it was ever drained")
+
+
+# --- inbox GC ---------------------------------------------------------------
+class InboxGC(Tmp):
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        self.d = bus.Daemon(bus.Paths(self.w), idle_timeout=3600)
+        self.job = bus.InboxGCJob()
+
+    def _msg(self, stem):
+        with open(os.path.join(self.w, "inbox", stem + ".json"), "w") as fh:
+            json.dump({"kind": "intake", "ask": "x"}, fh)
+
+    def _handoff(self, block):
+        with open(os.path.join(self.w, "handoff.md"), "w") as fh:
+            fh.write("# Handoff\n\nprose\n\n" + bus.render_handoff_block(block) + "\n")
+
+    def test_nothing_is_collected_without_a_watermark(self):
+        self._msg("20260716T120000.000001Z-aaaaaaaa-1")
+        self.job.tick(self.d)
+        self.assertEqual(len(os.listdir(os.path.join(self.w, "inbox"))), 1)
+
+    def test_only_at_or_below_the_watermark_is_collected(self):
+        low = "20260716T120000.000001Z-aaaaaaaa-1"
+        mark = "20260716T120100.000001Z-bbbbbbbb-2"
+        high = "20260716T120200.000001Z-cccccccc-3"
+        for s in (low, mark, high):
+            self._msg(s)
+        self._handoff({"consumed": [], "consumed_through": mark, "dead_letters": []})
+        self.job.tick(self.d)
+        left = sorted(n[:-5] for n in os.listdir(os.path.join(self.w, "inbox")))
+        self.assertEqual(left, [high], "GC crossed the watermark or stopped short")
+
+    def test_a_torn_handoff_collects_nothing_rather_than_over_collecting(self):
+        self._msg("20260716T120000.000001Z-aaaaaaaa-1")
+        with open(os.path.join(self.w, "handoff.md"), "w") as fh:
+            fh.write(bus.HANDOFF_BEGIN + "\n```json\n{not json")
+        self.job.tick(self.d)
+        self.assertEqual(len(os.listdir(os.path.join(self.w, "inbox"))), 1)
+
+    def test_already_unlinked_message_is_not_an_error(self):
+        """The sensitive-payload carve-out unlinks a consumed message before the
+        janitor reaches it."""
+        mark = "20260716T120100.000001Z-bbbbbbbb-2"
+        self._handoff({"consumed": [], "consumed_through": mark, "dead_letters": []})
+        self.job.tick(self.d)  # empty inbox, watermark set
+        self.assertTrue(True)  # a raise here would have failed the test
 
 
 # --- lifecycle --------------------------------------------------------------

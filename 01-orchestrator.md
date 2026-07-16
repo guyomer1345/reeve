@@ -96,12 +96,17 @@ per-capability *how*), it encodes:
 - **The control algorithm** — *drain* (consume the inbox — see below) → *read* `state.json` (cold start:
   `handoff.md` + `git log`) → *place* (mid-item continue; between items `prioritize`) → *advance* (look up the
   node's edges, dispatch, follow the result, write `state.json`).
-- **The boundary drain [DECIDED — D108]** — at every scheduler boundary the orchestrator consumes `inbox/` before
-  it schedules, **all kinds, uniformly**: list `inbox/` → skip `message_id`s already in the `handoff.md`
-  consumed-set → **apply `control`** (so a reprioritize is honored by the pick that follows) → **resume a
-  ready-parked ticket** (oldest verdict first, +aging — D91) → **promote `intake`** into the backlog through triage
-  → **start-new** → **fire `release`** through `guard.sh` → sleep. Without this step an orchestrator following its
-  brief literally would park at a checkpoint and never consume the verdict that unparks it.
+- **The boundary drain [DECIDED — D108; SPLIT + BUILT — D117]** — at every scheduler boundary the orchestrator
+  consumes `inbox/` before it schedules, **all kinds, uniformly**: list `inbox/` → skip `message_id`s already in the
+  `handoff.md` consumed-set → **apply `control`** (so a reprioritize is honored by the pick that follows) →
+  **resume a ready-parked ticket** (oldest verdict first, +aging — D91) → **promote `intake`** into the backlog
+  through triage → **start-new** → **fire `release`** through `guard.sh` → sleep. Without this step an orchestrator
+  following its brief literally would park at a checkpoint and never consume the verdict that unparks it.
+  **Only the *apply* is the orchestrator's** (D117): the selection, ordering, watermark, prune and the
+  atomic+durable `handoff.md` republish are `scripts/drain.py` (`list` → apply → `record`; `secret` for a returned
+  credential, which never enters the orchestrator's context). Measured: given the prose alone, real sessions applied
+  correctly every time and got the *bookkeeping* wrong 2 in 3 — a rule that lives only in this repo's decision log
+  is not a rule the consumer follows.
 - **Invariants split** — **enforced** (secret-scan + verify-before-commit + the **push floor** — never move a
   protected branch, never push a secret in the outgoing range — = `hooks/guard.sh`; the outward-action gate = the
   `config.outward`/outbox defer-and-release model over that floor, with the harness **out of the outward path

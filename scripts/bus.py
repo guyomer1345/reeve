@@ -64,13 +64,13 @@ import hashlib
 import html
 import json
 import os
+import re
 import secrets
-import shutil
-import socket
 import subprocess
 import sys
 import threading
 import time
+import uuid
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -105,6 +105,10 @@ class Paths:
         self.parked = os.path.join(self.runtime, "parked")
         self.inbox = os.path.join(self.runtime, "inbox")
         self.outbox = os.path.join(self.runtime, "outbox")
+        # Pinned for the same measured reason as the token: these are live credentials
+        # on a tree whose mount may ignore 0600 and say nothing. The bus never touches
+        # this path — it is here because path resolution has one owner.
+        self.secrets = os.path.join(self.runtime, "secrets")
         # committed half (always on the repo mount, never relocated)
         self.handoff = os.path.join(self.workflow, "handoff.md")
         self.backlog = os.path.join(self.workflow, "backlog.md")
@@ -201,6 +205,324 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def probe_mode(root):
+    """Ask the filesystem whether it honours a file mode at all, by measuring it.
+
+    A mode is a request, not a guarantee: the WSL repo mount returns 0777 for a 0600
+    create, from Linux, with no error. That matters far past the capability token —
+    this same tree holds inbox messages carrying credentials a human returned at a
+    setup checkpoint, and the secret store. So probe the tree once and say what is
+    exposed, rather than discovering it per-file or, worse, never.
+    """
+    probe = os.path.join(root, ".mode-probe.%d" % os.getpid())
+    try:
+        fd = os.open(probe, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+        os.close(fd)
+    except OSError as exc:
+        return "cannot probe file mode under %s: %s" % (root, exc)
+    try:
+        got = os.stat(probe).st_mode & 0o777
+    except OSError as exc:
+        return "cannot stat the mode probe under %s: %s" % (root, exc)
+    finally:
+        try:
+            os.unlink(probe)
+        except OSError:
+            pass
+    if got & ~0o600:
+        return ("%s does not honour file modes (a 0600 create came back %s). The "
+                "capability token, any credential returned at a setup checkpoint while "
+                "it sits on the inbox, and the secret store are all readable by other "
+                "users on this machine. Relocate the runtime root to a native "
+                "filesystem and point .workflow/runtime.json at it." % (root, oct(got)))
+    return None
+
+
+# --- the handoff machine block ----------------------------------------------
+# handoff.md is prose the orchestrator writes for the next session to read, but two
+# machine facts live on it — the inbox consumed-set and its watermark — because it is
+# the durable cold-start anchor, which is exactly the moment they are load-bearing.
+# Prose and machine state therefore share one file, so the machine half lives in a
+# fenced, delimited block that drain.py owns and rewrites without touching a byte of
+# the surrounding prose.
+#
+# It is parsed HERE rather than in drain.py because both sides read it: the bus needs
+# the watermark to GC its own partition. drain.py is the only writer.
+HANDOFF_BEGIN = "<!-- drain:begin — machine-owned (drain.py). Do not hand-edit. -->"
+HANDOFF_END = "<!-- drain:end -->"
+HANDOFF_BLOCK_RE = re.compile(
+    re.escape(HANDOFF_BEGIN) + r".*?" + re.escape(HANDOFF_END), re.DOTALL)
+_FENCE_RE = re.compile(r"```json\s*(.*?)\s*```", re.DOTALL)
+
+
+def empty_block():
+    return {"consumed": [], "consumed_through": None, "dead_letters": []}
+
+
+def read_handoff_block(path):
+    """Return the machine block, or an empty one if handoff.md has none.
+
+    A missing or unparseable block degrades to empty rather than raising: on the bus
+    side that means "no watermark, so GC nothing", which is the safe direction — a
+    torn read can make collection lag, never over-collect.
+    """
+    text = read_text(path)
+    if not text:
+        return empty_block()
+    m = HANDOFF_BLOCK_RE.search(text)
+    if not m:
+        return empty_block()
+    fence = _FENCE_RE.search(m.group(0))
+    if not fence:
+        return empty_block()
+    try:
+        block = json.loads(fence.group(1))
+    except ValueError:
+        return empty_block()
+    if not isinstance(block, dict):
+        return empty_block()
+    out = empty_block()
+    out.update({k: v for k, v in block.items() if k in out})
+    if not isinstance(out["consumed"], list):
+        out["consumed"] = []
+    if not isinstance(out["dead_letters"], list):
+        out["dead_letters"] = []
+    return out
+
+
+def render_handoff_block(block):
+    return "%s\n```json\n%s\n```\n%s" % (
+        HANDOFF_BEGIN, json.dumps(block, indent=2, sort_keys=True), HANDOFF_END)
+
+
+def upsert_handoff_block(text, block):
+    """Return `text` with the machine block set to `block`, prose untouched.
+
+    Appends the block if it is absent — which covers both a first run and a session
+    that rewrote handoff.md wholesale and dropped it. The dropped case cannot recover
+    the SET (it is gone), only the structure; that is survivable precisely because
+    every kind carries an effect anchor of its own, so a re-applied message is caught
+    on its second layer rather than double-applied.
+
+    The format lives here, beside its parser, so the two cannot drift apart. drain.py
+    owns deciding what goes in it and writing the file.
+    """
+    rendered = render_handoff_block(block)
+    if text is None:
+        return ("# Handoff — resume anchor\n\n"
+                "_No prose anchor written yet._\n\n" + rendered + "\n")
+    if HANDOFF_BLOCK_RE.search(text):
+        return HANDOFF_BLOCK_RE.sub(lambda _: rendered, text, count=1)
+    return text.rstrip("\n") + "\n\n" + rendered + "\n"
+
+
+# --- the inbox writer -------------------------------------------------------
+# The bus is the SOLE writer of inbox/. The orchestrator never writes it and never
+# deletes from it (one carve-out: a consumed message that carried a credential is
+# unlinked by the orchestrator the moment that value reaches the secret store, so a
+# secret's latency-to-zero does not wait on this janitor).
+TS_FMT = "%Y%m%dT%H%M%S.%fZ"
+_STEM_TS_RE = re.compile(r"^(\d{8}T\d{6}\.\d{6}Z)-")
+# <ts>-<uuid>-<pid>. Recognizable on sight in a backlog `source` cell, which is how a
+# promoted item is traced back to the request that asked for it.
+MESSAGE_ID_RE = re.compile(r"\d{8}T\d{6}\.\d{6}Z-[0-9a-f]{8}-\d+")
+
+VERDICT_OUTCOMES = ("approve", "changes", "reject")
+# A CLOSED set, and that is load-bearing rather than tidy: a control op leaves no
+# durable artifact to anchor on, so the ONLY thing making a redelivered control
+# message safe is that re-applying it is a no-op by construction. Adding a
+# non-idempotent op here would silently break the drain's crash-window safety, so an
+# op has to be admitted deliberately — reprioritize re-orders the same backlog to the
+# same order; pause and resume each re-set a flag.
+CONTROL_OPS = ("reprioritize", "pause", "resume")
+
+
+def stem_micros(stem):
+    """The microseconds encoded in a message_id, or 0 if it is not one."""
+    m = _STEM_TS_RE.match(stem or "")
+    if not m:
+        return 0
+    try:
+        dt = datetime.strptime(m.group(1), TS_FMT).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return 0
+    return int(dt.timestamp() * 1_000_000)
+
+
+class Invalid(Exception):
+    """A message the bus refuses to append. Rejected at POST time, while there is
+    still a caller listening to be told why — once it is on the inbox the only reader
+    is a batch consumer that cannot answer anybody."""
+
+
+def _req_str(body, field, maxlen=8192):
+    v = body.get(field)
+    if not isinstance(v, str) or not v.strip():
+        raise Invalid("%s must be a non-empty string" % field)
+    if len(v) > maxlen:
+        raise Invalid("%s is too long (max %d)" % (field, maxlen))
+    return v
+
+
+def _is_sensitive(returns):
+    """Does this verdict hand back a credential?
+
+    Deliberately shallow and permissive: `returns` is an open payload, and the cost of
+    a false positive is a tighter mode plus an unlink the orchestrator would do anyway,
+    while the cost of a false negative is a live key left lying on the inbox.
+    """
+    if isinstance(returns, dict):
+        if returns.get("sensitive"):
+            return True
+        return any(_is_sensitive(v) for v in returns.values())
+    if isinstance(returns, list):
+        return any(_is_sensitive(v) for v in returns)
+    return False
+
+
+def validate(kind, body):
+    """Return (clean_body, sensitive). Raises Invalid with a reason a human can act on."""
+    if not isinstance(body, dict):
+        raise Invalid("body must be a JSON object")
+
+    if kind == "verdict":
+        token = _req_str(body, "token", 512)
+        v = body.get("verdict")
+        if not isinstance(v, dict):
+            raise Invalid("verdict must be an object")
+        tasks = v.get("tasks")
+        if tasks is None:
+            if v.get("outcome") not in VERDICT_OUTCOMES:
+                raise Invalid("verdict.outcome must be one of %s"
+                              % ", ".join(VERDICT_OUTCOMES))
+        else:
+            # A setup checkpoint is plural: one reply carries a per-task outcome so a
+            # mixed answer (this key works, that one I could not get) routes each on
+            # its own.
+            if not isinstance(tasks, list) or not tasks:
+                raise Invalid("verdict.tasks must be a non-empty array when present")
+            for t in tasks:
+                if not isinstance(t, dict) or t.get("outcome") not in VERDICT_OUTCOMES:
+                    raise Invalid("every verdict.tasks[] entry needs an outcome in %s"
+                                  % ", ".join(VERDICT_OUTCOMES))
+        clean = {"token": token, "verdict": v}
+        return clean, _is_sensitive(v.get("returns")) or any(
+            _is_sensitive(t.get("returns")) for t in (tasks or []) if isinstance(t, dict))
+
+    if kind == "intake":
+        clean = {"ask": _req_str(body, "ask")}
+        nodes = body.get("node_ids")
+        if nodes is not None:
+            if not isinstance(nodes, list) or not all(isinstance(n, str) for n in nodes):
+                raise Invalid("node_ids must be an array of strings")
+            clean["node_ids"] = nodes
+        return clean, False
+
+    if kind == "control":
+        op = body.get("op")
+        if op not in CONTROL_OPS:
+            raise Invalid("op must be one of %s" % ", ".join(CONTROL_OPS))
+        return {"op": op}, False
+
+    if kind == "release":
+        ids = body.get("action_ids")
+        if not isinstance(ids, list) or not ids or not all(
+                isinstance(a, str) and a.strip() for a in ids):
+            raise Invalid("action_ids must be a non-empty array of strings")
+        # Always an explicit id-set — a snapshot of what the human actually looked at.
+        # An action queued after their glance is simply not in the set, which is why
+        # there is no approve-all-pending wildcard to offer.
+        return {"action_ids": ids}, False
+
+    raise Invalid("unknown kind %r" % kind)
+
+
+class InboxWriter:
+    """Appends typed messages to inbox/, in an order the watermark can trust.
+
+    THE MEASURED CONTRACT: filename order must equal VISIBILITY order.
+
+    The GC rule is "collect every inbox file at or below the watermark the
+    orchestrator published", and the orchestrator computes that watermark from what it
+    can SEE. So if a message can ever become visible carrying a timestamp lower than
+    one already visible, the watermark can be published over a message nobody has
+    consumed, and the janitor deletes it. A human's verdict, silently dropped.
+
+    That is not hypothetical: stamp the name from the clock and then write+rename, and
+    two concurrent POSTs race — the thread that names itself FIRST can be descheduled
+    and rename LAST. Measured: the second drain publishes a watermark above the
+    stalled message, and GC eats it. This server is threaded, so the race is live.
+
+    Two rules close it, and both are needed:
+      1. Allocate the name AND publish it under ONE lock, so the interval where a name
+         exists but is not yet visible cannot overlap another allocation.
+      2. Never re-issue a name at or below the last one, even if the clock moves
+         backwards (NTP) or the daemon restarts — so the sequence is monotonic across
+         a process boundary, not only within one.
+    """
+
+    def __init__(self, paths):
+        self.paths = paths
+        self._lock = threading.Lock()
+        self._last_us = self._prime()
+
+    def _prime(self):
+        """Resume the sequence above everything that has ever been issued.
+
+        The floor is the higher of two things, and BOTH are needed:
+
+          - the newest name still on the inbox, and
+          - the watermark the orchestrator has published.
+
+        The disk alone is not enough, and the hole is not exotic: the GC's whole job is
+        to empty this directory, so the steady state is an inbox with nothing in it to
+        prime from. A daemon restarting there under a backwards clock step (NTP, a
+        suspended laptop) would issue an id BELOW the watermark, and the janitor would
+        collect that message on its next tick — before the orchestrator ever drained it.
+        The watermark is the durable high-water record of what has already been issued
+        and consumed, so it is the honest floor.
+        """
+        floor = 0
+        try:
+            names = os.listdir(self.paths.inbox)
+        except OSError:
+            names = []
+        for n in names:
+            if n.endswith(".json"):
+                floor = max(floor, stem_micros(n[:-5]))
+        floor = max(floor, stem_micros(
+            read_handoff_block(self.paths.handoff).get("consumed_through") or ""))
+        return floor
+
+    def append(self, kind, body, sensitive=False):
+        """Publish one message; return its bus-assigned message_id.
+
+        The message_id IS the filename stem — one canonical id, so the ticket the
+        console holds, the id the consumed-set records, and the stamp that lands on a
+        promoted backlog item are all the same string.
+        """
+        record = dict(body)
+        record["kind"] = kind
+        with self._lock:
+            now_us = int(time.time() * 1_000_000)
+            us = max(now_us, self._last_us + 1)
+            ts = datetime.fromtimestamp(us / 1_000_000, timezone.utc).strftime(TS_FMT)
+            message_id = "%s-%s-%d" % (ts, uuid.uuid4().hex[:8], os.getpid())
+            record["message_id"] = message_id
+            record["received_at"] = now_iso()
+            atomic_write(os.path.join(self.paths.inbox, message_id + ".json"),
+                         json.dumps(record, indent=1) + "\n", mode=0o600)
+            self._last_us = us
+        return message_id
+
+    def pending(self):
+        try:
+            return sorted(n[:-5] for n in os.listdir(self.paths.inbox)
+                          if n.endswith(".json"))
+        except OSError:
+            return []
+
+
 # --- the jobs ---------------------------------------------------------------
 class Job:
     name = "job"
@@ -263,6 +585,39 @@ class ParkedWatchJob(Job):
     def idle_reason(self, daemon):
         n = len(self.open_checkpoints(daemon))
         return "%d parked checkpoint(s) still open" % n if n else None
+
+
+class InboxGCJob(Job):
+    """Bounds the inbox, without either partition gaining a second writer.
+
+    The orchestrator publishes `consumed_through` — a low-watermark it only advances
+    once every message at or below it is consumed. The bus, which is the sole writer
+    of inbox/, is therefore the one that deletes. The consumer never does.
+
+    This job never votes the daemon busy. Unconsumed messages are durable on disk, so
+    a daemon that reaps itself loses nothing: /start re-spawns it and the orchestrator
+    drains at its next boundary. Voting busy here would instead keep the daemon alive
+    forever whenever the orchestrator is gone — which is most of the time.
+    """
+    name = "inbox-gc"
+
+    def tick(self, daemon):
+        watermark = read_handoff_block(daemon.paths.handoff).get("consumed_through")
+        if not watermark:
+            return
+        try:
+            names = os.listdir(daemon.paths.inbox)
+        except OSError:
+            return
+        for n in names:
+            if not n.endswith(".json") or n[:-5] > watermark:
+                continue
+            try:
+                os.unlink(os.path.join(daemon.paths.inbox, n))
+            except FileNotFoundError:
+                pass  # the sensitive-payload carve-out got there first
+            except OSError as exc:
+                log("inbox GC could not remove %s: %s" % (n, exc))
 
 
 # --- the read model ---------------------------------------------------------
@@ -349,6 +704,47 @@ class ReadModel:
                             "item_ref": rec.get("item_ref"), "created_at": rec.get("created_at")})
         return out
 
+    def promoted(self):
+        """message_id → the backlog item it became.
+
+        The intake anchor and the "my requests" correlation key are the same field:
+        promotion stamps the source message_id onto the item, which both makes a
+        re-promotion a no-op AND tells the human what their request turned into. One
+        field, two jobs — so this surface needs no mechanism of its own.
+        """
+        out = {}
+        for line in (read_text(self.paths.backlog) or "").splitlines():
+            m = MESSAGE_ID_RE.search(line)
+            if not m:
+                continue
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if cells:
+                out[m.group(0)] = cells[0]
+        return out
+
+    def requests(self):
+        """What the console needs to resolve the status of a ticket it remembers.
+
+        The page holds its own ticket ids in localStorage; the bus cannot know which
+        requests belong to this browser, so it publishes the index and the page looks
+        itself up. Everything here is an effect anchor that already had to exist.
+        """
+        block = read_handoff_block(self.paths.handoff)
+        return {
+            "queued": self.inbox_pending(),
+            "consumed": block.get("consumed") or [],
+            "consumed_through": block.get("consumed_through"),
+            "dead_letters": block.get("dead_letters") or [],
+            "promoted": self.promoted(),
+        }
+
+    def inbox_pending(self):
+        try:
+            return sorted(n[:-5] for n in os.listdir(self.paths.inbox)
+                          if n.endswith(".json"))
+        except OSError:
+            return []
+
     def snapshot(self):
         state = read_json(self.paths.state) or {}
         backlog = read_text(self.paths.backlog)
@@ -365,6 +761,7 @@ class ReadModel:
             "outbox_pending": self.outbox(),
             "backlog": backlog,
             "recent": self.git_recent(),
+            "requests": self.requests(),
         }
 
     def snapshot_bytes(self):
@@ -422,6 +819,24 @@ INDEX_HTML = """<!doctype html>
 <section id="outward">
   <h2>Pending outward actions <span id="ob-count" class="count"></span></h2>
   <div id="ob-list" class="empty">none queued</div>
+  <div id="ob-actions" hidden>
+    <button id="ob-release" type="button">Release selected</button>
+    <span id="ob-msg" class="msg"></span>
+  </div>
+</section>
+
+<section id="ask">
+  <h2>Request work</h2>
+  <textarea id="ask-text" rows="3" placeholder="What needs doing? It lands in the backlog through triage, not straight onto the queue."></textarea>
+  <div class="row">
+    <button id="ask-send" type="button">Send request</button>
+    <span id="ask-msg" class="msg"></span>
+  </div>
+</section>
+
+<section id="requests">
+  <h2>My requests <span id="rq-count" class="count"></span></h2>
+  <div id="rq-list" class="empty">nothing sent from this browser yet</div>
 </section>
 
 <section id="activity">
@@ -434,13 +849,34 @@ INDEX_HTML = """<!doctype html>
     <div class="row"><strong class="kind"></strong><span class="ticket mono"></span></div>
     <p class="request"></p>
     <div class="row"><span class="deadline"></span></div>
+    <div class="verdict">
+      <select class="outcome">
+        <option value="approve">approve</option>
+        <option value="changes">changes</option>
+        <option value="reject">reject</option>
+      </select>
+      <input class="notes" type="text" placeholder="notes (what you saw, what to change)">
+      <button class="send" type="button">Send verdict</button>
+      <span class="msg"></span>
+    </div>
   </article>
 </template>
 
 <template id="ob-tpl">
   <article class="card">
-    <div class="row"><strong class="action"></strong><span class="oid mono"></span></div>
+    <div class="row">
+      <label><input class="pick" type="checkbox"> <strong class="action"></strong></label>
+      <span class="oid mono"></span>
+    </div>
     <div class="row"><span class="item"></span></div>
+  </article>
+</template>
+
+<template id="rq-tpl">
+  <article class="card">
+    <div class="row"><strong class="rkind"></strong><span class="rstatus pill"></span></div>
+    <p class="rsummary"></p>
+    <div class="row"><span class="rticket mono"></span><span class="rdetail"></span></div>
   </article>
 </template>
 
@@ -498,6 +934,48 @@ function renderList(items, listSel, countSel, tplSel, fill, emptyText) {
   }
 }
 
+// --- sending -----------------------------------------------------------------
+// Every write is JSON + the token header, which is what forces a preflight a form
+// POST cannot satisfy. Nothing here is a real <form> submission: the CSP sets
+// form-action 'none', so a stray submit fails closed rather than navigating away.
+async function send(kind, body) {
+  const res = await fetch("/api/" + kind, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Bus-Token": TOKEN },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* an error body is optional */ }
+  if (res.status !== 202) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
+// The loop is a batch consumer, so nothing here can report what HAPPENED — only that
+// the request landed durably. Remembering the ticket is what turns that into an
+// answer later, and localStorage is the only place that knows which requests are
+// this browser's.
+const MINE_KEY = "bus.myrequests";
+
+function mine() {
+  try { return JSON.parse(localStorage.getItem(MINE_KEY)) || []; }
+  catch (e) { return []; }
+}
+
+function remember(ticket, kind, summary) {
+  const all = mine();
+  all.unshift({ ticket, kind, summary, at: new Date().toISOString() });
+  try { localStorage.setItem(MINE_KEY, JSON.stringify(all.slice(0, 50))); }
+  catch (e) { /* a full or blocked store costs the history, not the request */ }
+  renderRequests(lastSnapshot);
+}
+
+function flash(el, text, ok) {
+  el.textContent = text;
+  el.className = "msg " + (ok ? "ok" : "bad");
+  setTimeout(() => { el.textContent = ""; }, 6000);
+}
+
 function renderCheckpoints(items) {
   renderList(items, "#cp-list", "#cp-count", "#cp-tpl", (node, cp) => {
     node.querySelector(".kind").textContent = cp.kind || "checkpoint";
@@ -507,15 +985,37 @@ function renderCheckpoints(items) {
     const d = node.querySelector(".deadline");
     d.textContent = cp.deadline ? (cp.overdue ? "OVERDUE — " : "due ") + cp.deadline : "";
     if (cp.overdue) d.classList.add("overdue");
+    const msg = node.querySelector(".msg");
+    const btn = node.querySelector(".send");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        const outcome = node2(btn, ".outcome").value;
+        const notes = node2(btn, ".notes").value;
+        const r = await send("verdict", { token: cp.token, verdict: { outcome, notes } });
+        remember(r.ticket, "verdict", (cp.kind || "checkpoint") + " " +
+                 (cp.ticket_id || "") + " → " + outcome);
+        flash(msg, "sent — the loop applies it at its next boundary", true);
+      } catch (e) {
+        flash(msg, String(e.message || e), false);
+        btn.disabled = false;
+      }
+    });
   }, "none open");
 }
+
+// The card is cloned from a <template>, so a handler cannot close over a live node
+// reference taken before insertion — walk up from the button instead.
+function node2(btn, sel) { return btn.closest(".card").querySelector(sel); }
 
 function renderOutbox(items) {
   renderList(items, "#ob-list", "#ob-count", "#ob-tpl", (node, ob) => {
     node.querySelector(".action").textContent = ob.action || "action";
     node.querySelector(".oid").textContent = ob.id || "";
     node.querySelector(".item").textContent = ob.item_ref || "";
+    node.querySelector(".pick").value = ob.id || "";
   }, "none queued");
+  $("#ob-actions").hidden = !items.length;
 }
 
 function renderLog(items) {
@@ -536,6 +1036,41 @@ function renderLog(items) {
   }
 }
 
+// Resolve one remembered ticket against the anchors the snapshot publishes. This
+// mirrors resolve_request() on the server deliberately: the page must render the
+// answer with no extra round-trip per ticket, off the poll it already makes.
+function resolve(rq, ticket) {
+  const dl = (rq.dead_letters || []).find((d) => d && d.message_id === ticket);
+  if (dl) return { status: "dead-letter", detail: dl.reason || "not applied" };
+  const item = (rq.promoted || {})[ticket];
+  if (item) return { status: "applied", detail: "became " + item };
+  if ((rq.consumed || []).includes(ticket)) return { status: "applied", detail: "" };
+  if ((rq.queued || []).includes(ticket)) return { status: "queued", detail: "waiting for the next boundary" };
+  // Below the watermark it is consumed AND collected AND pruned — the most finished
+  // state there is. Absence here means done, not lost.
+  if (rq.consumed_through && ticket <= rq.consumed_through)
+    return { status: "applied", detail: "" };
+  return { status: "sent", detail: "not seen by the loop yet" };
+}
+
+function renderRequests(snap) {
+  const rq = (snap && snap.requests) || {};
+  const items = mine();
+  renderList(items, "#rq-list", "#rq-count", "#rq-tpl", (node, m) => {
+    const r = resolve(rq, m.ticket);
+    node.querySelector(".rkind").textContent = m.kind;
+    const st = node.querySelector(".rstatus");
+    st.textContent = r.status;
+    if (r.status === "applied") st.classList.add("ok");
+    if (r.status === "dead-letter") st.classList.add("bad");
+    node.querySelector(".rsummary").textContent = m.summary || "";
+    node.querySelector(".rticket").textContent = m.ticket;
+    node.querySelector(".rdetail").textContent = r.detail;
+  }, "nothing sent from this browser yet");
+}
+
+let lastSnapshot = null;
+
 async function poll() {
   try {
     const headers = { "X-Bus-Token": TOKEN };
@@ -546,15 +1081,47 @@ async function poll() {
     if (!res.ok) { setConn("error " + res.status, false); return; }
     etag = res.headers.get("ETag");
     const snap = await res.json();
+    lastSnapshot = snap;
     renderState(snap.state || {});
     renderCheckpoints(snap.parked || []);
     renderOutbox(snap.outbox_pending || []);
+    renderRequests(snap);
     renderLog(snap.recent || []);
     setConn("live", true);
   } catch (e) {
     setConn("daemon unreachable", false);
   }
 }
+
+$("#ask-send").addEventListener("click", async () => {
+  const box = $("#ask-text");
+  const msg = $("#ask-msg");
+  const ask = box.value.trim();
+  if (!ask) { flash(msg, "say what you want done first", false); return; }
+  try {
+    const r = await send("intake", { ask });
+    remember(r.ticket, "intake", ask);
+    box.value = "";
+    flash(msg, "queued — it reaches the backlog through triage", true);
+  } catch (e) {
+    flash(msg, String(e.message || e), false);
+  }
+});
+
+$("#ob-release").addEventListener("click", async () => {
+  const msg = $("#ob-msg");
+  const ids = [...document.querySelectorAll("#ob-list .pick:checked")].map((c) => c.value);
+  if (!ids.length) { flash(msg, "pick the actions to release", false); return; }
+  try {
+    const r = await send("release", { action_ids: ids });
+    remember(r.ticket, "release", "release " + ids.join(", "));
+    flash(msg, "approved " + ids.length + " action(s) — they fire at the next boundary", true);
+  } catch (e) {
+    flash(msg, String(e.message || e), false);
+  }
+});
+
+renderRequests(null);
 
 // A chained timeout, not setInterval: a slow response must never stack requests.
 // Polling pauses when the tab is hidden and resumes with an immediate read.
@@ -590,6 +1157,23 @@ dd { margin:0; }
 .mono, .sha { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85em; color:var(--dim); }
 .deadline { font-size:.8rem; color:var(--dim); }
 .deadline.overdue { color:var(--bad); font-weight:600; }
+.verdict { display:flex; gap:.4rem; align-items:center; margin-top:.5rem;
+  padding-top:.5rem; border-top:1px solid var(--line); flex-wrap:wrap; }
+.verdict .notes { flex:1; min-width:12rem; }
+input, select, textarea, button { font:inherit; color:var(--fg); background:transparent;
+  border:1px solid var(--line); border-radius:5px; padding:.3rem .5rem; }
+textarea { width:100%; resize:vertical; }
+button { cursor:pointer; border-color:var(--dim); }
+button:hover:enabled { border-color:var(--fg); }
+button:disabled { opacity:.5; cursor:default; }
+label { display:inline-flex; align-items:center; gap:.4rem; }
+.msg { font-size:.8rem; }
+.msg.ok { color:var(--ok); }
+.msg.bad { color:var(--bad); }
+#ask .row, #ob-actions { margin-top:.5rem; display:flex; gap:.75rem;
+  align-items:center; justify-content:flex-start; }
+#rq-list .card .row { gap:.75rem; }
+.rdetail { font-size:.8rem; color:var(--dim); }
 ol#log { list-style:none; padding:0; margin:0; }
 ol#log li { display:grid; grid-template-columns:5rem 1fr auto; gap:.75rem;
   padding:.3rem 0; border-bottom:1px solid var(--line); }
@@ -606,10 +1190,16 @@ class Daemon:
         self.lock_fd = None
         self.server = None
         self.model = ReadModel(paths)
-        self.jobs = [ServeJob(), ParkedWatchJob()]
+        self.inbox = InboxWriter(paths)
+        self.jobs = [ServeJob(), ParkedWatchJob(), InboxGCJob()]
         self.last_request = time.time()
         self.warnings = []
         self._stopping = threading.Event()
+
+    def warn(self, msg):
+        if msg and msg not in self.warnings:
+            self.warnings.append(msg)
+            log("WARNING: " + msg)
 
     # -- singleton election --
     def acquire_lock(self):
@@ -639,10 +1229,7 @@ class Daemon:
         rec = {"pid": os.getpid(), "port": port, "token": self.token,
                "started_at": now_iso()}
         atomic_write(self.paths.record, json.dumps(rec, indent=1) + "\n", mode=0o600)
-        warn = verify_mode(self.paths.record, 0o600)
-        if warn:
-            self.warnings.append(warn)
-            log("WARNING: " + warn)
+        self.warn(verify_mode(self.paths.record, 0o600))
         return rec
 
     # -- the janitor --
@@ -696,6 +1283,11 @@ class Daemon:
         if not self.acquire_lock():
             raise SystemExit("another daemon holds %s — refusing to start a second"
                              % self.paths.lock)
+        # Measure the tree's mode behaviour once, up front. This is not only about the
+        # token: from this increment on, a setup verdict carrying a live credential
+        # lands in inbox/ under the same root.
+        os.makedirs(self.paths.inbox, exist_ok=True)
+        self.warn(probe_mode(self.paths.runtime))
         self.token = secrets.token_urlsafe(32)
         handler = make_handler(self)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -835,6 +1427,19 @@ def make_handler(daemon):
                     return self._send(304, b"", extra={"ETag": etag})
                 return self._send(200, body, extra={"ETag": etag})
 
+            # The status resource the 202's Location header names. The console does not
+            # need it (it resolves tickets off the polled snapshot), but a Location
+            # that 404s is a lie, and this is what makes the async request-reply shape
+            # honest for anything else that reads it.
+            if path.startswith("/api/requests/"):
+                if not self._guard():
+                    return
+                ticket = path[len("/api/requests/"):]
+                if not MESSAGE_ID_RE.fullmatch(ticket):
+                    return self._err(404, "no such ticket")
+                return self._send(200, json.dumps(
+                    resolve_request(daemon.model.requests(), ticket)).encode())
+
             return self._err(404, "no such endpoint")
 
         def do_HEAD(self):
@@ -859,9 +1464,70 @@ def make_handler(daemon):
                 daemon.stop()
                 return
 
+            # The async command half of the protocol. There is no synchronous path to
+            # offer here even if it were wanted: the orchestrator is a batch consumer
+            # at a scheduler boundary, not an HTTP responder, so nothing can answer
+            # "and what happened?" within this request. The honest reply is 202 plus a
+            # ticket to ask about later.
+            if path.startswith("/api/") and path[len("/api/"):] in KINDS:
+                kind = path[len("/api/"):]
+                try:
+                    payload = json.loads(body or b"{}")
+                except ValueError:
+                    return self._err(400, "body must be valid JSON")
+                try:
+                    clean, sensitive = validate(kind, payload)
+                except Invalid as exc:
+                    return self._err(400, str(exc))
+                try:
+                    message_id = daemon.inbox.append(kind, clean, sensitive=sensitive)
+                except OSError as exc:
+                    log("inbox append failed for kind=%s: %s" % (kind, exc))
+                    return self._err(500, "could not durably record the message")
+                if sensitive:
+                    # Never log the body. The mode is checked because this file now
+                    # holds a live credential until the orchestrator moves it to the
+                    # secret store and unlinks it.
+                    daemon.warn(verify_mode(os.path.join(
+                        daemon.paths.inbox, message_id + ".json"), 0o600))
+                    log("accepted %s %s (carries a sensitive value)" % (kind, message_id))
+                else:
+                    log("accepted %s %s" % (kind, message_id))
+                return self._send(202, json.dumps(
+                    {"ticket": message_id, "kind": kind}).encode(),
+                    extra={"Location": "/api/requests/" + message_id})
+
             return self._err(404, "no such endpoint")
 
     return Handler
+
+
+KINDS = ("verdict", "intake", "control", "release")
+
+
+def resolve_request(index, ticket):
+    """Where one ticket has got to, from the anchors alone.
+
+    Note the watermark case: a consumed message is eventually GC'd off the inbox AND
+    pruned out of the consumed-set, so an id that has fallen below the watermark is
+    absent from both while being the most thoroughly consumed of all. Reading that
+    absence as "unknown" would tell a human their verdict vanished.
+    """
+    for dl in index.get("dead_letters") or []:
+        if (dl or {}).get("message_id") == ticket:
+            return {"ticket": ticket, "status": "dead-letter",
+                    "reason": dl.get("reason")}
+    item = (index.get("promoted") or {}).get(ticket)
+    if item:
+        return {"ticket": ticket, "status": "applied", "item_ref": item}
+    if ticket in (index.get("consumed") or []):
+        return {"ticket": ticket, "status": "applied"}
+    if ticket in (index.get("queued") or []):
+        return {"ticket": ticket, "status": "queued"}
+    through = index.get("consumed_through")
+    if through and ticket <= through:
+        return {"ticket": ticket, "status": "applied"}
+    return {"ticket": ticket, "status": "unknown"}
 
 
 daemon_started = now_iso()

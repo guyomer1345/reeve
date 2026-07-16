@@ -93,6 +93,11 @@ built-in Claude Code command.
      parked, or dead. A per-project copy (like every other shipped script), which is also what keys it per project:
      its lock, its discovery record, and its port all derive from that project's runtime root, so two projects
      cannot collide. Stack-agnostic (it reads only the workflow's own layout), so it ships fixed — not per-stack.
+   - Copy the shipped **drain bookkeeper** (`scripts/drain.py`) → **`.claude/scripts/`** — the deterministic half
+     of the boundary inbox drain the orchestrator invokes each turn (`list` → apply → `record`): which messages are
+     new, in what order they apply, what the watermark is, and what may be pruned. It sits beside `bus.py` and
+     imports its path resolution, so the two must land in the same directory. Stack-agnostic (it reads only the
+     workflow's own layout), so it ships fixed — not per-stack.
    - Copy the shipped **contract linter** (`scripts/check_contracts.py`) → **`.claude/scripts/`** — the decidable
      routing-graph check `align`'s mechanical layer invokes over `.workflow/loop.md` + the installed skills (via
      `--loop`/`--skills-dir`/`--schemas`): every routing target resolves, every invoked `node:mode` is routed,

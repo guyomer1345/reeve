@@ -22,19 +22,40 @@ edges) and its diagram. You are always somewhere in it. Read it to decide the ne
 don't carry the graph in your head.
 
 ## Each turn: drain → read → place → advance
-1. **Drain** `.workflow/inbox/` — the console's messages to you. List it, **skip any `message_id`
-   already in `handoff.md`'s consumed-set**, then apply the rest **by kind, in this order**:
-   - `control` (reprioritize / pause) — first, so it's honored by the pick you're about to make.
-   - `verdict` — resume the parked ticket whose `token` matches (oldest verdict first). An unknown
-     or already-closed token → **dead-letter and surface it**, never a silent resume.
+1. **Drain** `.workflow/inbox/` — the console's messages to you.
+
+   **Run `python3 .claude/scripts/drain.py list`.** It returns exactly what to apply, in the
+   order to apply it, with already-consumed messages skipped. Don't list the directory yourself
+   and don't reason about which ids are new: that part is arithmetic, it is this script's job,
+   and it is the half that is easy to get quietly wrong.
+
+   **Apply each one — that part is yours**, by kind:
+   - `control` (reprioritize / pause / resume) — honored here only, never mid-item.
+   - `verdict` — resume the parked ticket whose `token` matches. An unknown or already-closed
+     token → **dead-letter it and surface it**, never a silent resume.
    - `intake` — promote into `backlog.md` through triage, stamping the message's id into the new
-     item's `source`. If an item already carries that id, it's already promoted: skip.
+     item's `source`. If an item already carries that id, it's already promoted: skip it.
    - `release` — fire each named `outbox/` entry (skip any already `executed`).
 
-   Record every applied id in the consumed-set and republish `handoff.md`. **Never delete an inbox
-   file** — the bus owns that directory and collects consumed messages itself once you publish the
-   `consumed_through` watermark. The **one** exception: a consumed message carrying a **sensitive**
-   value is unlinked immediately after you write that value to the secret store.
+   **Then record what you applied:**
+   `python3 .claude/scripts/drain.py record --applied <id> [<id>...] [--dead-letter <id>="why"]`
+   Record each id **as soon as** its apply succeeds, not in one batch at the end — a crash
+   between applying and recording re-applies that message on restart, and the window should be
+   as small as you can make it. (Each kind's effect is *also* idempotent, which is what covers
+   the window you can't close: a closed token, an `executed` outbox entry, the `source` stamp.)
+
+   `record` recomputes the watermark, prunes the set, and republishes `handoff.md` durably. It
+   owns the machine block in that file — **never hand-write, hand-edit, or delete that block**;
+   rewrite the prose around it as freely as you like.
+
+   **A returned credential never passes through you.** If `list` marks a message `sensitive`,
+   don't open the file — run `python3 .claude/scripts/drain.py secret --id <id>`. It moves the
+   value into the secret store, unlinks the message, and records it, without the value ever
+   reaching your context or a log.
+
+   **Never delete an inbox file.** The bus owns that directory and collects messages itself once
+   you publish the watermark. The `secret` command above is the only exception, and it exists
+   because a credential must not wait on a janitor.
 
    This step is what resumes parked work — skip it and a checkpoint never unparks.
 2. **Read** `.workflow/state.json` to find where you are. On a cold start (fresh session),

@@ -59,8 +59,16 @@ What each kind does at the boundary, and the anchor that makes a repeat a no-op:
 - **release** — fires the named `outbox/` entries through `guard.sh`. *Anchor:* the entry's status (already fired
   → skip).
 
-A parked ticket resumes **only** via this drain. Applied ids are recorded in `handoff.md`'s consumed-set; the
-consumer **never deletes** an inbox file (the bus owns that directory and collects consumed messages itself).
+A parked ticket resumes **only** via this drain. The consumer **never deletes** an inbox file (the bus owns that
+directory and collects consumed messages itself).
+
+**The drain is split, and the split is the point.** *Which* messages are new, in what order they apply, what the
+watermark is now, and what may be pruned are all a pure function of the inbox and `handoff.md` — that half is
+`drain.py`'s (`list` → apply → `record`), and it is not re-derived by hand. *Applying* a message is judgment —
+which ticket a verdict resumes, whether an ask is worth promoting and at what priority, how a rejection routes —
+and that half stays here. `record` recomputes `consumed_through` (the low-watermark: every message at or below it
+is consumed, so the bus may collect it) and **prunes the consumed-set to ids above it**, which is what keeps
+`handoff.md` bounded — a cold start reads that file whole.
 
 ## Maintenance items
 `prioritize` injects a **maintenance item** on a threshold (§ `prioritize`): a *retention/size* threshold →

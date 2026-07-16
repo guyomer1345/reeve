@@ -146,7 +146,16 @@ claim-by-rename needed; matched **idempotently, single-shot** (duplicate → no-
 a `Location` ticket at POST time; any result surfaces via orchestrator-written state the console re-reads by ticket —
 the orchestrator **never responds synchronously** (it is a boundary batch-consumer, not an HTTP responder).
 
-**`message_id`** — the filename stem (`<ts>-<uuid>-<pid>`) **is** the message's canonical, bus-assigned id.
+**`message_id`** — the filename stem (`<ts>-<uuid>-<pid>`) **is** the message's canonical, bus-assigned id. **One id,
+no second one:** it is the `Location` ticket the `202` returns, the console's `localStorage` key, the consumed-set
+entry, and the `source` stamp on a promoted item. A client-supplied `ticket` field is therefore *not* carried — the
+caller cannot know the id at POST time, and a second id would correlate "my requests" against the wrong one.
+
+**Ids are issued in VISIBILITY order, and the watermark depends on it.** The bus allocates a message's name and
+publishes it under one lock, and never re-issues a name at or below the last (its floor is the higher of the newest
+name on the inbox and the published `consumed_through` — the inbox's steady state is *empty*, so the disk alone is
+not a floor). Without this a message can become visible carrying a ts *below* one already visible, the orchestrator
+publishes a watermark over a message it never saw, and the bus GCs a message nobody consumed — measured, and silent.
 
 **Consume = record, never delete.** The bus is the sole writer of `inbox/`, so the consumer **never removes a
 message** (delete-on-consume would make the inbox two-writer). Instead the orchestrator keeps a durable
@@ -154,6 +163,13 @@ message** (delete-on-consume would make the inbox two-writer). Instead the orche
 ids already in the set**, applies the rest, adds their ids, and atomically republishes. A cold start re-lists
 `inbox/` and the set makes the re-read a no-op — this is what stops a restart from re-promoting an
 already-consumed intake or re-firing a control op.
+
+**The drain is split, and only one half is prose.** *Which* messages are new, in what order they apply, what the
+watermark is, and what may be pruned is a pure function of (`inbox/`, `handoff.md`) with exactly one right answer —
+that half is `scripts/drain.py` (`list` → apply → `record`), which also gives `handoff.md` the atomic+durable
+publish a text-writing tool cannot express. *Applying* a message is judgment and stays in the orchestrator's brief.
+The line is measured, not stylistic: driven against real sessions the apply half was right every time, while the
+bookkeeping half silently produced an unbounded set.
 
 **Two idempotency layers.** The consumed-set covers the normal path. Because apply-then-record has a crash window
 (crash in between → re-apply on restart), **each kind's *effect* must also be idempotent** — its anchor is named
@@ -172,16 +188,17 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
   `state.json`/logs. This shred is the **one exception** to *consume = record, never delete*: the orchestrator may
   `unlink` a single consumed record **that carried a sensitive payload**, right after extracting it to the store, so
   a secret's latency-to-zero never waits on the bus's GC pass. Nothing else in `inbox/` is ever consumer-deleted.
-- **`kind: intake`** — `{ ticket, ask, node_ids? }` — a new-work request; the orchestrator **promotes** it into
+- **`kind: intake`** — `{ ask, node_ids? }` — a new-work request; the orchestrator **promotes** it into
   `backlog.md` through triage — **never a direct backlog write** (that would make the backlog two-writer).
   `node_ids` present when the project-map screen emitted it. **Anchor:** promotion **stamps the source `message_id`
   into the new item's `source`**, and re-promotion is skipped when an item already carries it — the same stamp that
   lets the console's "my requests" surface correlate an intake to the item it became.
-- **`kind: control`** — `{ ticket, op }` (e.g. `reprioritize`, `pause`) — a loop-control command honored at the next
+- **`kind: control`** — `{ op: reprioritize|pause|resume }` — a loop-control command honored at the next
   boundary (non-preemptive). **Anchor:** none is possible (a control op leaves no durable artifact to check), so
   **control ops MUST be idempotent** — re-applying one is a no-op by construction (`reprioritize` re-orders the same
-  backlog to the same order; `pause` re-sets a flag). A non-idempotent control op may not be added without bringing
-  its own anchor.
+  backlog to the same order; `pause`/`resume` each re-set a flag). The enum is therefore **closed and
+  bus-validated**: a non-idempotent op cannot be added without bringing its own anchor, and an open set would admit
+  one through the front door.
 - **`kind: release`** — `{ action_ids[] }` — a human **batch-approval** of pending outward actions; the
   orchestrator executes each named `outbox` entry (re-run through `guard.sh`) at the next boundary and marks it
   `executed`. **Always by explicit `action_ids`** (a snapshot of what the human saw — items enqueued after the glance
@@ -359,11 +376,26 @@ reads that value as authority.
 
 ## handoff.md  · the durable resume anchor (committed) · *`.workflow/handoff.md`; rewritten whole each handoff, never appended; published atomically **and durably** (write-temp → `fsync(file)` → `rename` → `fsync(dir)`) — the one file where crash-durability, not just atomicity, is mandatory. Committed, so it stays on the repo mount (never relocated); the bus reads it for the `consumed_through` watermark, and a torn read can only make inbox GC lag, never over-collect*
 - `current_item`, `loop_position`, `parked[]`, `base_sha` — the commit it was written against; a cold start
-  reads this + `git log <base_sha>..HEAD` (bounded to one session's delta) and rebuilds position.
+  reads this + `git log <base_sha>..HEAD` (bounded to one session's delta) and rebuilds position. **Prose, written
+  by the orchestrator.**
+- **The machine block** — a fenced, delimited region (`<!-- drain:begin -->` … `<!-- drain:end -->`) holding
+  `consumed[]`, `consumed_through` and `dead_letters[]`. **Two authors, one file:** `drain.py` rewrites only the
+  block, the orchestrator rewrites only the prose around it, and neither touches the other's half. The orchestrator
+  **never hand-writes or deletes the block** (a session that rewrites the file wholesale and drops it loses the
+  *set* — recoverable only in the sense that each kind's effect anchor then catches the re-application; the block
+  structure itself is rebuilt).
 - `consumed[]` + `consumed_through` — the inbox **consumed-set** (bus-assigned `message_id`s already applied) and
   its low-watermark. Lives here because this is the durable anchor a cold start rebuilds from — exactly the moment
   the set is load-bearing (it makes the post-restart inbox re-read a no-op). Ids only, never message bodies, so it
-  stays small and carries no secret; pruned to ids above `consumed_through`.
+  stays small and carries no secret; **pruned to ids above `consumed_through`** — which is what bounds it, and is
+  the rule a prose brief demonstrably did not carry. **An id at or below the mark counts as consumed even though the
+  set no longer lists it** — that is what the mark means, and a walk that reads only the set freezes the watermark
+  permanently the first time pruning drops an id beneath it.
+- `dead_letters[]` — `{ message_id, reason, at }` for a message that applied to nothing (a verdict whose token is
+  unknown or already closed). **Capped (20) and deliberately NOT pruned by the watermark**: this is the one message
+  a human most needs told about, and collecting it when the mark passes would erase the notice before it was read.
+  It is a defined field precisely because it wasn't — every driven session improvised its own section here, in a
+  committed file.
 
 ## per-item artifacts  · on disk
 `plan` / `changelog` / `verify-verdict` / `debug-report` live under `.workflow/items/<id>/` — `planner`

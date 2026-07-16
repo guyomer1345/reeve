@@ -2632,3 +2632,131 @@ F11 (the verifier named the heartbeat-vs-survive-death tension as a genuine resi
 residual. Driven end-to-end on WSL2 + verified from the Windows host; 39 fixture tests in `scripts/test_bus.py`
 (gate suite 89 → 128). Depends on D94/D95/D99/D100/D115; reuses D71/D80/D102/D111/D112/D114. →
 `03`/`05`/`commands/start.md`/`scripts/bus.py`/`scripts/test_bus.py`/`11`.
+
+## D117 — The drain is SPLIT: its bookkeeping is code (`drain.py`), its apply stays the brief — a rule stated only in a decision log is not a rule the consumer follows **[DECIDED + BUILT — Phase-3 increment 3; realizes D108's consume model, corrects the half of it that was never wired to a consumer; MEASURED against real sessions]**
+D108 closed "the inbox consume mechanism is asserted, not realized" — and then **reproduced its own defect one level
+down**. The mechanism was written into `08` and `shared/schemas.md`, and the *drivers* the orchestrator actually
+follows got a subordinate clause: `consumed_through` appeared **once** across `templates/` ("once you publish the
+`consumed_through` watermark"), never defined; `prune` appeared **nowhere**; `loop.md` did not mention the watermark
+at all. The bound was real in the decision log and absent from the consumer.
+- **The split, drawn by measurement rather than taste.** Three real `claude -p` sessions were driven against the
+  actual brief over a seeded inbox (an already-consumed intake · a valid verdict · an unknown-token verdict · a
+  control op stamped *later* than the rest · a new intake · a release naming one pending + one already-`executed`
+  action). **The apply half was right 3/3** — control first despite its later ts, the token match, the dead-letter
+  instead of a silent resume, the doubly-anchored skip (set *and* `source` stamp), the `executed` skip. **The
+  bookkeeping half failed 2/3**: both sonnet runs kept every id, producing an **unbounded consumed-set** on the file
+  every cold start reads whole. The opus run pruned correctly *and flagged the spec as ambiguous unprompted* ("both
+  readings agree the watermark is …-9006 … collapsing is the only reading that respects bounded-by-construction").
+  So: **apply = judgment, stays prose; bookkeeping = a pure function of (inbox, `handoff.md`), becomes
+  `scripts/drain.py`** (`list` → apply → `record`). Not a routing node — plain control-flow — so the contract linter
+  stays clean; `retention.py` is the precedent (a tool the orchestrator *calls*).
+- **A second reason the brief could not have worked, whatever it said.** D93 mandates `handoff.md` be published
+  write-temp → `fsync` → `rename` → `fsync(dir)` — "the one file where crash-durability, not just atomicity, is
+  mandatory". **A model holding a text-writing tool cannot express a rename**, so that mandate was unmet at the drain
+  no matter how the prose was worded. `drain.py record` is what makes it true. (The *handoff step* still writes the
+  anchor by hand and remains unmet — logged in `07`, bounded because `handoff.md` is committed, so git holds the last
+  good copy.)
+- **The machine block.** Prose and machine state share one file, so the machine half is a fenced, delimited block
+  (`<!-- drain:begin -->` … `<!-- drain:end -->`) carrying `consumed[]` / `consumed_through` / `dead_letters[]`.
+  `drain.py` rewrites only the block; the orchestrator rewrites only the prose. Format + parser live together in
+  `bus.py` (the bus reads the watermark to GC its own partition — `bus:read`); `drain.py` is the sole writer.
+  **Dropped-block residual, accepted:** a session that rewrites `handoff.md` wholesale can drop it; `drain.py`
+  rebuilds the structure but the *set* is gone → the next drain re-applies → **layer 2 (the per-kind effect anchor)
+  catches it**. That is the crash window's twin, and it is exactly why D108 has two layers rather than one.
+- **The watermark froze — found only by driving, after 27 unit tests passed.** The brief tells the orchestrator to
+  record each id **the moment its apply succeeds** (smallest crash window), so ids arrive **one at a time**. Pruning
+  drops an id from the set as soon as the mark passes it — so on the next pass that id is no longer "in consumed",
+  the contiguous-prefix walk **stops dead on it, and the mark never moves again**: GC halts, the inbox grows
+  forever, and the bound D108(3) exists to provide silently does not hold. Every batch-at-once test passed while
+  this was broken. **The rule: an id at or below the mark counts as consumed** — that is what the mark *means*, and
+  the set has legitimately forgotten it. The real session also **rationalized the frozen output as correct** ("not
+  yet a contiguous prefix … that's expected" — they *were* a contiguous prefix), which is the argument for the split
+  restated: a model takes its tool's output as authoritative and explains it rather than catching it.
+- **Why:** single-shot is advertised to the whole console→orchestrator contract, and it is the one correctness
+  backbone the POST path cannot ship without. D108 made the mechanism *decidable*; this makes it **followed**.
+*Rejected:* fixing the prose alone (the bound stays an assertion about a model, re-testable only by re-driving one,
+at a measured 2/3 — and it cannot reach the atomicity mandate at all); `drain.py` owning the apply too (triage and
+per-kind routing are judgment — measured right 3/3, so there is nothing to fix); a shadow copy of the consumed-set
+against the dropped block (a second source of truth — D80 — to cover a case layer 2 already bounds); recording ids in
+one batch at the end (widens the crash window the two-layer model exists to narrow).
+*Evidence:* three driven `claude -p` sessions on v2.1.211 over a seeded inbox (2/3 unbounded set; the third flagged
+the ambiguity itself); a fourth driven session against the *fixed* brief that produced the frozen watermark on real
+state; the fix re-verified against that session's own output (mark unfroze 9001 → 9004, stopping correctly at the
+unapplied id) and the regression test confirmed to fail against the pre-fix code. 27 fixture tests in
+`scripts/test_drain.py`. Reuses D71/D80/D90/D91/D93/D105/D108/D116. →
+`01`/`05`/`07`/`shared/schemas.md`/`templates/orchestrator-CLAUDE.md`/`templates/loop.md`/`commands/start.md`/`scripts/drain.py`/`scripts/bus.py`/`11`.
+
+## D118 — The inbox's ordering contract: filename order ≡ VISIBILITY order, or the watermark deletes a message nobody consumed **[DECIDED + BUILT — Phase-3 increment 3; completes D108's rule (3), whose safety rested on a guarantee nothing provided; MEASURED]**
+D108's GC rule is "the bus collects every inbox file at or below the watermark the orchestrator published", and the
+orchestrator computes that watermark **from what it can see**. That is sound only if a message can never *become
+visible* carrying a ts lower than one already visible — a guarantee **nothing in the design provided, and nothing
+named**.
+- **Measured, not argued.** The naive build (stamp the name from the clock, then write + rename) loses messages: a
+  thread that names itself *first* can be descheduled and rename *last*. Replayed directly — the drain sees only the
+  later message, publishes the watermark above it, the stalled write lands beneath, and the janitor deletes a
+  **verdict a human submitted, silently**. `ThreadingHTTPServer` makes this live, not theoretical.
+- **The call: allocate the name AND publish it under ONE lock** (so the interval where a name exists but is not yet
+  visible cannot overlap another allocation), **plus a monotonic floor** so no id is ever re-issued at or below the
+  last. The floor is the higher of *the newest name on disk* and *the published watermark* — and the second half is
+  not belt-and-braces: **the GC's whole job is to empty this directory**, so the steady state is an inbox with
+  nothing to prime from, and a daemon restarting there under a backwards clock step (NTP, a suspended laptop) would
+  issue an id beneath the watermark that the janitor collects before the orchestrator ever drains it. The watermark
+  is the durable high-water record of what has been issued, so it is the honest floor.
+- **The same hole, one door over.** The sensitive carve-out unlinks a consumed message before the janitor reaches
+  it, so the watermark computation reads *visible ∪ consumed*, never the directory alone — computing over the disk
+  would let that hole stall the mark permanently beneath it.
+- **Why:** the watermark is the only thing bounding the inbox, and its failure mode is the loss of exactly the
+  message class the away channel exists to carry. A mutex is a cheap price for turning an assumption into a
+  guarantee.
+*Rejected:* an mtime grace period on the GC (narrows the race, never closes it, and buys a tunable nobody can reason
+about); GC-on-the-explicit-consumed-set instead of a watermark (unbounds the set — the thing the watermark exists to
+bound); priming the id sequence from disk alone (measured hole: the collected inbox is the steady state); trusting
+wall-clock monotonicity (a clock step is exactly when this fails, and it fails silently).
+*Evidence:* direct measurement — the naive build replayed to message loss ("never-consumed files the bus would GC:
+[…]"), the append-lock replay then reporting none; both pinned as fixture tests, including the 40-way concurrency
+case and the restart-under-a-backwards-clock case. Reuses D93/D94/D108/D115. →
+`05`/`shared/schemas.md`/`scripts/bus.py`/`scripts/test_bus.py`/`11`.
+
+## D119 — The POST surface's four unowned calls: one canonical id, a dead-letter that exists, a closed control enum, and a credential that never enters a context **[DECIDED + BUILT — Phase-3 increment 3; completes D95/D97/D111/D115's discipline on the paths this increment opened]**
+The calls the POST path could not be built without, none of which had an owner.
+- **`ticket` ≡ `message_id` — the vestigial field is retired.** `intake`/`control` carried a `ticket` in the body,
+  which **the client cannot know at POST time**, while JF9's `source: message_id` stamp is what correlates a request
+  to the item it became. Two ids for one thing would have made "my requests" correlate the wrong one. The **bus
+  assigns one canonical id** (the filename stem), the `202`'s `Location` names it, and the same string is the
+  consumed-set entry, the backlog `source` stamp, and the console's `localStorage` key. **"My requests" therefore
+  needs no mechanism of its own** — the per-kind effect anchors D108 already required *are* the status, which is why
+  a ticket still resolves after the message is collected and the set pruned (verified: an intake reads "became
+  item-9", a dead-letter reads its reason, both after GC emptied the inbox).
+- **The dead-letter surface existed nowhere, and every session invented one.** All three driven runs improvised a
+  section into `handoff.md` — a **committed, `bus:read`** file — and invented **two different schemas**
+  (`dead-letters[]` ×2, `needs-human[]`). It is now `dead_letters[]` in the machine block, `drain.py`-owned, capped
+  at 20 and **deliberately not pruned by the watermark**: a dead-lettered verdict is the one message a human most
+  needs told about, and collecting it the moment the mark passes would erase the notice before it was read.
+- **`control.op` is a CLOSED set — `{reprioritize, pause, resume}`.** A control op has no durable artifact to anchor
+  on, so the *only* thing making a redelivered one safe is that re-applying it is a no-op; an open set admits a
+  non-idempotent op through the front door and silently breaks the drain's crash-window safety. **`resume` is a
+  named addition** (it is in no prior decision): `pause` without an un-pause means a human can halt the loop from
+  their phone and must then be *at the terminal* to restart it — the exact failure the away channel exists to
+  prevent. It is idempotent (re-clears a flag). Closed, so `check_enum_coherence.py` can guard it.
+- **A returned credential never enters a context.** D97 says a `sensitive` `returns` is written to the secret store
+  and never logged — but the orchestrator was to do it, and an orchestrator reading the file puts the key in its
+  transcript, which is precisely the audience-widening D116 rejected for the token. So `drain.py list` **redacts**
+  it and `drain.py secret` moves the value to `.workflow/secrets/`, verifies the achieved mode, unlinks the record,
+  and records it consumed — in one step, without the value being printed. Verified end-to-end: zero occurrences of
+  the key in the drain's output, the value intact in a 0600 store, the inbox record gone.
+- **D115's mode finding, generalized and made to fire.** D115 stat'd the *token*. From this increment the same tree
+  holds inbox messages carrying live credentials, so the daemon now **probes the runtime root once at boot** and
+  says what is exposed. Measured: on `/mnt/c` it reports "does not honour file modes (a 0600 create came back
+  0o777) … the capability token, any credential returned at a setup checkpoint while it sits on the inbox, and the
+  secret store are all readable by other users"; on ext4 it is silent. The pin was always justified by this; nothing
+  had ever checked it on the paths that carry the secrets.
+*Rejected:* a client-generated ticket (a second id to reconcile against the `source` stamp, for nothing); leaving the
+dead-letter surface to the brief (measured: three runs, two schemas, into a committed file); an open control enum
+with a documented idempotency rule (unenforceable — the D108 concern); the orchestrator reading a sensitive message
+itself (puts the key in the transcript); per-file mode checks instead of a tree probe (answers the question one file
+too late, and only for files that happen to be checked).
+*Evidence:* the three driven sessions (the improvised dead-letter schemas); direct measurement of `probe_mode` on the
+real 9p mount vs ext4; the sensitive path driven end-to-end (redaction, store, unlink, mode); the "my requests"
+lifecycle driven through GC. Fixture tests in `scripts/test_bus.py` + `scripts/test_drain.py` (gate suite 128 → 177).
+Reuses D93/D95/D97/D99/D105/D108/D111/D115/D116. →
+`03`/`05`/`07`/`shared/schemas.md`/`scripts/bus.py`/`scripts/drain.py`/`11`.

@@ -111,13 +111,21 @@ checkpoint verdict + status away from the terminal).
   JSON; a monotonic `version`/`ETag` → `304` skips the re-render; polling pauses on `document.hidden`. inotify→SSE is
   the reserved "re-read" ergonomics hint (D93), never load-bearing — safe because urgency rides the **daemon's
   out-of-band alert** (below), not the page.
-- **Contact-orchestrator UX** (B3 — the D93 principle made concrete) = POST forms + a feedback surface: a
+- **Contact-orchestrator UX** (B3 — the D93 principle made concrete) **[BUILT — D117/D118/D119]** = POST forms + a
+  feedback surface: a
   **verdict** form (D97 `{outcome, notes, returns?}` / plural `tasks[]`; renders the D98 steps + verified deep-links +
   breadcrumbs for `setup`), an **intake** form (the D70 node→ticket click is a pre-filled intake), a **release** form
   (D105 — the pending-outbox panel: the queued outward actions, batch-approved by explicit `action_ids` → a
   `kind: release` POST), and the **"my requests" view** — each POST returns `202` + a `Location` ticket saved to
   `localStorage`; the view is the polled state *filtered* by those ticket ids, so `pending→consumed→resolved` is
   legible with **no new endpoint**. This is what keeps the async, not-a-chat model (D93) usable instead of a void.
+  **As built:** `POST /api/{verdict,intake,control,release}` → validate (a bad message is refused with a reason at
+  POST time, while a caller is still listening — once it is on the inbox the only reader is a batch consumer that
+  can answer nobody) → atomic append → `202` + `Location: /api/requests/<message_id>`. **The ticket IS the
+  `message_id`** (D119) — no second id — and "my requests" resolves off the **per-kind effect anchors D108 already
+  required**, so it still answers after the message is GC'd and the set pruned (an intake reads *became item-9*, a
+  dead-letter reads its reason). `control` is a closed enum; a `sensitive` verdict is redacted from the drain's
+  output and moved by `drain.py secret` (D119).
 - **Pending outward actions (D105)** ride the cockpit as a **pull** surface (a count + the release form), **not** a
   notification (D101 excluded outward-gate pings) — an outward action doesn't block the loop, so it doesn't interrupt.
 

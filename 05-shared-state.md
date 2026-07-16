@@ -35,7 +35,21 @@ carries an effect-level anchor** (verdict → the parked token · release → th
 the source `message_id` stamped on the promoted item · control → the standing rule that control ops are
 idempotent). The **sole** carve-out to never-delete: a consumed record carrying a **sensitive** payload is unlinked
 by the orchestrator immediately after the credential is extracted to the secret store (D111), so a secret never
-waits on a janitor.
+waits on a janitor — and the extraction, unlink and record are **one scripted step** (`drain.py secret`), so the
+value never passes through a context window or a log (D119).
+
+**The drain is split; only its judgment half is prose (D117).** The bookkeeping — which ids are new, their order,
+the watermark, the prune, and `handoff.md`'s atomic+durable republish — is `scripts/drain.py` (`list` → apply →
+`record`). Applying is judgment and stays in the driver artifacts. The split is measured: driven against real
+sessions the apply half was right every time while the bookkeeping half silently produced an **unbounded**
+consumed-set, because the rule lived in the decision log and never reached the consumer. `handoff.md` therefore
+carries a **machine block** `drain.py` owns (`consumed[]` / `consumed_through` / `dead_letters[]`) beside the
+orchestrator's prose; neither author rewrites the other's half (`shared/schemas.md`).
+
+**The watermark rests on an ordering guarantee the bus must provide (D118).** GC-at-or-below-the-mark is safe only
+because ids are issued in **visibility order** (name allocated + published under one lock, floored above both the
+newest name on disk and the published watermark). Without it a message becomes visible beneath the mark and the
+janitor deletes something nobody consumed — **measured**, and silent.
 
 **Protocol — two mechanisms, no third (D93).** (1) Synchronous **reads** the bus serves straight from disk — no
 orchestrator involvement. The bus is **not a static file server**: the console polls one *synthesized*, ETag'd
@@ -144,7 +158,7 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     checks.sh       # mechanical-gate runner (generated per-stack; --fix / --check)  (committed) · bus:none
     codemap.sh      # code-map generator (generated per-stack; writes docs/knowledge/graph.json)  (committed) · bus:none
     state.json      # live position (item/phase/wave) — RUNTIME (atomic-publish, D93), gitignored · bus:read · pin
-    handoff.md      # durable resume anchor                         (committed) · bus:read (the D108 consumed_through watermark — the bus GCs the inbox on it)
+    handoff.md      # durable resume anchor: the orchestrator's PROSE + a drain.py-owned machine block (consumed[]/consumed_through/dead_letters[]) — two authors, neither rewriting the other's half — D108/D117  (committed) · bus:read (the consumed_through watermark — the bus GCs the inbox on it; and dead_letters[]/consumed[] — the console's "my requests" surface resolves a ticket off them)
     backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed) · bus:read
     outbox/         # RUNTIME — pending-outward-action queue (push/issue/deploy the orchestrator deferred, awaiting a console `release`) — D105 (retires the D60-reserved checkpoints/), gitignored · bus:read (the console's release panel) · pin
     bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored · bus:write · pin (for the 0600-honouring mount FIRST, atomicity second — D115)

@@ -93,6 +93,17 @@ Deliberately deferred — known unknowns, to close during build or later.
   the concrete `--fix`/`--check` runner + configs) — a `/start` runtime detail, not yet exercised in a real
   bootstrap.
 
+- **`handoff.md`'s durability mandate is met at the drain and nowhere else (raised by D117).** D93 calls it "the one
+  file where crash-durability, not just atomicity, is mandatory" (write-temp → `fsync` → `rename` → `fsync(dir)`).
+  `drain.py record` does exactly that for the machine block. But the **handoff step** — the orchestrator rewriting
+  the prose anchor at session end — is a model with a text-writing tool, which **physically cannot express a
+  rename**, let alone a directory `fsync`. So the mandate is unmet on the very write it was authored for.
+  **Bounded, not open-ended:** `handoff.md` is committed, so a torn or unflushed copy is recoverable from git — the
+  last good anchor is a `git show` away. The fix's *shape* is the open part: a CLI taking a markdown blob is poor
+  ergonomics, and a "model writes the prose → a script republishes it atomically" two-step is plausible but needs
+  design. Deliberately **not** folded into Phase-3 increment 3 (it touches the handoff step and the brief, not the
+  drain).
+
 ## Deferred (post-MVP or later)
 - **Knowledge graph regenerate-vs-incremental** (`06`) — **RESOLVED (D78):** static layer regenerates + the durable
   *observed* layer is merged on regenerate. New open follow-ons from D78: node-ID stability across renames;

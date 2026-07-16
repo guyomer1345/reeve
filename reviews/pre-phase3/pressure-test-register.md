@@ -352,6 +352,16 @@ Phase 3 will hit immediately.
 - **Why it matters:** duplicate GitHub issues on a crash — narrow window, human-recoverable, not data-loss.
 - **Proposed resolution:** add an idempotency key (a client dedup token in the issue body the consumer checks-
   then-creates, or treat a present `github_ref` as "already fired"), and specify the fire→mark-executed ordering.
+- **STILL OPEN after Phase-3 increment 3 (deliberate — 2026-07-16).** The release *consumer* was built (D117): the
+  drain selects, orders and records a `kind: release` message. But `drain.py` only **records** — the firing lives in
+  `create-issue`'s skill body + the outbox schema, so nothing this increment built can close this, and bundling it
+  would mix two surfaces. **Name it plainly: `issue-create` is the one declared exception to D108's layer-2 rule
+  that every kind's effect is idempotent** — D105 already flagged it as the class that must bring its own key, and
+  it hasn't got one yet. A half-fix was considered and rejected: an in-flight `firing` status + treating a present
+  `github_ref` as fired closes the *ordering* but not the real window (a crash between GitHub returning and the
+  write-back), which would look like a fix without being one. **Corroborated again, unprompted:** a session driven
+  over the drain refused to fire a queued `issue-create` on exactly this reasoning ("firing opens a duplicate
+  issue") without being pointed at this finding.
 
 ---
 

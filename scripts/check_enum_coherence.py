@@ -49,7 +49,20 @@ ENUMS = [
         # the checkpoint verdict verb-enum (D97); anchors on `outcome:` so it can't
         # collide with either `kind:` enum above.
         "owner_re": r"outcome:\s*(approve(?:\|[a-z]+)+)",
-        "consumers": ["skills/checkpoint/SKILL.md"],
+        "consumers": ["skills/checkpoint/SKILL.md", "scripts/bus.py"],
+        "consumer_re": {"scripts/bus.py": r"VERDICT_OUTCOMES\s*=\s*\(([^)]*)\)"},
+    },
+    {
+        "name": "inbox.control.op",
+        "owner": "shared/schemas.md",
+        # A control op has no durable effect anchor, so the only thing making a
+        # redelivered one safe is that re-applying it is a no-op. That holds only while
+        # the set stays CLOSED and every member is idempotent by construction — so the
+        # set drifting apart from the code that enforces it is exactly the failure this
+        # gate exists to catch.
+        "owner_re": r"op:\s*(reprioritize(?:\|[a-z]+)+)",
+        "consumers": ["scripts/bus.py"],
+        "consumer_re": {"scripts/bus.py": r"CONTROL_OPS\s*=\s*\(([^)]*)\)"},
     },
 ]
 
@@ -213,6 +226,14 @@ def registry_count(owner_text, owner_re, exclude):
     return len([x for x in members if x not in exclude])
 
 
+def declared_values(consumer_text, consumer_re):
+    """The value list a CODE consumer declares, or None if the declaration moved."""
+    m = re.search(consumer_re, consumer_text, re.S)
+    if not m:
+        return None
+    return re.findall(r"['\"]([a-z][a-z-]*)['\"]", m.group(1))
+
+
 def check_enums(read=_default_read):
     errs = []
     for inv in ENUMS:
@@ -223,10 +244,28 @@ def check_enums(read=_default_read):
             continue
         for cons in inv["consumers"]:
             text = read(cons)
-            missing = [v for v in values if not re.search(rf"\b{re.escape(v)}\b", text)]
-            if missing:
-                errs.append(f"{inv['name']}: {cons} is missing value(s) {', '.join(missing)} "
-                            f"— owner {inv['owner']} declares {'|'.join(values)}")
+            cre = (inv.get("consumer_re") or {}).get(cons)
+            if cre:
+                # A CODE consumer declares the set as a literal, so compare the literal
+                # exactly — in both directions. A bare word-search is worthless here: it
+                # passes on any mention anywhere in the file, and these values are common
+                # English ("resume", "pause") that appear in prose and docstrings. This
+                # gate was toothless until it stopped searching and started parsing.
+                got = declared_values(text, cre)
+                if got is None:
+                    errs.append(f"{inv['name']}: declaration not found in {cons} "
+                                f"(the gate's own anchor moved — update "
+                                f"check_enum_coherence.py)")
+                elif set(got) != set(values):
+                    errs.append(
+                        f"{inv['name']}: {cons} declares {'|'.join(got) or '(none)'} "
+                        f"— owner {inv['owner']} declares {'|'.join(values)}")
+            else:
+                missing = [v for v in values if not re.search(rf"\b{re.escape(v)}\b", text)]
+                if missing:
+                    errs.append(f"{inv['name']}: {cons} is missing value(s) "
+                                f"{', '.join(missing)} — owner {inv['owner']} "
+                                f"declares {'|'.join(values)}")
     return errs
 
 

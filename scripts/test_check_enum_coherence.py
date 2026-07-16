@@ -15,7 +15,28 @@ SCHEMAS = """\
 - `request` — `{ kind: demo|qa|setup|reconcile, what, blocking: true }`
 - `verdict` — `{ outcome: approve|changes|reject, notes }`
 - inbox message is typed — `kind: verdict|intake|control` — one transport
+- **`kind: control`** — `{ op: reprioritize|pause|resume }` — honored at a boundary
 """
+
+# A CODE consumer declares the set as a literal. The prose word-search is worthless
+# against one: "resume" and "pause" are ordinary English that appear in any docstring
+# (bus.py's own says "it survives /clear, --resume, and session death"), so a dropped
+# member sails straight through. These fixtures pin the parse instead.
+BUS_OK = '''\
+"""The console daemon. It survives /clear, --resume, and session death."""
+VERDICT_OUTCOMES = ("approve", "changes", "reject")
+CONTROL_OPS = ("reprioritize", "pause", "resume")
+'''
+BUS_STALE_OPS = '''\
+"""The console daemon. It survives /clear, --resume, and session death."""
+VERDICT_OUTCOMES = ("approve", "changes", "reject")
+CONTROL_OPS = ("reprioritize", "pause")
+'''
+BUS_EXTRA_OPS = '''\
+"""The console daemon. It survives /clear, --resume, and session death."""
+VERDICT_OUTCOMES = ("approve", "changes", "reject")
+CONTROL_OPS = ("reprioritize", "pause", "resume", "abort")
+'''
 CHECKPOINT = "Four kinds — demo, qa, setup, reconcile. Routes by outcome — approve, changes, reject."
 CHECKPOINT_STALE = "Four kinds — demo, qa, setup, reconcile. Routes on approve, reject."  # missing changes
 ROSTER_OK = "| checkpoint | skill | verdict (demo / qa / setup / reconcile) |"
@@ -90,14 +111,40 @@ class Helpers(unittest.TestCase):
 
 
 class Enums(unittest.TestCase):
-    def _files(self, roster, shared05=SHARED05_OK):
+    def _files(self, roster, shared05=SHARED05_OK, bus=BUS_OK):
         return {"shared/schemas.md": SCHEMAS,
                 "skills/checkpoint/SKILL.md": CHECKPOINT,
                 "10-roster.md": roster,
-                "05-shared-state.md": shared05}
+                "05-shared-state.md": shared05,
+                "scripts/bus.py": bus}
 
     def test_clean_passes(self):
         self.assertEqual(e.check_enums(reader(self._files(ROSTER_OK))), [])
+
+    def test_code_consumer_dropping_a_member_is_caught(self):
+        """The control enum is CLOSED because a control op has no effect anchor: the
+        only thing making a redelivered one safe is that re-applying it is a no-op. If
+        the code and the schema drift, that guarantee quietly stops being true."""
+        errs = e.check_enums(reader(self._files(ROSTER_OK, bus=BUS_STALE_OPS)))
+        self.assertTrue(any("inbox.control.op" in x and "bus.py" in x for x in errs), errs)
+
+    def test_code_consumer_adding_a_member_is_caught(self):
+        """Both directions. An op the schema never admitted is the dangerous one — it
+        is how a non-idempotent op enters through the front door."""
+        errs = e.check_enums(reader(self._files(ROSTER_OK, bus=BUS_EXTRA_OPS)))
+        self.assertTrue(any("inbox.control.op" in x and "abort" in x for x in errs), errs)
+
+    def test_a_mention_in_prose_does_not_satisfy_a_code_consumer(self):
+        """The toothless case, pinned: BUS_STALE_OPS drops "resume" from the tuple while
+        the word still appears in the docstring (--resume). A word-search passes it."""
+        files = self._files(ROSTER_OK, bus=BUS_STALE_OPS)
+        self.assertIn("resume", files["scripts/bus.py"], "fixture must still mention it")
+        self.assertTrue(e.check_enums(reader(files)), "the gate fell back to a word-search")
+
+    def test_moved_code_declaration_is_flagged_not_ignored(self):
+        files = self._files(ROSTER_OK, bus="# the tuple got renamed\nOPS = ('pause',)\n")
+        errs = e.check_enums(reader(files))
+        self.assertTrue(any("declaration not found" in x for x in errs), errs)
 
     def test_missing_value_flagged(self):
         errs = e.check_enums(reader(self._files(ROSTER_STALE)))
