@@ -1768,7 +1768,7 @@ tool**; two fan-outs (auto-compact mechanics · long-loop context best-practice 
 long-running agents" + "context engineering", Manus, Cognition, context-rot benchmarks). Reuses D4/D48/D51; refines
 `01` Session-lifecycle. → `01`/`07`/`11`.
 
-## D93 — Bus contract: single-writer ownership + atomic-publish + a two-mechanism protocol (sync reads · async commands); one typed inbox — the orchestrator is never an HTTP responder **[DECIDED — Phase-2 A2, research-backed]**
+## D93 — Bus contract: single-writer ownership + atomic-publish + a two-mechanism protocol (sync reads · async commands); one typed inbox — the orchestrator is never an HTTP responder **[DECIDED — Phase-2 A2, research-backed; two arms revised by D114: this decision's *enumerations* (the served-read set + the native-FS pin set) are retired as prose and re-owned by `05`'s layout tree — they had drifted at every touch — and the "the committed artifacts stay in the repo (git doesn't need rename-atomicity)" rationale is corrected as a non-sequitur (three committed files are `bus:read`, so the *bus* reads them across the weak mount; the exposure is bounded to GC lag + a self-healing render, and now says so)]**
 The A2 bus contract closes on three rules. **(1) Ownership = a single-writer partition, zero co-written files:** the
 orchestrator is the sole writer of `state.json` / `handoff.md` / `backlog.md` / `parked/` / `items/` + git; the bus is
 the sole writer of `inbox/`; everyone else reads. **UI-originated work never writes the backlog directly** (that would
@@ -2068,7 +2068,7 @@ The intake-stage refine mini-loop (human sees demo → "change X" → `create-de
 *Rejected:* unbounded regeneration (burns autonomy/tokens chasing a moving target); auto-proceed at the cap (D97 forbids it — a mock the human never approved isn't a lock); grading rounds by size (needless judgment); escalating to a *bigger async checkpoint* (the same low-bandwidth channel that just failed).
 *Evidence:* D97 (never auto-proceeds) · D93 (dialogue = terminal, bus = bounded requests) · D61 (count-don't-judge) · D45 (no AI-on-AI eval); the house bounded-loop→escalate pattern (D24). → `09`/`skills/create-demo`/`11`.
 
-## D104 — Demo on-disk location: `.workflow/demos/<item-id>/` — gitignored runtime, under the served tree, pruned on resolve **[DECIDED — Phase-2 D (D3)]**
+## D104 — Demo on-disk location: `.workflow/demos/<item-id>/` — gitignored runtime, under the served tree, pruned on resolve **[DECIDED — Phase-2 D (D3); sharpened by D114 — this entry's closing "co-located with the served root wherever D93 pins it" presumes a single served root that does not exist (the bus reads across both the pinned runtime subtree and the committed repo tree), so `demos/` is now marked explicitly: `bus:static` + `no-pin`, exactly on this entry's own atomicity-light reasoning]**
 The throwaway sandbox lives at **`.workflow/demos/<item-id>/`** — nearly forced by the substrate: **gitignored runtime** (rules out committed `items/<id>/`, which D61 keeps for crash-survival — committing throwaway bytes bloats git and contradicts D21) · **under the D94 daemon's served tree** (must be servable) · **durable across the park** (the human may look hours later — D90/D91; rules out `/tmp` scratch). **Not** the build worktree (the demo is *intake-stage*, before the build ticket/worktree exists — D91). Regenerated **in place via atomic write** (`os.replace`; D21's "regenerate, never hand-edit" = overwrite). A thin pointer (the demo path) rides the **`parked/<id>` record** so console/orchestrator find it. **Pruned on checkpoint-resolve** (throwaway + gitignored → just delete; the audit prune (D61) sweeps stragglers) — nothing to archive: **D21 makes the *locked spec* the durable artifact, not the demo bytes**. New runtime dir → owner declared (D80): **`create-demo` writes, the audit prune deletes**; gitignored with the rest of the runtime view (D53/D62). On WSL the demo bundle is write-once-then-serve (atomicity-light), co-located with the served root wherever D93 pins it.
 *Rejected:* `items/<id>/` (committed — bloats git with throwaway bytes); `/tmp` scratch (not durable across an hours-long park); the per-ticket worktree (build-stage, doesn't exist yet at intake); archiving the demo on resolve (D21 — the spec is what's kept).
 *Evidence:* D21 (throwaway, spec-is-locked) · D53/D60/D61 (gitignored runtime, cap-and-archive, items-committed-while-open) · D62 (docs-root/disk layout) · D90/D91 (durable park, worktrees are build-stage) · D93/D94 (served tree, FS pinning). → `05`/`09`/`skills/create-demo`/`11`.
@@ -2247,7 +2247,7 @@ patterns are fragile → use deny + hooks" guidance, which bars an allow-glob fo
 names read by a hook*. Reuses D35/D58/D80/D87/D105. →
 `01`/`05`/`07`/`shared/schemas.md`/`hooks/guard.sh`/`templates/settings.json`/`templates/orchestrator-CLAUDE.md`/`commands/start.md`/`11`.
 
-## D111 — Away-alert: the always-alive daemon owns notification (not the Claude `Notification` hook); deadline/reminder pinned; the secret store adopted at `.workflow/secrets/` **[DECIDED — pre-Phase-3 F4; folds JF2 + JF4 + the A6 shred fork; corrects the D90/D101 mechanism]**
+## D111 — Away-alert: the always-alive daemon owns notification (not the Claude `Notification` hook); deadline/reminder pinned; the secret store adopted at `.workflow/secrets/` **[DECIDED — pre-Phase-3 F4; folds JF2 + JF4 + the A6 shred fork; corrects the D90/D101 mechanism; one arm completed by D114 — this entry's "added to … the native-FS pin list" was singular where there were **two** copies, so `secrets/` reached `05` and not `07`; that miss is the direct evidence D114 cites for retiring the hand-kept lists]**
 The console's one critical-path job — alert an away human that a verdict is needed — **had no working trigger**.
 F4 reported three gaps; they are **one root error**: D90/D101 hung the alert on the harness **`Notification` hook**,
 the one mechanism that structurally cannot do it.
@@ -2409,6 +2409,84 @@ and D112 (remote act) are what make the missing resume link visible. D90 (nothin
 shape is the legal path, the cloud SDK is not) · D92 (the deferral being reversed, and its own triple-justification)
 · D94 (the detached always-alive daemon that makes the purity argument moot and hosts the runner) · D100 (stdlib
 Python) · D109 (the stance this narrowly reopens). → `01`/`07`/`shared/schemas.md`/`templates/orchestrator-CLAUDE.md`/`11`.
+
+## D114 — Disk-layout properties: `05`'s tree is the single owner of per-path `bus:` + `pin` markers; the prose lists are retired and two shipped consumers are gate-held **[DECIDED — pre-Phase-3 JF3 (the last enumeration gap); adopts an owner under D80, corrects a D93 rationale, sharpens D104]**
+JF3 asked whether `outbox/` and `demos/` should be added to two enumerations (the served-read list and the native-FS
+pin list). The finding **understated the problem**: those two facts had **no owner and six copies**, three of which
+were wrong at the time of writing. The fix is therefore an **adoption**, not an addition.
+- **The evidence that enumeration-by-hand is the wrong shape — it had already failed three times.** **D105** added
+  `outbox/` and reached **neither** list. **D111** added `secrets/` and reached the pin list in `05` but **not** the
+  second copy in `07`:135 — the miss is visible in D111's own capture note ("Added to … the native-FS pin list",
+  singular; there were two). And `parked/` was pinned by `05` while `shared/schemas.md` never said so. The most
+  recent hand-edit, made by the person actively thinking about the list, still missed a copy — so "add both to both
+  lists" would have repaired three copies and left the mechanism that produced them.
+- **The word "served" was hiding two different facts.** `03`:104 has the console polling **one synthesized, ETag'd
+  snapshot** — so the bus was never a static file server, and "the files the bus serves" is really its **read-model
+  input set**. Meanwhile `demos/` genuinely *is* raw bytes at `/demo/*`. Those are **D102's two serving classes**,
+  already decided; collapsing them into one list is what made "is `handoff.md` served?" unanswerable and let `05`
+  (`graph.json`) and `03` (`handoff.md` + git) hold two lists that were never the same question.
+- **The call.** `05`'s **disk-layout tree is the OWNER** of three per-path properties: commit-class, **`bus:`**
+  (`read` = feeds the read-model, token-gated · `static` = the D102 static class, raw bytes token-free · `write` =
+  the bus is the writer · `none`), and **`pin`/`no-pin`** — a **RUNTIME-only** question, since a committed file
+  lives on the repo mount by construction. Every prose list is **retired**: `05`'s own three, `07`:135, `03`:99 now
+  point. The tree is the right owner because it already *was* one — it enumerates every path exactly once and
+  already carried the commit-class per line; the doc-review's **A4** was that same tree being right while a prose
+  list drifted from it.
+- **What is retired is the *enumeration*, not the *mention*.** A doc may still state one path's property in context
+  (`04`:74's "`.workflow/secrets/`, native-FS-pinned" stands). The drift class is the **list that must be complete**,
+  because incompleteness is **invisible** — nothing about `05`'s pin list looked wrong while `outbox/` was missing
+  from it. A single-path mention carries its own subject, so a wrong one is visibly wrong and is `align`'s job.
+- **The substance, settled.** `outbox/` = **`bus:read` + `pin`** (it crosses the process boundary — the orchestrator
+  writes, the bus reads it for the console's release panel — so it needs rename-atomicity, exactly like `parked/`).
+  `demos/` = **`bus:static` + `no-pin`** — the register's warning was right and D104 already said why (write-once-
+  then-serve, atomicity-light; a torn read is cosmetic and self-heals on a throwaway). **The two lists take
+  different members**, which is precisely why a blanket "every runtime dir is pinned" rule was rejected.
+- **`handoff.md` was already decided — by D108, not by the console.** Rule (3) has the orchestrator publish
+  `consumed_through` and **the bus GC the inbox on it**; the watermark lives on `handoff.md`. So the bus **must**
+  read it to do its own job — `bus:read`, settled, independent of any UI question. `05`:41 was under-listing;
+  `03`:99's "renders from" was loosely right for the wrong reason.
+- **A D93 rationale corrected (same sentence as the pin list, so it lands here).** `05` justified leaving the
+  committed artifacts on the repo mount with *"git doesn't need rename-atomicity"* — a **non-sequitur**: three
+  committed files are `bus:read` (`handoff.md`, `backlog.md`, `graph.json`), so the **bus** reads them across the
+  weak mount whether or not git cares. Chased as a message-loss path, it **is not one**: a torn read interleaves old
+  and new bytes and so cannot fabricate a `consumed_through` *higher* than one the orchestrator actually published —
+  inbox GC can only **lag, never over-collect** (and D108 already scopes GC as hygiene) — while a torn
+  `backlog.md`/`graph.json` render self-heals on the next 2–5 s poll. So: **bounded and accepted, now stated**
+  rather than resting on a wrong reason. Corollary made explicit: `.workflow/` is **split across two filesystems**
+  whenever `/start` relocates — one logical layout, not one mount.
+- **The gate, because a rule nothing enforces is how these lists drifted.** Three rules in
+  `scripts/check_enum_coherence.py` (its existing *owner-declares → consumers-cover* shape, presence-only):
+  **R1** every `.workflow/` leaf declares a `bus:` marker, and every RUNTIME leaf declares `pin`/`no-pin` — a **new
+  dir cannot land without answering both**, which is the D105/D111 failure at its root; **R2** the tree's `pin` set
+  == `shared/schemas.md`'s "kept on a native filesystem" headers, **both directions**; **R3** every RUNTIME path is
+  in `commands/start.md`'s gitignore scaffold (the **A2** drift class). Verified by **replaying the real history**:
+  each of D105, D111/`parked/`, and A2 goes **red**, the live tree green. The two consumers are the **shipped** ones
+  (which cannot point at a spec doc — the shipped-ref rule); the spec-side readers just point, so there is nothing
+  left to check there.
+*Why:* the two facts are load-bearing for the first build increment (the daemon must know what it reads and where
+rename-atomicity actually holds), and they had drifted every single time they were touched. A general inheritance
+rule was the tempting fix and the wrong one — "atomicity-sensitive" is **not mechanically decidable** (it is exactly
+the judgment D104 made for `demos/`), so a blanket rule would not remove the human step, it would **hide** it and
+silently reclassify the next dir nobody decided about. Marking the property **at the artifact** keeps the judgment
+explicit and makes it inherit *by construction*: the question is asked where the path is declared.
+*Rejected:* adding `outbox/`+`demos/` to both lists (the fix that had already failed three times; repairs the copies,
+keeps the mechanism); a blanket "every atomicity-sensitive runtime dir is pinned / every `.workflow` file is served"
+rule (an undecidable predicate — it relocates the judgment out of sight and silently classifies new dirs); putting
+both members on both lists (**wrong on the facts** — `demos/` is served-not-pinned); making `shared/schemas.md` the
+owner (it is shipped, so it cannot point at the spec — and it has no header for `demos/`, `backlog.md` or
+`graph.json`, so it is not a complete registry); making `commands/start.md` the owner (it is a *scaffold* list — it
+deliberately omits the dirs created at runtime — and shipped besides); a fourth meta-gate script (this is the same
+invariant shape `check_enum_coherence.py` exists for); treating the `bus-read ∧ committed` exposure as a new
+decision (chased and **downgraded** — the failure is bounded to GC lag and a self-healing render, so it is a
+rationale fix, not a mechanism change).
+*Evidence:* the pre-Phase-3 doc-review register JF3, **re-verified against the artifacts and found to understate the
+gap** — the three prior drifts (D105's, D111's, and `parked/`'s) were found by reading the files, not the register.
+D80 (one owner per fact + the blast-radius sweep) is the law being applied; D89 tier-2 is the gate this extends; A4
+is the precedent (the tree right, the prose list drifted). Reuses D53/D62 (layout) · D93 (the pin + the corrected
+rationale) · D99/D100 (the synthesized ETag'd snapshot — why "served" was the wrong frame) · D102 (the two serving
+classes, the `bus:` vocabulary) · D104 (`demos/` atomicity-light; its "co-located with the served root" phrase
+sharpened — there is no single served root) · D105 (`outbox/`) · D108 (`handoff.md` is `bus:read`) · D111
+(`secrets/`). → `03`/`05`/`07`/`shared/schemas.md`/`scripts/check_enum_coherence.py`.
 
 ---
 

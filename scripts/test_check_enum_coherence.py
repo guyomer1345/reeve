@@ -27,6 +27,37 @@ CODEMAP = "ARMS = [PythonArm(), JsTsArm(), GoArm(), JavaArm(), CSharpArm(), Gene
 ROADMAP_OK = "**Five precise arms built** — thread CLOSED (D77/D79)."
 ROADMAP_STALE = "**Four precise arms built** — the next arm is remaining."
 
+# --- layout fixtures (D114) --------------------------------------------------
+# `<worktrees>/` sits at the same indent as `.workflow/`, so the parser must stop
+# there — it is a launch-root sibling, not a `.workflow/` leaf.
+LAYOUT_OK = """\
+## Disk layout **[layout DECIDED]**
+Preamble prose.
+```
+<launch root>      # where Claude runs
+  CLAUDE.md         # orchestrator brief
+  .workflow/
+    config.json     # run config    (committed) · bus:none
+    state.json      # live position — RUNTIME, gitignored · bus:read · pin
+    handoff.md      # durable resume anchor  (committed) · bus:read
+    outbox/         # RUNTIME — pending outward actions, gitignored · bus:read · pin
+    demos/<id>/     # RUNTIME — throwaway bundle, gitignored · bus:static · no-pin
+  <worktrees>/      # RUNTIME — one worktree per ticket, gitignored · bus:none · no-pin
+  <project_root>/   # the product
+```
+Trailing prose.
+"""
+SCHEMAS_LAYOUT_OK = """\
+## state.json  · the live pointer · *`.workflow/state.json`; RUNTIME, kept on a native filesystem*
+## outbox / pending-outward-action  · the queue · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, kept on a native filesystem*
+## handoff.md  · the resume anchor · *`.workflow/handoff.md`; committed, stays on the repo mount*
+"""
+START_OK = """\
+   Add the **runtime** paths to the target's `.gitignore` — `state.json`, `outbox/`,
+   `demos/`, and the per-ticket worktrees; the durable artifacts (`config.json`,
+   `handoff.md`) are committed.
+"""
+
 
 def reader(files):
     return lambda rel: files[rel]
@@ -97,6 +128,86 @@ class Counts(unittest.TestCase):
     def test_non_count_phrase_ignored(self):
         # "the precise arms" carries no number -> not a claim, no false positive
         self.assertEqual(e.check_counts(reader(self._files("see the precise arms below"))), [])
+
+
+class LayoutParsing(unittest.TestCase):
+    def test_only_workflow_leaves_are_rows(self):
+        rows = e.parse_workflow_tree(LAYOUT_OK)
+        self.assertEqual([p for p, _ in rows],
+                         ["config.json", "state.json", "handoff.md", "outbox/", "demos/<id>/"])
+
+    def test_stops_at_launch_root_siblings(self):
+        # `<worktrees>/` and `<project_root>/` are the launch root's, not `.workflow/`'s
+        rows = e.parse_workflow_tree(LAYOUT_OK)
+        self.assertNotIn("<worktrees>/", [p for p, _ in rows])
+
+    def test_missing_anchor_is_loud_not_empty(self):
+        self.assertIsNone(e.parse_workflow_tree("# a doc with no layout tree"))
+
+    def test_norm_keys_on_first_component(self):
+        self.assertEqual(e._norm("parked/<id>.json"), "parked")
+        self.assertEqual(e._norm("demos/<id>/"), "demos")
+        self.assertEqual(e._norm("state.json"), "state.json")
+
+    def test_pin_of_reads_all_three_states(self):
+        self.assertIs(e._pin_of("RUNTIME · bus:read · pin"), True)
+        self.assertIs(e._pin_of("RUNTIME · bus:static · no-pin"), False)   # not a `pin` match
+        self.assertIsNone(e._pin_of("RUNTIME · bus:read"))
+
+
+class Layout(unittest.TestCase):
+    def _files(self, layout=LAYOUT_OK, schemas=SCHEMAS_LAYOUT_OK, start=START_OK):
+        return {"05-shared-state.md": layout,
+                "shared/schemas.md": schemas,
+                "commands/start.md": start}
+
+    def test_clean_passes(self):
+        self.assertEqual(e.check_layout(reader(self._files())), [])
+
+    # R1 — the D105/D111 failure mode at its root: a new RUNTIME dir lands and
+    # nobody is forced to answer "does the bus read it? is it pinned?"
+    def test_new_runtime_dir_without_markers_flagged(self):
+        layout = LAYOUT_OK.replace(
+            "  <worktrees>/",
+            "    cache/          # RUNTIME — a new dir nobody classified, gitignored\n  <worktrees>/")
+        errs = e.check_layout(reader(self._files(layout=layout)))
+        self.assertTrue(any("cache/" in x and "bus:" in x for x in errs))
+        self.assertTrue(any("cache/" in x and "no-pin" in x for x in errs))
+
+    def test_unknown_bus_value_flagged(self):
+        layout = LAYOUT_OK.replace("state.json      # live position — RUNTIME, gitignored · bus:read · pin",
+                                   "state.json      # live position — RUNTIME, gitignored · bus:serves · pin")
+        errs = e.check_layout(reader(self._files(layout=layout)))
+        self.assertTrue(any("bus:serves" in x for x in errs))
+
+    def test_committed_path_needs_no_pin_marker(self):
+        # `handoff.md` is committed + bus:read and carries no pin marker — legal
+        self.assertEqual([x for x in e.check_layout(reader(self._files())) if "handoff" in x], [])
+
+    # R2 — the real D105 drift: `outbox/` reached the tree, not the schema.
+    def test_pinned_path_missing_from_schemas_flagged(self):
+        schemas = SCHEMAS_LAYOUT_OK.replace(
+            "`.workflow/outbox/<id>.json`; RUNTIME, gitignored, kept on a native filesystem",
+            "`.workflow/outbox/<id>.json`; RUNTIME, gitignored")
+        errs = e.check_layout(reader(self._files(schemas=schemas)))
+        self.assertTrue(any("outbox" in x and "native filesystem" in x for x in errs))
+
+    # R2, reverse — schemas claims a pin the tree does not grant.
+    def test_schemas_claiming_unpinned_path_flagged(self):
+        schemas = SCHEMAS_LAYOUT_OK + (
+            "## demos  · the bundle · *`.workflow/demos/<id>/`; RUNTIME, kept on a native filesystem*\n")
+        errs = e.check_layout(reader(self._files(schemas=schemas)))
+        self.assertTrue(any("demos" in x and "does not mark it pin" in x for x in errs))
+
+    # R3 — the A2 drift: a RUNTIME path the gitignore scaffold would commit.
+    def test_runtime_path_missing_from_gitignore_scaffold_flagged(self):
+        start = START_OK.replace("`state.json`, `outbox/`,\n   `demos/`,", "`state.json`, `demos/`,")
+        errs = e.check_layout(reader(self._files(start=start)))
+        self.assertTrue(any("outbox" in x and "would be committed" in x for x in errs))
+
+    def test_gitignore_anchor_moved_is_loud(self):
+        errs = e.check_layout(reader(self._files(start="a scaffold with no gitignore clause")))
+        self.assertTrue(any("anchor moved" in x for x in errs))
 
 
 if __name__ == "__main__":

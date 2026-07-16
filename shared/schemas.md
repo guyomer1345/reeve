@@ -129,7 +129,7 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   A **timeout never auto-proceeds** — it re-surfaces + reminds (a missing credential can't be skipped). A rejection is
   not always a defect — hence routing by kind, not a universal `debug` sink.
 
-## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
+## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored, kept on a native filesystem; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
 - `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them.
 - `deadline` — an **absolute** timestamp stamped at park time as *now + `config.checkpoint.deadline_hours`*
   (default 24h). Absolute, not a duration, because the process that *acts* on it is the console daemon, which
@@ -191,7 +191,7 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
   *message* dedups here; an external side-effect with no natural idempotency — `issue-create` — carries its own
   key on the outbox entry.)
 
-## outbox / pending-outward-action  · written by the orchestrator when a skill defers an outward action, cleared by the `release` consumer · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, single-writer (orchestrator); the mirror of the bus-owned `inbox/`*
+## outbox / pending-outward-action  · written by the orchestrator when a skill defers an outward action, cleared by the `release` consumer · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, single-writer (orchestrator), kept on a native filesystem; read by the bus to render the console's release panel; the mirror of the bus-owned `inbox/`*
 The **transactional-outbox** queue behind the "never stalls — queue the outward action, one approval releases a
 batch" rule. An outward action (`push`, `issue-create`, `issue-close`, later `deploy` / `send`) is **not** a
 checkpoint — it doesn't park the ticket (the commit is local, the ticket completes, the loop advances). When the
@@ -319,12 +319,12 @@ the one place the loop keeps a secret.
   socket (outward `release`, returns-bearing `setup` verdicts) that must never be fronted. `remote_token` is a
   **separate** CSPRNG secret, never the loopback `token`, paired to the phone by QR + URL fragment.
 
-## state.json  · the live loop pointer (volatile, gitignored) · *published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
+## state.json  · the live loop pointer (volatile, gitignored) · *`.workflow/state.json`; published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
 - `status` ∈ `{ intake, building, idle }`
 - `node` — current loop node; value ∈ the `loop.md` node labels (e.g. `planner:plan-one`, `verify`)
 - `current_item` — backlog id or `null` · `wave` — wave id or `null` · `note` — human-readable cursor
 
-## handoff.md  · the durable resume anchor (committed) · *rewritten whole each handoff, never appended; published atomically **and durably** (write-temp → `fsync(file)` → `rename` → `fsync(dir)`) — the one file where crash-durability, not just atomicity, is mandatory*
+## handoff.md  · the durable resume anchor (committed) · *`.workflow/handoff.md`; rewritten whole each handoff, never appended; published atomically **and durably** (write-temp → `fsync(file)` → `rename` → `fsync(dir)`) — the one file where crash-durability, not just atomicity, is mandatory. Committed, so it stays on the repo mount (never relocated); the bus reads it for the `consumed_through` watermark, and a torn read can only make inbox GC lag, never over-collect*
 - `current_item`, `loop_position`, `parked[]`, `base_sha` — the commit it was written against; a cold start
   reads this + `git log <base_sha>..HEAD` (bounded to one session's delta) and rebuilds position.
 - `consumed[]` + `consumed_through` — the inbox **consumed-set** (bus-assigned `message_id`s already applied) and

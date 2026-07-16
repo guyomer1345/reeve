@@ -7,9 +7,13 @@
 > (deadline/cadence unpinned) → **D111** (`config.checkpoint`, daemon-owned); **JF9** (intake source-stamp) →
 > **D108** (the stamp is also intake's idempotency anchor — one field, two gaps); **JF6** (missing forward-pointers)
 > → done in-passing for D70/D87/D90/D92/D95/D97/D101/D105/D107; **JF7** (C1/C2 label collision) → dissolved by
-> **D113**'s increment reframe. **Still open: JF3** (`outbox/`+`demos/` absent from the served-read + native-FS pin
-> enumerations — an adoption call), **JF5** (`09`'s `purpose.intent` resolver wording), **JF8** (gate doesn't catch
-> prose doc-slug refs).
+> **D113**'s increment reframe; **JF3** → **D114**, which found this register **understated** it — the two
+> enumerations had *no owner and six copies, three already wrong* (D105 added `outbox/` to neither list; D111 added
+> `secrets/` to one pin list of two; `parked/` was pinned by `05` and not by `shared/schemas.md`), so the call was
+> **adoption, not addition**: `05`'s layout tree now owns per-path `bus:`/`pin` markers, every prose list is retired,
+> and three `check_enum_coherence.py` rules hold the two shipped consumers to it (all three historical drifts replay
+> red). **Still open: JF5** (`09`'s `purpose.intent` resolver wording), **JF8** (gate doesn't catch prose doc-slug
+> refs).
 
 **The D89-style phase-boundary `align` cold-audit — the closing coherence gate before Phase 3.**
 COHERENCE, not substance: does the whole surface agree with itself and with the built artifacts (the input
@@ -74,7 +78,7 @@ All four meta-gates green after these edits (`check-status-coherence` · `check_
 - **Why not mechanical:** picking the path (e.g. `.workflow/secrets/`) + owner + 0600/ACL creation is a **design call** (a load-bearing runtime artifact holding live credentials). This is the D80 adoption gap the pressure-test's F9 already names.
 - **Options:** adopt under D80 — fixed path on the native-FS pin, owner = orchestrator writes / audit-prune deletes, add to the gitignore scaffold + `05` layout + a schema entry (reuse the D95 token-file discipline).
 
-### JF3 — `outbox/` (and `demos/`) are absent from the served-read list and the native-FS pin list *(LOW–MEDIUM · = pressure-test F14 completeness)*
+### JF3 — `outbox/` (and `demos/`) are absent from the served-read list and the native-FS pin list *(LOW–MEDIUM · = pressure-test F14 completeness)* — **RESOLVED → D114 (and this finding understated the gap: no owner, six copies, three already wrong)**
 - **Area:** `05:20-22` serves reads from `state.json/backlog.md/parked/graph.json` (no `outbox/`), yet `05:136` says "the console renders the pending `outbox/`"; `05:104-105` pins the atomicity-sensitive subtree as `state.json/bus.json/parked/inbox/` — omitting `outbox/`, though `shared/schemas.md:157` marks it atomic-write single-writer RUNTIME.
 - **Why not mechanical:** it extends a **D93 enumeration that predates the D105 `outbox/`** — an adoption/ownership call (add `outbox/`+`demos/` explicitly, *or* adopt a general "all atomicity-sensitive runtime dirs are native-FS-pinned / all `.workflow` files are served from disk" rule so new dirs inherit).
 

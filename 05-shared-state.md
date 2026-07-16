@@ -37,8 +37,11 @@ idempotent). The **sole** carve-out to never-delete: a consumed record carrying 
 by the orchestrator immediately after the credential is extracted to the secret store (D111), so a secret never
 waits on a janitor.
 
-**Protocol — two mechanisms, no third (D93).** (1) Synchronous **reads** the bus serves straight from disk
-(`state.json` / `backlog.md` / `parked/` / `graph.json`) — no orchestrator involvement. (2) Asynchronous
+**Protocol — two mechanisms, no third (D93).** (1) Synchronous **reads** the bus serves straight from disk — no
+orchestrator involvement. The bus is **not a static file server**: the console polls one *synthesized*, ETag'd
+snapshot document (D99/D100), so the load-bearing fact is which paths the bus **reads**, not which URLs it exposes.
+Those paths are the ones the layout tree marks **`bus:read`** (D114) — enumerated there, never here; the D102
+static class (the page, its assets, the demo bundle) is marked `bus:static`. (2) Asynchronous
 **commands**: the bus returns `202 Accepted` + a `Location` ticket and appends the message to the **inbox**; the
 orchestrator consumes it at a scheduler boundary; any result surfaces via orchestrator-written state the console
 re-reads by ticket (Async Request-Reply). **The orchestrator is never an HTTP responder** (D90) — a synchronous
@@ -116,47 +119,65 @@ served **token-free under the Host-allowlist**, because a browser can't attach a
 reads; the demo (served under a `sandbox`-directive opaque origin — D102) joins the static class.
 
 ## Disk layout **[layout DECIDED — D53/D62; read/write protocols EXPAND]**
-`init` (`commands/start.md`) scaffolds this layout in a target project:
+`init` (`commands/start.md`) scaffolds this layout in a target project.
+
+**The tree is the OWNER of three per-path properties (D114)** — commit-class (`committed` / `RUNTIME`+gitignored),
+**`bus:`** (what the bus daemon does with the path: `read` = it feeds the console read-model, token-gated ·
+`static` = the D102 static class, raw bytes served token-free · `write` = the bus is the writer · `none` = the bus
+never touches it), and **`pin`/`no-pin`** (native-FS-pinned — RUNTIME paths only; a committed file lives on the repo
+mount by construction). **No prose below restates these sets** — every list that did drifted (D114); each points
+here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to the tree.
 ```
 <launch root>      # where Claude runs = orchestrator home (process / machinery)
   CLAUDE.md         # orchestrator brief (greenfield: here; brownfield: a marked block in the existing one)
   .workflow/
-    config.json     # project_root (./project | .) + run config    (committed)
-    loop.md         # routing graph + diagram (fixed topology)      (committed)
-    checks.sh       # mechanical-gate runner (generated per-stack; --fix / --check)  (committed)
-    codemap.sh      # code-map generator (generated per-stack; writes docs/knowledge/graph.json)  (committed)
-    state.json      # live position (item/phase/wave) — RUNTIME (atomic-publish, D93), gitignored
-    handoff.md      # durable resume anchor                         (committed)
-    backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed)
-    outbox/         # RUNTIME — pending-outward-action queue (push/issue/deploy the orchestrator deferred, awaiting a console `release`) — D105 (retires the D60-reserved checkpoints/), gitignored
-    bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored
-    parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored
-    inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control|release) the bus writes; matched at boundaries — D90/D91/D93/D105, gitignored
-    secrets/        # RUNTIME — live credentials returned at a setup checkpoint; 0600/ACL, atomic write; orchestrator writes+reads; NEVER retention-swept — D111, gitignored
-    items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed)
-    align/          # anchor.json — the drift-scan base_sha (align mkdir's it on first run) — committed
-    demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves under a sandbox-CSP opaque origin; pruned on checkpoint-resolve — D102/D104, gitignored
-  <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored
+    config.json     # project_root (./project | .) + run config    (committed) · bus:none
+    loop.md         # routing graph + diagram (fixed topology)      (committed) · bus:none
+    checks.sh       # mechanical-gate runner (generated per-stack; --fix / --check)  (committed) · bus:none
+    codemap.sh      # code-map generator (generated per-stack; writes docs/knowledge/graph.json)  (committed) · bus:none
+    state.json      # live position (item/phase/wave) — RUNTIME (atomic-publish, D93), gitignored · bus:read · pin
+    handoff.md      # durable resume anchor                         (committed) · bus:read (the D108 consumed_through watermark — the bus GCs the inbox on it)
+    backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed) · bus:read
+    outbox/         # RUNTIME — pending-outward-action queue (push/issue/deploy the orchestrator deferred, awaiting a console `release`) — D105 (retires the D60-reserved checkpoints/), gitignored · bus:read (the console's release panel) · pin
+    bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored · bus:write · pin
+    parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored · bus:read · pin
+    inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control|release) the bus writes; matched at boundaries — D90/D91/D93/D105, gitignored · bus:write · pin
+    secrets/        # RUNTIME — live credentials returned at a setup checkpoint; 0600/ACL, atomic write; orchestrator writes+reads; NEVER retention-swept — D111, gitignored · bus:none · pin (for the 0600-honouring mount, not for atomicity)
+    items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed) · bus:none
+    align/          # anchor.json — the drift-scan base_sha (align mkdir's it on first run) — committed · bus:none
+    demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves under a sandbox-CSP opaque origin; pruned on checkpoint-resolve — D102/D104, gitignored · bus:static · no-pin (write-once-then-serve, atomicity-light — D104)
+  <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored · bus:none · no-pin
   <project_root>/   # the product (greenfield: project/ ; brownfield: the repo root)
     CLAUDE.md       # the product's own brief
     llms.txt        # thin agent entry point → points into docs/knowledge/  (committed)
     docs/           # ← the DOCS-ROOT — durable product knowledge (D62)
       spec/         # the product spec (discuss fills it)           (committed)
       architecture.md  # inline Mermaid-C4 L1/L2 (document-owned)   (committed)
-      knowledge/    # code map — Space 6 (index.md, graph.json, nodes/)  (committed)
+      knowledge/    # code map — Space 6 (index.md, graph.json, nodes/)  (committed) · bus:read (graph.json — the map tab, post-MVP)
       decisions/    # decision-records = ADRs (append-only, global) (committed)
     <product code>
 ```
-**Commit policy:** everything durable is committed; the **runtime** view (`state.json`, `bus.json`, `outbox/`,
-`parked/`, `inbox/`, `secrets/`, `demos/`, the per-ticket worktrees) is gitignored.
+**Commit policy:** everything durable is committed; everything the tree marks **RUNTIME** is gitignored. (The set
+is the tree's, not a second list here — `commands/start.md`'s gitignore scaffold is its one shipped restatement,
+gate-held to the tree.)
 
 **Runtime coordination on a native FS (D93).** The atomic-publish + inbox guarantees (POSIX `rename` atomicity,
 `fsync`, `inotify`) hold on a **local** filesystem and are weak-to-broken on network-style mounts (NFS; and on WSL2
-the repo's `/mnt/c` DrvFs/9p mount — the same class). So the atomicity-sensitive runtime subtree (`state.json`,
-`bus.json`, `parked/`, `inbox/`, `secrets/` — which additionally needs the mount to honour `0600`) is pinned to a
-**native-FS path** (e.g. under `$HOME` on ext4), not the repo mount;
-`/start` detects a DrvFs/network mount and relocates-or-warns. The **committed** durable artifacts stay in the repo
-(git doesn't need rename-atomicity). Same "target OS/FS isn't POSIX-ext4" family as the D89 shipped-glue gap.
+the repo's `/mnt/c` DrvFs/9p mount — the same class). So every runtime path the tree marks **`pin`** is relocated to
+a **native-FS path** (e.g. under `$HOME` on ext4), not the repo mount; `/start` detects a DrvFs/network mount and
+relocates-or-warns. The pinned set is **not restated here** (D114): a hand-kept second copy is precisely how
+`outbox/` never reached it and how `secrets/` reached one copy of it and not the other.
+
+The **committed** durable artifacts stay in the repo and are therefore **never pinned** — a committed file lives on
+the repo mount by construction, so `pin` is a RUNTIME-only question. **This is not because "git doesn't need
+rename-atomicity"** (D114 corrects that reasoning — it was a non-sequitur): three committed files are `bus:read`
+(`handoff.md`, `backlog.md`, `graph.json`), so the **bus** reads them across the weak mount even though git doesn't
+care. The exposure is **bounded and accepted**, not overlooked: a torn read interleaves old and new bytes, so it
+cannot fabricate a `consumed_through` *higher* than one the orchestrator actually published — inbox GC can only
+**lag, never over-collect** (and D108 already scopes GC as hygiene, not a hot path); a torn `backlog.md`/`graph.json`
+render is cosmetic and self-heals on the next 2–5 s poll. `.workflow/` is therefore **split across two filesystems**
+whenever `/start` relocates — the tree is one logical layout, not one mount. Same "target OS/FS isn't POSIX-ext4"
+family as the D89 shipped-glue gap.
 
 **Continue-while-parked isolation (D91):** each in-flight ticket develops in its own **git worktree** on its own
 branch; a checkpoint parks it with a `WIP:` commit + a `parked/<id>` record, and the loop interleaves to the next

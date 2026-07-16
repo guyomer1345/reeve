@@ -133,8 +133,10 @@ Deliberately deferred — known unknowns, to close during build or later.
     thin Python launcher — `python3` is already a hard dependency — or a documented Git-Bash/WSL requirement),
     **not** a `.sh→.py` refactor (the D71 bash-glue/python-logic split stands).
   - **Runtime coordination on a native FS (D93)** — atomic `rename`/`fsync`/`inotify` are weak-to-broken on
-    network-style mounts (NFS; WSL2 `/mnt/c` DrvFs/9p). The runtime subtree (`state.json`/`bus.json`/`parked/`/
-    `inbox/`) is pinned to a native-FS path; `/start` detects a DrvFs/network mount and relocates-or-warns.
+    network-style mounts (NFS; WSL2 `/mnt/c` DrvFs/9p). The runtime paths `05`'s layout tree marks **`pin`** are
+    relocated to a native-FS path (the tree owns that set — D114; this register does not restate it, which is how
+    this copy sat stale, missing `secrets/`, from D111 until D114); `/start` detects a DrvFs/network mount and
+    relocates-or-warns.
   - **WSL2 bus lifecycle (D94)** — a detached daemon can't hold the distro VM open; the bus dies ~8s after the
     last terminal closes and re-spawns on the next `/start` (owner-accepted; `enable-linger` / `vmIdleTimeout=-1`
     the opt-in upgrade).

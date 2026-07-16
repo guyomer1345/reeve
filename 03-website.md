@@ -96,7 +96,11 @@ so the carve-out is what makes Tailscale the recommended transport: no domain, E
 live run* and *explore the project* — and only supervision is MVP (the dogfood's one critical-path job: deliver a
 checkpoint verdict + status away from the terminal).
 - **Home = a run-status cockpit:** current item · wave/parked tickets · **pending checkpoints** · recent activity —
-  rendered from the files the bus serves synchronously (`state.json` / `backlog.md` / `parked/` / `handoff.md` / git; D93).
+  rendered from a **subset** of the bus's read-model inputs (the paths `05`'s layout tree marks `bus:read`, plus
+  `git log` for recent activity — a computed input, not a served file; D93/D114). Which paths the bus reads is the
+  tree's fact; which of them feed *this tab* is the UI's, and they are not the same list — the home leans on
+  `state.json` / `parked/` / `backlog.md` / `handoff.md` / git, while `graph.json` feeds the later map tab and
+  `outbox/` the release panel below.
 - **Screen list (MVP → later):** cockpit (home) · checkpoint console · **"my requests"** · roadmap/backlog
   (read-only) → *later* tabs: the project map (above), knowledge exploration. **The map is a tab, not the home, and
   not the first cut** — resolves the `07` tab-vs-home question: **tab** (D70 is stageable; its value needs the
