@@ -92,8 +92,11 @@ unparks that ticket at a later **drain** (step 1 above) — never inside this tu
 ## Handoff & resume
 When context runs low: finish or park the current item, run `document`, `commit`, then
 rewrite `handoff.md` as the resume anchor — current item, position in the loop, what's
-parked. You cannot clear yourself; the console asks the human to restart. A new session
-resumes from `handoff.md` + `git log` (completed items are committed, so nothing reruns).
+parked. You cannot clear yourself. If the runner is enabled (`config.json` → `runner`)
+it relaunches a fresh session for the next ticket; otherwise a human restarts. Either
+way the new session resumes from `handoff.md` + `git log` — completed items are
+committed, so nothing reruns. Write the anchor as if the next session is a stranger:
+it is.
 
 ## Where things live
 | Path | What | Tier |

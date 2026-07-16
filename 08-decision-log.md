@@ -1741,7 +1741,7 @@ Step-Functions `.waitForTaskToken` shrunk to one machine). Reuses D24/D26/D48/D6
 load-bearing; `prioritize` gains the predicate; `verify` owns the rebase/speculative-merge; the bus owns the inbox.
 → `01`/`03`/`05`/`07`/`09`/`10`/`11`/`shared/schemas.md`.
 
-## D92 — Context management: the conversation is disposable; the orchestrator stays thin via subagents; auto-compact is a *within-run seatbelt*, not the cross-ticket strategy **[DECIDED — Phase-2 A1 extension]**
+## D92 — Context management: the conversation is disposable; the orchestrator stays thin via subagents; auto-compact is a *within-run seatbelt*, not the cross-ticket strategy **[DECIDED — Phase-2 A1 extension; the runner **deferral is REVERSED by D113** (it is the away-channel's last link, and this decision's "preserve the pure-config MVP" reason expired once D94 shipped a detached daemon) — which also retires the manual-`/clear` MVP stopgap below]**
 The orchestrator's **conversation is disposable — `handoff.md` + git are authoritative** (D48/D51). Heavy per-ticket
 work runs in **fresh subagent windows** (each returns a thin summary), so the orchestrator's resident context stays
 thin and barely grows across tickets — the mature long-running-harness pattern (Anthropic: fresh window + progress
@@ -2359,6 +2359,56 @@ it). D90 (verdict-as-authoritative-prompt — the fact that sets the bar) · D95
 failures, the `?token=` CVE lineage) · D97 (a missing credential can't be skipped) · D100 (stdlib-only → no JWT
 verify) · D102 (the static-asset serving class the demo joins) · D107 (the taxonomy this corrects) · D109 (the
 operator-responsibility stance reused). → `03`/`05`/`07`/`09`/`shared/schemas.md`/`11`.
+
+## D113 — MVP away-autonomy: the relaunch-runner is pulled onto the critical path; the C1→C2 split is retired for one component's six increments; the boundary is stated **[DECIDED — pre-Phase-3 F14 (scoping); reverses D92's deferral]**
+The composite lock F14 asked for. Three calls.
+- **(1) The runner is MVP, not deferred — it is the away-channel's last link.** Trace the overnight run with
+  everything else decided: the loop parks on a setup checkpoint at 1am, interleaves through the independent tickets,
+  then **runs out of independent work and whole-parks** — it yields, and **nothing inside Claude self-wakes** (D90).
+  At 8am the human is alerted (D111), submits the verdict from a phone (D112), and the bus writes it durably to the
+  inbox — **and nothing happens.** It waits until a human reaches the terminal, where they could have typed it
+  anyway. So without the runner, D111's alert and D112's remote surface deliver a verdict that *queues*: away-
+  autonomy stays bounded to the **interleaving-alive window** (real only while independent work remains, since
+  read-only fill-work is finite). **The maintainer's own F6b standard settles it** — *if the human can't act from
+  their phone, the away system isn't worth it* — because its sequel is *if the phone verdict doesn't resume the
+  work, it still isn't worth it.*
+- **Why D92's deferral expired:** D92 deferred the runner "to preserve the pure-config MVP". **D94 already ships a
+  detached, always-alive Python daemon** — purity was spent there. The runner is not a new *category* of thing, only
+  a capability of a process we already ship, so it **hosts on that daemon** (`config.runner.enabled`, off → the
+  console still works but nothing resumes a whole-parked loop). D90 already blessed its shape (a thin local
+  relaunch on the user's own machine/auth, explicitly *not* the cloud SDK), so the master rule — never sit in
+  Claude's request path — is untouched. Bonus: it **retires D92's manual-`/clear` stopgap** (a fresh `claude -p` per
+  ticket is a clean window for free), which is why D92 called it *triple-justified* in the first place.
+- **(2) It reopens D109 — and honestly.** D109 declined an election as *"not ours: operator responsibility"*. That
+  reasoning covers **operator error**; it does **not** reach a duplicate the *runner* creates, which would be **our**
+  defect. So the runner **checks a liveness marker before spawning** — justified strictly as the runner's
+  precondition, not as general operator-policing; nothing else consults it. (Batching the capture paid for itself
+  here: D109 was still in flux, so this is a revision in place rather than a decision superseded two entries later.)
+- **(3) The C1→C2 split is retired.** `11` sequenced *"C1 read-only console (**no bus needed** → quickest visible
+  payoff) → C2 comms bus"* — **incoherent against D94/D100**: a read-only console *is* a detached daemon serving a
+  browser, so **the console IS the bus** and there is no bus-free C1. They are not two phases but **increments of
+  one component**: (1) daemon skeleton → (2) reads + cockpit page *(the old C1)* → (3) POST + inbox + drain *(the
+  old C2 — where the verdict job actually lands)* → (4) the notifier → (5) the remote socket → (6) the runner. Each
+  adds a real capability, and **no MVP goal is met until step 3**, so step 2 is a de-risking checkpoint, **not a
+  shippable milestone**. (This also dissolves the JF7 C1/C2 label collision.)
+- **(4) The boundary, stated (the point of F14).** With the runner in, away-autonomy is **real end-to-end**:
+  alerted anywhere → act from a phone → the verdict lands durably → the runner resumes the loop. Residual bounds,
+  eyes open: **release + credential-bearing setup verdicts are loopback-only** (D112 — unless the transport is
+  E2E/Tailscale, which unlocks the credential case) · **protected-branch pushes never auto-fire** (D110, absolute —
+  a human moves `main`) · **remote needs a declared identity transport** (D112) · **no webhook ⇒ no away alerting**
+  (D111) · **one orchestrator is operator-assumed** (D109), the runner's marker being the one exception.
+*Rejected:* keeping the runner deferred (leaves the away-channel one link short — F4 and F6 would be well-built
+paths to a verdict that waits for you to come home); a **sibling runner process** (cleaner separation, but one more
+thing to supervise when the daemon is already always-alive and already watching `inbox/`+`parked/` for D111);
+extending D109's operator-responsibility stance to cover the runner ("the runner owns launches — don't `/start`
+alongside it": consistent, but forgetting the runner is on is an *easy* mistake and the failure is a silent
+state-clobber); keeping C1→C2 as two phases (describes a bus-free console that cannot exist, and ships a milestone
+that misses the console's one job).
+*Evidence:* the pre-Phase-3 register F14 (scoping) + the composite of this session's own decisions — D111 (alert)
+and D112 (remote act) are what make the missing resume link visible. D90 (nothing self-wakes; the local-relaunch
+shape is the legal path, the cloud SDK is not) · D92 (the deferral being reversed, and its own triple-justification)
+· D94 (the detached always-alive daemon that makes the purity argument moot and hosts the runner) · D100 (stdlib
+Python) · D109 (the stance this narrowly reopens). → `01`/`07`/`shared/schemas.md`/`templates/orchestrator-CLAUDE.md`/`11`.
 
 ---
 

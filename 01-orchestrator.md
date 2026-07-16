@@ -58,15 +58,22 @@ agents hitting build tools cause lock contention).
   barely grows. **Auto-compact is a within-run seatbelt only** (~63% reclaim; threshold via
   `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`), **not** the cross-ticket strategy. Pure Claude Code **cannot** self-`/clear`
   or auto-restart (no `SlashCommand` tool; `/clear` is human-only; `SessionStart` can't fire an autonomous turn).
-  - **MVP (pure config):** a **manual alert** prompts the human to `/clear` + re-run `/start` (rehydrate from
-    `handoff.md`) once the single session is polluted — the only non-autonomous step. The graceful handoff (park →
-    `document` → `commit` → write `handoff.md`) happens regardless, so the runner below is an add-on, not a redesign.
-  - **Full autonomy (optional, deferred):** a thin **local relaunch "runner"** — a fresh `claude -p` process **per
-    ticket** (a clean window for free; the loop lives in stateless bash/SDK, so nothing accumulates). This is the
-    ONLY path to true overnight autonomy AND it *triple-solves* context-reset + autonomous checkpoint-resume +
-    overnight. It is a **local relaunch loop, NOT the Agent SDK** (the SDK runs *cloud* managed agents and cannot
-    resume a local session — D90); each user runs it on their OWN auth. Tradeoff = purity (config + a small
-    program), not legality.
+  - **The relaunch-runner is MVP [DECIDED — D113]** (D92 had it deferred; that call is reversed). A thin **local
+    relaunch "runner"** — a fresh `claude -p` process **per ticket** (a clean window for free; the loop lives in
+    stateless glue, so nothing accumulates). It *triple-solves* context-reset + autonomous checkpoint-resume +
+    overnight, and it **retires the manual-`/clear` stopgap**. It is a **local relaunch loop, NOT the Agent SDK**
+    (the SDK runs *cloud* managed agents and cannot resume a local session — D90); each user runs it on their OWN
+    auth, so the master rule (never sit in Claude's request path) is untouched.
+    - **Why it moved onto the critical path:** it is the **last link** of the away-channel. Without it, an away
+      human is alerted (D111) and can submit a verdict from a phone (D112), the verdict lands durably in the inbox
+      — and then **nothing happens**: nothing inside Claude self-wakes (D90), so a whole-parked or dead orchestrator
+      never drains it until a human reaches the terminal, where they could have typed it anyway. Away-autonomy is
+      otherwise bounded to the *interleaving-alive window* — real only while the loop still has independent work.
+    - **Why the deferral reason expired:** D92 deferred it "to preserve the pure-config MVP", but **D94 already
+      ships a detached always-alive daemon** — purity was spent there. The runner is not a new *category*, just a
+      capability of a process we already ship; it **hosts on that daemon** (`config.runner.enabled`).
+    - **It spawns, so it needs a liveness precondition (D109/D113):** the runner checks a liveness marker before
+      launching, because a duplicate orchestrator would be *our* defect, not operator error.
 
 ## The macro-loop **[DECIDED — spine in `10`; driver above]**
 The full spine (`prioritize → discuss/create-demo → planner → execute → verify → debug/refine → checkpoint

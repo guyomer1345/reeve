@@ -31,11 +31,15 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   file-disjoint ∧ ¬1-hop-neighbor); it powers both waves and **continue-while-parked interleaving (MVP, D91)**.
   Residual: `build-once-per-wave` (a wave-coordinator, not a command gate). **[core — predicate done; build-once
   stageable]**
-- **Context / checkpoint reset — DECIDED (D90/D92):** checkpoint = durable park + `claude --resume`; context is
-  disposable (subagents keep the orchestrator thin; auto-compact = within-run seatbelt). MVP = a **manual alert** to
-  `/clear` + re-run `/start`; **true overnight = a thin local relaunch-runner** (fresh `claude -p` per ticket — the
-  *only* self-`/clear`-free path; triple-solves context + checkpoint-resume + overnight; NOT the cloud Agent SDK).
-  **[mechanism decided; the runner build is [later]]**
+- **Context / checkpoint reset — DECIDED (D90/D92); the runner is now MVP (D113).** Checkpoint = durable park +
+  `claude --resume`; context is disposable (subagents keep the orchestrator thin; auto-compact = within-run
+  seatbelt). The thin **local relaunch-runner** (fresh `claude -p` per ticket — the *only* self-`/clear`-free path;
+  triple-solves context + checkpoint-resume + overnight; NOT the cloud Agent SDK) is **pulled into MVP**: it is the
+  last link that makes the away-channel pay off (without it an away verdict lands durably in the inbox and simply
+  *waits* for a human to reach the terminal), and D92's reason for deferring it — "preserve the pure-config MVP" —
+  **is obsolete**, since D94 already ships a detached always-alive daemon. It **hosts on that daemon**
+  (`config.runner.enabled`), and it retires D92's manual-`/clear` stopgap. **[core — decided; builds as Phase-3
+  increment 6]**
 - **Model + effort routing** — per-task model/effort map (graph-maintenance cheap, planning expensive). **[later]**
 - **Arbiter input contract** — decide a batch in dependency order vs one at a time. **[later]**
 
@@ -58,14 +62,19 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   engineering-feasibility pass; **no new agent** (answers the old "engineer agent?" slot). **[stageable]**
 
 ### Space 3 — Website / console + bus  *(role decided; unbuilt — NOT merely "later")*
-- **C1 — read-only console** — render live loop state (roadmap, knowledge graph, activity, checkpoints) from
-  files that already exist (`state.json`/`backlog`/`handoff`/`loop.md`/git). No bus needed → the quickest
-  visible payoff. **[stageable, doable now]**
-- **C2 — comms bus** (the local HTTP loopback, Space 5) — **on the critical path for unattended autonomy:** the
-  dogfood showed every step self-drives *except* the blocking qa `checkpoint`, which needs the bus to deliver
-  the human verdict away from the terminal; it also unblocks the airtight outward-gate (the `cd x && push`
-  chaining-gap checkpoint-queue). **The full contract is now DESIGNED (D93/D94/D95 — ownership · protocol · lifecycle
-  · trust, owned by `05`);** the build rides Phase 3. **[core for unattended autonomy — designed; build Phase 3]**
+- **The console + bus are ONE component, built in increments (D113 — replaces the old "C1 read-only console → C2
+  comms bus" split).** That split was stale against D94/D100: a read-only console *is* a detached daemon serving a
+  browser — **the console IS the bus**, so "C1, no bus needed" describes nothing buildable, and C1-alone cannot
+  deliver the console's one critical-path job (a verdict needs the POST + drain). Sequence, value-ordered — each
+  step adds a real capability, and **no MVP goal is met until step 3**, so step 2 is a de-risking checkpoint, *not*
+  a shippable milestone:
+  1. **Daemon skeleton** — detached (`setsid`), `flock` liveness, `bus.json`, loopback bind, capability token (D94/D95/D100).
+  2. **Reads + the cockpit page** — live loop state from files that already exist (`state.json`/`backlog`/`handoff`/`parked`/git); visibility, and it de-risks the stack (*the old "C1"*).
+  3. **POST → inbox + the orchestrator drain** — the verdict job actually lands here (D93 protocol + the D108 consume model) (*the old "C2"*).
+  4. **The notifier** — `parked/` watch + webhook/reminders/escalation (D111): away becomes *triggerable*.
+  5. **The remote socket** — the reduced surface behind a declared identity transport (D112): away becomes *actionable*.
+  6. **The relaunch-runner** — (D113): away becomes *completing*.
+  **[core for unattended autonomy — fully designed (D93/D94/D95 + D108/D111/D112/D113); build = Phase 3]**
 - **C-map — project map + flow view** (D70) — a read-only cluster diagram over the code-map `graph.json`
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
@@ -255,15 +264,27 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **A + C + B + D + E are ALL CLOSED (D90–D107) → the Phase-2 DESIGN is COMPLETE.** Next is
-**Phase 3 — Build the website** (C1 console → C2 bus).
+**Recommended next slice:** **Phase-2 design CLOSED (D90–D107), and the pre-Phase-3 gate is now CLOSED too
+(D108–D113).** Next is **Phase 3 — Build the website**, as the **six value-ordered increments** under *Space 3*
+above (daemon skeleton → reads+page → POST+drain → notifier → remote socket → runner), **not** the retired
+"C1 → C2" split.
 **Phase 4 — Build the demo.**
-Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, the **local relaunch-runner**
-(D90/D92 — context-reset + overnight autonomy), model/effort routing,
+
+**The MVP away-autonomy boundary (D113 — locked, eyes open).** With the runner in, away-autonomy is **real
+end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote socket) → the verdict lands durably
+(D93/D108) → **the runner resumes the loop autonomously**. The residual bounds, stated plainly:
+- **Release + credential-bearing setup verdicts are loopback-only** (D112) — be at the machine to authorize an
+  outward action or hand over a credential (*unless* the transport is E2E/Tailscale, which unlocks the credential case).
+- **Protected-branch pushes never auto-fire** (D110, absolute) — a human moves `main`.
+- **Remote needs a declared identity transport** (D112); **no webhook ⇒ no away alerting** (D111).
+- **One orchestrator is operator-assumed** (D109), with the runner's liveness marker as its one exception.
+
+Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, model/effort routing,
 packaging, the state-view, the version-update skill, **and the D84 skill→agent reclassification** (`execute` +
 `create-demo` → leaf agents: the file moves, agent-format rewrites, orchestrator dispatch-by-kind wiring, and the
 `17 skills + 2 agents` → `15 + 4` count update — a dedicated session, validation-blocked until the loop runs) —
-slots around these phases as it pays off.
+slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
+critical path as Phase-3 increment 6.)*
 
 ## The one-liner
 The engine **drives** and is now **self-maintaining** (retention + freshness + docs-root) and **disciplined**

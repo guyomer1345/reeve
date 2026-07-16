@@ -95,11 +95,14 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Model + effort routing** map (`01`).
 - **Collision-model independence test** (`01`/`02`) — waves grouping decided (D36).
 - **Arbiter** batch-vs-one input contract (`01`).
-- **Local relaunch "runner"** for fully-autonomous restart (`01`, D90/D92) — deferred add-on; MVP uses
-  human-prompted restart (a **manual alert** to `/clear` + re-run `/start` once the single session is polluted).
-  **Reframed (D90):** it is a thin **local** loop that relaunches `claude` (a fresh `claude -p` per ticket = a clean
-  window + autonomous resume), **NOT** the cloud Agent SDK (which can't resume a local session). Triple-justified
-  (context-reset + autonomous checkpoint-resume + overnight). Build + verify auth (subscription vs API key) later.
+- **Local relaunch "runner"** (`01`, D90/D92) — **no longer deferred: pulled into MVP (D113)** as Phase-3 increment
+  6, hosted on the D94 daemon (`config.runner.enabled`); it **retires** the manual-`/clear`-and-re-`/start` stopgap.
+  It is the **last link** of the away-channel — without it an away verdict lands durably and then waits for a human
+  at the terminal, so D111's alert + D112's remote surface don't pay off. D92's deferral reason ("preserve the
+  pure-config MVP") expired when D94 shipped a detached daemon. **Reframed (D90):** a thin **local** loop that
+  relaunches `claude` (a fresh `claude -p` per ticket = a clean window + autonomous resume), **NOT** the cloud Agent
+  SDK (which can't resume a local session). Triple-justified (context-reset + autonomous checkpoint-resume +
+  overnight). *Residual:* verify auth (subscription vs API key) on the real build.
 - **Website stack** (`03`) — **CLOSED (D100):** a stdlib-Python detached HTTP daemon (`http.server.ThreadingHTTPServer`)
   + a zero-build, CSP-clean static page (vanilla default, Preact+htm escape hatch); the daemon serves a strict
   `script-src 'self'` CSP. No install/build step; `python3` is the only added dependency (already required).

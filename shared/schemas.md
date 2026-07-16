@@ -273,6 +273,13 @@ fires it.
   fixed, not fenced.
   **Fine-grained scoping** (never auto-push `main`) belongs in `guard.sh`, **not** a config allow-pattern (Claude
   Code documents arg-constraining patterns as fragile → use deny + hooks) — see `guard` below.
+- `runner` — the relaunch-runner, read by the daemon that hosts it: `{ enabled }`. When on, the daemon relaunches
+  `claude` (a fresh process per ticket = a clean context window for free) whenever there is unconsumed work and
+  **no orchestrator is live** — the last link that lets an away verdict actually *resume* the loop rather than sit
+  in the inbox until someone reaches the terminal. Because the runner is itself a spawner, it **checks a liveness
+  marker before launching**: a duplicate orchestrator would be the package's own defect rather than operator error
+  (the single exception to the otherwise operator-assumed one-orchestrator rule). Absent → off: the console still
+  works, but nothing resumes a whole-parked loop without a human at the terminal.
 - `remote` — opt-in remote (phone) access, read by the daemon: `{ enabled, transport: access | tailscale }`.
   **Absent / `enabled: false` / no transport → the remote socket is not served at all** (loopback only). The
   transport is a **declaration**: the operator stands up Cloudflare Access or `tailscale serve` in front of
