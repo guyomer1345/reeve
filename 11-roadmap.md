@@ -224,8 +224,11 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   rides the polled state, keyed by `localStorage` ticket ids). **B4 stack (D100):** a single-file stdlib-Python daemon
   (`http.server.ThreadingHTTPServer`, the D94 detached daemon) + a zero-build static page (vanilla default / Preact+htm
   escape hatch), the daemon serving a strict `script-src 'self'` CSP — over-determined by A2/A3/A4 + the pure-config rule.
-  **B5 attention (D101):** notify on exactly two events (checkpoint-raised · loop hard-stop/escalation) over the D90
-  `Notification` hook; reminders ride the D97 timeout; phone/tunnel later.
+  **B5 attention (D101):** notify on exactly two events (checkpoint-raised · loop hard-stop/escalation); reminders
+  ride the D97 timeout. **Mechanism corrected by D111** — the always-alive **bus daemon** owns the alert (watch
+  `parked/` → alert → re-alert on `config.checkpoint.reminder_hours` → escalate past the absolute `deadline`), not
+  the D90 `Notification` hook, which cannot fire while the loop interleaves and is dead when it whole-parks;
+  `config.notify`'s webhook is the away channel (no webhook ⇒ no away alerting).
 - **C — checkpoints. CLOSED (D96–D98).** **C1 data model** — the verb-enum verdict (`{outcome: approve|changes|
   reject, notes, returns?}`) + plural machine-verified setup gate (`request.tasks[]`, within-plan coalescing) atop
   the D90/D91 park model. **C2 triggers (D96)** — judgment/action taxonomy; declared-upstream (qa=D30, demo=D22

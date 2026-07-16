@@ -123,13 +123,21 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   - **qa** — approve → `document`/`commit` · reject → `debug` (`changes` ≡ reject here).
   - **setup** — approve|changes → the orchestrator **verifies the external precondition actually works** (probe the
     key/webhook) *before* proceeding; reject → replan or hard-stop. A `returns` value marked `sensitive` is written to
-    the gitignored secret store, **never logged**, and its inbox record **shredded after use**.
+    the gitignored **secret store** (`.workflow/secrets/`, below), **never logged**, and its inbox record **unlinked
+    immediately after that write**.
   - **reconcile** — approve → `prioritize` · else → `ingest`/`discuss`.
   A **timeout never auto-proceeds** — it re-surfaces + reminds (a missing credential can't be skipped). A rejection is
   not always a defect — hence routing by kind, not a universal `debug` sink.
 
 ## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
 - `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them.
+- `deadline` — an **absolute** timestamp stamped at park time as *now + `config.checkpoint.deadline_hours`*
+  (default 24h). Absolute, not a duration, because the process that *acts* on it is the console daemon, which
+  compares against wall-clock and was not present when the ticket parked. Past it → the daemon **escalates**
+  (never auto-proceeds).
+- **This record is the alert trigger.** Writing it *is* the signal: the daemon watches `parked/`, raises the alert
+  on a new open checkpoint, re-alerts every `config.checkpoint.reminder_hours`, and escalates once overdue. The
+  parking skill sends nothing itself.
 
 ## inbox-message  · appended to the inbox by the bus when the console POSTs · *`.workflow/inbox/<ts>-<uuid>-<pid>.json`; append-only, durable (atomic write+rename), at-least-once; RUNTIME, kept on a native filesystem*
 Every console→orchestrator message is **typed** — `kind: verdict|intake|control|release` — one uniform durable
@@ -239,6 +247,17 @@ fires it.
 - `demo` — the demo-sandbox knob read by `create-demo`: `max_refine_rounds` (the cap on demo regenerations
   before the refine loop stops auto-proceeding and **escalates to a live `discuss`**). Absent → shipped default
   (`max_refine_rounds` 3).
+- `checkpoint` — the park-deadline knobs, **read by the console daemon** (the only always-alive process, so the
+  only one that can own a timer): `deadline_hours` (the orchestrator stamps an *absolute* `deadline` onto the
+  parked record as *now + this*; once passed, the daemon escalates — a **deadline never auto-proceeds**, it only
+  raises the alarm) + `reminder_hours` (how often the daemon re-alerts while the checkpoint is open and not yet
+  overdue). Absent → shipped defaults (`deadline_hours` 24, `reminder_hours` 4).
+- `notify` — the away-channel, **read by the console daemon**: `webhook` `{ url, kind: generic|slack }` +
+  `desktop` (bool). The **webhook is the real away channel** — it reaches a phone and works from a detached
+  daemon; a desktop toast is **best-effort only** (it needs a session bus, has none on WSL/headless, and reaches
+  only someone already at the machine, who is by definition not away). Absent → desktop best-effort and **no away
+  alerting at all**: the human polls the console. That degradation is deliberate and must be stated plainly rather
+  than papered over — an alert channel that silently reaches nobody is worse than a documented absence.
 - `outward` — the standing-pre-authorization allowlist for outward actions, in Claude Code's own
   `permissions.{allow, ask, deny}` shape (deny→ask→allow, first-match-wins), **coarse per-action-class**
   (`push` / `issue-create` / `issue-close` / later `deploy` / `send`). Absent → **all `ask`** (MVP-safe:
@@ -259,6 +278,19 @@ fires it.
   non-overridable — the loop never pushes a protected branch and never pushes a secret in the outgoing range,
   regardless of `outward`. Absent → `{main, master}`. (Un-protecting a branch is deliberately not a config toggle:
   disabling a safety floor should cost an edit to `guard.sh` itself, which is a visible, owner-level act.)
+
+## secret store  · written by the orchestrator when a `setup` verdict returns a `sensitive` value, read when the loop needs that credential · *`.workflow/secrets/`; RUNTIME, gitignored, kept on a native filesystem; each entry created `0600` (restricted ACL on Windows) with an atomic write*
+The home for the **live credentials** a human hands over at a `setup` checkpoint (an API key, a webhook secret) —
+the one place the loop keeps a secret.
+- **Owner:** the orchestrator **writes** it (on consuming a `sensitive` `returns`) and **reads** it (the setup
+  verify-probe). Nothing else writes it.
+- **Never** logged, never echoed to `state.json`/`handoff.md`, never committed. The inbox record that carried the
+  value is **unlinked immediately** after the write (the one consumer-delete carve-out).
+- **These are credentials, not memory — the retention/`audit` prune never sweeps them.** Retention bounds the
+  append-only *memory* tier; a cap deleting a live key would break a working setup. Removal is **explicit**
+  (rotation / teardown), never automatic.
+- Same atomic-`0600`-create discipline as the bus token (create *with* the mode, never write-then-`chmod`);
+  Windows has no `0600` → explicit ACLs, the same target-OS/FS family as the other runtime pins.
 
 ## bus.json  · written by the bus daemon at boot, read by `/start` + the browser · *`.workflow/bus.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ pid, port, token, started_at }` — the daemon's discovery + auth record. `port` = a dynamic **loopback**

@@ -70,9 +70,18 @@ Declared upstream wherever the intent lives, with setup's one exception:
 - **Setup is plural + coalesced:** `request.tasks[]` (a lone setup is a one-element set), per-task outcomes;
   foreseeable setups are bundled **within-plan at first-setup-contact** (not front-loaded). Cross-ticket coalescing
   is deferred (the schema already fits it — additive, not a refactor).
-- **A returned secret rides the inbox, sensitive + shred** — written to the gitignored secret store, never logged,
-  the inbox record shredded after use (D95 scopes the bus to the user's own UID; residual exposure equals `.env`).
-- **Timeout never auto-proceeds** — it re-surfaces + reminds; a missing credential can't be skipped.
+- **A returned secret rides the inbox, sensitive + shred** — written to the gitignored **secret store**, now
+  located and owned (D111): **`.workflow/secrets/`**, native-FS-pinned, atomic `0600`/ACL create, orchestrator
+  writes + reads, **never logged and never retention-swept** (live credentials are not memory — a memory cap
+  deleting a working key is a bug, so removal is explicit). The inbox record that carried it is **unlinked
+  immediately after that write** — the single carve-out to the never-delete inbox rule (D108), so a secret's
+  latency-to-zero never waits on the bus's GC. (D95 scopes the bus to the user's own UID; residual exposure equals
+  `.env`.)
+- **Timeout never auto-proceeds** — it re-surfaces + reminds; a missing credential can't be skipped. **Now pinned
+  (D111):** the parked record carries an **absolute** `deadline` = park-time + `config.checkpoint.deadline_hours`
+  (default 24); the **console daemon** — the only always-alive process — re-alerts every
+  `config.checkpoint.reminder_hours` (default 4) and escalates once overdue. The `checkpoint` skill raises no alert
+  itself: writing the parked record *is* the trigger.
 
 ## Help set — how the human is told what to do **[DECIDED — D98]**
 The async/park model draws the line (nothing live happens while parked): only guidance that fits a durable

@@ -49,7 +49,10 @@ agents hitting build tools cause lock contention).
   boundary**, not a live wait (nothing inside Claude can self-wake). Park = write handoff + verdict-request to disk
   and yield; resume = **`claude --resume <id> -p "<verdict>"`** (verdict rides as an *authoritative prompt*; a
   `SessionStart` hook only re-points to durable state — hook-injected context is under-weighted), cold-starting from
-  `handoff.md` + `git log` if the session store is gone. Notify an away human via the `Notification` hook.
+  `handoff.md` + `git log` if the session store is gone. **The away human is alerted by the console daemon, not the
+  `Notification` hook (D111)** — writing the parked record *is* the trigger; the daemon is the only process alive
+  when the loop is busy interleaving, whole-parked, or dead, so it owns the alert, the reminders and the
+  overdue escalation.
 - **Context / reset mechanism [DECIDED — D92, empirically verified]:** the conversation is **disposable** (handoff +
   git authoritative). Heavy per-ticket work runs in **fresh subagent windows**, so the orchestrator stays thin and
   barely grows. **Auto-compact is a within-run seatbelt only** (~63% reclaim; threshold via

@@ -43,9 +43,11 @@ built-in Claude Code command.
    `.workflow/items/<id>/` and `.workflow/align/` are **not** scaffolded here — `planner` `mkdir`s each item
    dir on demand, and `align` `mkdir`s `.workflow/align/` on its first run (writing `anchor.json`).
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `bus.json`, `outbox/`, `parked/`,
-   `inbox/`, `demos/`, and the per-ticket worktrees (created at runtime by the bus/orchestrator, not scaffolded
-   here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`, `codemap.sh`, `handoff.md`, `backlog.md`,
-   `items/`, and `docs/`) are committed.
+   `inbox/`, **`secrets/`**, `demos/`, and the per-ticket worktrees (created at runtime by the bus/orchestrator,
+   not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`, `codemap.sh`, `handoff.md`,
+   `backlog.md`, `items/`, and `docs/`) are committed. **`secrets/` holds live credentials** a human hands over at
+   a setup checkpoint — it must be gitignored *and* live on a filesystem that honours `0600` (restricted ACL on
+   Windows); it is never swept by the retention pass.
 3. **Install the orchestrator brief** (the driver), from the package `templates/`:
    - **greenfield:** copy `templates/orchestrator-CLAUDE.md` → the launch-root **`CLAUDE.md`** (fill
      `<project>`/`<project_root>`) and put the product under **`project/`** (its own `CLAUDE.md` left to the

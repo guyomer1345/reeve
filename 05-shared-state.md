@@ -71,6 +71,24 @@ daemon can't hold the distro VM open, so the bus dies ~8s after the last termina
 `/start` (the durable inbox loses nothing already-written); `loginctl enable-linger` / `.wslconfig vmIdleTimeout=-1`
 is the opt-in upgrade.
 
+**The daemon is also the notifier (D111) — notification was never the Claude hook's job.** D90/D101 hung the alert
+on the harness `Notification` hook, which is the one mechanism that structurally *cannot* do it: it is event-bound
+(permission-prompt / ~60 s idle), so it does not fire at checkpoint-raise while D91 interleaving keeps the
+orchestrator **busy** on the next ticket; it reaches only the machine running the loop, which is not where an away
+human is; and it is dead precisely when the orchestrator is **whole-parked or crashed**. The three F4 facets (no
+fire point · no reachable-away default · no timer owner) are all that one root error. The only process alive across
+every one of those states is **this daemon**, so it owns notification end-to-end: it watches `parked/`, alerts on a
+new open checkpoint, re-alerts every `config.checkpoint.reminder_hours`, and **escalates** once a `deadline` passes
+(never auto-proceeding — D97). The `checkpoint` skill sends nothing: **writing the parked record *is* the trigger.**
+Channel = `config.notify` — the **webhook is the real away channel** (reaches a phone, works from a detached
+daemon); a desktop toast is best-effort (no session bus on WSL/headless, and it only reaches someone already at the
+machine). **No webhook configured ⇒ no away alerting** — the human polls the console; stated plainly, because a
+channel that silently reaches nobody is worse than a documented absence. Consequence: `templates/settings.json`
+needs **no `Notification` hook at all**. This keeps D101's two-event taxonomy (checkpoint-raised · loop
+hard-stop/escalation) intact and changes only the mechanism under it; the daemon likewise raises the hard-stop
+event off an orchestrator-written marker. It is a deliberate widening of the daemon's role, and the justified one —
+D94 already gave it janitor duty, and being always-alive is exactly the property the job requires.
+
 **Trust — the browser/network is the untrusted caller, not same-UID (D95).** Loopback ≠ authenticated, and a forged
 command drives an autonomous executor. The loopback stack (all mandatory): a **capability token** (in `bus.json`,
 0600 atomic-create, **header-only**, required on reads too, no cookie), a **strict Host-header allowlist** on every
@@ -103,6 +121,7 @@ reads; the demo (served under a `sandbox`-directive opaque origin — D102) join
     bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored
     parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored
     inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control|release) the bus writes; matched at boundaries — D90/D91/D93/D105, gitignored
+    secrets/        # RUNTIME — live credentials returned at a setup checkpoint; 0600/ACL, atomic write; orchestrator writes+reads; NEVER retention-swept — D111, gitignored
     items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed)
     align/          # anchor.json — the drift-scan base_sha (align mkdir's it on first run) — committed
     demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves under a sandbox-CSP opaque origin; pruned on checkpoint-resolve — D102/D104, gitignored
@@ -118,12 +137,13 @@ reads; the demo (served under a `sandbox`-directive opaque origin — D102) join
     <product code>
 ```
 **Commit policy:** everything durable is committed; the **runtime** view (`state.json`, `bus.json`, `outbox/`,
-`parked/`, `inbox/`, `demos/`, the per-ticket worktrees) is gitignored.
+`parked/`, `inbox/`, `secrets/`, `demos/`, the per-ticket worktrees) is gitignored.
 
 **Runtime coordination on a native FS (D93).** The atomic-publish + inbox guarantees (POSIX `rename` atomicity,
 `fsync`, `inotify`) hold on a **local** filesystem and are weak-to-broken on network-style mounts (NFS; and on WSL2
 the repo's `/mnt/c` DrvFs/9p mount — the same class). So the atomicity-sensitive runtime subtree (`state.json`,
-`bus.json`, `parked/`, `inbox/`) is pinned to a **native-FS path** (e.g. under `$HOME` on ext4), not the repo mount;
+`bus.json`, `parked/`, `inbox/`, `secrets/` — which additionally needs the mount to honour `0600`) is pinned to a
+**native-FS path** (e.g. under `$HOME` on ext4), not the repo mount;
 `/start` detects a DrvFs/network mount and relocates-or-warns. The **committed** durable artifacts stay in the repo
 (git doesn't need rename-atomicity). Same "target OS/FS isn't POSIX-ext4" family as the D89 shipped-glue gap.
 

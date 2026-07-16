@@ -1675,7 +1675,7 @@ clumsier glue); a prose-negation lint flagging "remaining/stub" near an artifact
 
 ---
 
-## D90 — Checkpoint block/resume: a checkpoint is a durable *park boundary*, resumed by `claude --resume` with the verdict as an authoritative prompt **[DECIDED — empirically verified, Phase-2 A1]**
+## D90 — Checkpoint block/resume: a checkpoint is a durable *park boundary*, resumed by `claude --resume` with the verdict as an authoritative prompt **[DECIDED — empirically verified, Phase-2 A1; the *notify* mechanism corrected by D111 (the always-alive daemon owns the alert — the `Notification` hook cannot fire while the loop interleaves, cannot reach an away human, and is dead when the loop whole-parks); the deferred restart-runner pulled into MVP by D113]**
 A blocking human checkpoint is a **durable park boundary**, not a live in-session wait. At a checkpoint the
 orchestrator writes the graceful handoff (park → `document` → `commit` → `handoff.md`) + the verdict-request to
 disk, then **yields**. Resume is **`claude --resume <id> -p "<verdict>"`** — the verdict rides as the *resume
@@ -1894,7 +1894,7 @@ setup block (D90 forbids it).
 *Evidence:* two research fan-outs (external-action setup-gate patterns; async-HITL scheduling) + the cluster-A
 substrate. Reuses D22/D30/D66/D68/D90/D91. → `04`/`09`/`10`/`shared/schemas.md`/`skills/checkpoint`/`skills/create-demo`.
 
-## D97 — Checkpoint verdict is a verb-enum + a returns payload; setup is a plural, machine-verified action gate; timeout never auto-proceeds **[DECIDED — Phase-2 C, research-backed]**
+## D97 — Checkpoint verdict is a verb-enum + a returns payload; setup is a plural, machine-verified action gate; timeout never auto-proceeds **[DECIDED — Phase-2 C, research-backed; completed by D111 — the "gitignored secret store" is located + owned (`.workflow/secrets/`), the shred is a narrow inbox carve-out, and the timeout's deadline/reminder are pinned to `config.checkpoint` with the daemon as their timer owner]**
 The checkpoint verdict data model + the setup lifecycle. Closes C1's remaining data-model gap.
 - **Verdict = a verb-enum, not a boolean.** `verdict { outcome ∈ {approve, changes, reject}, notes, returns? }`;
   `pass` derives from `outcome=approve`. A boolean throws away the information the agent most needs
@@ -2033,7 +2033,7 @@ dialect); htmx (CSP-clean but architecturally mismatched — HTML-fragment swaps
 daemon patterns; a CSP eval-audit (Alpine-standard/petite-vue need eval, vanilla/Preact+htm/Lit don't); cytoscape UMD size +
 CSP notes. Depends on D71/D89/D93/D94/D95; realises D70 (deferred). → `03`/`05`/`07`/`11`.
 
-## D101 — Console attention: notify on exactly two events (checkpoint-raised · loop hard-stop/escalation); reminders ride the D97 timeout **[DECIDED — Phase-2 B (B5)]**
+## D101 — Console attention: notify on exactly two events (checkpoint-raised · loop hard-stop/escalation); reminders ride the D97 timeout **[DECIDED — Phase-2 B (B5); the taxonomy STANDS, but its mechanism is corrected by D111 — the bus daemon fires the alert, not the D90 `Notification` hook, and `config.notify`'s webhook is the away channel]**
 Closes B5. The notification *mechanism* is settled (D90 — the `Notification` hook → desktop-native + opt-in Slack/HTTP
 webhook; phone/tunnel later); this fixes the MVP **event taxonomy**.
 - Fire on exactly **(1) a checkpoint being raised** (the reason the away-channel exists) and **(2) the loop hard-stopping /
@@ -2246,6 +2246,67 @@ deferrable. Claude Code `permissions` precedence (deny→ask→allow, first-matc
 patterns are fragile → use deny + hooks" guidance, which bars an allow-glob for branch scoping but not a *list of
 names read by a hook*. Reuses D35/D58/D80/D87/D105. →
 `01`/`05`/`07`/`shared/schemas.md`/`hooks/guard.sh`/`templates/settings.json`/`templates/orchestrator-CLAUDE.md`/`commands/start.md`/`11`.
+
+## D111 — Away-alert: the always-alive daemon owns notification (not the Claude `Notification` hook); deadline/reminder pinned; the secret store adopted at `.workflow/secrets/` **[DECIDED — pre-Phase-3 F4; folds JF2 + JF4 + the A6 shred fork; corrects the D90/D101 mechanism]**
+The console's one critical-path job — alert an away human that a verdict is needed — **had no working trigger**.
+F4 reported three gaps; they are **one root error**: D90/D101 hung the alert on the harness **`Notification` hook**,
+the one mechanism that structurally cannot do it.
+- **Why the hook can never work (the three F4 facets collapse into this).** It is **event-bound**
+  (permission-prompt / ~60 s idle), so at checkpoint-raise — when D91 interleaving has the orchestrator **busy** on
+  the next ticket — neither trigger fires (and `settings.json` wired no such hook anyway). It is **desktop-native**,
+  reaching only the machine running the loop, which is by definition not where an away human is. And it is **dead**
+  exactly when the orchestrator is whole-parked or crashed — the state the away-channel exists for. So "no fire
+  point", "no reachable-away default" and "no timer owner" are not three bugs; they are one wrong owner.
+- **The call: the bus daemon is the sole notifier.** It is the only process alive across *all* those states (D94),
+  it already has janitor duty, and it is stdlib-Python (so a webhook POST + a `parked/` scan cost nothing). It
+  **watches `parked/`** → alerts on a new open checkpoint → **re-alerts every `config.checkpoint.reminder_hours`**
+  → **escalates** once the absolute `deadline` passes (never auto-proceeding — D97), and raises D101's second event
+  off an orchestrator-written hard-stop marker. **The `checkpoint` skill sends nothing: writing the parked record
+  *is* the trigger.** D101's two-event taxonomy is untouched — only the mechanism beneath it changes. Consequence:
+  the shipped `settings.json` needs **no `Notification` hook at all** (the register read its absence as a gap; it
+  was never the hook's job).
+- **Why one notifier, not skill-fires-initial + daemon-does-reminders:** the reminder half *needs* the daemon
+  regardless, so splitting buys nothing and costs a second send-path plus a double-fire race. One owner (D80).
+  Initial-alert latency = one poll interval — irrelevant to a human who is away.
+- **The away channel is BYO-webhook, stated plainly (JF-adjacent honesty).** `config.notify = { webhook {url, kind:
+  generic|slack}, desktop }`. The **webhook is the real channel** (reaches a phone; works from a detached daemon);
+  a **desktop toast is best-effort only** — it needs a session bus, has none on WSL/headless, and reaches only
+  someone already at the machine. **No webhook configured ⇒ no away alerting**, and the docs say so: a channel that
+  silently reaches nobody is worse than a documented absence.
+- **JF4 pinned.** `config.checkpoint = { deadline_hours: 24, reminder_hours: 4 }`, both overridable. The parked
+  record's `deadline` is stamped **absolute** (park-time + `deadline_hours`), because the process that acts on it
+  is the daemon — comparing wall-clock, and not present when the ticket parked.
+- **JF2 closed — the secret store adopted under D80.** Referenced 4× and located 0×: now **`.workflow/secrets/`**
+  — gitignored runtime, on the native-FS pin (it needs a mount that honours the mode), **atomic `0600`-create**
+  (never write-then-`chmod`; explicit ACLs on Windows — the D89 OS/FS family), reusing the D95 token-file
+  discipline. **Owner: the orchestrator writes** (on consuming a `sensitive` `returns`) **and reads** (the setup
+  verify-probe). One correction to the finding's own suggestion: it proposed "audit-prune deletes" — **wrong**.
+  These are **live credentials, not memory**; retention bounds the append-only *memory* tier, and a cap deleting a
+  working key is a defect. Removal is **explicit** (rotation/teardown), never automatic. Added to the `05` layout,
+  the commit-policy gitignore set, the native-FS pin list, and the `start.md` gitignore scaffold.
+- **A6 resolved — the shred is a narrow carve-out.** D97 says a `sensitive` inbox record is "shredded post-consume",
+  but D108 makes the orchestrator a non-writer of `inbox/`. Resolution: the orchestrator **may `unlink` exactly one
+  consumed record that carried a sensitive payload**, immediately after the credential lands in the store. Scoped
+  and stated as *the* exception; a secret's latency-to-zero must not wait on the bus's watermark GC.
+- **Drift fixed in passing:** `skills/checkpoint` still said "post it to the console and **block on the local bus**
+  — an explicit wait step", the pre-D90 live-wait model the doc-review's pass fixed in `01`/`04` but never reached
+  in the skill itself. Now park-and-yield.
+*Rejected:* the `Notification` hook (the root error — cannot fire while interleaving, cannot reach away, dead when
+parked/crashed); the `checkpoint` skill firing the initial alert with the daemon doing reminders (two send-paths, a
+double-fire race, and *more* code — the daemon is needed either way); desktop-toast as the default away channel
+(reaches nobody away, and unreliable from a detached daemon); implying away-alerting works with no webhook set
+(a channel that silently reaches nobody); a duration-relative `deadline` (the actor is a different, later process —
+it needs an absolute instant); the finding's "audit-prune deletes the secret store" (conflates live credentials
+with memory — would silently delete a working key); a synchronous bus **shred command** (a synchronous
+orchestrator→bus call — against D93 — and the secret lingers until the bus acts); the **bus extracting the
+credential at ingress** (genuinely better — no plaintext ever lands in the durable inbox — but it expands the bus
+into a credential-store writer; **noted as the future hardening**, deferred).
+*Evidence:* the pre-Phase-3 pressure-test register F4 (facet 1 verifier-CONFIRMED — the hook is event-bound and
+`settings.json` wires none; facets 2–3 refuted-with-conceded-residuals, both of which resolve to the same missing
+owner). D94 (the detached always-alive daemon + its existing janitor role) · D100 (stdlib-Python: `urllib` POST +
+a dir scan) · D97 (timeout never auto-proceeds) · D101 (the taxonomy, kept) · D95 (the 0600 atomic-create token
+discipline reused) · D80 (owner + location for every runtime artifact). Reuses D89/D90/D91/D93/D108. →
+`01`/`03`/`04`/`05`/`07`/`shared/schemas.md`/`skills/checkpoint`/`commands/start.md`/`11`.
 
 ---
 

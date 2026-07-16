@@ -65,8 +65,8 @@ checkpoint verdict + status away from the terminal).
   deferred flow-overlay + later arms).
 - **Refresh = snapshot polling, no SSE in MVP** (B2): one chained-`setTimeout` loop (~2–5 s) reads the whole state
   JSON; a monotonic `version`/`ETag` → `304` skips the re-render; polling pauses on `document.hidden`. inotify→SSE is
-  the reserved "re-read" ergonomics hint (D93), never load-bearing — safe because urgency rides the Notification hook
-  (below), not the page.
+  the reserved "re-read" ergonomics hint (D93), never load-bearing — safe because urgency rides the **daemon's
+  out-of-band alert** (below), not the page.
 - **Contact-orchestrator UX** (B3 — the D93 principle made concrete) = POST forms + a feedback surface: a
   **verdict** form (D97 `{outcome, notes, returns?}` / plural `tasks[]`; renders the D98 steps + verified deep-links +
   breadcrumbs for `setup`), an **intake** form (the D70 node→ticket click is a pre-filled intake), a **release** form
@@ -92,9 +92,19 @@ master rule, so B4 was *more* constrained than "deferred" implied.
   the one hard dependency (D71), and the D95 CSP rules out CDNs — every comparable local-first tool
   (Syncthing/Ollama/Jupyter) uses its language's built-in HTTP server for exactly this reason.
 
-## Attention / notification **[DECIDED — D101 (closes B5)]**
-Mechanism settled in D90 (the `Notification` hook → desktop-native + opt-in Slack/HTTP webhook; phone/tunnel later).
-MVP **event taxonomy** = fire on exactly **(1) a checkpoint being raised** and **(2) the loop hard-stopping / an
-escalation** (a D92 thrash-stop, or a D91/D97 dead-letter / stale-deadline escalation). Reminders are **not** a new
-event — they ride D97's timeout-resurfacing + D91 aging. Per-step progress / per-item-done / outward-gate pings are
-out of MVP (false-positive noise trains the human to ignore the channel).
+## Attention / notification **[DECIDED — D101 taxonomy; mechanism corrected by D111]**
+MVP **event taxonomy** (D101, unchanged) = fire on exactly **(1) a checkpoint being raised** and **(2) the loop
+hard-stopping / an escalation** (a D92 thrash-stop, or a D91/D97 dead-letter / stale-deadline escalation).
+Reminders are **not** a new event — they ride D97's timeout-resurfacing + D91 aging. Per-step progress /
+per-item-done / outward-gate pings are out of MVP (false-positive noise trains the human to ignore the channel).
+
+**Mechanism — the daemon, not the `Notification` hook (D111).** D90/D101 assumed the harness `Notification` hook;
+it structurally cannot do the job — event-bound (permission-prompt / idle) so it doesn't fire at raise-instant
+while D91 interleaving keeps the orchestrator busy, unable to reach anyone *away*, and dead exactly when the
+orchestrator is whole-parked or crashed. **The always-alive daemon owns notification instead** (`05`): it watches
+`parked/`, alerts on a new open checkpoint, re-alerts every `config.checkpoint.reminder_hours`, escalates past the
+absolute `deadline` (never auto-proceeding), and raises the hard-stop event off an orchestrator-written marker.
+The `checkpoint` skill sends nothing — writing the parked record *is* the trigger. Channel = `config.notify`: the
+**webhook is the away channel** (a phone, from a headless daemon), desktop toast is best-effort, and **no webhook
+⇒ no away alerting** (the human polls the console) — stated plainly, not implied. So the shipped `settings.json`
+needs **no `Notification` hook at all**.
