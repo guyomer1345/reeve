@@ -41,13 +41,22 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Disk layout** (`05`) — the full file tree + read/write protocols. *(Docs-root unified under
   `<project_root>/docs/` — spec + architecture + knowledge + decisions — D62; diagrams inline, D41.)*
 - **Orchestrator hooks** (D58) — `hooks/guard.sh` enforces **secret-scan** + **verify-before-commit** (hard
-  blocks), **hardened D87** (fails *closed* without python3, robust `git … commit` match, expanded secret
-  patterns, missing-verdict block, and it fires under bypassPermissions). **D87 closed the command-chaining gap
+  blocks), **hardened D87** (fails *closed* without python3, expanded secret patterns, missing-verdict block, and
+  it fires under bypassPermissions). D87's claimed "robust `git … commit` match" was **false as built and is now
+  real (D110)** — the flags-only regex missed any git global option taking a *separate value*, so
+  `git -c core.pager=cat commit` slipped past with a secret staged; both gates now key off a **parsed
+  subcommand**. **D87 closed the command-chaining gap
   at the guard level** — an obscured `cd x && git push` / `$(…)` is now hard-blocked so it must run directly
-  (where the `ask` prompt fires); `pre-commit.sh` is the git-native backstop (secret + verify + staged-diff).
+  (D110 revised *why*: not so a settings `ask` can fire — that `ask` is gone for the outbox classes — but so the
+  guard's own **push floor** can parse the refspec); `pre-commit.sh` is the git-native backstop (secret + verify +
+  staged-diff). **The push floor is BUILT (D110)** — resolve the refspec (incl. `HEAD:main`, leading `+`,
+  `--all`/`--mirror`, bare `git push` via upstream/`push.default`), **block any push to a protected branch**
+  (`{main, master}` always + `config.guard.protected_branches` add-only), and secret-scan the outgoing range;
+  fails closed on an unparseable refspec.
   Still open: **build-once-per-wave** (a wave-coordinator, not a command gate). The fuller **outward-action queue**
   (batching / standing pre-auth beyond the `ask`+guard pair) is **CLOSED — the D105 outbox model** (`config.outward`
-  allow|ask + `.workflow/outbox/` + a `release` batch-approval; `guard.sh` stays the non-overridable floor).
+  allow|ask + `.workflow/outbox/` + a `release` batch-approval; `guard.sh` stays the non-overridable floor), with
+  **D110** binding it: the harness leaves the outward path entirely, so `config.outward` is the sole policy owner.
 - **First-launch workspace trust** (D58) — the shipped `settings.json` + hooks are **ignored until the folder
   is trusted**, and the trust **dialog doesn't render in some terminals (e.g. WSL)**; `/start` + setup docs must
   give the manual `hasTrustDialogAccepted` flag method, not just "accept the dialog." (Validated: after trust,

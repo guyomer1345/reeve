@@ -153,13 +153,30 @@ advances). It is the **transactional-outbox** pattern:
 - **Defer, don't block.** The skill self-gates against **`config.outward`** (Claude Code's `permissions.{allow,ask,deny}`
   shape, deny→ask→allow, coarse per-action-class, default all `ask`). Match `allow` → run the command (still through
   `guard.sh`); else **append a record to `.workflow/outbox/` and continue** — never attempt-and-let-the-harness-`ask`
-  (that blocks + can't work away-from-terminal; the harness `ask`-prefix is only a backstop).
+  (that blocks + can't work away-from-terminal).
+- **The harness is out of the outward path entirely (D110).** `settings.json` carries **no `ask`** for the
+  outbox-covered classes (`git push`, `gh issue`), because the release fires the command *later*, at a boundary:
+  a static prompt would land in a terminal nobody is watching and block the away-release the whole model exists to
+  serve. So the harness `ask` **cannot** be the backstop D105 assumed — the two are mutually exclusive, and
+  away-release wins. `config.outward` is therefore the **sole owner** of the outward allow/ask fact (closing the
+  D80 two-owner conflict), and the gate reads: **skill self-gate → outbox/release → `guard.sh` floor**. Accepted
+  cost: a *mis-coded* skill running an outward command directly is caught only by the floor, not a prompt — a
+  first-party bug to fix, not fence. (Un-queued outward commands — deploy/publish/cloud — keep their `ask`.)
 - **Release drains it.** The console renders the pending `outbox/`; the human approves a batch → a **`kind: release`**
   inbox message (explicit `action_ids`) → the orchestrator fires each at a boundary (re-run through `guard.sh`), marks
   it `executed`. One approval releases a batch (D35).
 - **Two layers.** `guard.sh` = the non-overridable mechanical floor (Layer 1); `config.outward` = the overridable
   human-approval layer (Layer 2). Standing pre-auth waives the human, never the checks. Fine-grained scoping (never
   auto-push `main`) lives in `guard.sh`, not fragile config allow-patterns.
+- **The push floor (D110) — the mechanism the "never auto-push `main`" promise was leaning on, now built.** On any
+  `git push` the floor resolves the target refspec (`origin main`, `HEAD:main`, a leading `+`, `--force`,
+  `--all`/`--mirror`, and a bare `git push` via upstream/`push.default`) and **blocks *any* push to a protected
+  branch — not merely a force-push**, then secret-scans the **outgoing range** (a commit can reach a branch by a
+  path the commit-time gate never saw). Protected = `{main, master}` **always**, `config.guard.protected_branches`
+  **adds** to it and can never subtract. So the loop ships feature branches autonomously and a **human** moves
+  `main` — the highest-blast-radius action stays a deliberate human act. This is *absolute*: there is no
+  approved-release exception, which is precisely why it needs no release-authorization marker to distinguish an
+  approved main-push from a stray one. The refspec parse fails **closed** (unparseable → blocked).
 - **Safety** (the outbox anti-patterns, closed up front): each entry is **state-bound** and re-validated on release
   (divergent history invalidates + re-surfaces, never silently fires — TOCTOU); a **TTL** drops a stale entry (never
   fires late); release is **always by explicit `action_id`** (batch snapshot). **No notification** (D101 — a pull

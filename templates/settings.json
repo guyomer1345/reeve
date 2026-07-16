@@ -13,10 +13,16 @@
       "Bash"
     ],
     "ask": [
-      "Bash(git push:*)",
       "Bash(git remote add:*)",
       "Bash(git remote set-url:*)",
-      "Bash(gh:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh release:*)",
+      "Bash(gh repo:*)",
+      "Bash(gh api:*)",
+      "Bash(gh auth:*)",
+      "Bash(gh secret:*)",
+      "Bash(gh workflow:*)",
+      "Bash(gh gist:*)",
       "Bash(npm publish:*)",
       "Bash(yarn publish:*)",
       "Bash(pnpm publish:*)",

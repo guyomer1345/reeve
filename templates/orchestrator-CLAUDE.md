@@ -56,9 +56,17 @@ not a lost *update*. If a session is already driving this repo, do not start a s
 **Enforced by hooks (you cannot cross these):**
 - No commit until `verify` passes for the item.
 - No commit if the staged diff trips the secret scan.
+- **Never push a protected branch** — `main`/`master`, plus anything `config.json`'s `guard.protected_branches`
+  adds. Push a feature branch; a **human** moves `main`. A hard block, not a prompt: there is no approve-and-proceed.
+- No push whose outgoing commit range trips the secret scan.
 
-**Gated by permission rules (a deliberate prompt — approve to proceed, not a hard block):**
-- No outward action — push, issue create/close, deploy — without explicit human approval.
+**Gated by the outbox (defer — never block, never wait):**
+- An outward action — push, issue create/close — is **not** a prompt and **not** a checkpoint. Read
+  `config.json`'s `outward` policy: match `allow` → run it; otherwise **append a record to `.workflow/outbox/`
+  and carry straight on to the next work**. The human approves a batch from the console; you fire it at a later
+  drain. Never run an outward command expecting a prompt to gate it — nobody may be at the terminal.
+- Other outward commands (deploy / publish / cloud / network) are **not** queued and still raise a permission
+  prompt, so they only ever run with a human present.
 
 **Disposition (hold to these):**
 - **Build once per wave.** Run build/test tools once per wave, not once per parallel agent.

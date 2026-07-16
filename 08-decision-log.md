@@ -1563,7 +1563,7 @@ lock-on-approval *behavior* suffices); a standalone promise-mirror gate (`align`
 
 ---
 
-## D87 — Resolve phase, cluster 5: guard/permission hardening — the ≥5 guard bypasses closed, obscured outward actions gated, staged-diff atomicity + a git-native backstop **[DECIDED + BUILT]**
+## D87 — Resolve phase, cluster 5: guard/permission hardening — the ≥5 guard bypasses closed, obscured outward actions gated, staged-diff atomicity + a git-native backstop **[DECIDED + BUILT — two corrections by D110: (1) the chaining-block's *rationale* changed — a direct `git push`/`gh issue` no longer meets a settings `ask` prompt (it would block the away-release), so the block now exists to keep the refspec parseable by `guard.sh`'s own push floor; (2) claim (b) below was FALSE AS BUILT — `git -c core.pager=cat commit` **did** slip past (the flags-only regex breaks on any global option taking a *separate value*: `-c k=v`, `-C path`). Empirically re-found and fixed in D110 by parsing the subcommand.]**
 Origin: the resolve phase (cluster 5 — the highest-severity attacker surface: `guard.sh` was crossable ≥5 ways
 [S1], the outward gate had holes [G7], the commit-split was non-atomic [P8]). **The fixes (all tested):**
 - **guard.sh (S1):** (a) **fail-CLOSED without python3** — matches the raw hook payload when the parsed command
@@ -2073,7 +2073,7 @@ The throwaway sandbox lives at **`.workflow/demos/<item-id>/`** — nearly force
 *Rejected:* `items/<id>/` (committed — bloats git with throwaway bytes); `/tmp` scratch (not durable across an hours-long park); the per-ticket worktree (build-stage, doesn't exist yet at intake); archiving the demo on resolve (D21 — the spec is what's kept).
 *Evidence:* D21 (throwaway, spec-is-locked) · D53/D60/D61 (gitignored runtime, cap-and-archive, items-committed-while-open) · D62 (docs-root/disk layout) · D90/D91 (durable park, worktrees are build-stage) · D93/D94 (served tree, FS pinning). → `05`/`09`/`skills/create-demo`/`11`.
 
-## D105 — Outward-action permission: a *transactional-outbox* queue (not a checkpoint); a deny-floor + a coarse `config.outward` allow|ask layer; batch-release over a new inbox `kind: release`; state-bound + TTL'd; no durable ledger **[DECIDED — Phase-2 E (E2), research-backed; closes D35's open mechanics + D60]**
+## D105 — Outward-action permission: a *transactional-outbox* queue (not a checkpoint); a deny-floor + a coarse `config.outward` allow|ask layer; batch-release over a new inbox `kind: release`; state-bound + TTL'd; no durable ledger **[DECIDED — Phase-2 E (E2), research-backed; closes D35's open mechanics + D60; two premises corrected by D110 — the harness `ask` is NOT a backstop for the outbox classes (it cannot coexist with the away-release), and "never auto-push `main`" is an absolute `guard.sh` block, now built]**
 The mechanics D35 left open. The decisive reframe: **an outward action does not park the ticket.** A checkpoint (D90) parks-and-resumes because the *work is blocked* (no verdict → can't proceed); an outward action blocks nothing — the commit is already local, the ticket **completes and the loop advances** (D35's "never stalls: keep committing, queue the action, one approval releases a batch"). So the real fault line is **blocks-the-ticket (checkpoint) vs defers-a-side-effect (outbox)**, not judgment-vs-action (D96) — and `publish` is therefore **not** a fifth checkpoint kind and **not** a parking checkpoint on the bus. It is a distinct mechanism, the **outward-action outbox** — the industry **transactional-outbox** pattern (write the local change + a `PENDING` outbox record; a *release* drains it), reusing the bus/console transport + the D97 verb-enum but **not** the park/resume core.
 - **Two-layer permission.** **Layer 1 = the mechanical floor, non-overridable:** `guard.sh` (secret-scan + verify-before-commit + the D87 chaining-block) fires on *every* outward action regardless of config, fail-closed. **Layer 2 = human approval, overridable:** a **`config.outward` allowlist in Claude Code's own `permissions.{allow,ask,deny}` shape** (deny→ask→allow, first-match-wins), **coarse per-action-class** (`push` / `issue-create` / `issue-close` / later `deploy` / `send`), **default all `ask`** (MVP-safe = always-gated). Standing pre-auth waives *the human*, never *the checks*. **Fine-grained scoping lives in `guard.sh`, not config allow-patterns** — Claude Code's docs call arg-constraining allow-patterns fragile ("use deny + hooks"), so "never auto-push `main`" is a guard rule, not a config glob.
 - **Mechanism.** The skill **self-gates against `config.outward`** — match `allow` → run the command (still through `guard.sh`); else **append a record to `.workflow/outbox/` and continue** (it never attempts-the-command-and-lets-the-harness-`ask`, which blocks and can't work away-from-terminal; the harness `ask`-prefix is only the backstop for a mis-coded skill). `outbox/` = **runtime, gitignored, single-writer (orchestrator)** — the mirror of the bus-owned `inbox/`. **Release** = a batch-approval the human sends from the console → a **new `kind: release` inbox message** carrying **explicit action-ids** → consumed at a boundary → each approved action executes (re-runs `guard.sh`) → marked executed. New inbox kind (not a `control` op) so each kind stays crisp: verdict=resume-parked · intake=new-work · control=scheduling · **release=fire-queued-outward**.
@@ -2175,6 +2175,77 @@ upgrade); silent undefined behaviour with no documented constraint (the gap betw
 *Evidence:* the pre-Phase-3 pressure-test register F2 (verifier-corrected critical→high; the adjudicator concurred
 that D92's `/clear`+re-`/start` arm is same-session and therefore not a second writer). Reuses D48/D90/D92/D93/D94.
 → `01`/`05`/`templates/orchestrator-CLAUDE.md`/`11`.
+
+## D110 — Outward binding: the harness leaves the outward path; `config.outward` is the sole policy owner; the `guard.sh` push floor is BUILT and absolute on protected branches **[DECIDED + BUILT — pre-Phase-3 F3; corrects two D105 premises]**
+`config.outward=allow` was **inert**: the skill self-gated, saw `allow`, ran `git push` — and the harness then
+matched `settings.json`'s static `Bash(git push:*)` `ask` and prompted, **blocking away-from-terminal**. Standing
+pre-auth could not waive the human, and the only workaround (hand-edit `settings.json` too) created a **second
+owner** for one fact (a D80 violation).
+- **The forcing constraint — this was not a free choice.** The outbox **away-release** is incompatible with a
+  static harness `ask` on the same command, full stop. A release is approved in the console and **fired later**, at
+  a scheduler boundary; the `ask` prompts into the Claude session's terminal, which the away human is not watching
+  (and even D112's loopback-only release does not help — *loopback ≠ sitting at the Claude prompt*). So the harness
+  must leave the outward path for the model to work at all. **Projecting `config.outward` into `settings.json` does
+  not fix it** — the default `ask` projects to `ask` and still blocks the fire.
+- **The call.** `settings.json` carries **no `ask` for the outbox-covered classes**: `Bash(git push:*)` removed,
+  `Bash(gh:*)` narrowed to the non-queued surfaces (`gh pr|release|repo|api|auth|secret|workflow|gist`) — the
+  existing broad `Bash` `allow` then covers `git push`/`gh issue`. The gate becomes **skill self-gate
+  (`config.outward`) → outbox/release (the human) → `guard.sh` (the floor)**, making `config.outward` the **sole
+  owner** of the allow/ask fact. Un-queued outward commands (deploy/publish/cloud/network) keep their `ask` — they
+  have no outbox record, so removing their prompt would gate nothing.
+- **Corrects D105 #1 — the harness `ask` is NOT "the backstop for a mis-coded skill."** It cannot be: the same
+  prompt that would catch a mis-coded skill blocks the legitimate away-release. The two are mutually exclusive and
+  away-release wins. **Accepted cost:** a mis-coded skill (or a stray model-run `gh issue`) is now caught only by
+  the floor — skills are first-party and tested, so that is a bug to fix, not to fence. The
+  **release-authorization marker** (guard checks an orchestrator-set "I am firing approved action X" signal) was
+  designed and **deferred**: the absolute rule below removes any need for guard to tell an approved `main`-push
+  from a stray one.
+- **Corrects D105 #2 and BUILDS the missing mechanism — the push floor.** D105 delegated "never auto-push `main`"
+  to `guard.sh` in three places and **it did not exist** (a plain `git push --force origin main` hit only the
+  chaining check and passed). Now built: resolve the target refspec (`origin main`, `HEAD:main`, leading `+`,
+  `--force`, `--delete`, `--all`/`--mirror`, and a bare `git push` via upstream/`push.default`) → **block ANY push
+  to a protected branch, not merely a force-push** → secret-scan the **outgoing range** (a commit can reach a
+  branch by a path the commit-time gate never saw). Protected = `{main, master}` **always** +
+  `config.guard.protected_branches` (**add-only** — a config typo can never empty a safety floor; un-protecting
+  costs a visible edit to `guard.sh` itself). Fails **closed** (an unparseable refspec is refused, not guessed).
+  `guard.sh`'s exit-2 precedes the permission decision, so the floor holds even though the harness now `allow`s
+  the command — which is exactly what makes handing the harness's job to the floor safe.
+- **Why absolute, not a Layer-2 skill rule** (the maintainer's call, and the stronger reading of D105's own words):
+  a skill-level rule rests on skill correctness, whereas the hard block is bug-proof *and* forgery-proof, and it is
+  what lets the release-authorization marker stay unbuilt. Cost — no autonomous `main` push even in a solo repo —
+  is the right price: moving `main` is the highest-blast-radius outward act, and feature-branch-push + human-merge
+  is the disciplined norm regardless.
+- **A live D87 bypass found and closed in passing (the reason the floor parses rather than regexes).** Building the
+  floor on D87's `git … commit` regex shape exposed that **D87's own claim (b) was false as built**: `git -c
+  core.pager=cat commit` — the *exact example D87 names as closed* — **slipped past with a secret staged**
+  (empirically confirmed against the pre-slice `guard.sh`, so it is a pre-existing hole, not a regression). Cause:
+  a `(-flag)*` pattern breaks on any git global option carrying a **separate value** (`-c k=v`, `-C path`) because
+  the value token doesn't start with `-`, so the walk to the subcommand stops. The new push floor would have
+  **inherited the same hole** (`git -c k=v push origin main`). Fix: resolve the git **subcommand** by parsing
+  (`shlex`, honouring the value-taking global options, and tolerating `sudo git` / `/usr/bin/git`), with a
+  generous regex retained **only** for the no-`python3` path (a false positive there is safe; a miss is a bypass).
+  Both gates now key off the parsed subcommand.
+- **Verified on a fixture repo:** `push origin main` · `HEAD:main` · `--force origin main` · `+main` · `master` ·
+  a config-added `release` · `--all` · `--delete main` all block; `feature-x`, `-u origin feature-x`, and a bare
+  `git push` on a feature branch pass; a bare `git push` on `main` blocks (upstream/current-branch resolution); an
+  `AKIA…` in the outgoing range blocks and passes once reset; a chained `cd /tmp && git push` blocks. **Bypass
+  regression set:** `-c core.pager=cat` / `-C /tmp/x` / `-c a=b -c c=d` / `sudo git` now block on **both** commit
+  (secret staged) and push (protected branch); `git status`, `git log --oneline`, `git -c a=b push origin
+  feature-x` and `echo commit` stay clean (no false positives).
+*Rejected:* projecting `config.outward` → `settings.json` at `/start` (keeps config the authored owner and makes
+settings generated — but cannot deliver the away-release, which is the point); keeping the static `ask` and
+accepting no away-release in MVP (guts D105's away-autonomy — against the project thesis); moving `Bash(gh:*)`
+wholesale to `allow` (ungates `gh release`/`gh repo delete`, which the outbox does not cover); hard-blocking only
+*force*-push to protected (leaves a plain unapproved `main` push resting on skill correctness); a fully
+config-defined protected set (a hard floor whose scope a config typo could empty); building the
+release-authorization marker now (real coupling, unnecessary under the absolute rule).
+*Evidence:* the pre-Phase-3 pressure-test register F3 — the `config.outward` inertness independently re-verified
+against `templates/settings.json`, and the bare "guard has no branch logic" finding (refuted on its own as
+specced-but-unbuilt) folded in here, because F3's own resolution makes the floor load-bearing rather than
+deferrable. Claude Code `permissions` precedence (deny→ask→allow, first-match-wins) + its "arg-constraining
+patterns are fragile → use deny + hooks" guidance, which bars an allow-glob for branch scoping but not a *list of
+names read by a hook*. Reuses D35/D58/D80/D87/D105. →
+`01`/`05`/`07`/`shared/schemas.md`/`hooks/guard.sh`/`templates/settings.json`/`templates/orchestrator-CLAUDE.md`/`commands/start.md`/`11`.
 
 ---
 

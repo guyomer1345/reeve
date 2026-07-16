@@ -55,10 +55,13 @@ built-in Claude Code command.
      the markers); read that existing `CLAUDE.md` as a **primary ingest source**; set `project_root: .`.
    - Copy `templates/loop.md` → **`.workflow/loop.md`** and write **`.workflow/config.json`** (`project_root` +
      run config).
-   - Copy `templates/settings.json` → **`.claude/settings.json`** (loop permission rules: `allow` local
-     actions, `ask` outward) and `hooks/{guard.sh,pre-commit.sh}` → **`.claude/hooks/`** (guard = secret-scan +
-     verify-before-commit hard gates; pre-commit = the mechanical-gate backstop, registered in step 4).
-     `build-once-per-wave` is deferred.
+   - Copy `templates/settings.json` → **`.claude/settings.json`** (loop permission rules: `allow` local actions;
+     the outbox-covered outward classes — `git push`, `gh issue` — are deliberately **not** `ask`ed, because they
+     are approved through the outbox + a console `release` and fired later at a boundary, when a terminal prompt
+     would reach nobody; every other outward command — deploy / publish / cloud / network — stays `ask`) and
+     `hooks/{guard.sh,pre-commit.sh}` → **`.claude/hooks/`** (guard = secret-scan + verify-before-commit + the
+     **push floor** (never move a protected branch, never push a secret) hard gates; pre-commit = the
+     mechanical-gate backstop, registered in step 4). `build-once-per-wave` is deferred.
    - Copy the shipped **code-map extractor** (`scripts/codemap/`) → **`.claude/scripts/codemap/`** — the
      per-language tool `.workflow/codemap.sh` invokes to build the knowledge graph (wired in step 4).
    - Copy the shipped **retention script** (`scripts/retention.py`) → **`.claude/scripts/`** — the deterministic
@@ -74,8 +77,11 @@ built-in Claude Code command.
      `--loop`/`--skills-dir`/`--schemas`): every routing target resolves, every invoked `node:mode` is routed,
      every skill is a node or side-door. Stack-agnostic (lints the workflow's own wiring), so it ships fixed.
    - **Surface the one-time permission message** to the human: *"This is an autonomous loop. Accept the
-     workspace-trust dialog so the package can pre-approve the loop's local actions; outward actions
-     (push / issues / deploy) will still ask — by design. You don't need `--dangerously-skip-permissions`."*
+     workspace-trust dialog so the package can pre-approve the loop's local actions. Pushes and issue
+     create/close are **not** approved by a terminal prompt — they queue to `.workflow/outbox/` and wait for you
+     to release them from the console, so the loop keeps working while you are away; deploys and other outward
+     commands still ask. Two things are hard blocks, not prompts, and nothing can waive them: the loop never
+     moves `main`/`master`, and it never pushes a secret. You don't need `--dangerously-skip-permissions`."*
 4. **Specialize rules + wire enforcement** (the disciplined layer — auto-write greenfield, adopt-and-gap-fill
    brownfield):
    - **Seed the rules.** Copy the package baseline `rules/*.md` → **`<project_root>/rules/`**. Detect the

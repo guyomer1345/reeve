@@ -196,9 +196,13 @@ fires it.
   is idempotent. **Divergent state invalidates + re-surfaces, never silently fires.**
 - **`ttl`** — a queued action **drops on expiry** (never silently fires stale); drop ≠ escalate (an outward action
   isn't blocking). Config-overridable.
-- **Two-layer gate:** **Layer 1** = `guard.sh`, the non-overridable mechanical floor (secret-scan + verify-before-commit
-  + the command-chaining block), fires on execute regardless of config; **Layer 2** = `config.outward` (below), the
-  overridable human-approval layer. Standing pre-auth waives the human, never the checks.
+- **Two-layer gate:** **Layer 1** = `guard.sh`, the non-overridable mechanical floor — secret-scan +
+  verify-before-commit + the command-chaining block, **plus the push floor** (resolve the refspec — including
+  `HEAD:main`, a leading `+`, `--all`/`--mirror` and a bare `git push` via upstream/`push.default` — and **block
+  any push to a protected branch**, plus secret-scan the outgoing range). It fires on execute regardless of config
+  and cannot be waived, because `guard.sh` exits non-zero *ahead of* the permission decision. **Layer 2** =
+  `config.outward` (below), the overridable human-approval layer. Standing pre-auth waives the human, never the
+  checks.
 - **No durable ledger:** single-user = author-is-approver → segregation-of-duties moot → the action's own external
   consequence (moved git ref / GitHub issue event / deploy record) is the audit; the away-run digest is the console
   activity feed + `handoff.md`, not a new artifact.
@@ -239,9 +243,22 @@ fires it.
   `permissions.{allow, ask, deny}` shape (deny→ask→allow, first-match-wins), **coarse per-action-class**
   (`push` / `issue-create` / `issue-close` / later `deploy` / `send`). Absent → **all `ask`** (MVP-safe:
   every outward action gated per-action, queued to `outbox/`). This is Layer 2 (human approval); it never waives
-  Layer 1 (`guard.sh`). **Fine-grained scoping** (e.g. never auto-push `main`) belongs in `guard.sh`, **not** a
-  config allow-pattern (Claude Code documents arg-constraining patterns as fragile → use deny + hooks). Optional
-  `outbox_ttl` sets the pending-action expiry.
+  Layer 1 (`guard.sh`). Optional `outbox_ttl` sets the pending-action expiry.
+  **This key is the sole owner of the outward allow/ask policy.** The harness's own `settings.json` deliberately
+  carries **no competing `ask`** for the outbox-covered classes: an outward action is approved through the outbox +
+  a console `release` and fired *later*, at a scheduler boundary — a static harness prompt would fire into a
+  terminal nobody is watching and block the very away-release the model exists to serve. So the harness stays out
+  of the outward path, and the gate is: **skill self-gate (this key) → outbox/release (the human) → `guard.sh`
+  (the floor)**. The consequence is deliberate: a *mis-coded skill* that runs an outward command directly is no
+  longer caught by a prompt — only by the floor. That trade buys the away-release; a bug in first-party skills is
+  fixed, not fenced.
+  **Fine-grained scoping** (never auto-push `main`) belongs in `guard.sh`, **not** a config allow-pattern (Claude
+  Code documents arg-constraining patterns as fragile → use deny + hooks) — see `guard` below.
+- `guard` — the Layer-1 floor's only knob: `protected_branches` (**add-only**). `main` and `master` are **always**
+  protected and cannot be removed; this list *adds* to them (e.g. `release`, `prod`). The floor itself is
+  non-overridable — the loop never pushes a protected branch and never pushes a secret in the outgoing range,
+  regardless of `outward`. Absent → `{main, master}`. (Un-protecting a branch is deliberately not a config toggle:
+  disabling a safety floor should cost an edit to `guard.sh` itself, which is a visible, owner-level act.)
 
 ## bus.json  · written by the bus daemon at boot, read by `/start` + the browser · *`.workflow/bus.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ pid, port, token, started_at }` — the daemon's discovery + auth record. `port` = a dynamic **loopback**

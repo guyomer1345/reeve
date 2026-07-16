@@ -92,10 +92,12 @@ per-capability *how*), it encodes:
   ready-parked ticket** (oldest verdict first, +aging — D91) → **promote `intake`** into the backlog through triage
   → **start-new** → **fire `release`** through `guard.sh` → sleep. Without this step an orchestrator following its
   brief literally would park at a checkpoint and never consume the verdict that unparks it.
-- **Invariants split** — **enforced** (secret-scan + verify-before-commit = `hooks/guard.sh`; the outward-action
-  gate = the `config.outward`/outbox defer-and-release model over the `guard.sh` floor — the settings `ask` rule
-  is only the harness backstop, D105; build-once-per-wave deferred) vs **disposition** (hub-and-spoke; pure queue;
-  resolve-don't-stall via `research`→`decision-engineer`; mind the tiers).
+- **Invariants split** — **enforced** (secret-scan + verify-before-commit + the **push floor** — never move a
+  protected branch, never push a secret in the outgoing range — = `hooks/guard.sh`; the outward-action gate = the
+  `config.outward`/outbox defer-and-release model over that floor, with the harness **out of the outward path
+  entirely** — D110 removed the settings `ask` for the outbox-covered classes, because it would block the very
+  away-release it was imagined to back up; build-once-per-wave deferred) vs **disposition** (hub-and-spoke; pure
+  queue; resolve-don't-stall via `research`→`decision-engineer`; mind the tiers).
 - **Checkpoints** (durable park on the bus — D90) and **handoff/resume**.
 
 Driving model: `CLAUDE.md` is **advisory context, not enforced configuration** — so the loop *sequence* runs
