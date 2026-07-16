@@ -273,6 +273,14 @@ fires it.
   fixed, not fenced.
   **Fine-grained scoping** (never auto-push `main`) belongs in `guard.sh`, **not** a config allow-pattern (Claude
   Code documents arg-constraining patterns as fragile → use deny + hooks) — see `guard` below.
+- `remote` — opt-in remote (phone) access, read by the daemon: `{ enabled, transport: access | tailscale }`.
+  **Absent / `enabled: false` / no transport → the remote socket is not served at all** (loopback only). The
+  transport is a **declaration**: the operator stands up Cloudflare Access or `tailscale serve` in front of
+  `bus.json`'s `remote_port` and is responsible for it being real — the same operator-responsibility stance as the
+  single-orchestrator run-constraint. It is *not* a free-text URL: the value picks what the daemon will serve.
+  `transport: tailscale` additionally unlocks **credential-bearing `setup` verdicts** on the remote surface,
+  because WireGuard is **end-to-end encrypted**; `transport: access` does **not** — Cloudflare terminates TLS, so a
+  returned key would transit their edge in plaintext. Everything else on the remote surface is identical.
 - `guard` — the Layer-1 floor's only knob: `protected_branches` (**add-only**). `main` and `master` are **always**
   protected and cannot be removed; this list *adds* to them (e.g. `release`, `prod`). The floor itself is
   non-overridable — the loop never pushes a protected branch and never pushes a secret in the outgoing range,
@@ -293,11 +301,16 @@ the one place the loop keeps a secret.
   Windows has no `0600` → explicit ACLs, the same target-OS/FS family as the other runtime pins.
 
 ## bus.json  · written by the bus daemon at boot, read by `/start` + the browser · *`.workflow/bus.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
-- `{ pid, port, token, started_at }` — the daemon's discovery + auth record. `port` = a dynamic **loopback**
-  port (bind `127.0.0.1:0`, read back — the port is **not** a secret). `token` = the CSPRNG **capability token**
-  required as a header on every request (authentication; **distinct** from a checkpoint correlation `token`).
-  `/start` health-checks `port`+`token` to **adopt-or-spawn** the daemon; the daemon holds a `flock` for its
-  lifetime as the liveness authority.
+- `{ pid, port, token, started_at, remote_port?, remote_token? }` — the daemon's discovery + auth record. `port` =
+  a dynamic **loopback** port (bind `127.0.0.1:0`, read back — the port is **not** a secret). `token` = the CSPRNG
+  **capability token** required as a header on every request (authentication; **distinct** from a checkpoint
+  correlation `token`). `/start` health-checks `port`+`token` to **adopt-or-spawn** the daemon; the daemon holds a
+  `flock` for its lifetime as the liveness authority.
+- `remote_port` / `remote_token` — present **only** when `config.remote` declares an identity transport. This is
+  the **reduced remote surface** (reads · opinion verdicts · the static demo); the operator points their
+  `cloudflared` / `tailscale serve` at `remote_port`, and **never** at `port` — `port` is the full-surface loopback
+  socket (outward `release`, returns-bearing `setup` verdicts) that must never be fronted. `remote_token` is a
+  **separate** CSPRNG secret, never the loopback `token`, paired to the phone by QR + URL fragment.
 
 ## state.json  · the live loop pointer (volatile, gitignored) · *published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
 - `status` ∈ `{ intake, building, idle }`

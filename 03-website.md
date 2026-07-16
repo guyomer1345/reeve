@@ -38,20 +38,58 @@ home, and not the first cut** — it is Mode B (explore), whereas the MVP is Mod
 - **Interaction:** clicking a node emits a **scoped intake ticket** via the bus (`05`) — an ordinary D69-triaged
   backlog item, **not** a live edit channel (a *scoping aid for intake*, never a backdoor around it).
 
-## Remote control **[DECIDED — D70]**
-Local-served by default; opt-in **"remote control"** serves the console over a temporary **Cloudflare tunnel**
-(same tunnel capability as `00`'s QA phone-ping). Off by default + ships an explicit **"unsafe" warning** now
-(tunneling breaks the loopback trust model); **auth is a reserved future requirement**, not built now. **D70 stands
-(owner-accepted risk, D95):** warning-only / no auth for now — with the one hard rule that the loopback capability
-token is **never** reused as tunnel auth (over the wire there is no 0600 file to gate it). Real tunnel auth
-(Cloudflare Access / HMAC) is the reserved upgrade for when the risk is no longer acceptable.
+## Remote control **[DECIDED — D112 (supersedes the D70/D95/D107 "unauthed warning-only tunnel")]**
+Local-served by default; opt-in **remote access** puts the console on a phone. The old model (an unauthed tunnel
+that *warns*) **could not be built as specced**, for two independent reasons D112 resolves:
 
-**Outward-release is loopback-only over an unauthed tunnel (D107).** The E2 outbox (D105) adds the highest-consequence
-console interaction: a forged *verdict* drives *local* work, but a forged **release** fires an *outward, irreversible*
-effect (push/deploy). So over the owner-accepted unauthed tunnel, **the release form is served/accepted on loopback
-only**; read + verdict inherit the pre-existing owner-accepted caveat (as demo-viewing did, D102). Real tunnel auth
-moves from *reserved-optional* to **required-before-remote-release** — the tunnel carries low-consequence interactions
-at owner-accepted risk, but not "authorize an outward side-effect" until auth lands.
+**(1) The unauthed tunnel was self-contradictory.** D95 says the loopback token is **never** reused as tunnel auth;
+D107 says read+verdict ride the tunnel — but every one of those endpoints is token-gated, so a verdict-capable
+remote browser **must** hold the token. Both cannot be true: either the token goes over the wire (violating D95) or
+the tunnel serves nothing useful. **(2) A `Host`-header policy is not a boundary.** Distinguishing "loopback" from
+"the tunnel" by `Host` makes a security decision out of a header the untrusted proxy controls — it fails *silently*
+if `cloudflared` rewrites it. **A boundary must be structural.**
+
+**A forged verdict is agent control, not "local work" (the finding that sets the bar).** D107 rated verdicts
+low-consequence because "a forged verdict drives *local* work". But D90 makes the verdict ride as
+`claude --resume -p "<verdict>"` — an **authoritative prompt** — and `notes` is free text. So anyone who can POST a
+verdict injects arbitrary authoritative instructions into an autonomous code agent. D107's rating is wrong **twice**:
+once for credential-bearing setup verdicts (below), and once for *every* verdict, via `notes`. A bare bearer token
+on a public URL is therefore **not** an adequate gate.
+
+**The model — a structural two-socket split + a declared identity transport:**
+- **Socket B — loopback-only, never fronted.** The full surface: **outward `release`** and **returns-bearing
+  `setup` verdicts**. Unreachable remotely as a fact about the network, not a promise about a header. D95's blanket
+  Host-allowlist stands here **unmodified**.
+- **Socket A — the reduced remote surface:** reads · **opinion verdicts** (`demo`/`qa`/`reconcile` — an opinion, no
+  payload) · the static demo. Served **only** when `config.remote` declares an **identity transport**:
+  **Cloudflare Access** or **Tailscale `serve`**. Declared `none`/absent → **A is not served at all** (loopback
+  only). Both transports cost the same in code — the daemon just serves A; the operator puts the gate in front.
+- **A distinct remote token** gates A as a **second factor** on top of the transport identity (D95's "never reuse
+  the loopback token" respected; its "three independent failures" logic applied) — so a misconfigured Access does
+  not instantly expose the surface.
+- **Pairing = QR + URL fragment.** The local console renders a QR of `https://<host>/#t=<remote-token>`; the phone
+  scans, stores it in `localStorage`, strips the fragment. **This amends D95's "never in a URL"**: that rule
+  targeted the Jupyter **`?token=` query param** (server-logged, `Referer`-leaked). A **fragment never leaves the
+  browser** — not sent to the server, not in the proxy's logs, not in `Referer`. So: *never in query/path; the
+  fragment is the pairing channel.*
+- **A keeps a Host-allowlist, but its role changes** — A is loopback-bound (the proxy connects to it), so a local
+  browser could hit it directly: the allowlist is **anti-DNS-rebinding**, **not** the loopback-vs-remote boundary.
+  The port topology is the boundary.
+- **We do not own the tunnel lifecycle.** The operator runs `cloudflared` / `tailscale serve` against the port
+  `bus.json` publishes, and is responsible for the declared transport being real — the same operator-responsibility
+  stance as the single-orchestrator run-constraint (D109). This is what collapses the build cost to: a second
+  socket, a second token, a QR, one config key.
+- **No JWT library** (D100 stdlib-only holds): we do not verify the Access assertion — A is loopback-bound and only
+  the proxy reaches it.
+
+**The risk taxonomy — what may ride A** (correcting D107): a verdict carrying only an **opinion** may; a verdict
+carrying a **payload** may not. **Release** never rides A. **Returns-bearing setup verdicts** are loopback-only by
+default — they write live credentials *and* trigger a machine-verify probe to a caller-chosen endpoint (SSRF-lite +
+credential substitution). **One transport-confidentiality carve-out:** a credential may ride an **end-to-end
+encrypted** private transport (**Tailscale** — WireGuard; nobody in the middle sees it) but **never** a
+**TLS-terminating proxy** (**Cloudflare Access** — the edge sees plaintext, so a Stripe key would transit a third
+party). This matters because `setup` is the *hardest* away-blocker (D97: a missing credential cannot be skipped) —
+so the carve-out is what makes Tailscale the recommended transport: no domain, E2E, and strictly more capable.
 
 ## Console model + screens **[DECIDED — D99 (closes B1/B2/B3)]**
 **MVP = a read-only supervision cockpit, not a project explorer.** The console has two latent modes — *supervise a

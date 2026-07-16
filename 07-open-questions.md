@@ -111,10 +111,14 @@ Deliberately deferred — known unknowns, to close during build or later.
   — **decided (D78):** `verify` is the observer (it already runs the affected flow); mechanism = `sys.monitoring`
   fire-once (Py 3.12+, measured 1.0×) with coverage-harvest (~1.5×) as the universal fallback; trigger selectively
   where an arm's `known_gaps` flag dynamism. Open: the per-stack mechanism for non-Python (reasoned, not measured).
-  (4) **Remote-control auth** (Cloudflare Access / token) — reserved, warning-only for now. **E3 refinement (D107):**
-  outward-**release** (the D105 outbox) is loopback-only over the unauthed tunnel — read/verdict inherit the
-  owner-accepted caveat, but real tunnel auth is **required-before-remote-release** (the one interaction too
-  destructive for the unauthed tunnel). The other three residuals are confirmed correctly parked (tab-not-home D99;
+  (4) **Remote-control auth** — **CLOSED (D112):** the unauthed warning-only tunnel was unbuildable (D95's
+  "the loopback token is never tunnel auth" contradicts D107's "read/verdict ride the tunnel", since those
+  endpoints are token-gated), and D107 under-rated verdicts — D90 makes a verdict an *authoritative prompt*, so a
+  forged one is **agent control**. Now: a **structural two-socket split** (loopback socket = full surface incl.
+  `release` + credential-bearing setup verdicts, never fronted; a reduced remote socket = reads · opinion verdicts ·
+  static demo) served **only** behind a **declared identity transport** (Cloudflare Access | Tailscale), with a
+  distinct remote token (QR + URL-fragment pairing) as the second factor. Auth moved from *reserved* to
+  **required-for-any-remote-surface**. The other three residuals are confirmed correctly parked (tab-not-home D99;
   durable-flow ≈ D78; capture-mechanism D78, non-Python open). *Project-map residuals CLOSED as E3.*
 - **Automated testing**, **test-from-anywhere**, **paid device/QA platform** (`04`) — designed-for,
   not built.

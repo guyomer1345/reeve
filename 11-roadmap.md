@@ -70,7 +70,8 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
   Structural face of the project-state view. Stageable read-only atop C1; overlay + capture need later arms.
-  Plus **remote control** = opt-in Cloudflare-tunnel serve (warning-only now, auth later). **[stageable; overlay later]**
+  Plus **remote control** = opt-in phone access — **now a two-socket split behind a declared identity transport
+  (D112: Cloudflare Access | Tailscale), not the old unauthed warning-only tunnel** (which was unbuildable). **[stageable; overlay later]**
 - **Open design** — **CLOSED (D99–D101):** the console model + screen list (map = **tab**, not home, not the first
   cut) + snapshot-poll refresh + the contact-UX (verdict/intake forms + a "my requests" surface) (D99); the stack —
   a stdlib-Python detached daemon + a zero-build CSP-clean page (D100); the two-event notification taxonomy (D101).
@@ -217,7 +218,9 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   HTTP responder; the conversation corollary (dialogue = terminal, bus = requests + bounded clarifications).
   **A3 website/bus lifecycle (D94):** a session-independent detached daemon, ensure-running via `flock`-authority +
   token'd `/health`, `POST /shutdown` + idle-janitor; WSL2 dies-with-terminal. **A4 local-bus trust (D95):**
-  capability token + Host-allowlist + loopback bind; tunnel stays warning-only (D70, owner-accepted).
+  capability token + Host-allowlist + loopback bind. **(The "tunnel stays warning-only/unauthed" arm is superseded
+  by D112** — a structural two-socket split behind a declared identity transport; the loopback Host-allowlist stands
+  unchanged on the full-surface socket.)
 - **B — console. CLOSED (D99–D101).** **B1/B2/B3 console model (D99):** MVP = a read-only supervision cockpit (home =
   run-status; map = a **tab**, not home, not the first cut) + snapshot-poll refresh (chained-`setTimeout` + `version`/`ETag`
   gate; no SSE in MVP) + the contact-UX (verdict + intake POST forms + a **"my requests"** async-feedback surface that
@@ -237,7 +240,7 @@ The website+demo design decomposes into five clusters; the dependency spine is *
 - **D — demo skill. CLOSED (D102–D104).** **D1 serving/format (D102):** a build-free, self-contained static
   bundle (no external hosts / no eval; vanilla or vendored htm+preact — the D100 idiom) the D94 daemon serves
   under a `sandbox`-directive CSP opaque origin + iframe-sandbox (isolated even top-level); demo = look, console =
-  verdict form; joins the daemon's static-asset (token-free) serving class; rides the console tunnel for free.
+  verdict form; joins the daemon's static-asset (token-free) serving class; rides the remote surface for free (D112).
   **D2 refine cap (D103):** ≤3 regenerations (`config.demo.max_refine_rounds`), never auto-proceed → escalate to
   live `discuss`. **D3 on-disk (D104):** `.workflow/demos/<item-id>/`, gitignored runtime, pruned on resolve.
 - **E — cross-cutting. CLOSED (D105–D107).** **E2 outward-action permission model (D105):** a **transactional-outbox**
@@ -247,8 +250,10 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   **E1 commitment-status storage (D106):** **spec-inline**, human-owned (never node frontmatter — a second copy that
   drifts + regen-clobbers); the drift check reads it **code→intent**. **E3 project-map residuals (D107):** the four
   D70 residuals confirmed parked (tab-not-home D99; durable-flow ≈ D78; capture D78; non-Python + remote-auth open) —
-  the one E2-forced call: **outward-release is loopback-only** over the unauthed tunnel (real tunnel auth
-  required-before-remote-release).
+  the one E2-forced call: **outward-release is loopback-only** (**realized structurally by D112** — release lives on
+  the never-fronted loopback socket, since a Host-header policy could not enforce it; and D112 extends the taxonomy:
+  credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
+  verdict agent control).
 
 **Recommended next slice:** **A + C + B + D + E are ALL CLOSED (D90–D107) → the Phase-2 DESIGN is COMPLETE.** Next is
 **Phase 3 — Build the website** (C1 console → C2 bus).

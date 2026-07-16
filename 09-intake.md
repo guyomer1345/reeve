@@ -112,8 +112,10 @@ already answers who serves it.
   `sandbox="allow-scripts allow-forms"` attribute — **never `allow-same-origin`**. **Demo = look, console = the
   D97 verdict form around it** (the demo is read-only, no POST, no token). It joins the daemon's **static-asset
   serving class** (Host-allowlisted, token-free — no secrets), distinct from the token-gated data/command class
-  (`05`). The **away human** reaches it over the *existing* console tunnel for free (remote seeing works; remote
-  verdict submission inherits D95's owner-accepted tunnel caveat).
+  (`05`). The **away human** reaches it for free over the *existing* remote surface (D112): the demo is static and
+  read-only, so it rides the **reduced remote socket** alongside reads + opinion verdicts — and a `demo` verdict is
+  exactly an *opinion* (no payload), so submitting it remotely is in-scope. That surface is served only behind a
+  **declared identity transport**; with none configured, the demo is loopback-only like everything else.
 - **Refine cap (D103):** the change-request → regenerate mini-loop is bounded at **N regenerations**
   (config-overridable `config.demo.max_refine_rounds`, **default 3**), counted plainly. On the cap it **never
   auto-proceeds** (D97) — it **escalates to a live `discuss` session** (a low-bandwidth async channel that won't

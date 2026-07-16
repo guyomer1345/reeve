@@ -96,8 +96,19 @@ endpoint (the DNS-rebinding defense), **JSON-only + a custom header** (forces th
 `127.0.0.1` bind. The **served page additionally carries a strict `Content-Security-Policy: script-src 'self'`** — the
 console-side teeth of this posture; it forces the zero-build vanilla/Preact+htm frontend (no `unsafe-eval`), owned by
 D100/`03`. The **port is not a secret**; the **bus token (auth) is distinct from the checkpoint token
-(correlation)**. Windows lacks 0600 → token-file ACLs (the D89 OS/FS family). **Tunnel (D70, owner-accepted):** opt-in
-/ warning-only / no auth — with the one rule that the loopback token is **never** reused as tunnel auth.
+(correlation)**. Windows lacks 0600 → token-file ACLs (the D89 OS/FS family). **Remote access — a structural two-socket split
+(D112, superseding the D70/D107 unauthed warning-only tunnel):** the unauthed tunnel could not be built (D95's
+"the loopback token is never tunnel auth" and D107's "read/verdict ride the tunnel" are mutually exclusive, since
+those endpoints are token-gated), and a `Host`-header policy is no boundary at all — it hands a security decision
+to a header the proxy controls. So: **socket B** is loopback-only and never fronted (full surface: outward
+`release` + returns-bearing `setup` verdicts — the blanket Host-allowlist above stands here unmodified), while
+**socket A** carries the reduced remote surface (reads · opinion verdicts · the static demo) and is served **only**
+when `config.remote` declares an **identity transport** (Cloudflare Access | Tailscale). "Loopback-only" thus
+becomes a fact about the **port topology**, not a promise about a header; A's own Host-allowlist is
+anti-DNS-rebinding only. A **distinct remote token** (never the loopback one — D95 respected) is the second factor,
+paired by QR + a **URL fragment** (which never leaves the browser — the precise amendment to "never in a URL",
+whose target was the log-leaking `?token=` query param). The bar is set by D90: a verdict rides as an
+*authoritative prompt*, so a forged one is **agent control**, not merely "local work".
 **Two serving classes (D102 clarification):** the token gates the **sensitive data/command class** (state reads +
 POSTs); the **static app-shell class** — the console page, its assets, and the **demo sandbox** (`/demo/*`) — is
 served **token-free under the Host-allowlist**, because a browser can't attach a token header to a document/iframe

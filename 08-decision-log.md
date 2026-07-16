@@ -882,7 +882,7 @@ pass.** Implementation deferred (`11`).
 
 ---
 
-## D70 — Project map + flow view: a console tab over the code-map — static skeleton, dynamic overlay **[DECIDED — feature + architecture; the runtime-capture mechanism is a direction, tracked OPEN in `07`; the arm-vs-fallback coverage binary superseded by D72; the flow-overlay realised by D78]**
+## D70 — Project map + flow view: a console tab over the code-map — static skeleton, dynamic overlay **[DECIDED — feature + architecture; the runtime-capture mechanism is a direction, tracked OPEN in `07`; the arm-vs-fallback coverage binary superseded by D72; the flow-overlay realised by D78; the *unauthed opt-in tunnel* arm superseded by D112 — remote access now requires a declared identity transport behind a two-socket split]**
 The console gets a **project-map screen** rendering the code-map `graph.json` (D68) as a cluster diagram: nodes
 sized by the **impact lens**, grouped by the **directory tree**, with **semantic zoom** (cluster → file →
 [later] symbol). It is the structural face of the deferred **project-state view** (`07` — "how the pieces
@@ -1832,7 +1832,7 @@ WSL2 VM-lifecycle kill) + a Claude-Code process-reaping fan-out with **empirical
 orphan to PID 1 and survive; `--resume` loads context not processes; `/clear` is context-only; no `SessionEnd` default
 cleanup). Reuses D48/D90/D92. → `03`/`05`/`07`/`11`.
 
-## D95 — Local-bus trust: the browser/network is the untrusted caller, not same-UID; capability token + Host-allowlist + loopback bind **[DECIDED — Phase-2 A4, research-backed]**
+## D95 — Local-bus trust: the browser/network is the untrusted caller, not same-UID; capability token + Host-allowlist + loopback bind **[DECIDED — Phase-2 A4, research-backed; the loopback stack STANDS unmodified on the full-surface socket, but two arms are revised by D112: the *unauthed tunnel* is retired (it contradicted this decision's own token rule), and "token never in a URL" is sharpened to "never in the query/path" — a URL *fragment* never leaves the browser and is the QR pairing channel]**
 The trust boundary is **not** "same-UID local processes" — a same-UID process can already `ptrace` the orchestrator and
 read its files, so defending against it is theater — it is **"the browser and the network are untrusted callers."** The
 MVP **loopback** stack (all mandatory; they compose to three independent failures for a rebinding attacker): a **CSPRNG
@@ -2091,7 +2091,7 @@ Where `locked`/`provisional`/`unspecified` (D23) is recorded. **The spec is the 
 *Rejected:* node frontmatter as the owner (a second copy — D80 violation; regen-clobber; N-way fan-out of one fact); a separate `commitments.json` (splits a property from its subject — the spec element is its natural home).
 *Evidence:* the schema already models `commitment` inline (`shared/schemas.md`); D80 (one owner, derive-or-point); D78 (nodes regenerate); D23/D76 (commitment drives the drift/promise-adequacy checks, so it must be readable by verify/align/audit). → `09`/`06`/`07`/`shared/schemas.md`/`skills/{align,verify}`.
 
-## D107 — Project-map residuals confirmed parked; the one E2-forced call: outward-release is loopback-only over an unauthed tunnel **[DECIDED — Phase-2 E (E3)]**
+## D107 — Project-map residuals confirmed parked; the one E2-forced call: outward-release is loopback-only over an unauthed tunnel **[DECIDED — Phase-2 E (E3); the release-loopback-only *intent* is realized structurally by D112 (a never-fronted socket, since a Host policy cannot enforce it), and its "verdict = local, low-consequence" rating is CORRECTED there — D90 makes a verdict an authoritative prompt, so any forged verdict is agent control, and credential-bearing setup verdicts join release]**
 The D70 project-map/flow-view residuals, mostly confirmed correctly parked elsewhere: **tab-not-home** (resolved → tab, D99); **flow ephemeral-vs-durable** ≈ the **D78** durable **[D]** observed layer (regenerable static + durable observed, merge-on-regen); the **runtime-capture mechanism** decided for Python (`verify` observes; `sys.monitoring` fire-once — D78), **non-Python reasoned-not-measured stays open** (per-stack); **remote-control auth reserved / owner-accepted** (D70/D95). No new build.
 - **The one refinement E2 forces:** outward-**release** (D105) is the **highest-consequence** console interaction — a forged *verdict* drives *local* work (qa-approve → document/commit), a forged **release** fires an *outward, irreversible* effect (push/deploy). So over the **unauthed, owner-accepted tunnel** (D70/D95 F4): **release stays loopback-only** (served/accepted on loopback only); **read + verdict** inherit the pre-existing owner-accepted tunnel caveat (as D102 already scoped remote demo-viewing/verdict). **Real tunnel auth** (Cloudflare Access / HMAC) moves from *reserved-optional* to **required-before-remote-release** — the tunnel carries low-consequence interactions at owner-accepted risk but not "authorize an outward side-effect" until auth lands.
 *Rejected:* exposing release over the unauthed tunnel like read/verdict (release is a strictly larger blast radius — an outward irreversible effect, not local work); forcing real tunnel auth into MVP now (release-over-loopback needs none; the tunnel stays opt-in/off-by-default).
@@ -2307,6 +2307,58 @@ owner). D94 (the detached always-alive daemon + its existing janitor role) · D1
 a dir scan) · D97 (timeout never auto-proceeds) · D101 (the taxonomy, kept) · D95 (the 0600 atomic-create token
 discipline reused) · D80 (owner + location for every runtime artifact). Reuses D89/D90/D91/D93/D108. →
 `01`/`03`/`04`/`05`/`07`/`shared/schemas.md`/`skills/checkpoint`/`commands/start.md`/`11`.
+
+## D112 — Remote access: a structural two-socket split behind a declared identity transport; the unauthed tunnel is retired **[DECIDED — pre-Phase-3 F6; supersedes D70/D95/D107's unauthed warning-only tunnel]**
+The tunnel **could not be built as specced**, and the reason is not the one the register found first.
+- **(1) The specced tunnel is self-contradictory.** D95: the loopback token is **never** reused as tunnel auth.
+  D107: read+verdict ride the tunnel. But every one of those endpoints is **token-gated**, so a verdict-capable
+  remote browser **must** present the token. Both cannot hold: either the token goes over the wire (violating D95)
+  or the tunnel serves nothing useful. The register found the near half of this (the token cannot *discriminate*
+  verdict from release); the deeper half is that it cannot *authenticate* anything remotely either.
+- **(2) The register's own proposed fix is unsound.** A **per-endpoint `Host` policy** makes a security boundary out
+  of a header the untrusted proxy controls: if `cloudflared` forwards the tunnel Host the allowlist rejects all
+  tunnel traffic; if it rewrites Host to loopback, tunnel traffic is byte-indistinguishable from loopback and
+  release **cannot** refuse it — and that failure is **silent**. A boundary must be **structural**, not header-based.
+- **(3) The bar is higher than D107 assumed — a forged verdict is *agent control*.** D107 rated verdicts
+  low-consequence because "a forged verdict drives *local* work". But D90 makes the verdict ride as
+  `claude --resume -p "<verdict>"` — an **authoritative prompt** — and `notes` is free text. So POST access to a
+  verdict endpoint = arbitrary authoritative instructions into an autonomous code agent. **D107's rating is wrong
+  twice:** once via credential-bearing setup verdicts (F6's finding), and once via `notes`, for *every* verdict.
+  That kills "a bare bearer token on a public URL" as the gate and makes real identity the requirement.
+- **The model.** **Socket B — loopback-only, never fronted:** the full surface (outward `release` +
+  returns-bearing `setup` verdicts). D95's blanket Host-allowlist stands here **unmodified**, and "loopback-only"
+  becomes a fact about **port topology** — nothing to spoof. **Socket A — the reduced remote surface** (reads ·
+  **opinion verdicts** · the static demo), served **only** when `config.remote` declares an **identity transport**
+  (`access` | `tailscale`); absent → A is not served at all. A **distinct remote token** (never the loopback one —
+  D95 respected) is a **second factor** over the transport identity, applying D95's own "three independent
+  failures" logic so a misconfigured Access does not instantly expose the surface. **Pairing = QR + URL fragment**,
+  which **amends D95's "never in a URL"** precisely: that rule targeted the Jupyter **`?token=` *query param***
+  (server-logged, `Referer`-leaked); a **fragment never leaves the browser**. A's Host-allowlist survives but its
+  role changes to **anti-DNS-rebinding** (A is loopback-bound, so a local browser can hit it), *not* the boundary.
+- **Risk taxonomy (corrects D107):** *a verdict carrying an **opinion** may ride A; a verdict carrying a **payload**
+  may not.* Release never rides A. **One transport-confidentiality carve-out:** a credential may ride an **E2E**
+  private transport (**Tailscale**/WireGuard — nobody in the middle sees it) but **never** a **TLS-terminating
+  proxy** (**Cloudflare Access** — the edge sees plaintext, so a returned key would transit a third party). This is
+  load-bearing for autonomy: `setup` is the *hardest* away-blocker (D97 — a missing credential cannot be skipped),
+  so the carve-out makes **Tailscale the recommended transport** (no domain, E2E, strictly more capable).
+- **Cost stays small because we do not own the tunnel lifecycle.** The operator runs `cloudflared`/`tailscale
+  serve` against `bus.json`'s `remote_port` and is responsible for the declared transport being real — the same
+  operator-responsibility stance as D109's run-constraint. Build = a second socket + a second token + a QR + one
+  config key. **No JWT library** (D100's stdlib-only holds): we don't verify the Access assertion — A is
+  loopback-bound and only the proxy reaches it.
+*Rejected:* the per-endpoint `Host` policy (the register's lean — a proxy-controlled, silently-failing boundary);
+keeping an unauthed warning-only tunnel (unbuildable, and it would hand agent control to a bearer token on a public
+URL); **deferring remote entirely** (my first-cut recommendation — the maintainer's push was right: away-alerting
+without away-*acting* is not worth building, and the two-socket split is exactly what makes remote safe enough to
+ship); token-in-query (the Jupyter CVE class — the fragment is a different mechanism, not a loosening); picking one
+transport (supporting both costs ~zero code — the daemon serves A either way — and Tailscale is the no-domain,
+E2E-capable path); owning the `cloudflared` lifecycle (real build cost for an opt-in feature the operator can wire).
+*Evidence:* the pre-Phase-3 register F6 (an adjudicator override of two verifier over-refutations — both invoked
+"a tunnel client lacks the 0600 token", which fails precisely because a verdict-capable remote client must hold
+it). D90 (verdict-as-authoritative-prompt — the fact that sets the bar) · D95 (token discipline, three-independent-
+failures, the `?token=` CVE lineage) · D97 (a missing credential can't be skipped) · D100 (stdlib-only → no JWT
+verify) · D102 (the static-asset serving class the demo joins) · D107 (the taxonomy this corrects) · D109 (the
+operator-responsibility stance reused). → `03`/`05`/`07`/`09`/`shared/schemas.md`/`11`.
 
 ---
 
