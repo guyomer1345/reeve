@@ -1,5 +1,15 @@
 # Pre-Phase-3 Pressure-Test Register
 
+> **STATUS: RESOLVED (2026-07-16) — the must-resolve set is closed as D108–D113.** F1→**D108** (folding JF1+JF9) ·
+> F2→**D109** · F3→**D110** (+ the `guard.sh` push floor BUILT; it also exposed and closed a live D87 bypass —
+> `git -c core.pager=cat commit` slipped past with a secret staged) · F4→**D111** (folding JF2+JF4) · F6→**D112** ·
+> F14→**D113**. Three findings were **corrected** in the resolving: F3's "project config into settings.json" cannot
+> work (the away-release forbids any static `ask`); F6's per-endpoint **Host policy** is not a boundary (a
+> proxy-controlled header, silently failing) → a structural two-socket split; and F4's "audit-prune deletes the
+> secret store" conflates live credentials with memory. **The remaining MEDIUM/LOW findings (F5, F7–F13) are NOT
+> resolved** and stay open input for a later pass. This register is a historical artifact — the decisions are the
+> owner of what was settled (`08`), and status lives in `11`.
+
 **Autonomous design interrogation of the whole six-space design, weighted to Phase-2 (D90–D107).**
 Substance only (is the design right / complete / coherent / buildable) — **not** a doc↔artifact coherence pass
 (that is the separate doc-review). No spec docs, `shared/`, `skills/`, or `08` were edited producing this.

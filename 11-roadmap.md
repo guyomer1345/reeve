@@ -216,6 +216,15 @@ the two-event notification taxonomy, via two research fan-outs). **D = the demo 
 sandbox-CSP isolation · refine cap · on-disk location, via two research fan-outs). E = cross-cutting (D105–D107 —
 the outward-action outbox · commitment-status storage · project-map residuals, via one research fan-out).**
 **Phase-2 DESIGN COMPLETE → Phase 3 (build the website).** The full agenda + per-item status is below.)*
+*(**Pre-Phase-3 gate CLOSED — D108–D113, 2026-07-16.** An autonomous pressure-test + coherence cold-audit
+(`reviews/pre-phase3/`) surfaced six must-resolve substance findings; all six are now decided, with JF1/JF2/JF4/JF9
+folded in: **D108** inbox consume (consumed-set + per-kind anchors + watermark GC + the drain wired into the
+drivers) · **D109** single-orchestrator = an operator-guaranteed run-constraint, not enforced · **D110** the harness
+leaves the outward path, `config.outward` is sole owner, and the **`guard.sh` push floor is BUILT** (absolute on
+protected branches; it also closed a live D87 bypass) · **D111** the bus daemon owns the away-alert (not the
+`Notification` hook), deadline/reminder pinned, the secret store adopted · **D112** remote = a structural two-socket
+split behind a declared identity transport · **D113** the runner onto the critical path + this section's increment
+reframe. No register residual.)*
 
 ### Phase 2 — design agenda & dependency sequence *(the resume map)*
 The website+demo design decomposes into five clusters; the dependency spine is **A → C → B → D → E**

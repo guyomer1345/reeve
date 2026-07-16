@@ -37,8 +37,9 @@ act by hand, it failed.*
   checkpoints WITH help (contextual steps + verified deep-links + breadcrumb paths — D98); the knowledge
   base; graceful session handoff.
 - **Out (designed-for, not built):** richer checkpoint help (screenshots of where settings live, screen-share
-  + live Claude feedback — D98); automated testing; "test-from-anywhere" (run-while-away → spin test env →
-  Cloudflare tunnel → ping phone); the paid device/QA platform.
+  + live Claude feedback — D98); automated testing; "test-from-anywhere" (run-while-away → spin test env → reach it
+  remotely → ping phone — the *remote* half now rides the console's identity-gated remote surface, D112, not the
+  retired unauthed tunnel); the paid device/QA platform.
 
 ## Operating scope **[DECIDED]**
 Single local project, single user, single machine; the workflow runs inside the repo it's building.

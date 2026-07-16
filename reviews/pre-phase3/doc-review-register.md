@@ -1,5 +1,16 @@
 # Pre-Phase-3 Doc-Review Register (coherence cold-audit)
 
+> **STATUS: PARTLY RESOLVED (2026-07-16).** Folded into the D108–D113 capture: **JF1** (inbox-drain absent from the
+> drivers) → **D108**, wired into `orchestrator-CLAUDE.md` + `loop.md` + `01` (option (a), not the STUB — the drain
+> semantics were being pinned anyway); **JF2** (secret store homeless) → **D111** (`.workflow/secrets/`, owner +
+> pin + `0600`; its "audit-prune deletes" suggestion **corrected** — live credentials are not memory); **JF4**
+> (deadline/cadence unpinned) → **D111** (`config.checkpoint`, daemon-owned); **JF9** (intake source-stamp) →
+> **D108** (the stamp is also intake's idempotency anchor — one field, two gaps); **JF6** (missing forward-pointers)
+> → done in-passing for D70/D87/D90/D92/D95/D97/D101/D105/D107; **JF7** (C1/C2 label collision) → dissolved by
+> **D113**'s increment reframe. **Still open: JF3** (`outbox/`+`demos/` absent from the served-read + native-FS pin
+> enumerations — an adoption call), **JF5** (`09`'s `purpose.intent` resolver wording), **JF8** (gate doesn't catch
+> prose doc-slug refs).
+
 **The D89-style phase-boundary `align` cold-audit — the closing coherence gate before Phase 3.**
 COHERENCE, not substance: does the whole surface agree with itself and with the built artifacts (the input
 Phase 3 builds from)? Where a doc↔artifact drift was a *mechanical* D80 repair (stale ref / wrong list /
