@@ -187,6 +187,23 @@ Deliberately deferred — known unknowns, to close during build or later.
   view (D38 — not a hand-maintained doc that rots): a `status`/`map` skill or a console screen synthesizing
   roadmap + backlog + decisions + graph on demand. **The `graph.json` cluster map (D70) is its "how the pieces
   connect" face** — the structural half of this surface.
+- **Public-facing repo identity + onboarding (`00`) — user-raised 2026-07-18; owned now, scheduled Phase 4 (D121).**
+  The end goal is a *public* repo others install and integrate, but the repo today is a dense construction record:
+  the numbered docs `00–11`, the `D<N>` vocabulary, and internal codenames ("the drain", "the notifier", "waves",
+  "away becomes triggerable") are the design scaffolding, not a product front door. The current public surface is a
+  spec-navigation `README.md` that even hardcodes the maintainer's local path — there is no getting-started, no
+  separation of construction-record from shipped product, and the skill `description:` fields (the one internal
+  vocabulary that ships *inside* the package) are still partly in design terms. **The open fork is one-repo-vs-two:**
+  (a) a **transparent monorepo** — publish as-is, design docs + decision log included (the reasoning trail is an
+  asset, but the front door must redirect "use it" away from `08`); or (b) a **distilled package** — publish only the
+  package + clean docs, keeping the spec/log as a `docs/design/` or private construction record (clean surface, but a
+  sync seam and the "shows its work" credibility is lost). **Deferred, not ignored (D121):** the *concern* is owned
+  now (this entry + the `11` cross-cutting item); the *work* — the fork call, a product front-door README +
+  getting-started, the construction-vs-product reframe of `00–11`/`08`, and a user-language pass over skill
+  descriptions — rides Phase 4, because onboarding prose written against a still-moving Phase-3 product churns. The
+  one cheap thing done incrementally: keep skill `description:` fields honest as they're touched. Overlaps but is
+  distinct from the **project-state view** (a *navigation* surface + self-hosting prereq) and the **framework
+  version-update skill** (keeping *installed* copies fresh), both below.
 - **Framework version-update skill (`10`, D57) — user-raised 2026-06-30.** The package is now a **public
   repo**; consuming projects install a snapshot (`.claude/` skills/agents/commands + `templates`/`shared`/
   `hooks`). As the framework evolves (fixes, new skills, schema/format changes) installed copies go **stale**,

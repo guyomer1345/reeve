@@ -2845,3 +2845,38 @@ detached daemon; the restart-no-duplicate path driven at the CLI boundary; `noti
 `ServiceUnknown`; the cockpit rendered in headless Chrome. Fixture tests in `scripts/test_bus.py` (gate suite 181 →
 199). Depends on D93/D94/D101/D111/D116; reuses D80/D95/D97/D105/D108/D109/D113/D114/D119. →
 `03`/`05`/`07`/`shared/schemas.md`/`commands/start.md`/`scripts/bus.py`/`scripts/test_bus.py`/`11`.
+
+## D121 — The public-facing repo identity is a recognized gap: owned now, work scheduled for Phase 4; the one-repo-vs-two fork stays OPEN **[DECIDED — scoping + ownership; the fork itself is OPEN (`07`); the work rides Phase 4]**
+The end goal is a **public repo** others install and integrate (`00`), but the repo today is a dense *construction
+record*: the numbered docs `00–11`, the `D<N>` vocabulary, and internal codenames ("the drain", "the notifier",
+"waves", "away becomes triggerable") are design scaffolding, not a product front door. The only public-facing
+surface is a spec-navigation `README.md` that even hardcodes the maintainer's absolute local path as "Home" — there
+is no getting-started, no separation of construction-record from shipped product, and the skill `description:` fields
+(the one internal vocabulary that ships *inside* the package) still carry design terms.
+
+**The call:** *own the concern, defer the work.* The concern gets a home now — an open-question entry (`07`) and a
+Phase-4 cross-cutting roadmap item (`11`) — so it stops floating; the *work* rides **Phase 4** (the last build phase
+before release). That work is: (1) decide the **one-repo-vs-two fork**; (2) write a **product front-door README +
+getting-started**; (3) reframe `00–11`/`08` as explicitly-labeled construction-record provenance; (4) a
+**user-language pass over the skill `description:` fields**. The fork's two arms — a **transparent monorepo** (publish
+as-is, design docs + decision log included; the reasoning trail is a distinctive asset, but the front door must
+redirect "use it" away from `08`) vs a **distilled package** (publish only the package + clean docs, keeping the
+spec/log as `docs/design/` or a private construction record; clean surface, but a sync seam and the "shows its work"
+credibility is lost). **The fork is left OPEN** (`07`) — the maintainer's lean is the transparent monorepo (one
+source of truth, no sync seam), but it is not closed here.
+
+*Why defer:* onboarding/narrative prose written against a still-moving Phase-3 product churns and rots — you write
+the front door once the thing behind it stops moving. The one exception carved out: keep skill `description:` fields
+honest in user language *as they are touched*, since those ship inside the package regardless of timing.
+
+*Rejected:* writing the README/onboarding now (churns against a moving target); leaving the concern unowned or
+folding it into "Packaging/distribution" (it is broader than plugin mechanics — a distinct front-door/narrative
+deliverable, and burying it is how it stays an orphan); deciding the fork now (premature — the right call depends on
+how the packaged surface actually looks at Phase 4); two permanently hand-maintained repos (the drift the whole
+project exists to avoid).
+
+*Evidence:* `README.md` is titled "Dev-Workflow Spec — working draft" and indexes the spec for a maintainer, not a
+consumer (it hardcodes a local absolute path as "Home"); `07` already tracks the *project-state view* (a navigation
+surface + self-hosting prereq) and the *framework version-update skill* (keeping installed copies fresh) but had
+**no** entry for the front-door/identity gap; the skill descriptions carry design vocabulary today. Relates to the
+project-state view and self-hosting; revisited at Phase 4. → `00`/`07`/`11`.

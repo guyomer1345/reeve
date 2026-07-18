@@ -47,4 +47,6 @@ Single local project, single user, single machine; the workflow runs inside the 
 ## Repo = spec + package
 This folder is the project's permanent home and source of truth; the spec is edited here directly, and the
 package it specifies (`skills/ agents/ rules/ hooks/ …`) is built here alongside it. For what's built vs still
-open, see `11-roadmap.md` (canonical status).
+open, see `11-roadmap.md` (canonical status). The *published* shape for public consumers — one transparent repo vs a
+distilled package, plus the front-door/onboarding layer that goes with it — is an open question (`07`, D121),
+scheduled for Phase 4.

@@ -192,6 +192,13 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 ### Cross-cutting — packaging, validation, self-hosting
 - **Packaging/distribution** — plugin packaging (`.claude-plugin/`), `shared/` resolution, first-launch
   **trust-UX doc** (D57/D58). **[stageable]**
+- **Public-repo identity + onboarding (D121, user-raised)** — the repo ships publicly, but today it's a dense
+  construction record (numbered docs + `D<N>` refs + internal codenames) fronted only by a spec-navigation README.
+  The deliverable: decide the **one-repo-vs-two fork** (`07`), write a product front-door README + getting-started,
+  reframe `00–11`/`08` as explicitly-labeled `docs/design/` provenance, and do a user-language pass over the skill
+  `description:` fields (the internal vocabulary that ships *inside* the package). Onboarding prose written against a
+  moving Phase-3 target churns, so it's scheduled for **Phase 4**, owned now so it can't get lost. Cousin of the
+  state-view + version-update items. **[core — Phase 4]**
 - **Validation gaps** — real orchestrator→agent **dispatch** in a harness run; `@import`-survives-`/compact`;
   whether `verify` samples the real `git diff` vs trusts the `changelog` (#8); **shipped bash glue assumes a
   bash interpreter on the target OS — unverified on native Windows (D89; the D71 split stands, no refactor)**. **[stageable]**
@@ -318,7 +325,9 @@ filesystem:** alert state had no home (in-memory ⇒ WSL-restart spam), and thre
 `enable-linger` is the wrong *layer* for the WSL death (the daemon is in `/init.scope`, the killer is Windows-side),
 `config.json` was marked `bus:none` on the increment that reads it, and the desktop toast fails for the wrong stated
 reason (no name owner, not "no session bus"). **Drive them on the real filesystem, with a real model.**)*
-**Phase 4 — Build the demo.**
+**Phase 4 — Build the demo, then the public-release surface.** The demo (Space 4), plus the **public-repo identity +
+onboarding** pass (the one-repo-vs-two fork · a product front-door README + getting-started · the construction-vs-product
+reframe of `00–11`/`08` · a user-language pass over skill `description:` fields — D121, `07`).
 
 **The MVP away-autonomy boundary (D113 — locked, eyes open).** With the runner in, away-autonomy is **real
 end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote socket) → the verdict lands durably
