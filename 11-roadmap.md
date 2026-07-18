@@ -87,14 +87,21 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      increment to meet an MVP goal* (D93 protocol + the D108 consume model) (*the old "C2"*).
      **Residual (carried from increment 2, now twice): nobody has rendered the page in a browser** — the forms were
      added to an unreviewed surface; correctness is driven, legibility is not.
-  4. **The notifier** — `parked/` watch + webhook/reminders/escalation (D111): away becomes *triggerable*.
+  4. **The notifier** — **BUILT 2026-07-18 (D120)**: the daemon watches `parked/` → alerts on a new open checkpoint
+     → re-alerts every `config.checkpoint.reminder_hours` → escalates once past the absolute `deadline` (never
+     auto-proceeding), as a **term on the existing `parked` job**. Alert state lives in a fourth daemon-owned path
+     (`alerts.json`, fail-toward-noise, survives restart); event 2 ships its **real-source arms** (deadline +
+     dead-letter escalation), the thrash/crash arm deferred to increment 6 with its liveness signal; the **doorbell**
+     webhook payload carries no request body. *Away becomes triggerable.*
   5. **The remote socket** — the reduced surface behind a declared identity transport (D112): away becomes *actionable*.
   6. **The relaunch-runner** — (D113): away becomes *completing*.
   **[core for unattended autonomy — fully designed (D93/D94/D95 + D108/D111/D112/D113); build = Phase 3.
   **Increments 1+2 BUILT 2026-07-16 (D115/D116** — `scripts/bus.py` + 39 fixture tests, gate suite 89 → 128);
-  **increment 3 BUILT 2026-07-16 (D117/D118/D119** — `scripts/drain.py` + the POST surface; gate suite 128 → 177).
-  **The first MVP goal is met: a verdict now lands durably and unparks the loop.** Next is **increment 4 — the
-  notifier** (`parked/` watch + webhook/reminders/escalation, D111): away becomes *triggerable*.]**
+  **increment 3 BUILT 2026-07-16 (D117/D118/D119** — `scripts/drain.py` + the POST surface; gate suite 128 → 177);
+  **increment 4 BUILT 2026-07-18 (D120** — the notifier; gate suite 181 → 199).
+  **The first MVP goal is met: a verdict now lands durably and unparks the loop; and away is now *triggerable*.**
+  Next is **increment 5 — the remote socket** (the reduced surface behind a declared identity transport, D112):
+  away becomes *actionable*.]**
 - **C-map — project map + flow view** (D70) — a read-only cluster diagram over the code-map `graph.json`
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
@@ -293,10 +300,11 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **Phase 3 is UNDERWAY — increments 1+2+3 are BUILT (D115/D116 · D117/D118/D119,
-2026-07-16), and the first MVP goal is met**: a verdict POSTed from the console lands durably on the inbox and
-unparks the loop at the next boundary. Next is **increment 4 — the notifier** (`parked/` watch + webhook /
-reminders / escalation, D111): away becomes *triggerable*. Then remote socket → runner.
+**Recommended next slice:** **Phase 3 is UNDERWAY — increments 1+2+3+4 are BUILT (D115/D116 · D117/D118/D119 ·
+D120), the first MVP goal is met, and away is now *triggerable***: a verdict POSTed from the console lands durably on
+the inbox and unparks the loop, and the daemon alerts an away human that a verdict is owed. Next is **increment 5 —
+the remote socket** (the reduced surface behind a declared identity transport, D112): away becomes *actionable*.
+Then the runner.
 *(**The build is pressure-testing the design, as intended.** Increment 1 alone found the substrate unbuildable as
 specced — a pinned path could not be *found* — and **measured two stated mechanisms to be wrong**: `flock` does not
 fail on the repo mount, while file *mode* does, silently and open. Both are the reverse of what the spec asserted,
@@ -305,8 +313,11 @@ pattern, and widened it past the filesystem:** the D108 watermark was measured t
 consumed** (it rested on an ordering guarantee nothing provided — D118), and the drain's rule (3) was **followed by
 1 of 3 real sessions** because it lived in this log and never reached the driver artifacts (D117). Both were found
 by *driving*, not reading — and the watermark's second bug survived 27 green unit tests, surfacing only when a real
-session recorded ids one at a time, exactly as the brief asks. **Drive them on the real filesystem, with a real
-model.**)*
+session recorded ids one at a time, exactly as the brief asks. **Increment 4 held it again, and past the
+filesystem:** alert state had no home (in-memory ⇒ WSL-restart spam), and three stated mechanisms measured wrong —
+`enable-linger` is the wrong *layer* for the WSL death (the daemon is in `/init.scope`, the killer is Windows-side),
+`config.json` was marked `bus:none` on the increment that reads it, and the desktop toast fails for the wrong stated
+reason (no name owner, not "no session bus"). **Drive them on the real filesystem, with a real model.**)*
 **Phase 4 — Build the demo.**
 
 **The MVP away-autonomy boundary (D113 — locked, eyes open).** With the runner in, away-autonomy is **real
@@ -316,6 +327,9 @@ end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote 
   outward action or hand over a credential (*unless* the transport is E2E/Tailscale, which unlocks the credential case).
 - **Protected-branch pushes never auto-fire** (D110, absolute) — a human moves `main`.
 - **Remote needs a declared identity transport** (D112); **no webhook ⇒ no away alerting** (D111).
+- **On WSL, away alerting is conditional on a Windows-side setting the package cannot reach** (D120) — the daemon
+  dies with the last terminal unless `.wslconfig` sets `vmIdleTimeout=-1`; the daemon surfaces this in `status`
+  rather than implying an alert that will not arrive.
 - **One orchestrator is operator-assumed** (D109), with the runner's liveness marker as its one exception.
 
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, model/effort routing,

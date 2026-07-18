@@ -104,6 +104,20 @@ Deliberately deferred — known unknowns, to close during build or later.
   design. Deliberately **not** folded into Phase-3 increment 3 (it touches the handoff step and the brief, not the
   drain).
 
+- **The console page's legibility is now reviewed (D120), one nit left.** The twice-carried "nobody has rendered
+  the page in a browser" residual is **closed** — the live cockpit was rendered in headless Chrome and read as
+  legible (the pending-checkpoint card + verdict form, outward/release, request-work, "my requests"; overdue
+  checkpoints get a red bold "OVERDUE —"). **Remaining nit:** the deadline renders as a raw ISO string
+  (`2999-01-01T00:00:00+00:00`) where a human reads relative time ("due in 3 days") far better — a small
+  client-side formatting polish, non-blocking.
+
+- **The away-alert dedup key collides on a same-second re-park (D120) — accepted bound.** The daemon keys alert
+  state on `ticket_id` + the parked record's absolute `deadline` (`parked_seq` was removed as a field with no
+  writer). A ticket that resolves and re-parks within the same `deadline` second would be treated as
+  already-alerted. Accepted, not open: a re-park almost always yields a later `deadline` (a fresh `now +
+  deadline_hours`), so the collision needs two parks inside one second — and the failure is one missed *second*
+  alert on the same ticket, not a lost verdict. Revisit only if a real run shows sub-second re-parks.
+
 ## Deferred (post-MVP or later)
 - **Knowledge graph regenerate-vs-incremental** (`06`) — **RESOLVED (D78):** static layer regenerates + the durable
   *observed* layer is merged on regenerate. New open follow-ons from D78: node-ID stability across renames;

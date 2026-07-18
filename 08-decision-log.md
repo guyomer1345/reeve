@@ -2760,3 +2760,88 @@ real 9p mount vs ext4; the sensitive path driven end-to-end (redaction, store, u
 lifecycle driven through GC. Fixture tests in `scripts/test_bus.py` + `scripts/test_drain.py` (gate suite 128 → 177).
 Reuses D93/D95/D97/D99/D105/D108/D111/D115/D116. →
 `03`/`05`/`07`/`shared/schemas.md`/`scripts/bus.py`/`scripts/drain.py`/`11`.
+
+## D120 — The notifier built: alert state gets a home, event 2 ships its buildable arms, and three stated mechanisms measured wrong **[DECIDED + BUILT — Phase-3 increment 4; realizes D101/D111's away-alert; corrects D94's linger framing, D101/D111's event-2 sequencing, and D93/schemas' desktop rationale; MEASURED, not reasoned]**
+The daemon now watches `parked/` and alerts an away human — the console's one critical-path job. It is a **term on
+the existing `parked` job**, not a rewrite (the idle vote and the alert read the same open-checkpoint set — D116's
+jobs frame is exactly this). But four of the mechanism's load-bearing details had no owner or were stated wrong, and
+the wrong ones were only reachable by driving.
+- **Alert state had no home — the likeliest gap, and it is a fourth daemon-owned path.** D111 specified watch →
+  alert → re-alert → escalate but never said where "already alerted" is recorded. The daemon **cannot** write
+  `parked/` (single-writer, orchestrator's — D93) and **cannot** use `bus.json` (boot-scoped, rewritten at the
+  restart the state must survive). In memory ⇒ **every restart re-alerts every open checkpoint**, and on WSL
+  restarts are routine, so an away human gets spammed and learns to ignore the channel — D101's own failure mode.
+  **The call: `.workflow/alerts.json`, a fourth path the daemon alone writes** (`{checkpoints, dead_letters}`),
+  loaded at start so a restart is quiet, atomic-`0600`, pinned. Its governing rule is **fail toward noise: a lost
+  or corrupt file re-alerts rather than going silent** — a missed alert is the one failure this increment exists to
+  prevent. Not a second writer of anyone's partition (the daemon writing its own state), so D93 holds.
+- **Event 2 ships its two real-source arms; the third was a sequencing error.** D101/D111 said the daemon raises the
+  loop-hard-stop event "off an orchestrator-written hard-stop marker" — which **has no writer, and a crash cannot
+  write one anyway** (it needs orchestrator liveness, which D109 declined and D113 schedules as the runner's
+  precondition, increment 6). So two of the three D101 escalation arms are buildable **today** with zero new
+  writers — the record's absolute-`deadline` escalation, and the `handoff` **dead-letter** escalation (`drain.py`
+  writes `dead_letters[]`, the bus already reads it) — and the thrash/crash arm is **deferred to increment 6**,
+  where its liveness signal lands. This ships a *truthful* two-event taxonomy rather than one-and-a-half arms hung
+  on a marker no orchestrator could reliably write.
+- **`loginctl enable-linger` is the wrong lever for the WSL death — it would not have helped.** D94 filed the
+  daemon's death-with-terminal as an "owner-accepted caveat" with "`enable-linger` / `.wslconfig`" as the opt-in
+  upgrade, in one breath, as if alternatives. **Measured false:** `KillUserProcesses=no` (logind kills nothing on
+  session end), and both a shell and a `setsid` child land in **`/init.scope`, not `user-1000.slice`** — linger
+  keeps alive a slice the daemon never lives in. The real killer is the WSL **VM lifecycle**, Windows-side,
+  reachable only from `.wslconfig` (`vmIdleTimeout`), which **no setting inside the distro and no line of `bus.py`
+  can veto.** So the question "is linger a `/start` step or a precondition" has no useful answer — linger is not on
+  the menu. **The call: probe and surface, never block.** The daemon detects WSL at boot and reports away-channel
+  readiness — webhook configured?, currently failing?, and the WSL death caveat — in the boot log and `status`,
+  because a notifier that cannot notify must be *visible*, not silent (D111's own standard). Refusing to boot was
+  rejected: it would break increments 1–3, which lose nothing without alerting (the inbox is durable).
+- **`config.json` was `bus:none` — "the bus never touches it" — and this increment makes the daemon read it.** A
+  straight contradiction under D114 (the tree is the single owner of `bus:` markers). Now `bus:read`. The daemon
+  reads `notify`/`checkpoint` across the committed repo mount; static after init, and a parse failure degrades to
+  **no away channel, surfaced** — the safe direction. And the **desktop-toast rationale was measurably wrong**
+  (small, but the pattern again): `schemas.md` said a toast "needs a session bus, has none on WSL/headless."
+  Measured: the session bus **exists** (`/run/user/1000/bus`) and `notify-send` is installed; it fails because **no
+  daemon owns `org.freedesktop.Notifications`**. Right conclusion (toast is best-effort), wrong reason — corrected,
+  and the failure now reaches `status` instead of vanishing.
+- **`parked_seq` is removed, not given a writer.** It appeared once repo-wide — in the parked-ticket field list —
+  with no writer, no reader, no semantics. It was the only field that could distinguish two *different* checkpoints
+  on the *same* ticket, which the alert-dedup key needs. Rather than invent a writer for a speculative field, the
+  key is **`ticket_id` + the absolute `deadline`** — which has stated semantics and is stamped fresh at each park,
+  so a resolve-then-re-park alerts again. Its one bound (two parks landing the same `deadline` second collide) is
+  accepted and recorded in `07`: a re-park almost always yields a later deadline, and the cost is one missed
+  *second* alert on one ticket, never a lost verdict.
+- **The webhook is a doorbell, not a letter, and not a D105 outward action.** Gating an *alert* behind human
+  approval is circular (the human is away — that is why we alert), so it does not join the outbox. SSRF is a
+  non-threat: the URL is the operator's own committed `config.json`, and whoever can edit it already owns
+  `CLAUDE.md`. The real concern is the payload — so it carries **only `{event, ticket_id, deadline, overdue,
+  console}`, never the request body or notes** — project content (and any credential a request field might carry)
+  does not leave the machine for a third party like Slack. Verified: the driven POST carried the ticket, not the
+  request text. Delivery failure is a **channel** property — a failing webhook backs off the whole channel
+  (doubling, capped at `reminder_hours`) and does not mark the checkpoint alerted, so a dead URL neither storms nor
+  loses the alert; the reminder path retries once it recovers.
+- **Escalation continues, it does not go quiet.** Past the deadline the daemon escalates **once** (a distinct
+  overdue alert), then reminders **continue marked overdue** — going silent after escalating loses the ticket; a
+  reminder storm trains ignoring. And **no backlog replay**: a daemon gone 10h with a 4h interval fires **one**
+  reminder on wake, not three.
+- **Driven, never type-checked (the failures here are invisible to a static read).** A real detached `bus.py ensure`
+  daemon POSTed a real HTTP sink (doorbell payload, no request body); `stop` → `ensure` (a fresh daemon, same disk)
+  fired **zero** duplicate alerts — the restart idempotency that in-memory state would have spammed; reminders,
+  escalate-once-then-overdue, re-park-re-alerts, no-backlog-replay, dead-URL-backoff, slack-vs-generic,
+  no-webhook-⇒-no-POST, and desktop-failure-surfaced all driven; the three pre-measurements (`Linger=no`, no
+  notification name owner, `/init.scope`) reproduced. 18 fixture tests (gate suite 181 → 199). **The twice-carried
+  browser-render residual is CLOSED** — the live cockpit was rendered in headless Chrome and read as legible; one
+  non-blocking nit (raw-ISO deadline) is filed in `07`.
+*Rejected:* in-memory alert state (re-alerts every open checkpoint on every restart — WSL spam); folding it into
+`bus.json` (boot-scoped — destroyed at the restart it must survive); building the hard-stop marker now (cannot catch a
+crash — the main case — and pulls increment-6 liveness work forward); `enable-linger` as the WSL fix (wrong layer —
+the daemon is in `/init.scope`, and the VM is Windows-side); a hard boot precondition (breaks increments 1–3, which
+work without alerting); desktop toast as the default away channel (reaches nobody away, and fails on this box); a rich
+payload echoing the request body (data egress to a third party, and can leak a credential — against D119's
+keep-secrets-out-of-context discipline); keeping `parked_seq` (a field with no writer, invented for a speculative
+re-park); going silent after escalation (loses the ticket) or storming (trains ignoring).
+*Evidence:* three pre-measurements re-measured on the real machine (`loginctl show-user … Linger=no`; `GetNameOwner
+org.freedesktop.Notifications` → `NameHasNoOwner` with the session bus present; `/proc/self/cgroup` = `/init.scope`
+for a `setsid` child, `KillUserProcesses=no`); the away channel driven end-to-end against a real HTTP sink from a real
+detached daemon; the restart-no-duplicate path driven at the CLI boundary; `notify-send` observed failing with
+`ServiceUnknown`; the cockpit rendered in headless Chrome. Fixture tests in `scripts/test_bus.py` (gate suite 181 →
+199). Depends on D93/D94/D101/D111/D116; reuses D80/D95/D97/D105/D108/D109/D113/D114/D119. →
+`03`/`05`/`07`/`shared/schemas.md`/`commands/start.md`/`scripts/bus.py`/`scripts/test_bus.py`/`11`.

@@ -144,9 +144,13 @@ master rule, so B4 was *more* constrained than "deferred" implied.
   the one hard dependency (D71), and the D95 CSP rules out CDNs — every comparable local-first tool
   (Syncthing/Ollama/Jupyter) uses its language's built-in HTTP server for exactly this reason.
 
-## Attention / notification **[DECIDED — D101 taxonomy; mechanism corrected by D111]**
+## Attention / notification **[DECIDED — D101 taxonomy; mechanism corrected by D111; BUILT — D120]**
 MVP **event taxonomy** (D101, unchanged) = fire on exactly **(1) a checkpoint being raised** and **(2) the loop
 hard-stopping / an escalation** (a D92 thrash-stop, or a D91/D97 dead-letter / stale-deadline escalation).
+**Built (D120):** event 1 ships whole, and event 2 ships as its two **real-source** arms — the record's
+absolute-`deadline` escalation and the `handoff` **dead-letter** escalation. The third arm, a thrash/crash
+hard-stop, needs an orchestrator liveness signal that does not exist until the runner (increment 6), so it is
+deferred there rather than hung on a marker no live-or-crashed orchestrator could reliably write.
 Reminders are **not** a new event — they ride D97's timeout-resurfacing + D91 aging. Per-step progress /
 per-item-done / outward-gate pings are out of MVP (false-positive noise trains the human to ignore the channel).
 
@@ -159,4 +163,7 @@ absolute `deadline` (never auto-proceeding), and raises the hard-stop event off 
 The `checkpoint` skill sends nothing — writing the parked record *is* the trigger. Channel = `config.notify`: the
 **webhook is the away channel** (a phone, from a headless daemon), desktop toast is best-effort, and **no webhook
 ⇒ no away alerting** (the human polls the console) — stated plainly, not implied. So the shipped `settings.json`
-needs **no `Notification` hook at all**.
+needs **no `Notification` hook at all**. The daemon reports away-channel readiness in `status` — webhook
+configured?, currently failing?, and the **WSL death caveat**: on WSL this daemon (and the away channel with it)
+dies shortly after the last terminal closes unless `.wslconfig` sets `vmIdleTimeout=-1` on the Windows side, which
+the package cannot set — so a notifier that cannot notify is *visible*, not silent.

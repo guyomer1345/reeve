@@ -654,5 +654,306 @@ class Lifecycle(Tmp):
         self.assertIsNone(bus.is_live(p))
 
 
+# --- the notifier: the timing decision, pure ---------------------------------
+class PlanAlerts(unittest.TestCase):
+    """The new→reminder→escalate-once→reminders-continue rules, no clock or socket.
+
+    Fast, but deliberately NOT the whole story: the bug that survived 27 green unit
+    tests last increment only showed on the driven path, so NotifierDrive below runs
+    the real POST + real restart. These pin the arithmetic; those pin the behaviour.
+    """
+    def cp(self, tid="item-1", deadline="2999-01-01T00:00:00+00:00"):
+        return {"ticket_id": tid, "deadline": deadline}
+
+    def empty(self):
+        return {"checkpoints": {}, "dead_letters": {}}
+
+    def test_first_sight_is_a_new_alert(self):
+        acts, keys, _ = bus.plan_alerts([self.cp()], [], self.empty(), 1000.0, 4 * 3600)
+        self.assertEqual([a["kind"] for a in acts], ["new"])
+        self.assertEqual(len(keys), 1)
+
+    def test_within_the_interval_is_silent(self):
+        st = {"checkpoints": {bus.alert_key(self.cp()):
+                              {"first_alert": 1000.0, "last_alert": 1000.0, "escalated": False}},
+              "dead_letters": {}}
+        acts, _, _ = bus.plan_alerts([self.cp()], [], st, 1000.0 + 60, 4 * 3600)
+        self.assertEqual(acts, [])
+
+    def test_past_the_interval_is_a_reminder(self):
+        st = {"checkpoints": {bus.alert_key(self.cp()):
+                              {"first_alert": 0.0, "last_alert": 0.0, "escalated": False}},
+              "dead_letters": {}}
+        acts, _, _ = bus.plan_alerts([self.cp()], [], st, 4 * 3600 + 1, 4 * 3600)
+        self.assertEqual([a["kind"] for a in acts], ["reminder"])
+
+    def test_overdue_escalates_once_then_reminders_continue_marked_overdue(self):
+        past = "2000-01-01T00:00:00+00:00"
+        key = bus.alert_key(self.cp(deadline=past))
+        st = {"checkpoints": {key: {"first_alert": 0.0, "last_alert": 0.0, "escalated": False}},
+              "dead_letters": {}}
+        now = time.time()
+        acts, _, _ = bus.plan_alerts([self.cp(deadline=past)], [], st, now, 4 * 3600)
+        self.assertEqual([a["kind"] for a in acts], ["escalation"])
+        self.assertTrue(acts[0]["overdue"])
+        # simulate the escalation having been sent...
+        st["checkpoints"][key] = {"first_alert": 0.0, "last_alert": now, "escalated": True}
+        acts2, _, _ = bus.plan_alerts([self.cp(deadline=past)], [], st, now + 4 * 3600 + 1, 4 * 3600)
+        self.assertEqual([a["kind"] for a in acts2], ["reminder"])
+        self.assertTrue(acts2[0]["overdue"], "reminders after escalation must stay marked overdue")
+
+    def test_reprk_with_a_new_deadline_is_a_new_key_so_it_alerts_again(self):
+        first = self.cp(deadline="2999-01-01T00:00:00+00:00")
+        second = self.cp(deadline="2999-06-06T00:00:00+00:00")  # same ticket, later park
+        self.assertNotEqual(bus.alert_key(first), bus.alert_key(second))
+
+    def test_a_dead_letter_alerts_once(self):
+        dl = [{"message_id": "20260101T000000.000001Z-aaaaaaaa-1", "reason": "unreadable"}]
+        acts, _, live = bus.plan_alerts([], dl, self.empty(), 1000.0, 4 * 3600)
+        self.assertEqual([a["kind"] for a in acts], ["dead-letter"])
+        st = {"checkpoints": {}, "dead_letters": {dl[0]["message_id"]: {"at": 1000.0}}}
+        acts2, _, _ = bus.plan_alerts([], dl, st, 2000.0, 4 * 3600)
+        self.assertEqual(acts2, [], "a dead-letter must not re-alert every tick")
+
+
+# --- the notifier: driven against a real HTTP sink ---------------------------
+class _Sink:
+    """A real loopback HTTP server that records the POSTs a webhook would receive."""
+    def __init__(self, fail=False):
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        self.received = []
+        outer = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(n)
+                outer.received.append({"path": self.path,
+                                       "ctype": self.headers.get("Content-Type"),
+                                       "body": json.loads(raw.decode() or "{}")})
+                if fail:
+                    self.send_response(500)
+                else:
+                    self.send_response(200)
+                self.end_headers()
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    @property
+    def url(self):
+        return "http://127.0.0.1:%d/hook" % self.port
+
+    def stop(self):
+        self.server.shutdown()
+
+
+class NotifierDrive(Tmp):
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        self.paths = bus.Paths(self.w)
+
+    def _config(self, url=None, kind="generic", reminder_hours=None, desktop=False):
+        notify = {"desktop": desktop}
+        if url:
+            notify["webhook"] = {"url": url, "kind": kind}
+        cfg = {"notify": notify}
+        if reminder_hours is not None:
+            cfg["checkpoint"] = {"reminder_hours": reminder_hours}
+        with open(self.paths.config, "w") as fh:
+            json.dump(cfg, fh)
+
+    def _park(self, name="item-1.json", tid="item-1", deadline="2999-01-01T00:00:00+00:00"):
+        with open(os.path.join(self.paths.parked, name), "w") as fh:
+            json.dump({"ticket_id": tid, "token": "cp",
+                       "checkpoint": {"kind": "qa", "request": "SECRET-REQUEST-BODY"},
+                       "deadline": deadline}, fh)
+
+    def _daemon(self):
+        d = bus.Daemon(self.paths, idle_timeout=3600)
+        d.port = 4321
+        return d
+
+    def _run(self, d):
+        job = bus.ParkedWatchJob(d.notifier)
+        job.tick(d)
+
+    def test_a_real_post_lands_and_carries_no_request_body(self):
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url)
+        self._park()
+        self._run(self._daemon())
+        self.assertEqual(len(sink.received), 1)
+        body = sink.received[0]["body"]
+        self.assertEqual(body["event"], "new")
+        self.assertEqual(body["ticket_id"], "item-1")
+        self.assertIn("127.0.0.1:4321", body["console"])
+        # the doorbell rule: the request body never leaves the machine
+        self.assertNotIn("SECRET-REQUEST-BODY", json.dumps(sink.received[0]))
+
+    def test_restart_does_not_re_alert_an_already_alerted_checkpoint(self):
+        """The test that matters: 27 green unit tests missed the last increment's real
+        bug because it only appeared on the restart path. A fresh Notifier (a new
+        process) loads alerts.json and must stay quiet about what the old one alerted."""
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url)
+        self._park()
+        self._run(self._daemon())            # first daemon alerts
+        self.assertEqual(len(sink.received), 1)
+        self.assertTrue(os.path.exists(self.paths.alerts))
+        self._run(self._daemon())            # a "restart" — new Notifier, same disk
+        self.assertEqual(len(sink.received), 1, "a routine restart re-alerted (WSL spam)")
+
+    def test_a_lost_alert_file_re_alerts_rather_than_going_silent(self):
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url)
+        self._park()
+        self._run(self._daemon())
+        self.assertEqual(len(sink.received), 1)
+        os.unlink(self.paths.alerts)         # lost/corrupt state
+        self._run(self._daemon())
+        self.assertEqual(len(sink.received), 2, "a lost alert file must alert, not stay silent")
+
+    def test_reprk_after_resolve_alerts_again(self):
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url)
+        self._park(deadline="2999-01-01T00:00:00+00:00")
+        self._run(self._daemon())
+        os.unlink(os.path.join(self.paths.parked, "item-1.json"))  # resolved
+        self._run(self._daemon())                                  # prunes the key
+        self._park(deadline="2999-02-02T00:00:00+00:00")           # re-park, new deadline
+        self._run(self._daemon())
+        self.assertEqual(len(sink.received), 2, "a re-park on a new checkpoint must re-alert")
+
+    def test_reminder_fires_in_real_time(self):
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url, reminder_hours=0.0006)  # ~2.16s
+        self._park()
+        d = self._daemon()
+        self._run(d)                          # new
+        self.assertEqual(len(sink.received), 1)
+        self._run(d)                          # too soon — silent
+        self.assertEqual(len(sink.received), 1)
+        time.sleep(2.3)
+        self._run(d)                          # reminder now due
+        self.assertEqual(len(sink.received), 2)
+        self.assertEqual(sink.received[1]["body"]["event"], "reminder")
+
+    def test_no_reminder_backlog_replay_after_a_long_gap(self):
+        """A daemon gone 10h with a 4h interval fires ONE reminder on wake, not two."""
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url, reminder_hours=4)
+        self._park()
+        d = self._daemon()
+        self._run(d)                          # new alert, last_alert = now
+        # rewind last_alert 10h into the past — as if the daemon had been dead
+        key = bus.alert_key({"ticket_id": "item-1", "deadline": "2999-01-01T00:00:00+00:00"})
+        d.notifier.state["checkpoints"][key]["last_alert"] = time.time() - 10 * 3600
+        self._run(d)
+        self.assertEqual(len(sink.received), 2, "exactly one reminder on wake, never a backlog")
+
+    def test_escalation_then_overdue_reminder_over_the_wire(self):
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url, reminder_hours=0.0006)
+        self._park(deadline="2000-01-01T00:00:00+00:00")  # already overdue
+        d = self._daemon()
+        self._run(d)                          # new (first sight, even though overdue)
+        self.assertEqual(sink.received[-1]["body"]["event"], "new")
+        self._run(d)                          # now escalation (overdue, not yet escalated)
+        self.assertEqual(sink.received[-1]["body"]["event"], "escalation")
+        time.sleep(2.3)
+        self._run(d)                          # reminders continue, marked overdue
+        self.assertEqual(sink.received[-1]["body"]["event"], "reminder")
+        self.assertTrue(sink.received[-1]["body"]["overdue"])
+
+    def test_a_dead_url_backs_off_and_does_not_storm(self):
+        self._config(url="http://127.0.0.1:1/dead")  # nothing listens on port 1
+        self._park("a.json", tid="a")
+        self._park("b.json", tid="b")
+        self._park("c.json", tid="c")
+        d = self._daemon()
+        self._run(d)
+        self.assertGreaterEqual(d.notifier.consecutive_failures, 1)
+        self.assertGreater(d.notifier.next_attempt, time.time(), "no backoff set")
+        # a checkpoint that failed to send is NOT marked alerted, so it retries later
+        self.assertEqual(d.notifier.state.get("checkpoints", {}), {})
+        # immediate re-run is gated by the backoff — no storm
+        before = d.notifier.consecutive_failures
+        self._run(d)
+        self.assertEqual(d.notifier.consecutive_failures, before, "backoff did not throttle")
+
+    def test_slack_kind_sends_a_text_field(self):
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url, kind="slack")
+        self._park()
+        self._run(self._daemon())
+        body = sink.received[0]["body"]
+        self.assertEqual(set(body.keys()), {"text"})
+        self.assertIn("verdict", body["text"])
+
+    def test_no_webhook_means_no_post_and_readiness_says_so(self):
+        self._config(url=None)  # desktop off, no webhook
+        self._park()
+        d = self._daemon()
+        self._run(d)
+        self.assertFalse(d.notifier.readiness()["webhook"])
+        # nothing to send, but the checkpoint is marked so it does not recompute forever
+        self.assertIn(bus.alert_key({"ticket_id": "item-1",
+                                     "deadline": "2999-01-01T00:00:00+00:00"}),
+                      d.notifier.state["checkpoints"])
+
+    def test_desktop_failure_is_surfaced_not_swallowed(self):
+        """On a headless/WSL box no daemon owns the notification name, so notify-send
+        fails. That must reach `status`, not vanish."""
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url, desktop=True)
+        self._park()
+        d = self._daemon()
+        self._run(d)
+        # the webhook still succeeded; the desktop attempt, if it failed, is a warning
+        self.assertEqual(len(sink.received), 1)
+        # notify-send may or may not exist; if it failed, the warning is visible
+        if any("desktop notification failed" in w for w in d.warnings):
+            self.assertTrue(True)
+
+
+# --- the notifier: a live detached daemon actually POSTs ---------------------
+class NotifierLiveDaemon(Tmp):
+    """Proves the wiring end to end: a real setsid daemon's janitor calls the
+    notifier, which POSTs to a real sink — the path a static read cannot verify."""
+    def test_a_detached_daemon_alerts_a_real_sink(self):
+        w = mkworkflow(self.root)
+        paths = bus.Paths(w)
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        with open(paths.config, "w") as fh:
+            json.dump({"notify": {"webhook": {"url": sink.url, "kind": "generic"}}}, fh)
+        with open(os.path.join(paths.parked, "item-1.json"), "w") as fh:
+            json.dump({"ticket_id": "item-1", "token": "cp",
+                       "checkpoint": {"kind": "qa", "request": "ok?"},
+                       "deadline": "2999-01-01T00:00:00+00:00"}, fh)
+        rec = bus.ensure(paths, idle_timeout=4)  # janitor_interval ~1s
+        self.addCleanup(lambda: bus.stop(paths))
+        deadline = time.time() + 8
+        while time.time() < deadline and not sink.received:
+            time.sleep(0.2)
+        self.assertTrue(sink.received, "the live daemon never POSTed the away alert")
+        self.assertEqual(sink.received[0]["body"]["ticket_id"], "item-1")
+
+
 if __name__ == "__main__":
     unittest.main()

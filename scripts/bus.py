@@ -82,6 +82,10 @@ GIT_CACHE_TTL = 10            # seconds; the poll runs every few seconds
 RECENT_COMMITS = 10
 TOKEN_HEADER = "X-Bus-Token"  # a custom header: forces the CSRF-defeating preflight
 HEALTH_TIMEOUT = 3
+DEFAULT_REMINDER_HOURS = 4    # how often an open checkpoint re-alerts while not overdue
+WEBHOOK_TIMEOUT = 5           # seconds; an away-alert POST must never pin the janitor
+TOAST_TIMEOUT = 5            # seconds; a desktop toast is best-effort, never blocking
+BACKOFF_BASE = 30            # seconds; a failing away channel backs off, doubling from here
 
 
 # --- path resolution --------------------------------------------------------
@@ -105,6 +109,12 @@ class Paths:
         self.parked = os.path.join(self.runtime, "parked")
         self.inbox = os.path.join(self.runtime, "inbox")
         self.outbox = os.path.join(self.runtime, "outbox")
+        # The daemon's own away-alert bookkeeping (which open checkpoints it has
+        # already alerted on). It cannot live in parked/ (single-writer, not the
+        # daemon's) nor in the boot-scoped discovery record, so it is a fourth path
+        # the daemon alone writes. A lost or corrupt copy re-alerts rather than going
+        # silent — a missed alert is the failure this exists to prevent.
+        self.alerts = os.path.join(self.runtime, "alerts.json")
         # Pinned for the same measured reason as the token: these are live credentials
         # on a tree whose mount may ignore 0600 and say nothing. The bus never touches
         # this path — it is here because path resolution has one owner.
@@ -203,6 +213,25 @@ def read_json(path):
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+_IS_WSL = None
+
+
+def is_wsl():
+    """True on WSL, measured once from /proc/version.
+
+    It matters to the away channel specifically: on WSL the VM (and this daemon with
+    it) is torn down by the Windows host ~8s after the last terminal closes, and no
+    setting inside the distro can veto that — it is a `.wslconfig` question on the
+    Windows side, which this package cannot reach. So the daemon that must alert an
+    away human can itself be gone in exactly the away scenario, and the honest move is
+    to say so rather than imply an alert will arrive.
+    """
+    global _IS_WSL
+    if _IS_WSL is None:
+        _IS_WSL = "microsoft" in (read_text("/proc/version", limit=4096) or "").lower()
+    return _IS_WSL
 
 
 def probe_mode(root):
@@ -523,6 +552,310 @@ class InboxWriter:
             return []
 
 
+# --- the notifier -----------------------------------------------------------
+# The daemon is the only process alive across every state the away-channel exists
+# for — the orchestrator busy on the next ticket, whole-parked, or dead — so it is
+# the one that can own alerting. Writing a parked record IS the trigger: the parking
+# skill sends nothing. The daemon watches parked/, alerts on a new open checkpoint,
+# re-alerts every reminder interval, and escalates once past the record's absolute
+# deadline (never auto-proceeding). It also raises the second event — the loop
+# hard-stop/escalation — off the sources that exist today: a dead-lettered console
+# message (handoff's machine block). A thrash/crash hard-stop needs an orchestrator
+# liveness signal that does not exist yet, so that arm waits for the runner.
+#
+# The away channel is BYO-webhook, stated plainly: the webhook reaches a phone and
+# works from a detached daemon; a desktop toast is best-effort (Linux-only, and needs
+# a notification daemon to own the D-Bus name — absent on a headless/WSL box). With
+# no webhook configured there is NO away alerting, and the daemon says so rather than
+# implying an alert that reaches nobody.
+class ConfigCache:
+    """Re-reads config.json only when its mtime changes.
+
+    So adding a webhook to a running project takes effect within a poll interval
+    instead of needing a restart, without re-parsing on every janitor tick. config is
+    committed (repo mount); a parse failure degrades to {} — i.e. no away channel —
+    which is the safe direction: a silent miss is the one outcome to avoid, and this
+    surfaces as away-channel-not-ready rather than a crash.
+    """
+    def __init__(self, path):
+        self.path = path
+        self._mtime = None
+        self._cfg = {}
+
+    def get(self):
+        try:
+            mtime = os.stat(self.path).st_mtime
+        except OSError:
+            self._mtime, self._cfg = None, {}
+            return self._cfg
+        if mtime != self._mtime:
+            self._mtime = mtime
+            cfg = read_json(self.path)
+            self._cfg = cfg if isinstance(cfg, dict) else {}
+        return self._cfg
+
+
+def reminder_seconds(cfg):
+    """config.checkpoint.reminder_hours → seconds (float, so a test can use ~2s)."""
+    cp = cfg.get("checkpoint") if isinstance(cfg.get("checkpoint"), dict) else {}
+    try:
+        hours = float(cp.get("reminder_hours", DEFAULT_REMINDER_HOURS))
+    except (TypeError, ValueError):
+        hours = DEFAULT_REMINDER_HOURS
+    return max(0.0, hours) * 3600.0
+
+
+def parse_deadline(value):
+    """An absolute ISO deadline → epoch seconds, or None if absent/unparseable.
+
+    Unparseable degrades to None (never overdue) rather than raising: a missing
+    deadline must not stop the new-checkpoint alert from firing.
+    """
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def alert_key(rec):
+    """Identity of a checkpoint for alert-dedup.
+
+    ticket_id alone is not enough: a ticket can park, resolve, and re-park on a
+    DIFFERENT checkpoint, and keying on the ticket would suppress the second alert.
+    The absolute deadline is the discriminator — it has stated semantics and a new
+    park stamps a fresh one. Its one bound: two parks of the same ticket that land the
+    same deadline second collide; accepted, since a re-park almost always yields a
+    later deadline.
+    """
+    return "%s|%s" % (rec.get("ticket_id") or "?", rec.get("deadline"))
+
+
+def plan_alerts(open_cps, dead_letters, state, now, reminder_secs):
+    """Pure decision: what to send this tick, and which keys are still live.
+
+    Returns (actions, live_checkpoint_keys, live_dead_letter_ids). Kept side-effect
+    free so the timing rules — new → reminder → escalate-once → reminders-continue —
+    are unit-testable without a clock, a webhook, or disk.
+    """
+    actions = []
+    cpt_state = state.get("checkpoints", {})
+    live_keys = set()
+    for rec in open_cps:
+        key = alert_key(rec)
+        live_keys.add(key)
+        deadline = parse_deadline(rec.get("deadline"))
+        overdue = bool(deadline is not None and now > deadline)
+        entry = cpt_state.get(key)
+        base = {"key": key, "ticket_id": rec.get("ticket_id"),
+                "deadline": rec.get("deadline"), "overdue": overdue}
+        if not entry or entry.get("last_alert") is None:
+            actions.append(dict(base, kind="new"))
+        elif overdue and not entry.get("escalated"):
+            actions.append(dict(base, kind="escalation"))
+        elif (now - entry["last_alert"]) >= reminder_secs:
+            actions.append(dict(base, kind="reminder"))
+    live_dl = set()
+    dl_state = state.get("dead_letters", {})
+    for entry in dead_letters:
+        mid = (entry or {}).get("message_id")
+        if not mid:
+            continue
+        live_dl.add(mid)
+        if mid not in dl_state:
+            actions.append({"kind": "dead-letter", "message_id": mid,
+                            "reason": (entry or {}).get("reason")})
+    return actions, live_keys, live_dl
+
+
+class Notifier:
+    """Owns the away channel: config, alert bookkeeping, and delivery.
+
+    Alert state (which checkpoints/dead-letters have been alerted) is loaded from disk
+    at construction, so a restart does not re-alert everything already open — which on
+    WSL, where restarts are routine, would train the human to ignore the channel.
+
+    Delivery failure is a CHANNEL property, not a per-checkpoint one, so a failing
+    webhook backs off the whole channel (doubling from BACKOFF_BASE, capped at the
+    reminder interval) rather than storming a dead URL once per open checkpoint. A
+    failed send does not mark the checkpoint alerted, so the existing reminder path
+    retries it for free once the channel recovers.
+    """
+    def __init__(self, paths):
+        self.paths = paths
+        self.config = ConfigCache(paths.config)
+        self.state = self._load(paths.alerts)
+        self.port = None
+        self.consecutive_failures = 0
+        self.next_attempt = 0.0
+        self.last_error = None
+
+    def _load(self, path):
+        data = read_json(path)
+        if not isinstance(data, dict):
+            return {"checkpoints": {}, "dead_letters": {}}
+        for k in ("checkpoints", "dead_letters"):
+            if not isinstance(data.get(k), dict):
+                data[k] = {}
+        return data
+
+    def _persist(self):
+        try:
+            atomic_write(self.paths.alerts,
+                         json.dumps(self.state, indent=1) + "\n", mode=0o600)
+        except OSError as exc:
+            log("could not persist alert state: %s" % exc)
+
+    def run_once(self, daemon, open_cps):
+        if daemon.port:
+            self.port = daemon.port
+        cfg = self.config.get()
+        reminder_secs = reminder_seconds(cfg)
+        dead = read_handoff_block(daemon.paths.handoff).get("dead_letters") or []
+        now = time.time()
+        changed = False
+        if now >= self.next_attempt:
+            actions, live_keys, live_dl = plan_alerts(
+                open_cps, dead, self.state, now, reminder_secs)
+            for action in actions:
+                ok, detail = self.deliver(daemon, cfg, action)
+                if detail.get("desktop"):
+                    daemon.warn("desktop notification failed (best-effort, so the "
+                                "away channel is the webhook): %s" % detail["desktop"])
+                if not ok:
+                    self._backoff(daemon, now, reminder_secs, detail.get("webhook"))
+                    break
+                self.consecutive_failures = 0
+                self.last_error = None
+                self._record_success(action, now)
+                changed = True
+        else:
+            live_keys = {alert_key(r) for r in open_cps}
+            live_dl = {m for m in ((d or {}).get("message_id") for d in dead) if m}
+        changed = self._prune(live_keys, live_dl) or changed
+        if changed:
+            self._persist()
+
+    def _backoff(self, daemon, now, reminder_secs, err):
+        self.consecutive_failures += 1
+        cap = reminder_secs or 3600.0
+        delay = min(cap, BACKOFF_BASE * (2 ** (self.consecutive_failures - 1)))
+        self.next_attempt = now + delay
+        self.last_error = err
+        daemon.warn("away webhook failed (%d in a row, retrying in ~%ds): %s"
+                    % (self.consecutive_failures, int(delay), err))
+
+    def _record_success(self, action, now):
+        if action["kind"] == "dead-letter":
+            self.state.setdefault("dead_letters", {})[action["message_id"]] = {"at": now}
+            return
+        cps = self.state.setdefault("checkpoints", {})
+        entry = cps.setdefault(action["key"],
+                               {"first_alert": None, "last_alert": None, "escalated": False})
+        if entry["first_alert"] is None:
+            entry["first_alert"] = now
+        entry["last_alert"] = now
+        if action["kind"] == "escalation":
+            entry["escalated"] = True
+
+    def _prune(self, live_keys, live_dl):
+        """Drop state for checkpoints/dead-letters no longer present.
+
+        This is what makes a resolved-then-re-parked ticket alert again (its new
+        deadline is a new key), and it bounds the file. The one bound: a re-park that
+        lands the same deadline second collides — accepted, since a re-park almost
+        always yields a later deadline.
+        """
+        changed = False
+        for bucket, live in (("checkpoints", live_keys), ("dead_letters", live_dl)):
+            store = self.state.get(bucket, {})
+            for key in [k for k in store if k not in live]:
+                del store[key]
+                changed = True
+        return changed
+
+    # -- delivery --
+    def deliver(self, daemon, cfg, action):
+        """Send one alert. Returns (ok, detail).
+
+        ok is the WEBHOOK's health (the real away channel): False only when a
+        configured webhook POST fails, so a failure backs the channel off. A desktop
+        toast is best-effort — its failure is reported but never fails the send or
+        blocks the channel. No webhook configured ⇒ ok=True (nothing to retry; the
+        documented degradation), and the human polls the console.
+        """
+        notify = cfg.get("notify") if isinstance(cfg.get("notify"), dict) else {}
+        text, payload = self._shape(daemon, action)
+        detail = {}
+        if notify.get("desktop"):
+            detail["desktop"] = self._toast(text)
+        webhook = notify.get("webhook") if isinstance(notify.get("webhook"), dict) else {}
+        url = webhook.get("url")
+        if not url:
+            return True, detail
+        detail["webhook"] = self._post(url, webhook.get("kind"), payload, text)
+        return detail["webhook"] is None, detail
+
+    def _shape(self, daemon, action):
+        """The doorbell payload — enough to know a verdict is owed and where to give
+        it, never the request body or notes. Project content (and any credential a
+        request field might carry) does not leave the machine for a third party.
+        """
+        port = self.port or daemon.port
+        console = "http://127.0.0.1:%s/" % (port if port else "?")
+        kind = action["kind"]
+        if kind == "dead-letter":
+            reason = action.get("reason") or "unspecified"
+            text = ("Loop escalation: a console message could not be applied "
+                    "(%s). Open %s" % (reason, console))
+            return text, {"event": "dead-letter", "message_id": action["message_id"],
+                          "reason": reason, "console": console, "text": text}
+        verb = {"new": "A checkpoint needs your verdict",
+                "reminder": "Still waiting on your verdict",
+                "escalation": "OVERDUE — a checkpoint passed its deadline"}[kind]
+        tid = action.get("ticket_id") or "?"
+        text = "%s (ticket %s, deadline %s). Open %s" % (
+            verb, tid, action.get("deadline") or "—", console)
+        return text, {"event": kind, "ticket_id": tid,
+                      "deadline": action.get("deadline"),
+                      "overdue": bool(action.get("overdue")),
+                      "console": console, "text": text}
+
+    def _post(self, url, kind, payload, text):
+        import urllib.error
+        import urllib.request
+        body = {"text": text} if kind == "slack" else payload
+        req = urllib.request.Request(
+            url, data=json.dumps(body).encode(), method="POST",
+            headers={"Content-Type": "application/json", "User-Agent": "loop-bus"})
+        try:
+            with urllib.request.urlopen(req, timeout=WEBHOOK_TIMEOUT) as res:
+                res.read()
+            return None
+        except (urllib.error.URLError, OSError, ValueError) as exc:
+            return str(exc)
+
+    def _toast(self, text):
+        try:
+            subprocess.run(["notify-send", "Claude loop", text], timeout=TOAST_TIMEOUT,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+            return None
+        except (OSError, subprocess.SubprocessError) as exc:
+            return str(exc)
+
+    def readiness(self):
+        """The away-channel state a human reads in `status` — configured y/n, whether
+        it is currently failing, and the WSL death caveat. A notifier that cannot
+        notify must be VISIBLE, not silent.
+        """
+        cfg = self.config.get()
+        notify = cfg.get("notify") if isinstance(cfg.get("notify"), dict) else {}
+        webhook = notify.get("webhook") if isinstance(notify.get("webhook"), dict) else {}
+        out = {"webhook": bool(webhook.get("url")), "desktop": bool(notify.get("desktop")),
+               "consecutive_failures": self.consecutive_failures,
+               "last_error": self.last_error, "wsl": is_wsl()}
+        return out
+
+
 # --- the jobs ---------------------------------------------------------------
 class Job:
     name = "job"
@@ -560,10 +893,20 @@ class ParkedWatchJob(Job):
     self-shuts while a checkpoint is open defeats its own purpose in precisely the
     scenario it was built for.
 
-    Alerting hangs off this same scan later; the scan is deliberately here now so
-    the janitor is correct from the first line rather than retrofitted.
+    Alerting now hangs off this same scan: the idle vote and the alert read the same
+    open-checkpoint set, so the janitor cannot reap the daemon while a verdict it is
+    still trying to alert about is owed. The notifier is a TERM on this job, not a
+    rewrite of the frame.
     """
     name = "parked"
+
+    def __init__(self, notifier=None):
+        self.notifier = notifier
+
+    def tick(self, daemon):
+        notifier = self.notifier or daemon.notifier
+        if notifier is not None:
+            notifier.run_once(daemon, self.open_checkpoints(daemon))
 
     def open_checkpoints(self, daemon):
         out = []
@@ -1187,11 +1530,13 @@ class Daemon:
         self.paths = paths
         self.idle_timeout = idle_timeout
         self.token = None
+        self.port = None
         self.lock_fd = None
         self.server = None
         self.model = ReadModel(paths)
         self.inbox = InboxWriter(paths)
-        self.jobs = [ServeJob(), ParkedWatchJob(), InboxGCJob()]
+        self.notifier = Notifier(paths)
+        self.jobs = [ServeJob(), ParkedWatchJob(self.notifier), InboxGCJob()]
         self.last_request = time.time()
         self.warnings = []
         self._stopping = threading.Event()
@@ -1293,7 +1638,20 @@ class Daemon:
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.server.daemon_threads = True
         port = self.server.server_address[1]
+        self.port = port
         self.publish(port)
+        # The away channel is only as alive as this process. On WSL the Windows host
+        # tears the VM (and this daemon) down shortly after the last terminal closes,
+        # and nothing inside the distro can veto it, so say so — an alert that silently
+        # reaches nobody is worse than a documented absence.
+        if is_wsl():
+            self.warn("platform is WSL: this daemon dies shortly after the last "
+                      "terminal closes, taking the away channel with it, unless "
+                      ".wslconfig sets vmIdleTimeout=-1 on the Windows side (this "
+                      "package cannot set it for you).")
+        if not self.notifier.readiness()["webhook"]:
+            self.warn("no away webhook configured (config.notify.webhook.url): there "
+                      "is no away alerting — a human must poll the console.")
         log("serving on http://127.0.0.1:%d (pid %d, runtime %s)"
             % (port, os.getpid(), self.paths.runtime))
         threading.Thread(target=self.janitor, daemon=True).start()
@@ -1416,6 +1774,7 @@ def make_handler(daemon):
                 return self._send(200, json.dumps({
                     "ok": True, "pid": os.getpid(), "started_at": daemon_started,
                     "idle": idle, "idle_blockers": blockers,
+                    "away": daemon.notifier.readiness(),
                     "warnings": daemon.warnings,
                 }).encode())
 
@@ -1651,6 +2010,14 @@ def main(argv=None):
         print("running  pid=%s  port=%s  idle=%s" % (rec.get("pid"), rec["port"], h.get("idle")))
         for b in h.get("idle_blockers", []):
             print("  holding open: %s" % b)
+        away = h.get("away") or {}
+        if away:
+            chan = "webhook" if away.get("webhook") else (
+                "desktop-only (best-effort)" if away.get("desktop") else "NONE — poll the console")
+            print("  away channel: %s" % chan)
+            if away.get("consecutive_failures"):
+                print("  away channel FAILING: %d in a row (%s)"
+                      % (away["consecutive_failures"], away.get("last_error")))
         for w in h.get("warnings", []):
             print("  WARNING: %s" % w)
         return 0

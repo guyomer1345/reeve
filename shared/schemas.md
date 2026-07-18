@@ -130,7 +130,7 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   not always a defect — hence routing by kind, not a universal `debug` sink.
 
 ## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored, kept on a native filesystem; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
-- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline, parked_seq }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them.
+- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request}, predicted_outcome, deadline }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them. The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
 - `deadline` — an **absolute** timestamp stamped at park time as *now + `config.checkpoint.deadline_hours`*
   (default 24h). Absolute, not a duration, because the process that *acts* on it is the console daemon, which
   compares against wall-clock and was not present when the ticket parked. Past it → the daemon **escalates**
@@ -271,10 +271,12 @@ fires it.
   overdue). Absent → shipped defaults (`deadline_hours` 24, `reminder_hours` 4).
 - `notify` — the away-channel, **read by the console daemon**: `webhook` `{ url, kind: generic|slack }` +
   `desktop` (bool). The **webhook is the real away channel** — it reaches a phone and works from a detached
-  daemon; a desktop toast is **best-effort only** (it needs a session bus, has none on WSL/headless, and reaches
-  only someone already at the machine, who is by definition not away). Absent → desktop best-effort and **no away
-  alerting at all**: the human polls the console. That degradation is deliberate and must be stated plainly rather
-  than papered over — an alert channel that silently reaches nobody is worse than a documented absence.
+  daemon; a desktop toast is **best-effort only** (Linux `notify-send`, and it needs a notification daemon to own
+  the `org.freedesktop.Notifications` bus name — absent on a headless/WSL box even though the session bus itself
+  exists, so the toast fails there — and it reaches only someone already at the machine, who is by definition not
+  away). Absent → desktop best-effort and **no away alerting at all**: the human polls the console. That
+  degradation is deliberate and must be stated plainly rather than papered over — an alert channel that silently
+  reaches nobody is worse than a documented absence, so the daemon reports away-channel readiness in `status`.
 - `outward` — the standing-pre-authorization allowlist for outward actions, in Claude Code's own
   `permissions.{allow, ask, deny}` shape (deny→ask→allow, first-match-wins), **coarse per-action-class**
   (`push` / `issue-create` / `issue-close` / later `deploy` / `send`). Absent → **all `ask`** (MVP-safe:
@@ -368,6 +370,18 @@ reads that value as authority.
   `cloudflared` / `tailscale serve` at `remote_port`, and **never** at `port` — `port` is the full-surface loopback
   socket (outward `release`, returns-bearing `setup` verdicts) that must never be fronted. `remote_token` is a
   **separate** CSPRNG secret, never the loopback `token`, paired to the phone by QR + URL fragment.
+
+## alerts.json  · written and read by the bus daemon alone, to record which checkpoints it has already alerted on · *`.workflow/alerts.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
+- `{ checkpoints: { "<ticket_id>|<deadline>": { first_alert, last_alert, escalated } }, dead_letters: { "<message_id>": { at } } }`
+  — the daemon's own away-alert bookkeeping. It **cannot** live in `parked/` (the orchestrator's single-writer
+  partition, not the daemon's) nor in the boot-scoped `bus.json` (rewritten at boot, so it would be destroyed at
+  exactly the restart it must survive), so it is a **fourth daemon-owned path**. Loaded at daemon start, so a
+  routine restart — frequent on WSL — does **not** re-alert every open checkpoint (which would train the human to
+  ignore the channel). **A lost or unparseable file re-alerts rather than going silent** — a missed alert is the
+  failure this exists to prevent, so the safe direction is noise. Delivery failure is a *channel* property: a
+  failing webhook backs off the whole channel (doubling, capped at `reminder_hours`) and does **not** mark the
+  checkpoint alerted, so the reminder path retries it once the channel recovers. Keys are pruned when the
+  checkpoint resolves / the dead-letter clears, which bounds the file and is what makes a re-park re-alert.
 
 ## state.json  · the live loop pointer (volatile, gitignored) · *`.workflow/state.json`; published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
 - `status` ∈ `{ intake, building, idle }`

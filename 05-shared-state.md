@@ -152,7 +152,7 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
 <launch root>      # where Claude runs = orchestrator home (process / machinery)
   CLAUDE.md         # orchestrator brief (greenfield: here; brownfield: a marked block in the existing one)
   .workflow/
-    config.json     # project_root (./project | .) + run config    (committed) · bus:none
+    config.json     # project_root (./project | .) + run config; the daemon reads notify/checkpoint for the away channel — committed, so read across the repo mount (static after init; a parse failure ⇒ no away channel, surfaced) · bus:read
     runtime.json    # RUNTIME — the pointer to the pinned runtime root; absent ⇒ this dir IS the runtime root (the no-relocation case). Machine-specific absolute path ⇒ never committed. NEVER pinned itself: it is *how* the pinned tree is found, so it must sit at a fixed spot on the repo mount — D115, gitignored · bus:none · no-pin
     loop.md         # routing graph + diagram (fixed topology)      (committed) · bus:none
     checks.sh       # mechanical-gate runner (generated per-stack; --fix / --check)  (committed) · bus:none
@@ -163,6 +163,7 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     outbox/         # RUNTIME — pending-outward-action queue (push/issue/deploy the orchestrator deferred, awaiting a console `release`) — D105 (retires the D60-reserved checkpoints/), gitignored · bus:read (the console's release panel) · pin
     bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored · bus:write · pin (for the 0600-honouring mount FIRST, atomicity second — D115)
     bus.lock        # RUNTIME — the daemon's singleton-election lock, held for process lifetime. A SEPARATE file from bus.json by necessity: bus.json is republished by rename, and a rename swaps the inode out from under a held lock, so a second daemon would find the new inode unlocked and start (measured, both filesystems) — D115, gitignored · bus:write · pin (co-location with the record it guards; flock itself does NOT require it — D115)
+    alerts.json     # RUNTIME — the daemon's away-alert bookkeeping (which checkpoints/dead-letters it has already alerted on). Cannot live in parked/ (not the daemon's partition) nor boot-scoped bus.json; a fourth daemon-owned path, loaded at start so a restart does not re-alert; lost ⇒ re-alert, never silent — D120, gitignored · bus:write · pin
     parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored · bus:read · pin
     inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control|release) the bus writes; matched at boundaries — D90/D91/D93/D105, gitignored · bus:write · pin
     secrets/        # RUNTIME — live credentials returned at a setup checkpoint; 0600/ACL, atomic write; orchestrator writes+reads; NEVER retention-swept — D111, gitignored · bus:none · pin (for the 0600-honouring mount, not for atomicity)
