@@ -1,5 +1,5 @@
 ---
-description: Bootstrap the disciplined-builder workflow in this project and become the orchestrator. Auto-detects greenfield (empty) vs brownfield (existing code), scaffolds workflow state, and hands off to inception or ingest.
+description: Bootstrap the disciplined-builder workflow in this project and become the orchestrator. Auto-detects greenfield (empty) vs brownfield (existing code), scaffolds workflow state, and hands off to building the spec (greenfield) or ingesting the existing code (brownfield).
 argument-hint: "[greenfield|brownfield]  (optional — auto-detected if omitted)"
 ---
 
@@ -63,57 +63,52 @@ built-in Claude Code command.
      plainly that `.workflow/` now spans two filesystems, and why.
    - Committed artifacts (`handoff.md`, `backlog.md`, `config.json`, `docs/`) **never** relocate — they live with the
      repo by definition. Only the runtime half moves.
-4. **Install the orchestrator brief** (the driver), from the package `templates/`:
-   - **greenfield:** copy `templates/orchestrator-CLAUDE.md` → the launch-root **`CLAUDE.md`** (fill
-     `<project>`/`<project_root>`) and put the product under **`project/`** (its own `CLAUDE.md` left to the
-     product); set `project_root: ./project`.
-   - **brownfield:** the product stays at the repo root; wrap `templates/orchestrator-CLAUDE.md` in the
-     **sentinel markers** and **append** it to the *existing* root `CLAUDE.md` (never clobber — idempotent via
-     the markers); read that existing `CLAUDE.md` as a **primary ingest source**; set `project_root: .`.
-   - Copy `templates/loop.md` → **`.workflow/loop.md`** and write **`.workflow/config.json`** (`project_root` +
-     run config).
-   - Copy `templates/settings.json` → **`.claude/settings.json`** (loop permission rules: `allow` local actions;
-     the outbox-covered outward classes — `git push`, `gh issue` — are deliberately **not** `ask`ed, because they
-     are approved through the outbox + a console `release` and fired later at a boundary, when a terminal prompt
-     would reach nobody; every other outward command — deploy / publish / cloud / network — stays `ask`) and
-     `hooks/{guard.sh,pre-commit.sh}` → **`.claude/hooks/`** (guard = secret-scan + verify-before-commit + the
-     **push floor** (never move a protected branch, never push a secret) hard gates; pre-commit = the
-     mechanical-gate backstop, registered in step 4). `build-once-per-wave` is deferred.
-   - Copy the shipped **code-map extractor** (`scripts/codemap/`) → **`.claude/scripts/codemap/`** — the
-     per-language tool `.workflow/codemap.sh` invokes to build the knowledge graph (wired in step 4).
-   - Copy the shipped **retention script** (`scripts/retention.py`) → **`.claude/scripts/`** — the deterministic
-     `audit`-item enforcer `document` (audit mode) invokes to bound the append-only tier. Stack-agnostic (it edits
-     only the workflow's own `.workflow/`+`docs/` layout), so it ships fixed — not generated per-stack.
-   - Copy the shipped **coverage gates** (`scripts/check_promise_coverage.py` + `scripts/check_criterion_discharge.py`
-     + `scripts/check_decision_coverage.py`) → **`.claude/scripts/`** — the deterministic gates `checks.sh --check`
-     invokes so a load-bearing promise can't ship with no resolvable / boundary test, no `artifact`
-     acceptance-criterion ships without a mechanical `discharge`, and no governing decision ships mapped to no plan
-     step. Stack-agnostic (all read the workflow's own `promises.json`), so they ship fixed — not per-stack.
-   - Copy the shipped **demo-bundle lint** (`scripts/check_demo_bundle.py`) → **`.claude/scripts/`** — the
-     deterministic self-contained-check `create-demo` runs before it parks a demo sandbox: the serving isolation is
-     a CSP the daemon enforces, but *self-contained* (no external hosts, no `eval`, build-free) is not, so a slip
-     renders locally and blanks over the tunnel. Stack-agnostic (it scans a bundle dir), so it ships fixed.
-   - Copy the shipped **console daemon** (`scripts/bus.py`) → **`.claude/scripts/`** — the detached local HTTP
-     daemon that serves the supervision console and is the channel a human uses to reach the loop while it is busy,
-     parked, or dead. A per-project copy (like every other shipped script), which is also what keys it per project:
-     its lock, its discovery record, and its port all derive from that project's runtime root, so two projects
-     cannot collide. Stack-agnostic (it reads only the workflow's own layout), so it ships fixed — not per-stack.
-   - Copy the shipped **drain bookkeeper** (`scripts/drain.py`) → **`.claude/scripts/`** — the deterministic half
-     of the boundary inbox drain the orchestrator invokes each turn (`list` → apply → `record`): which messages are
-     new, in what order they apply, what the watermark is, and what may be pruned. It sits beside `bus.py` and
-     imports its path resolution, so the two must land in the same directory. Stack-agnostic (it reads only the
-     workflow's own layout), so it ships fixed — not per-stack.
-   - Copy the shipped **orchestrator launcher** (`scripts/loop.sh`) → **`.claude/scripts/`** — the way a human
-     starts the orchestrator **once `config.runner` is enabled**: it holds an `flock` on `.workflow/orchestrator.lock`
-     for the session's lifetime, so the relaunch-runner can tell a human session is live and never spawns a duplicate.
-     It resolves the lock path through `bus.py`'s `Paths`, so it honours a relocated runtime tree. With the
-     runner off it is optional; with the runner on, **start/resume the orchestrator via `bash .claude/scripts/loop.sh`,
-     not bare `claude`** — a bare start is invisible to the runner (the one operator residual, same footing as the
-     single-orchestrator run-constraint).
-   - Copy the shipped **contract linter** (`scripts/check_contracts.py`) → **`.claude/scripts/`** — the decidable
-     routing-graph check `align`'s mechanical layer invokes over `.workflow/loop.md` + the installed skills (via
-     `--loop`/`--skills-dir`/`--schemas`): every routing target resolves, every invoked `node:mode` is routed,
-     every skill is a node or side-door. Stack-agnostic (lints the workflow's own wiring), so it ships fixed.
+4. **Install the package into the project.** Claude Code exposes the bundled package at
+   **`${CLAUDE_PLUGIN_ROOT}`** and the project root at **`${CLAUDE_PROJECT_DIR}`** (both substituted in this
+   command). Always copy *out* of the plugin into the project — never invoke a shipped script in place, because
+   `${CLAUDE_PLUGIN_ROOT}` is replaced on every plugin update.
+   - **Orchestrator brief** (the driver):
+     - **greenfield:** copy `${CLAUDE_PLUGIN_ROOT}/templates/orchestrator-CLAUDE.md` → the launch-root
+       **`CLAUDE.md`** (fill `<project>`/`<project_root>`) and put the product under **`project/`** (its own
+       `CLAUDE.md` left to the product); set `project_root: ./project`.
+     - **brownfield:** the product stays at the repo root; wrap that same template in the **sentinel markers**
+       and **append** it to the *existing* root `CLAUDE.md` (never clobber — idempotent via the markers); read
+       that existing `CLAUDE.md` as a **primary ingest source**; set `project_root: .`.
+   - Copy `${CLAUDE_PLUGIN_ROOT}/templates/loop.md` → **`.workflow/loop.md`** and write
+     **`.workflow/config.json`** (`project_root` + run config).
+   - Copy `${CLAUDE_PLUGIN_ROOT}/templates/settings.json` → **`.claude/settings.json`** (loop permission rules:
+     `allow` local actions; the outbox-covered outward classes — `git push`, `gh issue` — are deliberately
+     **not** `ask`ed, because they are approved through the outbox + a console `release` and fired later at a
+     boundary, when a terminal prompt would reach nobody; every other outward command — deploy / publish / cloud /
+     network — stays `ask`).
+   - **Install the shipped scripts + hooks — from the manifest, not enumerated here.** Read
+     **`${CLAUDE_PLUGIN_ROOT}/MANIFEST.json`**; for every `{src, dest}` in its **`install`** array, copy
+     `${CLAUDE_PLUGIN_ROOT}/<src>` → `${CLAUDE_PROJECT_DIR}/<dest>` (creating parent dirs). That manifest is the
+     **single source** for what installs into `.claude/`; because nothing is listed here, a script added to the
+     package is picked up automatically — the drift that once dropped `loop.sh` and the demo-bundle lint from a
+     hand-kept copy list cannot recur. Everything it installs is **stack-agnostic** (it reads only the workflow's
+     own `.workflow/`+`docs/` layout), so it ships fixed — never generated per-stack. What the set does, for
+     orientation (the manifest, not this prose, is authoritative on *which* files ship):
+     - the **console daemon** (`bus.py`) — the detached local HTTP daemon that serves the supervision console and
+       is a human's channel to the loop while it is busy, parked, or dead; a per-project copy is what **keys it
+       per project** (its lock, discovery record, and port all derive from that project's runtime root, so two
+       projects cannot collide), with its **drain bookkeeper** (`drain.py` — the boundary-inbox drain the
+       orchestrator runs each turn: which messages are new, in what order they apply, the watermark, what may be
+       pruned) and **launcher** (`loop.sh`) beside it. Both resolve paths *through* the daemon, so all three must
+       land in the same `.claude/scripts/`. With `config.runner` on, **start/resume the orchestrator via
+       `bash .claude/scripts/loop.sh`, not bare `claude`** — a bare start is invisible to the relaunch-runner (the
+       one operator residual, same footing as the single-orchestrator run-constraint);
+     - the **code-map extractor** (`codemap/`) the generated `.workflow/codemap.sh` invokes to build the knowledge
+       graph; the **retention** enforcer `document` (audit mode) runs to bound the append-only tier; the
+       **coverage gates** + the **contract linter** that `checks.sh --check` / `align`'s mechanical layer invoke
+       (a load-bearing promise can't ship with no resolvable / boundary test; no `artifact` criterion without a
+       mechanical `discharge`; no governing decision mapped to no step; every routing target resolves); and the
+       **demo-bundle lint** `create-demo` runs before it parks a sandbox (the CSP enforces *isolation*, but
+       *self-contained* — no external hosts, no `eval`, build-free — it does not, so a slip renders locally and
+       blanks over the remote surface);
+     - the git **hooks** into **`.claude/hooks/`** — `guard.sh` (secret-scan + verify-before-commit + the **push
+       floor**: never move a protected branch, never push a secret) and `pre-commit.sh` (the mechanical-gate
+       backstop, registered as the git hook in step 5). `build-once-per-wave` is deferred.
    - **Surface the one-time permission message** to the human: *"This is an autonomous loop. Accept the
      workspace-trust dialog so the package can pre-approve the loop's local actions. Pushes and issue
      create/close are **not** approved by a terminal prompt — they queue to `.workflow/outbox/` and wait for you
@@ -122,7 +117,7 @@ built-in Claude Code command.
      moves `main`/`master`, and it never pushes a secret. You don't need `--dangerously-skip-permissions`."*
 5. **Specialize rules + wire enforcement** (the disciplined layer — auto-write greenfield, adopt-and-gap-fill
    brownfield):
-   - **Seed the rules.** Copy the package baseline `rules/*.md` → **`<project_root>/rules/`**. Detect the
+   - **Seed the rules.** Copy the package baseline `${CLAUDE_PLUGIN_ROOT}/rules/*.md` → **`<project_root>/rules/`**. Detect the
      stack (languages, frameworks, package manager) and rewrite each `— enforced by: <mechanism>` tag with the
      project's *concrete* tool (e.g. `formatter` → `prettier`/`black`/`gofmt`), so the agent reads real commands.
      Nearest-file-wins: this project copy is the floor a subtree `rules/` can override.
@@ -139,9 +134,9 @@ built-in Claude Code command.
      `check_decision_coverage.py`** over each open item's `.workflow/items/<id>/promises.json` — a load-bearing
      promise with no resolvable / boundary test, an `artifact` criterion with no `discharge`, or a governing
      decision mapped to no step, fails the commit (the mechanical plan-coverage gates; teeth, not advice).
-   - **Register the git backstop.** Install the shipped `pre-commit.sh` as git's `.git/hooks/pre-commit` (copy
-     or symlink — git requires the exact name `pre-commit`) so a commit made *outside* the loop still hits
-     `checks.sh --check`.
+   - **Register the git backstop.** Install `pre-commit.sh` (copied to `.claude/hooks/` in step 4) as git's
+     `.git/hooks/pre-commit` (copy or symlink — git requires the exact name `pre-commit`) so a commit made
+     *outside* the loop still hits `checks.sh --check`.
    - **Generate `.workflow/codemap.sh`** — the code-map runner: a single call to the shipped engine
      (`.claude/scripts/codemap/codemap.py <project_root>`), which auto-dispatches each file to its language arm
      and writes `docs/knowledge/graph.json` (a typed import graph plus the *impact* and *orchestration* centrality

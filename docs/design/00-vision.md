@@ -44,9 +44,11 @@ act by hand, it failed.*
 ## Operating scope **[DECIDED]**
 Single local project, single user, single machine; the workflow runs inside the repo it's building.
 
-## Repo = spec + package
-This folder is the project's permanent home and source of truth; the spec is edited here directly, and the
-package it specifies (`skills/ agents/ rules/ hooks/ …`) is built here alongside it. For what's built vs still
-open, see `11-roadmap.md` (canonical status). The *published* shape for public consumers — one transparent repo vs a
-distilled package, plus the front-door/onboarding layer that goes with it — is an open question (`07`, D121),
-scheduled for Phase 4.
+## Repo = spec + package **[published shape DECIDED — D125]**
+This repo is **one transparent monorepo** that is both the spec and the package. The installable plugin lives
+under **`product/`** (the plugin root; its `product/MANIFEST.json` is the single source of truth for what ships);
+the **construction record** — the numbered design docs + the decision log — lives under **`docs/design/`**, and
+the meta-only tooling outside both. A consumer installs `product/` and follows the front-door `README.md`; a
+contributor reads `docs/design/`. For what's built vs still open, see `11-roadmap.md` (canonical status).
+*One repo, not a distilled twin (D125): the reasoning trail is the workflow's own dogfooded output, and a
+hand-maintained twin is the drift this project exists to kill.*

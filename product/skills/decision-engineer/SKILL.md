@@ -1,6 +1,6 @@
 ---
 name: decision-engineer
-description: Resolve an open build decision — tech stack, library, architecture — by gathering the options and current market practice and weighing them against the project's spec, returning a confidence-scored verdict. The Arbiter; invoked by planner (or anything) when it hits a decision it must not guess.
+description: Resolve an open build decision — tech stack, library, architecture — by gathering the options and current market practice and weighing them against the project's spec, returning a confidence-scored verdict. The project's decision authority of last resort; invoked by planner (or anything) when it hits a decision it must not guess.
 ---
 
 # Decision-engineer — resolve an open build decision

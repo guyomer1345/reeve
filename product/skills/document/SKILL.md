@@ -1,6 +1,6 @@
 ---
 name: document
-description: Fold completed changes and the decisions behind them into the project knowledge base — the LLM-wiki nodes, typed edges, and per-file Sessions log. Runs after a phase passes its checkpoint. Reads the changelog plus the decision/event stream, not just the diff.
+description: Fold completed changes and the decisions behind them into the project knowledge base — its knowledge nodes, typed edges, and per-file history log. Runs after a phase passes its checkpoint. Reads the changelog plus the decision/event stream, not just the diff.
 ---
 
 # Document — keep the knowledge base current

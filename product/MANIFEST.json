@@ -1,0 +1,31 @@
+{
+  "plugin": "dev-autonomous-workflow",
+  "comment": "The authoritative product boundary. Everything published lives under this plugin root; this file draws the ship line exactly once. The release build, the shipped-file leak check, and /start's install step all DERIVE from it — there is no second hand-maintained copy to drift. Physical location is deliberately NOT the ship line: this manifest is, which is what lets the tests sit beside the code they import without being published (see `exclude`).",
+  "ship": [
+    "commands",
+    "agents",
+    "skills",
+    "hooks",
+    "shared",
+    "rules",
+    "templates",
+    "scripts"
+  ],
+  "exclude": [
+    "**/test_*.py"
+  ],
+  "install": [
+    { "src": "scripts/bus.py", "dest": ".claude/scripts/bus.py" },
+    { "src": "scripts/drain.py", "dest": ".claude/scripts/drain.py" },
+    { "src": "scripts/retention.py", "dest": ".claude/scripts/retention.py" },
+    { "src": "scripts/loop.sh", "dest": ".claude/scripts/loop.sh" },
+    { "src": "scripts/check_contracts.py", "dest": ".claude/scripts/check_contracts.py" },
+    { "src": "scripts/check_promise_coverage.py", "dest": ".claude/scripts/check_promise_coverage.py" },
+    { "src": "scripts/check_criterion_discharge.py", "dest": ".claude/scripts/check_criterion_discharge.py" },
+    { "src": "scripts/check_decision_coverage.py", "dest": ".claude/scripts/check_decision_coverage.py" },
+    { "src": "scripts/check_demo_bundle.py", "dest": ".claude/scripts/check_demo_bundle.py" },
+    { "src": "scripts/codemap", "dest": ".claude/scripts/codemap" },
+    { "src": "hooks/guard.sh", "dest": ".claude/hooks/guard.sh" },
+    { "src": "hooks/pre-commit.sh", "dest": ".claude/hooks/pre-commit.sh" }
+  ]
+}

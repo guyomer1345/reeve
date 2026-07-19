@@ -1,6 +1,6 @@
 ---
 name: research
-description: Gather external or internal information on demand — tech-stack options, whether something is a known bug, third-party API/setup details, market practice. The Investigation worker dispatched by decision-engineer and debug; also callable directly whenever a capability lacks information it needs.
+description: Gather external or internal information on demand — tech-stack options, whether something is a known bug, third-party API/setup details, market practice. The research worker dispatched by decision-engineer and debug; also callable directly whenever a capability lacks information it needs.
 tools: WebSearch, WebFetch, Read, Grep, Glob, Bash
 ---
 

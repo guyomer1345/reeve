@@ -9,7 +9,7 @@ this gate makes forgetting fail the commit instead.
 
 Two invariant kinds, both DECIDABLE (a finding is a fact, so it can block):
   * ENUM  — an owner declares the authoritative value set (e.g. the checkpoint
-            `kind` enum in shared/schemas.md); every consumer that restates it
+            `kind` enum in product/shared/schemas.md); every consumer that restates it
             must mention every value. Presence coverage, never prose.
   * COUNT — an owner registry has N members (e.g. the code-map precise arms in
             codemap.py's ARMS list); a consumer's "N <label>" claim must equal N.
@@ -30,39 +30,39 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # scripts/ -
 ENUMS = [
     {
         "name": "checkpoint.kind",
-        "owner": "shared/schemas.md",
+        "owner": "product/shared/schemas.md",
         # anchor to the `request` line so we don't grab integrations/issue `kind:`.
         "owner_re": r"request[^\n]*kind:\s*([a-z]+(?:\|[a-z]+)+)",
-        "consumers": ["skills/checkpoint/SKILL.md", "10-roster.md"],
+        "consumers": ["product/skills/checkpoint/SKILL.md", "docs/design/10-roster.md"],
     },
     {
         "name": "inbox.kind",
-        "owner": "shared/schemas.md",
+        "owner": "product/shared/schemas.md",
         # the typed-inbox message kinds (D93); anchors on `verdict|` so it can't
         # collide with the checkpoint `kind: demo|qa|…` line above.
         "owner_re": r"kind:\s*(verdict(?:\|[a-z]+)+)",
-        "consumers": ["05-shared-state.md"],
+        "consumers": ["docs/design/05-shared-state.md"],
     },
     {
         "name": "checkpoint.verdict.outcome",
-        "owner": "shared/schemas.md",
+        "owner": "product/shared/schemas.md",
         # the checkpoint verdict verb-enum (D97); anchors on `outcome:` so it can't
         # collide with either `kind:` enum above.
         "owner_re": r"outcome:\s*(approve(?:\|[a-z]+)+)",
-        "consumers": ["skills/checkpoint/SKILL.md", "scripts/bus.py"],
-        "consumer_re": {"scripts/bus.py": r"VERDICT_OUTCOMES\s*=\s*\(([^)]*)\)"},
+        "consumers": ["product/skills/checkpoint/SKILL.md", "product/scripts/bus.py"],
+        "consumer_re": {"product/scripts/bus.py": r"VERDICT_OUTCOMES\s*=\s*\(([^)]*)\)"},
     },
     {
         "name": "inbox.control.op",
-        "owner": "shared/schemas.md",
+        "owner": "product/shared/schemas.md",
         # A control op has no durable effect anchor, so the only thing making a
         # redelivered one safe is that re-applying it is a no-op. That holds only while
         # the set stays CLOSED and every member is idempotent by construction — so the
         # set drifting apart from the code that enforces it is exactly the failure this
         # gate exists to catch.
         "owner_re": r"op:\s*(reprioritize(?:\|[a-z]+)+)",
-        "consumers": ["scripts/bus.py"],
-        "consumer_re": {"scripts/bus.py": r"CONTROL_OPS\s*=\s*\(([^)]*)\)"},
+        "consumers": ["product/scripts/bus.py"],
+        "consumer_re": {"product/scripts/bus.py": r"CONTROL_OPS\s*=\s*\(([^)]*)\)"},
     },
 ]
 
@@ -70,10 +70,10 @@ ENUMS = [
 COUNTS = [
     {
         "name": "codemap.precise_arms",
-        "owner": "scripts/codemap/codemap.py",
+        "owner": "product/scripts/codemap/codemap.py",
         "owner_re": r"ARMS\s*=\s*\[([^\]]*)\]",   # ARMS = [PythonArm(), ..., GenericArm()]
         "exclude": {"GenericArm"},                # the tier-0 floor is not a "precise arm"
-        "consumers": ["11-roadmap.md"],
+        "consumers": ["docs/design/11-roadmap.md"],
         # "<count> precise [resolver] arms" — count may be a word or a digit.
         "consumer_re": r"\b([A-Za-z]+|\d+)\s+precise\s+(?:resolver\s+)?arms?\b",
     },
@@ -99,7 +99,7 @@ def _default_read(rel):
 # `secrets/` and reached one pin list of two; `parked/` was pinned by 05 and not
 # by schemas.md. The lists are gone — the tree carries the markers and these
 # rules hold the two SHIPPED consumers to it (the spec-side readers just point).
-LAYOUT_OWNER = "05-shared-state.md"
+LAYOUT_OWNER = "docs/design/05-shared-state.md"
 BUS_VALUES = {"read", "static", "write", "none"}
 
 
@@ -174,10 +174,10 @@ def check_pin_consumer(rows, schemas_text):
     claimed = schemas_native_paths(schemas_text)
     errs = []
     for miss in sorted(pinned - claimed):
-        errs.append(f"layout.pin: {LAYOUT_OWNER} marks `{miss}` pin, but no shared/schemas.md header "
+        errs.append(f"layout.pin: {LAYOUT_OWNER} marks `{miss}` pin, but no product/shared/schemas.md header "
                     f"says it is 'kept on a native filesystem'")
     for extra in sorted(claimed - pinned):
-        errs.append(f"layout.pin: shared/schemas.md says `{extra}` is 'kept on a native filesystem', "
+        errs.append(f"layout.pin: product/shared/schemas.md says `{extra}` is 'kept on a native filesystem', "
                     f"but {LAYOUT_OWNER}'s tree does not mark it pin")
     return errs
 
@@ -201,8 +201,8 @@ def check_layout(read=_default_read):
         return [f"layout: the disk-layout tree was not found in {LAYOUT_OWNER} "
                 f"(the gate's own anchor moved — update check_enum_coherence.py)"]
     return (check_layout_markers(rows)
-            + check_pin_consumer(rows, read("shared/schemas.md"))
-            + check_gitignore_consumer(rows, read("commands/start.md")))
+            + check_pin_consumer(rows, read("product/shared/schemas.md"))
+            + check_gitignore_consumer(rows, read("product/commands/start.md")))
 
 
 def _num(tok):

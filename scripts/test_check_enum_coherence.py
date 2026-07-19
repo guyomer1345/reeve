@@ -112,11 +112,11 @@ class Helpers(unittest.TestCase):
 
 class Enums(unittest.TestCase):
     def _files(self, roster, shared05=SHARED05_OK, bus=BUS_OK):
-        return {"shared/schemas.md": SCHEMAS,
-                "skills/checkpoint/SKILL.md": CHECKPOINT,
-                "10-roster.md": roster,
-                "05-shared-state.md": shared05,
-                "scripts/bus.py": bus}
+        return {"product/shared/schemas.md": SCHEMAS,
+                "product/skills/checkpoint/SKILL.md": CHECKPOINT,
+                "docs/design/10-roster.md": roster,
+                "docs/design/05-shared-state.md": shared05,
+                "product/scripts/bus.py": bus}
 
     def test_clean_passes(self):
         self.assertEqual(e.check_enums(reader(self._files(ROSTER_OK))), [])
@@ -138,7 +138,7 @@ class Enums(unittest.TestCase):
         """The toothless case, pinned: BUS_STALE_OPS drops "resume" from the tuple while
         the word still appears in the docstring (--resume). A word-search passes it."""
         files = self._files(ROSTER_OK, bus=BUS_STALE_OPS)
-        self.assertIn("resume", files["scripts/bus.py"], "fixture must still mention it")
+        self.assertIn("resume", files["product/scripts/bus.py"], "fixture must still mention it")
         self.assertTrue(e.check_enums(reader(files)), "the gate fell back to a word-search")
 
     def test_moved_code_declaration_is_flagged_not_ignored(self):
@@ -156,14 +156,14 @@ class Enums(unittest.TestCase):
 
     def test_outcome_missing_value_flagged(self):
         files = self._files(ROSTER_OK)
-        files["skills/checkpoint/SKILL.md"] = CHECKPOINT_STALE  # drops "changes"
+        files["product/skills/checkpoint/SKILL.md"] = CHECKPOINT_STALE  # drops "changes"
         errs = e.check_enums(reader(files))
         self.assertTrue(any("changes" in x and "checkpoint" in x for x in errs))
 
 
 class Counts(unittest.TestCase):
     def _files(self, roadmap):
-        return {"scripts/codemap/codemap.py": CODEMAP, "11-roadmap.md": roadmap}
+        return {"product/scripts/codemap/codemap.py": CODEMAP, "docs/design/11-roadmap.md": roadmap}
 
     def test_matching_count_passes(self):
         self.assertEqual(e.check_counts(reader(self._files(ROADMAP_OK))), [])
@@ -204,9 +204,9 @@ class LayoutParsing(unittest.TestCase):
 
 class Layout(unittest.TestCase):
     def _files(self, layout=LAYOUT_OK, schemas=SCHEMAS_LAYOUT_OK, start=START_OK):
-        return {"05-shared-state.md": layout,
-                "shared/schemas.md": schemas,
-                "commands/start.md": start}
+        return {"docs/design/05-shared-state.md": layout,
+                "product/shared/schemas.md": schemas,
+                "product/commands/start.md": start}
 
     def test_clean_passes(self):
         self.assertEqual(e.check_layout(reader(self._files())), [])

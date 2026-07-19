@@ -1,6 +1,6 @@
 ---
 name: create-issue
-description: Capture a problem, bug, or "do this later" without addressing it now, and open a real GitHub issue for it. The side-door into the loop — issues are later consumed by planner and closed by close-issue. Use for found bugs, deferred work, and every provisional spec item (tracked debt).
+description: Capture a problem, bug, or "do this later" without addressing it now, and open a real GitHub issue for it. The way to file work into the loop without doing it now — issues are later picked up by planner and closed by close-issue. Use for found bugs, deferred work, and every provisional spec item (tracked debt).
 ---
 
 # Create-issue — the backlog side-door

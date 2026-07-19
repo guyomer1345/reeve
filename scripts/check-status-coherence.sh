@@ -18,14 +18,14 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-# --- ground truth ---
-skills=$(find skills -mindepth 2 -maxdepth 2 -name SKILL.md | wc -l | tr -d ' ')
-agents=$(find agents -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')
+# --- ground truth (the product now lives under product/, the design docs under docs/design/) ---
+skills=$(find product/skills -mindepth 2 -maxdepth 2 -name SKILL.md | wc -l | tr -d ' ')
+agents=$(find product/agents -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')
 caps=$((skills + agents))
-maxd=$(grep -hoE '^## D[0-9]+' 08-decision-log.md | grep -oE '[0-9]+' | sort -n | tail -1)
+maxd=$(grep -hoE '^## D[0-9]+' docs/design/08-decision-log.md | grep -oE '[0-9]+' | sort -n | tail -1)
 
 # --- live status-bearing docs (the append-only log is excluded) ---
-docs=(0[0-79]-*.md 1[01]-*.md README.md CLAUDE.md shared/*.md)
+docs=(docs/design/0[0-79]-*.md docs/design/1[01]-*.md README.md CLAUDE.md product/shared/*.md)
 
 fail=0
 flag() { echo "  $1" >&2; fail=1; }
@@ -60,8 +60,8 @@ done < <(grep -rnoE 'D1[-–—]D[0-9]+' "${docs[@]}" 2>/dev/null || true)
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
   case "$hit" in
-    11-roadmap.md:*) ;;  # the owner — allowed
-    *) flag "$hit  (roadmap status tag outside its owner, 11-roadmap.md)";;
+    docs/design/11-roadmap.md:*) ;;  # the owner — allowed
+    *) flag "$hit  (roadmap status tag outside its owner, docs/design/11-roadmap.md)";;
   esac
 done < <(grep -rnoE '\*\*\[(core|stageable|later|done)[^]]*\]\*\*' "${docs[@]}" 2>/dev/null || true)
 

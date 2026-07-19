@@ -1,43 +1,85 @@
-# Dev-Workflow Spec — working draft
+# dev-autonomous-workflow
 
-**What this is:** the full specification for an autonomous, disciplined Claude-Code-native dev
-workflow ("the disciplined builder"). The repo is **both the spec and the package being built** — the numbered
-docs design it; `skills/ agents/ rules/ hooks/ commands/ templates/ scripts/` implement it.
+**The disciplined builder** — an autonomous *but disciplined* dev workflow for Claude Code.
 
-**Status:** see `11-roadmap.md` — the canonical map of what's done, what's left, and the current phase. This
-folder is the source of truth; the spec lives and is edited here directly. (This README stays status-free by
-design — status is single-source.)
+It is a pure Claude-Code-native package — skills, subagents, hooks, slash commands, and a `CLAUDE.md`
+driver — that you install into your **own** Claude Code and run locally on your **own** subscription. It
+drives a project the way a professional engineer does: a self-directing loop (prioritize → plan → build →
+test → document) that runs on its own and pauses only for human checkpoints and steering, backed by a live
+supervision console and a project knowledge base.
 
-> **Home:** `/mnt/c/Users/Guy Omer/Documents/dev-autonomous-workflow/` (permanent working directory).
+**Master rule:** it never sits in Claude's request path. Everything runs locally on your machine; the
+components talk over a local bus and files, never by routing Claude on your behalf. There is no server, no
+hosted router, and nothing to sign up for.
 
-## How it's organized
-- `00-vision.md` — product thesis, goals, the master rule, MVP scope.
-- `01-orchestrator.md` — Space 1: the spine (macro-loop, router role, memory model, session lifecycle).
-- `02-agents.md` — Space 2: the persistent agent roster + I/O contracts.
-- `03-website.md` — Space 3: local console (visualization + your channel to the orchestrator).
-- `04-checkpoints.md` — Space 4: the manual human-test gate.
-- `05-shared-state.md` — Space 5: the on-disk state + the local comms bus.
-- `06-knowledge.md` — Space 6: the project knowledge base (code graph + per-file memory).
-- `07-open-questions.md` — everything deliberately deferred.
-- `08-decision-log.md` — every decision, why, what was rejected, and the evidence.
-- `09-intake.md` — the intake stage of the spine: task types + contracts, the demo skill + sandbox gate,
-  the commitment model. (Extends `01`.)
-- `10-roster.md` — Space 2 v1: the full capability roster (skills + agents), loop order, call-graph;
-  per-capability contracts live in the package files below.
-- `11-roadmap.md` — **canonical status:** what's built, what's left, the phased build sequence.
+## What you get
 
-Package source (Claude-Code-native, D25): `skills/<name>/SKILL.md`, `agents/<name>.md`,
-`shared/schemas.md`. The repo is both the spec and the package being built.
+- **A self-driving engineer loop** — not vibe-coding. It plans work, writes it, tests it, and documents it,
+  committing as it goes, and asks for you only when a real decision or a manual QA gate needs a human.
+- **A manual human-test gate** — the loop parks at defined points, shows you what to check, and resumes on
+  your verdict — which you can deliver from the console, including from your phone over a transport you declare.
+- **A live supervision console** — a local web page (a detached, zero-build daemon) that shows where the
+  project is, lets you send a verdict or a new task, and alerts you when the loop needs you or hard-stops.
+- **A project knowledge base** — a typed code-map graph plus per-file experiential memory, kept fresh by the
+  loop itself, so the engine's decisions are grounded in how *your* codebase actually connects.
 
-## Status legend
-- **[DECIDED]** — closed; rationale in the decision log.
-- **[OPEN]** — needs to be closed before build.
-- **[DEFERRED]** — known, intentionally not specced now (post-MVP or later).
+## Install
 
-## What's left
-See `11-roadmap.md` — the canonical, living map of remaining work by design-space and the phased build
-sequence. Kept there, not here, so status lives in exactly one place.
+Requirements: [Claude Code](https://code.claude.com) (v2.1+), plus `python3`, `git`, and `bash` on your PATH
+(the shipped helpers are stdlib-Python and bash, zero third-party dependencies).
 
-## Home
-Permanent home: `/mnt/c/Users/Guy Omer/Documents/dev-autonomous-workflow/` — the project's working
-directory and source of truth. Specs are edited here directly.
+```bash
+# add this repo as a plugin marketplace, then install the plugin
+claude plugin marketplace add guyomer1345/dev-autonomous-workflow
+claude plugin install dev-autonomous-workflow
+```
+
+To hack on the package locally instead, clone it and add the working copy as the marketplace:
+
+```bash
+git clone https://github.com/guyomer1345/dev-autonomous-workflow
+claude plugin marketplace add ./dev-autonomous-workflow
+claude plugin install dev-autonomous-workflow
+```
+
+## Getting started
+
+Open the project you want the workflow to build (or an empty directory for a new one) in Claude Code and run:
+
+```
+/start
+```
+
+`/start` detects whether the project is **greenfield** (empty) or **brownfield** (existing code), scaffolds
+the workflow state under `.workflow/`, installs the shipped scripts and git hooks into `.claude/`, and hands
+off — to a spec-building conversation for a new project, or to an ingest + reconciliation pass for an existing
+one. It prints a **console URL**; open it to watch the run and to reach the loop while it works.
+
+From there the loop runs on its own. You step in at checkpoints (approve / request changes / reject), steer it
+with new requests, and authorize outward actions (pushes, issues) from the console when you choose to.
+
+## How it works
+
+- **The orchestrator** is a thin router driven by `CLAUDE.md` and a `.workflow/loop.md` state graph. It reads
+  the current position, dispatches the next step to a skill or subagent, and advances — keeping its own context
+  thin by pushing real work into subagents.
+- **Checkpoints** are durable parks, not blocked processes: the loop records where it stopped and can be
+  resumed later (even after the terminal closes) once your verdict lands.
+- **The console + bus** is one local daemon that serves the read-only cockpit *and* accepts your verdicts,
+  new tasks, and outward-action releases — then a relaunch-runner can wake the loop and drain them, so an
+  approval you give while away actually moves the project forward.
+- **Discipline** is enforced, not hoped for: engineering rules with concrete per-stack enforcers, mechanical
+  pre-commit gates (secret-scan, a protected-branch push floor, plan-coverage checks), and an
+  alignment scan that keeps the built code honest against the spec.
+
+## How it was built
+
+This repo shows its work. The `product/` directory is the installable plugin — its
+[`MANIFEST.json`](product/MANIFEST.json) is the single source of truth for exactly what ships. Everything
+outside `product/` is the **construction record**: the full design spec, the reasoning behind every call, and
+the maintenance tooling live under [`docs/design/`](docs/design/) — the numbered design documents and an
+append-only decision log. It is dense and internal by design; you do not need any of it to *use* the workflow,
+but it is all there if you want to see why the thing is shaped the way it is.
+
+**Project status** (what's built, what's left, the phased plan) has exactly one home:
+[`docs/design/11-roadmap.md`](docs/design/11-roadmap.md).

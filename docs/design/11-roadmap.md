@@ -209,15 +209,17 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   **[core — skill + mechanical layer BUILT (D81); semantic layer validated Phase 2/3]**
 
 ### Cross-cutting — packaging, validation, self-hosting
-- **Packaging/distribution** — plugin packaging (`.claude-plugin/`), `shared/` resolution, first-launch
-  **trust-UX doc** (D57/D58). **[stageable]**
-- **Public-repo identity + onboarding (D121, user-raised)** — the repo ships publicly, but today it's a dense
-  construction record (numbered docs + `D<N>` refs + internal codenames) fronted only by a spec-navigation README.
-  The deliverable: decide the **one-repo-vs-two fork** (`07`), write a product front-door README + getting-started,
-  reframe `00–11`/`08` as explicitly-labeled `docs/design/` provenance, and do a user-language pass over the skill
-  `description:` fields (the internal vocabulary that ships *inside* the package). Onboarding prose written against a
-  moving Phase-3 target churns, so it's scheduled for **Phase 4**, owned now so it can't get lost. Cousin of the
-  state-view + version-update items. **[core — Phase 4]**
+- **Packaging/distribution** — **plugin packaging BUILT (D125):** the repo is its own marketplace
+  (`.claude-plugin/marketplace.json`, `source: ./product`), the plugin root is `product/` with a minimal
+  `plugin.json`, and **`product/MANIFEST.json`** is the single ship boundary the leak gate, `/start` install, and
+  the release build all derive from — validated + installed + release-built. Residual: the first-launch
+  **trust-UX doc** (D58) and `shared/` resolution polish. **[core — packaging built (D125); trust-UX doc stageable]**
+- **Public-repo identity + onboarding — DONE (D125, Phase-4 second half).** The one-repo-vs-two fork closed as
+  **ONE transparent repo**: `product/` is the plugin root, `product/MANIFEST.json` the authoritative ship boundary,
+  the construction record moved to `docs/design/`, a product front-door `README.md` replaced the spec-index (local
+  "Home" path dropped), and the skill `description:` fields were scrubbed of construction vocabulary — validated +
+  installed + release-built, all gates + the full suite green after the move. Full record: D125 (`07` fork CLOSED).
+  **[DONE — D125]**
 - **Validation gaps** — real orchestrator→agent **dispatch** in a harness run; `@import`-survives-`/compact`;
   whether `verify` samples the real `git diff` vs trusts the `changelog` (#8); **shipped bash glue assumes a
   bash interpreter on the target OS — unverified on native Windows (D89; the D71 split stands, no refactor)**. **[stageable]**
@@ -326,15 +328,14 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **Phase 3 is COMPLETE**, and **Phase 4's first half — build the demo — is DONE
-(D124):** the daemon serves `/demo/*` under the `sandbox`-CSP opaque origin (isolation proven in a real browser,
-top-level + framed), `create-demo` was driven on a real model, and the demo checkpoint rides the whole Phase-3
-machine (park with no worktree → notifier alert → remote opinion verdict → drain + runner) unchanged. **Next is
-Phase 4's SECOND half — the public-repo identity + onboarding (`D121`):** its opening move is the **one-repo-vs-two
-fork, still OPEN in `07`** (transparent monorepo vs distilled package), then a product front-door README +
-getting-started, the construction-vs-product reframe of `00–11`/`08`, and a user-language pass over the skill
-`description:` fields. Deferred until now precisely because onboarding prose churns against a moving demo target;
-that target has landed.
+**Recommended next slice:** **Phase 4 is COMPLETE — the MVP is release-ready.** Phase-4 first half (build the demo,
+D124) and second half (the public-repo identity + onboarding, D125) are both DONE: the shipped plugin now lives
+under `product/` with **`product/MANIFEST.json`** as the single ship boundary (the leak gate, `/start` install, and
+the release build all derive from it), the construction record is `docs/design/`, and the product installs via
+`claude plugin install` behind a front-door `README.md`. What remains is all `[stageable]`/`[later]`: the
+first-launch **trust-UX doc** (D58), the **framework version-update/migration skill**, the **project-state view** +
+**self-hosting**, and **`/start`'s full bootstrap runtime** validation (the standing residual — install + source
+resolution are proven, a full greenfield/brownfield bootstrap is not yet driven).
 *(**The build is pressure-testing the design, as intended.** Increment 1 alone found the substrate unbuildable as
 specced — a pinned path could not be *found* — and **measured two stated mechanisms to be wrong**: `flock` does not
 fail on the repo mount, while file *mode* does, silently and open. Both are the reverse of what the spec asserted,
@@ -359,10 +360,10 @@ drive surfaced a mechanism wrong only when run — an **untrusted workspace make
 allowlist and stall**, which no static read shows, and which drove a stall-timeout the crash-only design lacked. The
 resume path was **driven end-to-end on a real model** (a runner-spawned `claude` drained a durable verdict and advanced
 the watermark), not reasoned. **Drive them on the real filesystem, with a real model.**)*
-**Phase 4 — Build the demo (DONE — D124), then the public-release surface.** The demo (Space 4) is **built**; what
-remains is the **public-repo identity + onboarding** pass (the one-repo-vs-two fork · a product front-door README +
-getting-started · the construction-vs-product reframe of `00–11`/`08` · a user-language pass over skill
-`description:` fields — D121, `07`).
+**Phase 4 — COMPLETE.** The demo (Space 4) is **built (D124)** and the **public-release surface is built (D125)**:
+one transparent repo, `product/` as the plugin root, `product/MANIFEST.json` as the single ship boundary, the
+construction record reframed into `docs/design/`, a product front-door `README.md`, and the skill `description:`
+user-language pass. **The MVP is release-ready** — everything else is `[stageable]`/`[later]`.
 
 **The MVP away-autonomy boundary (D113 — locked, eyes open).** With the runner in, away-autonomy is **real
 end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote socket) → the verdict lands durably
@@ -384,8 +385,8 @@ slots around these phases as it pays off. *(The **local relaunch-runner** left t
 critical path as Phase-3 increment 6.)*
 
 ## The one-liner
-The engine **drives** and is now **self-maintaining** (retention + freshness + docs-root) and **disciplined**
-(skill deltas + `rules/` + the drift-gate authored — bar the per-stack `checks.sh` generator). What's left is
-to make it **knowledge-complete** (generation → ingest),
-**visible** (the console + bus), and **alignment-ready** (the demo + checkpoint mechanics). The bus is the one
-"enhancement" that's actually on the critical path for *unattended* autonomy — not merely later.
+The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
+`rules/` + the drift gate), **knowledge-complete** (code-map generation → brownfield ingest), **visible + reachable**
+(the console + bus, away-autonomy end-to-end), and **alignment-ready** (the demo + checkpoint mechanics). It is now
+**packaged for release** — one transparent repo, `product/` behind a `claude plugin install` front door (D125).
+The MVP is release-ready; what remains is all `[stageable]`/`[later]`.

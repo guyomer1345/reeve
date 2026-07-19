@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "dev-autonomous-workflow",
+  "description": "The disciplined builder — an autonomous but disciplined dev workflow for Claude Code.",
+  "owner": { "name": "Guy Omer" },
+  "plugins": [
+    {
+      "name": "dev-autonomous-workflow",
+      "description": "An autonomous, disciplined dev workflow for Claude Code: a self-driving engineer loop with human checkpoints, a live supervision console, and a project knowledge base — installed and run locally on your own subscription.",
+      "source": "./product",
+      "category": "development",
+      "homepage": "https://github.com/guyomer1345/dev-autonomous-workflow"
+    }
+  ]
+}

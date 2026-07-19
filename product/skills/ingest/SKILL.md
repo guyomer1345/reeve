@@ -1,6 +1,6 @@
 ---
 name: ingest
-description: Brownfield bootstrap — build the project knowledge base and reconstruct a spec from an existing codebase, then gate on a human reconciliation before the loop drives. Generates the structural code map, seeds behavioural-core intent from the existing CLAUDE.md/docs (never guessed from code), and hands the reconstructed understanding to a blocking checkpoint. Invoked by /start on an existing repo; routes to the normal loop once the human confirms.
+description: Brownfield bootstrap — build the project knowledge base and reconstruct a spec from an existing codebase, then gate on a human reconciliation before the loop drives. Generates the structural code map, seeds the app's core intended behaviour from the existing CLAUDE.md/docs (never guessed from code), and hands the reconstructed understanding to a blocking checkpoint. Invoked by /start on an existing repo; routes to the normal loop once the human confirms.
 ---
 
 # Ingest — reconstruct the knowledge base from existing code

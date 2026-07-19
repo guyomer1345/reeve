@@ -80,7 +80,10 @@ Deliberately deferred — known unknowns, to close during build or later.
   residuals + loopback-only-release), so the Phase-2 DESIGN is COMPLETE (next = Phase 3, `11`).**
 - **Real dispatch validation** — the dogfood *simulated* the `research` agent dispatch; the orchestrator→agent
   call + structured return is validated in the harness-real run.
-- **Package install** — loose `.claude/` files are MVP (D57); plugin packaging + `shared/` resolution open.
+- **Package install** — **plugin packaging BUILT (D125):** the repo self-markets (`.claude-plugin/marketplace.json`,
+  `source: ./product`) and installs via `claude plugin install`; `/start` copies the shipped scripts/hooks out per
+  `product/MANIFEST.json`'s `install` map, resolved from `${CLAUDE_PLUGIN_ROOT}`. Loose `.claude/` files remain the
+  manual-install fallback (D57). Open follow-on: the **version-update/migration skill** (below).
 - **Adoption follow-ons (D38–D51)** — the **retention & archival law** is **CLOSED**: Layer 0 write-law leak
   closures (D59–D60) + Layer 1 cap-and-archive read law (D61). What remains under it: **Sessions distillation**
   (deferred *mechanism* — lossy/model-authored; **D88 captured the rule (P2)** that a postmortem distills to a
@@ -191,23 +194,17 @@ Deliberately deferred — known unknowns, to close during build or later.
   view (D38 — not a hand-maintained doc that rots): a `status`/`map` skill or a console screen synthesizing
   roadmap + backlog + decisions + graph on demand. **The `graph.json` cluster map (D70) is its "how the pieces
   connect" face** — the structural half of this surface.
-- **Public-facing repo identity + onboarding (`00`) — user-raised 2026-07-18; owned now, scheduled Phase 4 (D121).**
-  The end goal is a *public* repo others install and integrate, but the repo today is a dense construction record:
-  the numbered docs `00–11`, the `D<N>` vocabulary, and internal codenames ("the drain", "the notifier", "waves",
-  "away becomes triggerable") are the design scaffolding, not a product front door. The current public surface is a
-  spec-navigation `README.md` that even hardcodes the maintainer's local path — there is no getting-started, no
-  separation of construction-record from shipped product, and the skill `description:` fields (the one internal
-  vocabulary that ships *inside* the package) are still partly in design terms. **The open fork is one-repo-vs-two:**
-  (a) a **transparent monorepo** — publish as-is, design docs + decision log included (the reasoning trail is an
-  asset, but the front door must redirect "use it" away from `08`); or (b) a **distilled package** — publish only the
-  package + clean docs, keeping the spec/log as a `docs/design/` or private construction record (clean surface, but a
-  sync seam and the "shows its work" credibility is lost). **Deferred, not ignored (D121):** the *concern* is owned
-  now (this entry + the `11` cross-cutting item); the *work* — the fork call, a product front-door README +
-  getting-started, the construction-vs-product reframe of `00–11`/`08`, and a user-language pass over skill
-  descriptions — rides Phase 4, because onboarding prose written against a still-moving Phase-3 product churns. The
-  one cheap thing done incrementally: keep skill `description:` fields honest as they're touched. Overlaps but is
-  distinct from the **project-state view** (a *navigation* surface + self-hosting prereq) and the **framework
-  version-update skill** (keeping *installed* copies fresh), both below.
+- **Public-facing repo identity + onboarding (`00`) — user-raised 2026-07-18; CLOSED 2026-07-20 (D125).**
+  The one-repo-vs-two fork is **decided: ONE transparent repo.** The shipped plugin lives under **`product/`**
+  (the plugin root; boundary = `product/MANIFEST.json`, which the leak gate, `/start`'s install step, and the
+  release build all derive from); the construction record — the numbered docs + the decision log + `reviews/` —
+  moved to **`docs/design/`**; a product front-door `README.md` replaced the spec-index (the hardcoded local
+  "Home" path dropped); and the skill `description:` fields were scrubbed of construction vocabulary. The
+  **distilled-package** arm was rejected — a sync seam + lost dogfooding, the exact drift this project exists to
+  kill (the construction record IS the workflow's own output). Full record: D125. **Still open (below):** the
+  **framework version-update skill** (keeping *installed* copies fresh) and the **project-state view**
+  (self-hosting prereq); and **`/start`'s full bootstrap runtime** stays unexercised (the standing validation
+  residual, `11`).
 - **Framework version-update skill (`10`, D57) — user-raised 2026-06-30.** The package is now a **public
   repo**; consuming projects install a snapshot (`.claude/` skills/agents/commands + `templates`/`shared`/
   `hooks`). As the framework evolves (fixes, new skills, schema/format changes) installed copies go **stale**,

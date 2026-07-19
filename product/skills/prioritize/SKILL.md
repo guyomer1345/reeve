@@ -1,6 +1,6 @@
 ---
 name: prioritize
-description: Order the backlog and emit the next wave of independent work items. Runs on every backlog change and whenever a phase completes. Pure queue — never preempts in-flight work; the machine finishes the current item, then re-picks.
+description: Order the backlog and emit the next set of independent work items — the ones that can safely run in parallel. Runs on every backlog change and whenever a phase completes. Pure queue — never preempts in-flight work; the machine finishes the current item, then re-picks.
 ---
 
 # Prioritize — order the backlog, emit the next wave
