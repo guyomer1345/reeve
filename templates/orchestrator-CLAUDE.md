@@ -73,6 +73,10 @@ state only, never history, within a small size budget. History lives in git.
 **One orchestrator per repo.** Nothing enforces this. Two sessions driving the same
 `.workflow/` will silently clobber each other's state — an atomic write stops a torn *read*,
 not a lost *update*. If a session is already driving this repo, do not start a second.
+If `config.json`'s `runner` is enabled, **start/resume the orchestrator via
+`bash .claude/scripts/loop.sh`, not bare `claude`** — the launcher holds the
+`orchestrator.lock` the runner probes, so it can tell you are live and won't spawn a
+duplicate. A bare start is invisible to the runner (the one operator residual).
 
 **Enforced by hooks (you cannot cross these):**
 - No commit until `verify` passes for the item.

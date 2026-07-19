@@ -58,7 +58,7 @@ agents hitting build tools cause lock contention).
   barely grows. **Auto-compact is a within-run seatbelt only** (~63% reclaim; threshold via
   `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`), **not** the cross-ticket strategy. Pure Claude Code **cannot** self-`/clear`
   or auto-restart (no `SlashCommand` tool; `/clear` is human-only; `SessionStart` can't fire an autonomous turn).
-  - **The relaunch-runner is MVP [DECIDED — D113]** (D92 had it deferred; that call is reversed). A thin **local
+  - **The relaunch-runner is MVP [DECIDED — D113; BUILT — D123]** (D92 had it deferred; that call is reversed). A thin **local
     relaunch "runner"** — a fresh `claude -p` process **per ticket** (a clean window for free; the loop lives in
     stateless glue, so nothing accumulates). It *triple-solves* context-reset + autonomous checkpoint-resume +
     overnight, and it **retires the manual-`/clear` stopgap**. It is a **local relaunch loop, NOT the Agent SDK**
@@ -72,8 +72,18 @@ agents hitting build tools cause lock contention).
     - **Why the deferral reason expired:** D92 deferred it "to preserve the pure-config MVP", but **D94 already
       ships a detached always-alive daemon** — purity was spent there. The runner is not a new *category*, just a
       capability of a process we already ship; it **hosts on that daemon** (`config.runner.enabled`).
-    - **It spawns, so it needs a liveness precondition (D109/D113):** the runner checks a liveness marker before
-      launching, because a duplicate orchestrator would be *our* defect, not operator error.
+    - **It spawns, so it needs a liveness precondition (D109/D113/D123):** the runner checks an `flock` on
+      `.workflow/orchestrator.lock` before launching, because a duplicate orchestrator would be *our* defect, not
+      operator error. **BUILT as Phase-3 increment 6 (D123):** the marker had to be *published* — a `/proc` scan for a
+      live `claude` is unsound (Claude Code runs a constellation of claude-named helper processes), so both launch
+      paths hold the lock explicitly: a human via the shipped **`loop.sh`** launcher, a runner-launched `claude -p` via
+      `flock` itself. The runner spawns `flock -n orchestrator.lock claude -p "<resume prompt>"` (detached, DEVNULL,
+      cwd = launch root, **no** `--dangerously-skip-permissions` so the `ask` floor + `guard.sh` still gate it), fires
+      only for a pending `verdict`/`intake` (never a lone `control`/`release`), and guards against a crash-storm: a
+      relaunch that doesn't advance the watermark backs off → hard-stops → **fires the away alert** (closing D120's
+      deferred thrash arm), and one that *hangs* (an untrusted `claude` ignores the allowlist and stalls — measured) is
+      killed by a stall timeout. The launched loop cold-starts and **drains** (D117) to apply the durable verdict —
+      driven end-to-end on a real model.
 
 ## The macro-loop **[DECIDED — spine in `10`; driver above]**
 The full spine (`prioritize → discuss/create-demo → planner → execute → verify → debug/refine → checkpoint

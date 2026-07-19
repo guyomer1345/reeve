@@ -38,8 +38,9 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   last link that makes the away-channel pay off (without it an away verdict lands durably in the inbox and simply
   *waits* for a human to reach the terminal), and D92's reason for deferring it — "preserve the pure-config MVP" —
   **is obsolete**, since D94 already ships a detached always-alive daemon. It **hosts on that daemon**
-  (`config.runner.enabled`), and it retires D92's manual-`/clear` stopgap. **[core — decided; builds as Phase-3
-  increment 6]**
+  (`config.runner.enabled`), and it retires D92's manual-`/clear` stopgap. **BUILT 2026-07-19 (D123)** as Phase-3
+  increment 6 — the `orchestrator.lock` liveness marker + the `loop.sh` launcher; driven end-to-end on a real model.
+  **[core — DONE]**
 - **Model + effort routing** — per-task model/effort map (graph-maintenance cheap, planning expensive). **[later]**
 - **Arbiter input contract** — decide a batch in dependency order vs one at a time. **[later]**
 
@@ -91,7 +92,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      → re-alerts every `config.checkpoint.reminder_hours` → escalates once past the absolute `deadline` (never
      auto-proceeding), as a **term on the existing `parked` job**. Alert state lives in a fourth daemon-owned path
      (`alerts.json`, fail-toward-noise, survives restart); event 2 ships its **real-source arms** (deadline +
-     dead-letter escalation), the thrash/crash arm deferred to increment 6 with its liveness signal; the **doorbell**
+     dead-letter escalation), the thrash/crash arm deferred to increment 6 with its liveness signal (**now closed — D123**); the **doorbell**
      webhook payload carries no request body. *Away becomes triggerable.*
   5. **The remote socket** — **BUILT 2026-07-19 (D122)**: the structural two-socket split — Socket B loopback/full-
      surface unchanged, Socket A the reduced remote surface (reads · opinion verdicts · static demo) bound only when
@@ -100,15 +101,21 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      coordinates · a **structural** `returns`/`tasks` credential boundary, not the `_is_sensitive` heuristic ·
      `public_url` load-bearing for the forwarded-Host allowlist); pairing ships **copy-paste**, the QR deferred as a
      scoped fast-follow. *Away becomes actionable.*
-  6. **The relaunch-runner** — (D113): away becomes *completing*.
-  **[core for unattended autonomy — fully designed (D93/D94/D95 + D108/D111/D112/D113); build = Phase 3.
+  6. **The relaunch-runner** — **BUILT 2026-07-19 (D123)**: the daemon hosts a runner job that, when there is a
+     pending `verdict`/`intake` and no orchestrator holds `orchestrator.lock`, spawns a fresh `claude -p` (a clean
+     window per ticket) which cold-starts and drains the durable verdict — resuming the loop autonomously. Liveness is
+     a published `flock` (a human via the shipped `loop.sh` launcher, the runner via `flock -n`; a `/proc` scan was
+     measured unsound); a crash/stall relaunch backs off → hard-stops → fires the away alert (closing D120's thrash
+     arm). *Away becomes **completing**.* This is the LAST increment — **the console + bus component is COMPLETE.**
+  **[core for unattended autonomy — fully designed (D93/D94/D95 + D108/D111/D112/D113); build = Phase 3 — **COMPLETE**.
   **Increments 1+2 BUILT 2026-07-16 (D115/D116** — `scripts/bus.py` + 39 fixture tests, gate suite 89 → 128);
   **increment 3 BUILT 2026-07-16 (D117/D118/D119** — `scripts/drain.py` + the POST surface; gate suite 128 → 177);
   **increment 4 BUILT 2026-07-18 (D120** — the notifier; gate suite 181 → 199);
-  **increment 5 BUILT 2026-07-19 (D122** — the remote socket / two-socket split; gate suite 199 → 235).
-  **The first MVP goal is met (a verdict lands durably and unparks the loop), away is *triggerable* (the notifier),
-  and away is now *actionable* (act on a checkpoint from a phone over a declared identity transport).**
-  Next is **increment 6 — the relaunch-runner** (D113): away becomes *completing*.]**
+  **increment 5 BUILT 2026-07-19 (D122** — the remote socket / two-socket split; gate suite 199 → 235);
+  **increment 6 BUILT 2026-07-19 (D123** — the relaunch-runner + the `loop.sh` launcher; +13 fixture tests).
+  **The away channel now closes END-TO-END: a verdict lands durably (increment 3), the daemon alerts an away human
+  (increment 4), who acts from a phone over a declared identity transport (increment 5), and the runner resumes the
+  whole-parked loop autonomously (increment 6). All six increments are BUILT; the component is done.]**
 - **C-map — project map + flow view** (D70) — a read-only cluster diagram over the code-map `graph.json`
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
@@ -314,11 +321,11 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **Phase 3 is UNDERWAY — increments 1–5 are BUILT (D115/D116 · D117/D118/D119 · D120 ·
-D122), the first MVP goal is met, and away is now *triggerable* AND *actionable***: a verdict POSTed from the console
-lands durably and unparks the loop, the daemon alerts an away human that a verdict is owed, and that human can now act
-on a checkpoint from a phone over a declared identity transport. Next is **increment 6 — the relaunch-runner** (D113):
-away becomes *completing* — the last link that resumes a whole-parked loop without a human at the terminal.
+**Recommended next slice:** **Phase 3 is COMPLETE — all six increments are BUILT (D115/D116 · D117/D118/D119 · D120 ·
+D122 · D123); the console + bus component is done and the away channel closes END-TO-END.** A verdict POSTed from a
+phone lands durably and unparks the loop, the daemon alerts an away human that a verdict is owed, that human acts on a
+checkpoint over a declared identity transport, and the **runner resumes the whole-parked loop autonomously** — no
+human at the terminal. **Next is Phase 4** (build the demo, then the public-release surface — `D121`).
 *(**The build is pressure-testing the design, as intended.** Increment 1 alone found the substrate unbuildable as
 specced — a pinned path could not be *found* — and **measured two stated mechanisms to be wrong**: `flock` does not
 fail on the repo mount, while file *mode* does, silently and open. Both are the reverse of what the spec asserted,
@@ -335,8 +342,14 @@ reason (no name owner, not "no session bus"). **Increment 5 held it past the fil
 meta-tag token bootstrap, applied naively to the remote page, would have served the second-factor token to anyone
 past the transport — nullifying it; the remote coordinates were framed per-boot, which breaks a one-time phone
 pairing on every WSL restart; and A's Host-allowlist, left loopback-only, would 403 a forwarded-Host proxy entirely.
-Three of the four were re-measured before the build, one surfaced in it. **Drive them on the real filesystem, with a
-real model.**)*
+Three of the four were re-measured before the build, one surfaced in it. **Increment 6 held it into the process model,
+and this one spawned a REAL `claude`:** the obvious liveness mechanism — a `/proc` scan for a live `claude` — was
+measured **unsound** (Claude Code runs a constellation of claude-named helper processes sharing the repo cwd), forcing
+a *published* `flock` marker and the `loop.sh` launcher (real orchestrator-side scope, exactly as predicted); and the
+drive surfaced a mechanism wrong only when run — an **untrusted workspace makes `claude -p` ignore the settings
+allowlist and stall**, which no static read shows, and which drove a stall-timeout the crash-only design lacked. The
+resume path was **driven end-to-end on a real model** (a runner-spawned `claude` drained a durable verdict and advanced
+the watermark), not reasoned. **Drive them on the real filesystem, with a real model.**)*
 **Phase 4 — Build the demo, then the public-release surface.** The demo (Space 4), plus the **public-repo identity +
 onboarding** pass (the one-repo-vs-two fork · a product front-door README + getting-started · the construction-vs-product
 reframe of `00–11`/`08` · a user-language pass over skill `description:` fields — D121, `07`).

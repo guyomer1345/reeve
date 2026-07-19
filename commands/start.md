@@ -28,6 +28,7 @@ built-in Claude Code command.
      checks.sh         # mechanical-gate runner (generated per-stack; --fix / --check) (committed)
      codemap.sh        # code-map generator (generated per-stack; writes docs/knowledge/graph.json) (committed)
      state.json        # live position — RUNTIME, add to .gitignore
+     orchestrator.lock # single-orchestrator liveness marker (runner's precondition) — RUNTIME, add to .gitignore
      handoff.md        # durable resume anchor          (committed)
      backlog.md        # live OPEN queue (issues + roadmap; closed leave) (committed)
      outbox/           # RUNTIME — pending outward-action queue (push/issue awaiting a console release); add to .gitignore
@@ -43,13 +44,13 @@ built-in Claude Code command.
    `.workflow/items/<id>/` and `.workflow/align/` are **not** scaffolded here — `planner` `mkdir`s each item
    dir on demand, and `align` `mkdir`s `.workflow/align/` on its first run (writing `anchor.json`).
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
-   `alerts.json`, `outbox/`, `parked/`, `inbox/`, **`secrets/`**, `remote_token`, `demos/`, and the per-ticket worktrees (created at runtime by the
+   `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, **`secrets/`**, `remote_token`, `demos/`, and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,
    `codemap.sh`, `handoff.md`, `backlog.md`, `items/`, and `docs/`) are committed. **`secrets/` holds live
    credentials** a human hands over at a setup checkpoint — it must be gitignored *and* live on a filesystem that
    honours `0600`; it is never swept by the retention pass.
 3. **Place the runtime tree on a filesystem that can hold it.** Check the mount under the launch root. The
-   atomicity- and mode-sensitive runtime paths (`state.json`, `bus.json`, `bus.lock`, `alerts.json`, `parked/`,
+   atomicity- and mode-sensitive runtime paths (`state.json`, `bus.json`, `bus.lock`, `orchestrator.lock`, `alerts.json`, `parked/`,
    `inbox/`, `outbox/`, `secrets/`, `remote_token`) need a **local** filesystem: on a network-style or Windows-interop mount, `rename` is not
    reliably atomic and — the one that bites silently — **a file created `0600` can come back world-readable with no
    error at all**, which would leave the console's capability token and any stored credential readable by other
@@ -98,6 +99,13 @@ built-in Claude Code command.
      new, in what order they apply, what the watermark is, and what may be pruned. It sits beside `bus.py` and
      imports its path resolution, so the two must land in the same directory. Stack-agnostic (it reads only the
      workflow's own layout), so it ships fixed — not per-stack.
+   - Copy the shipped **orchestrator launcher** (`scripts/loop.sh`) → **`.claude/scripts/`** — the way a human
+     starts the orchestrator **once `config.runner` is enabled**: it holds an `flock` on `.workflow/orchestrator.lock`
+     for the session's lifetime, so the relaunch-runner can tell a human session is live and never spawns a duplicate.
+     It resolves the lock path through `bus.py`'s `Paths`, so it honours a relocated runtime tree. With the
+     runner off it is optional; with the runner on, **start/resume the orchestrator via `bash .claude/scripts/loop.sh`,
+     not bare `claude`** — a bare start is invisible to the runner (the one operator residual, same footing as the
+     single-orchestrator run-constraint).
    - Copy the shipped **contract linter** (`scripts/check_contracts.py`) → **`.claude/scripts/`** — the decidable
      routing-graph check `align`'s mechanical layer invokes over `.workflow/loop.md` + the installed skills (via
      `--loop`/`--skills-dir`/`--schemas`): every routing target resolves, every invoked `node:mode` is routed,

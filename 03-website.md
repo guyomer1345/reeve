@@ -165,8 +165,10 @@ MVP **event taxonomy** (D101, unchanged) = fire on exactly **(1) a checkpoint be
 hard-stopping / an escalation** (a D92 thrash-stop, or a D91/D97 dead-letter / stale-deadline escalation).
 **Built (D120):** event 1 ships whole, and event 2 ships as its two **real-source** arms — the record's
 absolute-`deadline` escalation and the `handoff` **dead-letter** escalation. The third arm, a thrash/crash
-hard-stop, needs an orchestrator liveness signal that does not exist until the runner (increment 6), so it is
-deferred there rather than hung on a marker no live-or-crashed orchestrator could reliably write.
+hard-stop, needed an orchestrator liveness signal that did not exist until the runner (increment 6) — **now CLOSED
+(D123):** the runner's own crash-loop detection (a relaunch that neither advances the watermark nor is still
+productively draining, after a backoff cap) is that signal, and it fires a distinct `loop-stall` away alert. So the
+two-event taxonomy is now whole.
 Reminders are **not** a new event — they ride D97's timeout-resurfacing + D91 aging. Per-step progress /
 per-item-done / outward-gate pings are out of MVP (false-positive noise trains the human to ignore the channel).
 

@@ -2931,3 +2931,67 @@ slugs in the shipped `bus.py`). D112 (the split this realizes) · D95 (token dis
 as-authoritative-prompt, the bar) · D97 (a missing credential can't be skipped) · D100 (stdlib-only → no QR lib, no
 JWT) · D116 (the meta-tag bootstrap this scopes to loopback) · D119 (the POST validation this partitions per socket).
 → `03`/`05`/`shared/schemas.md`/`11`.
+
+## D123 — The relaunch-runner built: liveness had to be PUBLISHED (a `/proc` scan is unsound), the launcher holds it, and a REAL drive found an untrusted `claude` ignores the allowlist and stalls **[DECIDED + BUILT — Phase-3 increment 6, the LAST of the console+bus; realizes D113's runner + closes D120's deferred thrash arm; MEASURED end-to-end on a real model]**
+Increment 6 makes away **completing** — a phone verdict now RESUMES the loop autonomously instead of queuing, closing
+the away channel end-to-end (alerted D111 → act D112 → lands durably D108 → **the runner resumes** D123). The runner is
+a **job on the D94 daemon** (`config.runner.enabled`): when `drain.py list` shows a pending `verdict`/`intake` and no
+orchestrator holds `orchestrator.lock`, it spawns a fresh `claude -p` that cold-starts and **drains** (D117) the durable
+verdict. Four design calls were taken up front (all as recommended); the build then measured the mechanism, as every
+increment has.
+- **(1) Liveness is a PUBLISHED marker — the crux, and the obvious mechanism is unsound.** The runner must see BOTH a
+  runner-launched AND a human-`/start`-ed orchestrator, or "forgot the runner was on" becomes a silent state-clobber
+  (D113's own stated failure). There is **no ambient signal**: a `/proc` scan for a live `claude` was **measured
+  unsound** — Claude Code runs a constellation of claude-named processes (`claude daemon`, `bg-pty-host`, `bg-spare`,
+  a versioned session process whose `comm` is the *version string*) sharing the repo cwd, so it cannot separate a
+  driving orchestrator from a helper or a casual session; and a `state.json` mtime lies both ways (stale-recent on a
+  hung loop, absent on an idle-parked one). So liveness is an `flock` a launch **explicitly holds** — a human via the
+  shipped **`loop.sh`** launcher (`exec flock -n orchestrator.lock claude …`; MEASURED to survive the `exec` and hold
+  for the session, the lock file carrying claude's real pid), a runner-launched `claude -p` via `flock -n` itself. The
+  runner probes the lock; held ⇒ back off. This is the orchestrator-side scope the design predicted — a launcher +
+  `/start`/CLAUDE.md run-constraint, not just a daemon job.
+- **(2) The runner's own `flock -n` spawn IS the double-launch latch** — measured: a second acquire while a launch is
+  live is BLOCKED, so even a human starting in the probe→spawn window aborts rather than doubling. No separate flag. The
+  kernel drops the lock on death (measured on `kill -9`), so it never goes stale like a pidfile.
+- **(3) The launch, and the permission floor.** `flock -n orchestrator.lock claude -p "<resume prompt>"`, detached
+  (`setsid`, DEVNULL), cwd = launch root, user's own `~/.claude` auth. **Never `--dangerously-skip-permissions`:**
+  `guard.sh` (D110) fires even under bypass, but bypass *skips the settings `ask` floor* (deploy/network/`gh pr`) — a
+  runner-launched loop must never fire those unattended. So it inherits `settings.json` exactly like the interactive
+  loop. The resume prompt is **dedicated** (not `/start`, which re-scaffolds), and forces the drain rather than trusting
+  the "drive only if an active run" guard. **Driven end-to-end on a real model:** a runner-spawned `claude -p` ran
+  `drain.py list` → applied the verdict → `drain.py record`, advancing `consumed_through` from null to the id (rc 0).
+- **(4) The trust finding — wrong only when RUN.** A `claude -p` in a workspace Claude Code has not trusted **ignores
+  `settings.json`'s allowlist** ("Ignoring N permissions.allow entries … not trusted") and **stalls** — the loop cannot
+  run its own tools. No static read shows this. In practice `/start`'s trust dialog establishes trust, so a real project
+  is fine, but a `runner.enabled` project never trusted would spawn inert sessions. This drove a mechanism the
+  crash-only design lacked: a hung launch never *exits*, so it would pin the runner in-flight forever. **The call:** a
+  **stall-timeout** kills a relaunch that hasn't drained within a window and scores it no-progress (a *drained* launch is
+  productively working and runs freely); and untrusted-workspace is surfaced in `status` as a **warning, never a spawn
+  gate** — a misread must not silently disable the runner.
+- **(5) Trigger = applicable work only, and crash-safety closes D120's arm.** Spawn only for a pending `verdict`/`intake`
+  (advance a dead/parked loop) via `drain.py list` — never a lone `control` (nothing to drive) nor a `release`
+  (loopback-only ⇒ a human was present to approve it). A relaunch that neither advances the watermark nor drains backs
+  off (doubling) and, after a cap, **hard-stops and fires a distinct `loop-stall` away alert** — this IS D120's deferred
+  event-2 thrash/crash arm, which waited for exactly this liveness signal; the two-event taxonomy is now whole.
+- **(6) WSL, carried not solved.** The runner is the overnight mechanism, but the hosting daemon dies with the last
+  terminal unless `.wslconfig` sets `vmIdleTimeout=-1` (the D120 wall) — surfaced in `status`, never implied.
+*Rejected:* a `/proc` scan for a live `claude` (measured unsound — CC's own helper-process constellation); a
+`state.json` mtime heartbeat (idle-parked looks dead, hung looks live); a pidfile (PID reuse — D94/D109); tracking only
+the runner's own launched PID (misses the human `/start`); `--dangerously-skip-permissions` for the launch (bypasses the
+`ask` floor — catastrophic autonomy overreach); `release` in the trigger (fires outward side-effects from a headless
+loop with nobody present, past D110/D112's boundary); an **up-front trust *gate*** that blocks the spawn (a misread
+would silently disable the runner — a warning is the ceiling, the stall-timeout the real backstop); crash-only relaunch
+handling with no stall-timeout (an inert/hung launch pins the runner in-flight forever); `/start` acquiring the lock for
+the session (a session is not a process that naturally holds an fd, and `/start` runs *inside* an already-live claude —
+it cannot retro-acquire). *Residual (accepted, D109-consistent):* a human who enables the runner but starts **bare
+`claude`** is invisible to it — documented, not fenced.
+*Evidence:* `/proc` enumerated against a real running `claude` (the helper constellation); `loop.sh` driven (flock
+survives `exec`, second launcher refused, kernel-drops on `kill -9`); the runner's own acquire measured BLOCKED while a
+launch is live; a detached DEVNULL `claude -p` measured to run + exit (rc 0); the resume path driven end-to-end (a
+runner-spawned real `claude` drained a durable verdict, watermark advanced null→id, rc 0, ~15s); the untrusted-workspace
+stall observed in a real transcript, driving the stall-timeout. 13 new fixture tests in `scripts/test_bus.py` (disabled
+/ lone-control / held-lock / verdict→drain / intake / in-flight-no-double / crash-loop→hard-stop→alert /
+stall-timeout-kills-inert / progress-resets / readiness / idle-vote), all green; full suite green (one pre-existing
+notifier *timing* test flakes under the longer runtime, passes in isolation — not this change). Depends on
+D90/D92/D94/D108/D109/D111/D112/D113/D117/D120; reuses D80/D95/D100/D110/D114/D115/D119. →
+`01`/`03`/`05`/`07`/`shared/schemas.md`/`templates/orchestrator-CLAUDE.md`/`commands/start.md`/`scripts/bus.py`/`scripts/loop.sh`/`scripts/test_bus.py`/`11`.

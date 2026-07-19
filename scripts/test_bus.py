@@ -254,8 +254,10 @@ class Jobs(Tmp):
         may vote on the orchestrator's liveness.
         """
         names = sorted(j.name for j in self.d.jobs)
-        self.assertEqual(names, ["inbox-gc", "parked", "serve"])
+        self.assertEqual(names, ["inbox-gc", "parked", "runner", "serve"])
         self.assertNotIn("heartbeat", " ".join(names))
+        # the runner votes on applicable-work + the orchestrator LOCK, never on a
+        # heartbeat — the property this test pins, extended to the new job.
 
     def test_unconsumed_inbox_does_not_hold_the_daemon_open(self):
         """A durable message loses nothing when the daemon reaps itself — /start
@@ -269,6 +271,252 @@ class Jobs(Tmp):
             json.dump({"kind": "intake", "ask": "x"}, fh)
         idle, blockers = self.d.idle_check()
         self.assertTrue(idle, blockers)
+
+
+# --- the relaunch-runner ----------------------------------------------------
+class Runner(Tmp):
+    """The runner spawns a REAL process, so these drive it against a stub `claude` rather
+    than reasoning about it. The stub is either a loop that drains (progress) or one that
+    exits without draining (a crash loop). The liveness marker is exercised with a real
+    flock held by the test process."""
+
+    VID = "20260716T120000.000001Z-aaaaaaaa-1"   # a bus-valid message_id
+
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        self.paths = bus.Paths(self.w)
+        self.d = bus.Daemon(self.paths, idle_timeout=3600)
+        self.d.port = 4321
+        self.bin = os.path.join(self.root, "bin")
+        os.makedirs(self.bin, exist_ok=True)
+        self._env("BUS_CLAUDE_BIN", None)  # set per test
+
+    def tearDown(self):
+        j = self.d.runner
+        if j.launched is not None:
+            try:
+                j.launched.kill(); j.launched.wait(timeout=5)
+            except Exception:
+                pass
+
+    # -- helpers --
+    def _env(self, k, v):
+        old = os.environ.get(k)
+        self.addCleanup(lambda: os.environ.__setitem__(k, old) if old is not None
+                        else os.environ.pop(k, None))
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+    def _config(self, enabled=True, url=None):
+        cfg = {"runner": {"enabled": enabled}}
+        if url:
+            cfg["notify"] = {"webhook": {"url": url, "kind": "generic"}}
+        with open(self.paths.config, "w") as fh:
+            json.dump(cfg, fh)
+
+    def _pending(self, kind="verdict", mid=None):
+        mid = mid or self.VID
+        body = ({"kind": "verdict", "token": "cp1",
+                 "verdict": {"outcome": "approve"}} if kind == "verdict"
+                else {"kind": kind, "ask": "x"})
+        with open(os.path.join(self.paths.inbox, mid + ".json"), "w") as fh:
+            json.dump(body, fh)
+
+    def _stub(self, mode):
+        """A fake `claude`. `drain` = a loop that consumes the inbox (progress); `crash` =
+        one that exits 1 without draining (a crash loop)."""
+        drain_py = os.path.join(os.path.dirname(bus.__file__), "drain.py")
+        path = os.path.join(self.bin, "claude-%s" % mode)
+        if mode == "drain":
+            src = (
+                "#!/usr/bin/env python3\n"
+                "import subprocess, sys, json, os\n"
+                "wf = %r\n" % self.w +
+                "d = %r\n" % drain_py +
+                "out = subprocess.run([sys.executable, d, '--workflow-dir', wf, 'list'],"
+                " capture_output=True, text=True)\n"
+                "ids = [p['message_id'] for p in json.loads(out.stdout)['pending']]\n"
+                "if ids:\n"
+                "    subprocess.run([sys.executable, d, '--workflow-dir', wf, 'record',"
+                " '--applied'] + ids)\n")
+        else:
+            src = "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n"
+        with open(path, "w") as fh:
+            fh.write(src)
+        os.chmod(path, 0o755)
+        self._env("BUS_CLAUDE_BIN", path)
+        return path
+
+    def _reap(self, timeout=15):
+        j = self.d.runner
+        if j.launched is not None:
+            j.launched.wait(timeout=timeout)
+
+    # -- tests --
+    def test_disabled_never_spawns(self):
+        self._config(enabled=False)
+        self._pending()
+        self.d.runner.tick(self.d)
+        self.assertIsNone(self.d.runner.launched)
+
+    def test_a_lone_control_is_not_applicable(self):
+        self._config()
+        with open(os.path.join(self.paths.inbox, self.VID + ".json"), "w") as fh:
+            json.dump({"kind": "control", "op": "pause"}, fh)
+        self._stub("drain")
+        self.d.runner.tick(self.d)
+        self.assertIsNone(self.d.runner.launched, "a lone control must not spawn a loop")
+
+    def test_no_applicable_work_never_spawns(self):
+        self._config()
+        self._stub("drain")            # empty inbox
+        self.d.runner.tick(self.d)
+        self.assertIsNone(self.d.runner.launched)
+
+    def test_a_held_orchestrator_lock_blocks_the_spawn(self):
+        """The core precondition: never a duplicate alongside a live orchestrator."""
+        self._config()
+        self._pending()
+        self._stub("drain")
+        fd = os.open(self.paths.orchestrator_lock, os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)   # a "live orchestrator"
+        try:
+            self.d.runner.tick(self.d)
+            self.assertIsNone(self.d.runner.launched, "spawned alongside a live orch")
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN); os.close(fd)
+
+    def test_a_pending_verdict_relaunches_and_the_loop_drains(self):
+        """The end-to-end shape, with the drain stub standing in for the loop: spawn →
+        the launched process consumes the inbox → the watermark advances → the runner
+        scores progress, resets, and finds nothing left to do."""
+        self._config()
+        self._pending("verdict")
+        self._stub("drain")
+        self.d.runner.tick(self.d)                       # spawns
+        self.assertIsNotNone(self.d.runner.launched)
+        self._reap()
+        self.d.runner.tick(self.d)                       # reaps + scores
+        self.assertEqual(self.d.runner.consecutive_noprogress, 0)
+        self.assertIsNone(self.d.runner.launched)
+        block = bus.read_handoff_block(self.paths.handoff)
+        self.assertTrue(block.get("consumed_through"), "the loop did not advance the watermark")
+        # and nothing left is applicable, so a further tick is a no-op
+        self.d.runner.tick(self.d)
+        self.assertIsNone(self.d.runner.launched)
+
+    def test_an_intake_also_relaunches(self):
+        self._config()
+        self._pending("intake")
+        self._stub("drain")
+        self.d.runner.tick(self.d)
+        self.assertIsNotNone(self.d.runner.launched, "an intake advances a dead loop too")
+        self._reap()
+
+    def test_in_flight_launch_is_not_double_spawned(self):
+        """While a relaunch is running it holds the lock; a second tick must not spawn a
+        second one (the latch is the lock, but the in-flight handle short-circuits first)."""
+        self._config()
+        self._pending()
+        # a stub that lingers, so the launch is in-flight across the second tick
+        path = os.path.join(self.bin, "claude-slow")
+        with open(path, "w") as fh:
+            fh.write("#!/usr/bin/env python3\nimport time\ntime.sleep(3)\n")
+        os.chmod(path, 0o755)
+        self._env("BUS_CLAUDE_BIN", path)
+        self.d.runner.tick(self.d)
+        first = self.d.runner.launched
+        self.assertIsNotNone(first)
+        self.d.runner.tick(self.d)                       # in-flight → no second spawn
+        self.assertIs(self.d.runner.launched, first)
+        self._reap()
+
+    def test_crash_loop_backs_off_then_hard_stops_and_alerts(self):
+        """A launched loop that never drains must not storm: back off, and after the cap
+        HARD-STOP with an away alert — the notifier's deferred thrash/crash arm."""
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url)
+        self._pending()
+        self._stub("crash")
+        orig = bus.RUNNER_BACKOFF_BASE
+        bus.RUNNER_BACKOFF_BASE = 0.0                    # immediate retries, no real sleep
+        self.addCleanup(setattr, bus, "RUNNER_BACKOFF_BASE", orig)
+        for _ in range(bus.RUNNER_MAX_ATTEMPTS + 2):
+            self.d.runner.tick(self.d)                   # spawn (or no-op once stopped)
+            self._reap()
+            self.d.runner.tick(self.d)                   # reap + score → no-progress
+            if self.d.runner.hard_stopped:
+                break
+        self.assertTrue(self.d.runner.hard_stopped)
+        self.assertEqual(self.d.runner.consecutive_noprogress, bus.RUNNER_MAX_ATTEMPTS)
+        self.assertTrue(any(r["body"].get("event") == "loop-stall" for r in sink.received),
+                        "no crash-loop away alert fired")
+        # a hard-stopped runner goes idle (the alert fired; holding the daemon open helps
+        # nobody) and stops spawning
+        self.d.runner.tick(self.d)
+        self.assertIsNone(self.d.runner.launched)
+        self.assertTrue(self.d.runner.is_idle(self.d))
+
+    def test_progress_after_a_stumble_resets_the_counter(self):
+        """One bad launch must not doom the loop: a later launch that drains clears the
+        crash-loop counter, so a transient failure never counts toward a hard-stop."""
+        self._config()
+        self._pending()
+        self.d.runner._noprogress(self.d, "simulated stumble")
+        self.assertEqual(self.d.runner.consecutive_noprogress, 1)
+        self._stub("drain")
+        self.d.runner.next_attempt = 0.0                 # skip the backoff wait
+        self.d.runner.tick(self.d)
+        self._reap()
+        self.d.runner.tick(self.d)
+        self.assertEqual(self.d.runner.consecutive_noprogress, 0)
+
+    def test_an_inert_launch_is_killed_by_the_stall_timeout(self):
+        """A hung launch (an untrusted `claude` that never drains) must not pin the runner
+        in-flight forever. With no watermark advance past the stall window, it is killed
+        and scored as no-progress — the same path a crash takes."""
+        self._config()
+        self._pending()
+        path = os.path.join(self.bin, "claude-hang")
+        with open(path, "w") as fh:
+            fh.write("#!/usr/bin/env python3\nimport time\ntime.sleep(60)\n")  # never drains
+        os.chmod(path, 0o755)
+        self._env("BUS_CLAUDE_BIN", path)
+        orig = bus.RUNNER_STALL_TIMEOUT
+        bus.RUNNER_STALL_TIMEOUT = 0.0                    # deem it inert immediately
+        self.addCleanup(setattr, bus, "RUNNER_STALL_TIMEOUT", orig)
+        self.d.runner.tick(self.d)                        # spawns the hanging stub
+        self.assertIsNotNone(self.d.runner.launched)
+        time.sleep(0.5)
+        self.d.runner.tick(self.d)                        # in-flight, un-drained, past stall → killed
+        self.assertIsNone(self.d.runner.launched, "inert launch was not killed")
+        self.assertEqual(self.d.runner.consecutive_noprogress, 1)
+
+    def test_readiness_shape(self):
+        self._config()
+        r = self.d.runner.readiness(self.d)
+        for k in ("enabled", "in_flight", "consecutive_noprogress", "hard_stopped", "wsl",
+                  "workspace_trusted"):
+            self.assertIn(k, r)
+        self.assertTrue(r["enabled"])
+
+    def test_idle_vote_holds_the_daemon_open_while_a_resume_is_owed(self):
+        """Unlike inbox-GC, the runner votes BUSY while it still owes a resume — else the
+        janitor could reap the daemon out from under work it is responsible for."""
+        self._config()
+        self._pending()
+        self.assertFalse(self.d.runner.is_idle(self.d))
+        # but a held lock (an orchestrator is live and will drain) frees it to idle
+        fd = os.open(self.paths.orchestrator_lock, os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        try:
+            self.assertTrue(self.d.runner.is_idle(self.d))
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN); os.close(fd)
 
 
 # --- a real server ----------------------------------------------------------

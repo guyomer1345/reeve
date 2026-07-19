@@ -66,6 +66,8 @@ import json
 import os
 import re
 import secrets
+import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -88,6 +90,39 @@ TOAST_TIMEOUT = 5            # seconds; a desktop toast is best-effort, never bl
 BACKOFF_BASE = 30            # seconds; a failing away channel backs off, doubling from here
 DEFAULT_REMOTE_PORT = 8799   # the fixed loopback port the remote socket binds; operator-overridable
 REMOTE_KINDS = ("verdict",)  # Socket A's positive POST allowlist — everything else is loopback-only
+
+# --- the relaunch-runner ----------------------------------------------------
+# Only these kinds ADVANCE a dead/whole-parked loop, so only these are worth spawning a
+# fresh session for. A verdict resumes a parked ticket; an intake starts new work. A
+# lone control (pause/resume/reprioritize) has nothing to drive if the loop is gone, and
+# release is loopback-only — by construction a human was present to approve it, so it is
+# not an away-resume case (excluded for MVP).
+RUNNER_KINDS = ("verdict", "intake")
+RUNNER_MAX_ATTEMPTS = 5      # consecutive no-progress relaunches before a hard-stop + alert
+RUNNER_BACKOFF_BASE = 30     # seconds; a crash-looping relaunch backs off, doubling from here
+RUNNER_BACKOFF_CAP = 1800    # seconds; the backoff ceiling (30 min)
+# A relaunch that HANGS is a distinct failure from one that crashes: an inert `claude`
+# (e.g. an untrusted workspace, where the allowlist is ignored and the session stalls —
+# MEASURED) never exits, so it would pin the runner in-flight forever, never scoring, never
+# alerting. So a launch that has not DRAINED (advanced the watermark, which the loop does
+# first thing) within this window is killed and scored as no-progress. A launch that HAS
+# drained is doing real ticket work and may run as long as it likes.
+RUNNER_STALL_TIMEOUT = 300   # seconds an un-drained relaunch may run before it is killed as inert
+# The prompt the runner launches a fresh `claude -p` with. It must FORCE the boundary
+# drain regardless of the CLAUDE.md "drive only if state.json shows an active run" guard —
+# the runner only ever launches when there IS applicable unconsumed work, so an ambiguous
+# "is this a casual session?" read is exactly the wrong outcome. An explicit instruction
+# overrides the conditional guidance; the CLAUDE.md brief supplies the how.
+RUNNER_RESUME_PROMPT = (
+    "You are the disciplined-builder orchestrator, relaunched by the console daemon's "
+    "relaunch-runner to resume an unattended run. There is unconsumed work in "
+    ".workflow/inbox/ that advances a parked or ready build loop. Do NOT wait for "
+    "confirmation and do NOT treat this as a casual session: run the boundary drain now "
+    "(the drain→read→place→advance step in your CLAUDE.md — `drain.py list`, apply each "
+    "message, `drain.py record`), which resumes any parked ticket whose verdict has "
+    "arrived, then continue the loop from .workflow/loop.md until you park or run out of "
+    "ready work, and write the handoff."
+)
 
 
 # --- path resolution --------------------------------------------------------
@@ -127,6 +162,14 @@ class Paths:
         # channel most needs to survive. So it is persisted here (0600, verified) and
         # reused; delete-to-rotate = un-pair. Pinned for the loopback token's reason.
         self.remote_token_file = os.path.join(self.runtime, "remote_token")
+        # The single-orchestrator LIVENESS marker. A human session (via the loop.sh
+        # launcher) and a runner-launched `claude -p` both hold an flock on this file for
+        # their whole lifetime; the runner probes it before spawning, so it never launches
+        # a duplicate alongside a live orchestrator. A separate file from bus.lock: that
+        # one is the DAEMON's election, this is the ORCHESTRATOR's. The kernel drops it on
+        # death, so it never goes stale (unlike a pidfile). Pinned for co-location with the
+        # rest of the runtime tree, not for correctness — flock is sound on the WSL 9p mount.
+        self.orchestrator_lock = os.path.join(self.runtime, "orchestrator.lock")
         # committed half (always on the repo mount, never relocated)
         self.handoff = os.path.join(self.workflow, "handoff.md")
         self.backlog = os.path.join(self.workflow, "backlog.md")
@@ -240,6 +283,30 @@ def is_wsl():
     if _IS_WSL is None:
         _IS_WSL = "microsoft" in (read_text("/proc/version", limit=4096) or "").lower()
     return _IS_WSL
+
+
+def workspace_trusted(repo):
+    """Best-effort read of whether Claude Code trusts this workspace — True / False, or
+    None when it cannot be determined.
+
+    MEASURED: a headless `claude -p` in an UNtrusted workspace ignores the settings.json
+    allowlist entirely ("Ignoring N permissions.allow entries … not trusted"), so a
+    relaunched loop cannot run its own tools and simply stalls. In practice `/start` is run
+    interactively and accepts the trust dialog, so a real project is trusted by the time
+    the runner could fire — but a project with `runner.enabled` set and trust never granted
+    would spawn inert sessions, and that is worth SAYING. This is a warning signal only,
+    never a spawn gate: a format change here must not silently disable the runner (the
+    stall-timeout is the real backstop for an inert launch)."""
+    cfgpath = os.path.join(os.path.expanduser(
+        os.environ.get("CLAUDE_CONFIG_DIR", "~")), ".claude.json")
+    data = read_json(cfgpath)
+    if not isinstance(data, dict):
+        return None
+    proj = data.get("projects")
+    entry = proj.get(repo) if isinstance(proj, dict) else None
+    if not isinstance(entry, dict) or "hasTrustDialogAccepted" not in entry:
+        return None
+    return bool(entry["hasTrustDialogAccepted"])
 
 
 def probe_mode(root):
@@ -850,6 +917,28 @@ class Notifier:
         except (OSError, subprocess.SubprocessError) as exc:
             return str(exc)
 
+    def deliver_event(self, daemon, event, text, extra=None):
+        """A one-off away alert NOT tied to an open checkpoint — the runner's crash-loop
+        hard-stop (the notifier's deferred thrash/crash alert arm, which waited for the
+        runner's liveness signal). Best-effort and single-shot: it always surfaces via daemon.warn
+        (so a dead webhook still leaves a trace in `status`), posts once to the webhook if
+        configured, and is neither backed off nor retried — a hard-stop is one event, and
+        the reminder machinery exists for open checkpoints, not for this. Returns the
+        webhook error string, or None on success / no webhook.
+        """
+        daemon.warn(text)
+        cfg = self.config.get()
+        notify = cfg.get("notify") if isinstance(cfg.get("notify"), dict) else {}
+        if notify.get("desktop"):
+            self._toast(text)
+        webhook = notify.get("webhook") if isinstance(notify.get("webhook"), dict) else {}
+        url = webhook.get("url")
+        if not url:
+            return None
+        console = "http://127.0.0.1:%s/" % (self.port or daemon.port or "?")
+        payload = dict(extra or {}, event=event, console=console, text=text)
+        return self._post(url, webhook.get("kind"), payload, text)
+
     def readiness(self):
         """The away-channel state a human reads in `status` — configured y/n, whether
         it is currently failing, and the WSL death caveat. A notifier that cannot
@@ -969,6 +1058,243 @@ class InboxGCJob(Job):
                 pass  # the sensitive-payload carve-out got there first
             except OSError as exc:
                 log("inbox GC could not remove %s: %s" % (n, exc))
+
+
+class RunnerJob(Job):
+    """The relaunch-runner — the last link of the away channel.
+
+    A verdict submitted from a phone lands DURABLY in the inbox, but nothing inside Claude
+    self-wakes: a whole-parked or dead loop never drains it until a human reaches the
+    terminal. This job closes that gap. When there is unconsumed work that would advance
+    the loop AND no orchestrator is live, it spawns a FRESH `claude -p` — a clean context
+    window per ticket, which also retires the manual-`/clear` stopgap. It carries NO
+    verdict as a prompt: the verdict is already durable, and the existing drain applies it
+    when the fresh loop cold-starts. The runner is GENERIC — it kicks the loop; the drain
+    and the loop do the rest.
+
+    Two things make it safe to spawn a process:
+
+    LIVENESS. It must never launch a duplicate alongside a live orchestrator — that would
+    silently clobber state (the single-orchestrator run-constraint's honest residual, but
+    OUR defect here since the runner caused it). There is no ambient signal to read: Claude
+    Code runs a constellation of claude-named helper processes, and a state.json mtime is
+    stale-recent on a hung loop and absent on an idle-parked one. So liveness is an flock a
+    launch EXPLICITLY holds — a human's via the loop.sh launcher, a runner-launched
+    `claude -p` via `flock` itself. The runner probes that lock; held ⇒ someone is driving
+    ⇒ back off. Its own spawn goes through `flock -n`, so even if a human starts in the
+    probe→spawn window, the launch aborts rather than doubling (the latch is the lock, not
+    a flag).
+
+    NO CRASH-STORM. A launched loop that dies without advancing the watermark leaves the
+    same work pending — relaunch it blindly and it storms. So a launch that makes no
+    progress (watermark unmoved AND no applicable id consumed) backs off, doubling, and
+    after RUNNER_MAX_ATTEMPTS HARD-STOPS and fires an away alert (the notifier's thrash arm).
+    """
+    name = "runner"
+
+    def __init__(self, paths, notifier=None):
+        self.paths = paths
+        self.notifier = notifier
+        self.config = ConfigCache(paths.config)
+        self.launched = None          # Popen of an in-flight relaunch, or None
+        self.launch_snapshot = None   # {through, ids} captured at launch, for progress
+        self.consecutive_noprogress = 0
+        self.next_attempt = 0.0       # backoff gate (epoch)
+        self.hard_stopped = False
+        self.last_launch_at = None
+        self.last_error = None
+
+    # -- config --
+    def _enabled(self):
+        runner = self.config.get().get("runner")
+        return bool(isinstance(runner, dict) and runner.get("enabled"))
+
+    def _claude_bin(self):
+        # BUS_CLAUDE_BIN is the test seam and a legitimate escape hatch for a claude at a
+        # nonstandard path; otherwise resolve on the daemon's own PATH (inherited from the
+        # /start session that spawned it), falling back to a bare name.
+        return os.environ.get("BUS_CLAUDE_BIN") or shutil.which("claude") or "claude"
+
+    # -- the three preconditions --
+    def _applicable(self, daemon):
+        """The unconsumed inbox messages that would advance the loop, via the drain's own
+        list logic (single owner — never re-derived here). Lazy import to avoid a cycle
+        (drain imports bus)."""
+        try:
+            import drain
+            res = drain.cmd_list(self.paths, None)
+        except Exception as exc:  # a drain bug must not take the daemon down
+            log("runner: could not list inbox: %r" % exc)
+            return []
+        return [p for p in res.get("pending", []) if p.get("kind") in RUNNER_KINDS]
+
+    def _orchestrator_live(self, daemon):
+        """True iff something holds the orchestrator lock. A free lock is provable (we can
+        take it); a held one means a human session (via loop.sh) or a prior runner launch
+        is driving. Never a pidfile read — the flock cannot lie, and the kernel drops it on
+        death."""
+        try:
+            fd = os.open(self.paths.orchestrator_lock, os.O_CREAT | os.O_RDWR, 0o600)
+        except OSError:
+            return False  # cannot even open it ⇒ treat as free; the flock -n spawn is the real guard
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            return False
+        except OSError:
+            return True
+        finally:
+            os.close(fd)
+
+    # -- the tick --
+    def tick(self, daemon):
+        if not self._enabled():
+            return
+        # 1. Reap an in-flight launch and score its progress before deciding anything.
+        if self.launched is not None:
+            if self.launched.poll() is None:
+                # A launch that has drained is productively working (a resumed ticket can
+                # run for a long time) — leave it. One that has NOT drained within the
+                # stall window is inert (an untrusted/hung `claude`) — kill and score it,
+                # so it feeds the same backoff→hard-stop→alert path a crash does.
+                if (not self._drained_since_launch()
+                        and time.time() - (self.last_launch_at or 0) > RUNNER_STALL_TIMEOUT):
+                    log("runner: a relaunch ran >%ds without draining — killing it as inert"
+                        % RUNNER_STALL_TIMEOUT)
+                    self._kill(self.launched)
+                    self._score(daemon, "killed: no drain within the stall timeout")
+                    self.launched = None
+                return  # still running; the lock it holds also blocks a double
+            self._score(daemon, self.launched.returncode)
+            self.launched = None
+        if self.hard_stopped or time.time() < self.next_attempt:
+            return
+        # 2. Only spawn for work that would actually advance the loop.
+        pending = self._applicable(daemon)
+        if not pending:
+            return
+        # 3. Never alongside a live orchestrator.
+        if self._orchestrator_live(daemon):
+            return
+        self._spawn(daemon, pending)
+
+    def _spawn(self, daemon, pending):
+        lock = self.paths.orchestrator_lock
+        os.makedirs(os.path.dirname(lock), exist_ok=True)
+        block = read_handoff_block(self.paths.handoff)
+        self.launch_snapshot = {"through": block.get("consumed_through"),
+                                "ids": {p["message_id"] for p in pending}}
+        # `flock -n LOCK claude -p …` acquires the lock, forks claude holding it, and
+        # releases on claude's exit. -n means a race-in orchestrator aborts THIS launch
+        # rather than doubling. NO --dangerously-skip-permissions: that would bypass the
+        # settings.json `ask` floor (deploy/network/gh-pr) — a runner-launched loop must
+        # never fire those unattended. guard.sh still fires regardless. Detached
+        # into its own session with DEVNULL stdio; cwd = the launch root, so it loads the
+        # project's CLAUDE.md + .claude/settings.json; auth = the daemon's inherited ~/.claude.
+        cmd = ["flock", "-n", lock, self._claude_bin(), "-p", RUNNER_RESUME_PROMPT]
+        try:
+            self.launched = subprocess.Popen(
+                cmd, cwd=self.paths.repo, start_new_session=True,
+                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL)
+        except OSError as exc:
+            self.launched = None
+            self._noprogress(daemon, "spawn failed: %s" % exc)
+            return
+        self.last_launch_at = time.time()
+        log("runner: relaunched the loop (pid %d) for %d applicable message(s)"
+            % (self.launched.pid, len(pending)))
+
+    def _drained_since_launch(self):
+        """Has the in-flight launch advanced the watermark past where it started? The loop
+        drains first thing, so this flips true within the launch's first minute if it is
+        alive at all — which is exactly what separates a working launch from an inert one."""
+        snap = self.launch_snapshot or {}
+        through = read_handoff_block(self.paths.handoff).get("consumed_through")
+        return (through or "") > (snap.get("through") or "")
+
+    def _kill(self, proc):
+        """Kill the whole launch group. start_new_session makes proc the group leader, so
+        this reaps the `flock` wrapper AND the `claude` it forked together — killing only
+        the wrapper would orphan a claude that keeps the lock (MEASURED)."""
+        for sig in (signal.SIGTERM, signal.SIGKILL):
+            try:
+                os.killpg(proc.pid, sig)
+            except OSError:
+                return
+            try:
+                proc.wait(timeout=5)
+                return
+            except Exception:
+                continue
+
+    def _score(self, daemon, rc):
+        """Did the finished launch move the loop forward? Progress = the watermark
+        advanced OR at least one message this launch was spawned for is no longer
+        applicable (it was consumed). Anything else is a launch that did nothing, which is
+        what a crash loop looks like."""
+        snap = self.launch_snapshot or {}
+        through = read_handoff_block(self.paths.handoff).get("consumed_through")
+        still = {p["message_id"] for p in self._applicable(daemon)}
+        advanced = (through or "") > (snap.get("through") or "")
+        consumed_some = bool(snap.get("ids") and (snap["ids"] - still))
+        if advanced or consumed_some:
+            if self.consecutive_noprogress or self.next_attempt:
+                log("runner: relaunch made progress; crash-loop counter reset")
+            self.consecutive_noprogress = 0
+            self.next_attempt = 0.0
+            self.last_error = None
+        else:
+            self._noprogress(daemon, "relaunch exited (rc=%s) without advancing the loop" % rc)
+
+    def _noprogress(self, daemon, reason):
+        self.consecutive_noprogress += 1
+        self.last_error = reason
+        if self.consecutive_noprogress >= RUNNER_MAX_ATTEMPTS:
+            self.hard_stopped = True
+            text = ("Loop escalation: the relaunch-runner hard-stopped after %d "
+                    "consecutive relaunches made no progress (%s). The loop cannot "
+                    "self-resume — a human must intervene." %
+                    (self.consecutive_noprogress, reason))
+            log("runner: HARD-STOP — %s" % reason)
+            if self.notifier is not None:
+                self.notifier.deliver_event(
+                    daemon, "loop-stall", text,
+                    {"attempts": self.consecutive_noprogress})
+        else:
+            delay = min(RUNNER_BACKOFF_CAP,
+                        RUNNER_BACKOFF_BASE * (2 ** (self.consecutive_noprogress - 1)))
+            self.next_attempt = time.time() + delay
+            log("runner: no progress (%d/%d), backing off ~%ds — %s"
+                % (self.consecutive_noprogress, RUNNER_MAX_ATTEMPTS, int(delay), reason))
+
+    # -- idle vote + readiness --
+    def is_idle(self, daemon):
+        # Busy while a launch is in flight, or while we still owe a resume for applicable
+        # work and no orchestrator is live — so the janitor cannot reap the daemon out from
+        # under a resume it is responsible for. A hard-stop goes idle (the alert has fired;
+        # holding the daemon open on a stuck loop helps nobody).
+        if not self._enabled() or self.hard_stopped:
+            return True
+        if self.launched is not None and self.launched.poll() is None:
+            return False
+        return not (self._applicable(daemon) and not self._orchestrator_live(daemon))
+
+    def idle_reason(self, daemon):
+        if self.is_idle(daemon):
+            return None
+        if self.launched is not None and self.launched.poll() is None:
+            return "a relaunched loop (pid %s) is running" % self.launched.pid
+        return "unconsumed work awaits a relaunch"
+
+    def readiness(self, daemon):
+        return {"enabled": self._enabled(),
+                "in_flight": bool(self.launched is not None
+                                  and self.launched.poll() is None),
+                "consecutive_noprogress": self.consecutive_noprogress,
+                "hard_stopped": self.hard_stopped,
+                "last_error": self.last_error, "wsl": is_wsl(),
+                "workspace_trusted": workspace_trusted(self.paths.repo)}
 
 
 # --- the read model ---------------------------------------------------------
@@ -1732,7 +2058,8 @@ class Daemon:
         self.model = ReadModel(paths)
         self.inbox = InboxWriter(paths)
         self.notifier = Notifier(paths)
-        self.jobs = [ServeJob(), ParkedWatchJob(self.notifier), InboxGCJob()]
+        self.runner = RunnerJob(paths, self.notifier)
+        self.jobs = [ServeJob(), ParkedWatchJob(self.notifier), InboxGCJob(), self.runner]
         self.last_request = time.time()
         self.warnings = []
         self._stopping = threading.Event()
@@ -1919,6 +2246,15 @@ class Daemon:
                       "terminal closes, taking the away channel with it, unless "
                       ".wslconfig sets vmIdleTimeout=-1 on the Windows side (this "
                       "package cannot set it for you).")
+            if self.runner._enabled():
+                self.warn("runner is enabled but this is WSL: the daemon that hosts it "
+                          "dies with the last terminal, so an OVERNIGHT resume will not "
+                          "happen unless .wslconfig sets vmIdleTimeout=-1.")
+        if self.runner._enabled() and workspace_trusted(self.paths.repo) is False:
+            self.warn("runner is enabled but this workspace is not trusted by Claude Code: "
+                      "a relaunched `claude` would ignore .claude/settings.json's allowlist "
+                      "and stall, so nothing would resume. Run /start (or `claude`) "
+                      "interactively here once and accept the trust dialog.")
         if not self.notifier.readiness()["webhook"]:
             self.warn("no away webhook configured (config.notify.webhook.url): there "
                       "is no away alerting — a human must poll the console.")
@@ -2075,6 +2411,7 @@ def make_handler(daemon):
                     "idle": idle, "idle_blockers": blockers,
                     "away": daemon.notifier.readiness(),
                     "remote": daemon.remote_status(),
+                    "runner": daemon.runner.readiness(daemon),
                     "warnings": daemon.warnings,
                 }).encode())
 
@@ -2346,6 +2683,21 @@ def main(argv=None):
             if away.get("consecutive_failures"):
                 print("  away channel FAILING: %d in a row (%s)"
                       % (away["consecutive_failures"], away.get("last_error")))
+        runner = h.get("runner") or {}
+        if runner.get("enabled"):
+            state = ("HARD-STOPPED — a human must intervene" if runner.get("hard_stopped")
+                     else "relaunch in flight" if runner.get("in_flight")
+                     else "armed")
+            print("  runner: enabled (%s)" % state)
+            if runner.get("consecutive_noprogress"):
+                print("  runner NO-PROGRESS: %d relaunch(es) in a row (%s)"
+                      % (runner["consecutive_noprogress"], runner.get("last_error")))
+            if runner.get("workspace_trusted") is False:
+                print("  runner WARNING: workspace NOT trusted — a relaunch would ignore "
+                      "the allowlist and stall; run /start interactively once to trust it")
+            if runner.get("wsl"):
+                print("  runner WARNING: WSL kills the daemon with the last terminal — "
+                      "no overnight resume unless .wslconfig vmIdleTimeout=-1")
         remote = h.get("remote") or {}
         if remote.get("enabled"):
             print("  remote socket: %s on port %s (transport=%s, credentials=%s)"

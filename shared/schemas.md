@@ -292,13 +292,34 @@ fires it.
   fixed, not fenced.
   **Fine-grained scoping** (never auto-push `main`) belongs in `guard.sh`, **not** a config allow-pattern (Claude
   Code documents arg-constraining patterns as fragile → use deny + hooks) — see `guard` below.
-- `runner` — the relaunch-runner, read by the daemon that hosts it: `{ enabled }`. When on, the daemon relaunches
-  `claude` (a fresh process per ticket = a clean context window for free) whenever there is unconsumed work and
-  **no orchestrator is live** — the last link that lets an away verdict actually *resume* the loop rather than sit
-  in the inbox until someone reaches the terminal. Because the runner is itself a spawner, it **checks a liveness
-  marker before launching**: a duplicate orchestrator would be the package's own defect rather than operator error
-  (the single exception to the otherwise operator-assumed one-orchestrator rule). Absent → off: the console still
-  works, but nothing resumes a whole-parked loop without a human at the terminal.
+- `runner` — the relaunch-runner, read by the daemon that hosts it as a **job**: `{ enabled }`. When on, the
+  daemon relaunches `claude` (a fresh `claude -p` process per ticket = a clean context window for free — this retires
+  the manual-`/clear` stopgap) whenever there is **applicable** unconsumed work and **no orchestrator is live** — the
+  last link that lets an away verdict actually *resume* the loop rather than sit in the inbox until someone reaches the
+  terminal. Absent → off: the console still works, but nothing resumes a whole-parked loop without a human at the
+  terminal. The behaviour is fixed (no user knobs in MVP); the load-bearing rules:
+  - **Trigger = applicable work only.** It spawns only for a pending `verdict` or `intake` (the kinds that advance a
+    dead/parked loop) via `drain.py list` — never for a lone `control` (nothing to drive) and never for a `release`
+    (loopback-only, so a human was present to approve it). A message that can't resume anything doesn't spawn a loop
+    that would immediately re-park.
+  - **Liveness precondition** = the `orchestrator.lock` `flock` probe (above): a duplicate orchestrator would be the
+    package's own defect rather than operator error — the single exception to the otherwise operator-assumed
+    one-orchestrator run-constraint. The runner's own spawn goes through `flock -n`, which is also the double-launch latch.
+  - **The launch** = `flock -n orchestrator.lock claude -p "<resume prompt>"`, detached (`setsid`, DEVNULL stdio),
+    cwd = the launch root (so it loads the project's `CLAUDE.md` + `.claude/settings.json`), on the user's own
+    `~/.claude` auth. **Never `--dangerously-skip-permissions`** — that would bypass the settings `ask` floor
+    (deploy/network); `guard.sh` still gates it. The resume prompt forces the boundary drain rather than
+    relying on the "drive only if state.json shows an active run" guard.
+  - **Trust precondition (MEASURED):** a `claude -p` in a workspace Claude Code has not trusted **ignores
+    `settings.json`'s allowlist** and stalls, so the loop can't run its own tools. `/start`'s trust dialog establishes
+    it; the daemon **surfaces** an untrusted workspace in `status` (a warning, never a spawn gate — a misread must not
+    silently disable the runner).
+  - **Crash-loop + stall safety.** A relaunch that exits **without advancing the watermark** backs off (doubling) and,
+    after a cap, **hard-stops and fires an away alert** — closing the notifier's deferred thrash/crash alert arm. A relaunch
+    that **hangs without draining** (an inert/untrusted `claude`) is killed after a stall timeout and scored the same
+    way, so it can't pin the runner in-flight forever. A relaunch that *drains* is doing real work and runs freely.
+  - **WSL:** the runner is the overnight mechanism, but the daemon hosting it dies with the last terminal unless
+    `.wslconfig` sets `vmIdleTimeout=-1` — surfaced in `status`, never implied.
 - `remote` — opt-in remote (phone) access, read by the daemon: `{ enabled, transport: access | tailscale, port?,
   public_url? }`. **Absent / `enabled: false` / no transport → the remote socket is not served at all** (loopback
   only). The transport is a **declaration**: the operator stands up Cloudflare Access or `tailscale serve` in front of
@@ -362,6 +383,25 @@ reads that value as authority.
   ever created and written in place — **never renamed over**.
 - Liveness = **the held lock plus a token'd `/health`**: the lock proves *someone* is alive, the health check proves
   it is ours. A free lock means any `bus.json` is stale, whatever pid it names.
+
+## orchestrator.lock  · held by an orchestrator launch for its session lifetime, probed by the daemon's relaunch-runner · *`.workflow/orchestrator.lock`; RUNTIME, gitignored, created-never-replaced; kept on a native filesystem*
+The **single-orchestrator liveness marker** the relaunch-runner checks before it spawns, so it never launches a
+duplicate alongside a live orchestrator (the single-orchestrator run-constraint's honest residual would become the
+runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* election; this is the *orchestrator's* liveness.
+- **Both launch paths hold it via an `flock`.** A human starts the orchestrator through the shipped **`loop.sh`**
+  launcher (`exec flock -n .workflow/orchestrator.lock claude …`), which holds the lock across the `exec` for the
+  session's whole life; a **runner-launched `claude -p`** is spawned as `flock -n .workflow/orchestrator.lock claude -p …`,
+  so it holds it too. The runner probes the lock (a non-blocking `flock`); **held ⇒ someone is driving ⇒ back off**.
+- **The kernel drops it on death**, so it never goes stale the way a pidfile would — the same property that makes
+  `bus.lock` trustworthy. A `flock -n` probe is the whole liveness test; a free lock means no orchestrator is live.
+- **The runner's own spawn goes through `flock -n`,** so even if a human starts in the probe→spawn window the launch
+  aborts rather than doubling — the latch is the lock, not a flag. **Why not a `/proc` scan for a live `claude`:**
+  measured unsound — Claude Code runs a constellation of claude-named helper processes (`claude daemon`, `bg-pty-host`,
+  `bg-spare`, a versioned session process) sharing the repo cwd, so it cannot separate a driving orchestrator from a
+  helper or a casual session.
+- **The bare-`claude` bypass is the one operator residual** (same footing as the single-orchestrator run-constraint): a human who enables `config.runner` but
+  starts bare `claude` instead of `loop.sh` is invisible to the runner, which may then spawn a duplicate. Documented,
+  not fenced — the same footing as the single-orchestrator run-constraint itself.
 
 ## bus.json  · written by the bus daemon at boot, read by `/start` + the browser · *`.workflow/bus.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ pid, port, token, started_at, remote_port?, remote_token? }` — the daemon's discovery + auth record. `port` =

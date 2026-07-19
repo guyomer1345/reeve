@@ -125,14 +125,18 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Model + effort routing** map (`01`).
 - **Collision-model independence test** (`01`/`02`) — waves grouping decided (D36).
 - **Arbiter** batch-vs-one input contract (`01`).
-- **Local relaunch "runner"** (`01`, D90/D92) — **no longer deferred: pulled into MVP (D113)** as Phase-3 increment
-  6, hosted on the D94 daemon (`config.runner.enabled`); it **retires** the manual-`/clear`-and-re-`/start` stopgap.
-  It is the **last link** of the away-channel — without it an away verdict lands durably and then waits for a human
-  at the terminal, so D111's alert + D112's remote surface don't pay off. D92's deferral reason ("preserve the
-  pure-config MVP") expired when D94 shipped a detached daemon. **Reframed (D90):** a thin **local** loop that
-  relaunches `claude` (a fresh `claude -p` per ticket = a clean window + autonomous resume), **NOT** the cloud Agent
-  SDK (which can't resume a local session). Triple-justified (context-reset + autonomous checkpoint-resume +
-  overnight). *Residual:* verify auth (subscription vs API key) on the real build.
+- **Local relaunch "runner"** (`01`, D90/D92/D113) — **BUILT as Phase-3 increment 6 (D123).** Hosted on the D94
+  daemon as a job (`config.runner.enabled`); it **retires** the manual-`/clear`-and-re-`/start` stopgap and is the
+  **last link** of the away-channel. The liveness marker had to be *published* (a `/proc` scan is unsound), so a
+  human starts via the shipped `loop.sh` launcher and the runner spawns `flock -n orchestrator.lock claude -p …`.
+  Driven end-to-end on a real model: the runner-spawned `claude` drains a durable verdict and advances the watermark.
+  *Residuals now tracked here:* (a) the **bare-`claude` bypass** — a human who enables the runner but starts bare
+  `claude` is invisible to it (D109-consistent operator responsibility, documented not fenced); (b) an **up-front
+  trust gate** was deliberately NOT built — an untrusted workspace is a *warning* in `status`, not a spawn-block, so
+  a misread can't silently disable the runner (the stall-timeout is the real backstop); (c) a possible **`/start`-time
+  nudge** when `config.runner` is on but the current session doesn't hold the lock (it cannot retro-acquire, so a
+  nudge is the ceiling) — a fast-follow, not built. Auth (subscription vs API key) confirmed: it runs on the user's
+  own `~/.claude`.
 - **Website stack** (`03`) — **CLOSED (D100):** a stdlib-Python detached HTTP daemon (`http.server.ThreadingHTTPServer`)
   + a zero-build, CSP-clean static page (vanilla default, Preact+htm escape hatch); the daemon serves a strict
   `script-src 'self'` CSP. No install/build step; `python3` is the only added dependency (already required).

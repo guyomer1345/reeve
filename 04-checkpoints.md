@@ -31,9 +31,10 @@ background-exit re-invoke, no hook that wakes an idle model). The orchestrator w
 verdict-request to disk and **yields**; the verdict lands on the local bus into a durable **append-only inbox**
 (D91 correlation); resume is **`claude --resume <id> -p "<verdict>"`** — the verdict rides as an *authoritative
 prompt* (a `SessionStart` hook only re-points to durable state; hook-injected context is under-weighted), cold-
-starting from `handoff.md` + `git log` if the session store is gone. Restart trigger = **manual in MVP** (a console
-prompt) → a **local relaunch runner** later. **Not** a hook exit-code trick (a `Stop` hook exiting 2 forces
-*continue*, not pause). While parked, the orchestrator **interleaves** to the next independent ticket (D91).
+starting from `handoff.md` + `git log` if the session store is gone. Restart trigger = the **local relaunch runner**
+(**BUILT — D123**, Phase-3 increment 6: the daemon spawns a fresh `claude -p` when a durable verdict awaits a
+whole-parked loop and no orchestrator holds `orchestrator.lock`). **Not** a hook exit-code trick (a `Stop` hook exiting
+2 forces *continue*, not pause). While parked, the orchestrator **interleaves** to the next independent ticket (D91).
 
 **The away-channel for a bounded question (D93 conversation corollary).** A checkpoint is also how the orchestrator
 asks the *away* human a bounded question — it parks with the request, the human answers async via the bus, it
