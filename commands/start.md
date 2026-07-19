@@ -89,6 +89,10 @@ built-in Claude Code command.
      invokes so a load-bearing promise can't ship with no resolvable / boundary test, no `artifact`
      acceptance-criterion ships without a mechanical `discharge`, and no governing decision ships mapped to no plan
      step. Stack-agnostic (all read the workflow's own `promises.json`), so they ship fixed — not per-stack.
+   - Copy the shipped **demo-bundle lint** (`scripts/check_demo_bundle.py`) → **`.claude/scripts/`** — the
+     deterministic self-contained-check `create-demo` runs before it parks a demo sandbox: the serving isolation is
+     a CSP the daemon enforces, but *self-contained* (no external hosts, no `eval`, build-free) is not, so a slip
+     renders locally and blanks over the tunnel. Stack-agnostic (it scans a bundle dir), so it ships fixed.
    - Copy the shipped **console daemon** (`scripts/bus.py`) → **`.claude/scripts/`** — the detached local HTTP
      daemon that serves the supervision console and is the channel a human uses to reach the loop while it is busy,
      parked, or dead. A per-project copy (like every other shipped script), which is also what keys it per project:

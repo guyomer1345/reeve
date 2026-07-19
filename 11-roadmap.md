@@ -127,9 +127,14 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   a stdlib-Python detached daemon + a zero-build CSP-clean page (D100); the two-event notification taxonomy (D101).
 
 ### Space 4 — Checkpoints & the demo skill
-- **Demo skill mechanics** — **DONE (D102–D104):** the sandbox is a build-free, self-contained bundle the D94
-  daemon serves under a `sandbox`-CSP opaque origin (D102); the refine loop caps at 3 → escalate to `discuss`
-  (D103); it lives at `.workflow/demos/<item-id>/`, pruned on resolve (D104). (`09`.) **[done]**
+- **Demo skill mechanics** — **DESIGNED (D102–D104) → BUILT 2026-07-19 (D124), Phase-4 first half:** the D94
+  daemon now serves `/demo/<id>/` on both sockets under a `sandbox`-CSP opaque origin (D102), with the refine cap
+  (D103) and on-disk location (D104) wired. The build **drove the isolation in a real browser** (opaque origin at
+  top-level *and* framed) and **`create-demo` on a real model** (a self-contained bundle that renders under the
+  CSP), and sharpened the design: the `sandbox` CSP enforces *isolation*, not the format discipline (a shipped
+  `check_demo_bundle.py` lint does that); the refine count lives at `demos/<id>/.refine.json`; the bundle is pruned
+  on terminal resolve by the verdict-apply path with retention's `prune_demos` as the backstop; `os.replace` is
+  content-atomic on 9p (a transient open blip self-heals via a read-retry). (`09`.) **[DONE — built]**
 - **Checkpoint data model + triggers** — **DONE (D96–D98):** the judgment/action taxonomy + trigger rule (setup =
   spec `integrations[]` + execute-discovered; qa=D30, demo=D22 gate, reconcile=ingest), the verb-enum verdict +
   plural machine-verified setup gate, and the MVP help set (contextual steps + verified deep-links + breadcrumbs;
@@ -321,11 +326,15 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **Phase 3 is COMPLETE — all six increments are BUILT (D115/D116 · D117/D118/D119 · D120 ·
-D122 · D123); the console + bus component is done and the away channel closes END-TO-END.** A verdict POSTed from a
-phone lands durably and unparks the loop, the daemon alerts an away human that a verdict is owed, that human acts on a
-checkpoint over a declared identity transport, and the **runner resumes the whole-parked loop autonomously** — no
-human at the terminal. **Next is Phase 4** (build the demo, then the public-release surface — `D121`).
+**Recommended next slice:** **Phase 3 is COMPLETE**, and **Phase 4's first half — build the demo — is DONE
+(D124):** the daemon serves `/demo/*` under the `sandbox`-CSP opaque origin (isolation proven in a real browser,
+top-level + framed), `create-demo` was driven on a real model, and the demo checkpoint rides the whole Phase-3
+machine (park with no worktree → notifier alert → remote opinion verdict → drain + runner) unchanged. **Next is
+Phase 4's SECOND half — the public-repo identity + onboarding (`D121`):** its opening move is the **one-repo-vs-two
+fork, still OPEN in `07`** (transparent monorepo vs distilled package), then a product front-door README +
+getting-started, the construction-vs-product reframe of `00–11`/`08`, and a user-language pass over the skill
+`description:` fields. Deferred until now precisely because onboarding prose churns against a moving demo target;
+that target has landed.
 *(**The build is pressure-testing the design, as intended.** Increment 1 alone found the substrate unbuildable as
 specced — a pinned path could not be *found* — and **measured two stated mechanisms to be wrong**: `flock` does not
 fail on the repo mount, while file *mode* does, silently and open. Both are the reverse of what the spec asserted,
@@ -350,9 +359,10 @@ drive surfaced a mechanism wrong only when run — an **untrusted workspace make
 allowlist and stall**, which no static read shows, and which drove a stall-timeout the crash-only design lacked. The
 resume path was **driven end-to-end on a real model** (a runner-spawned `claude` drained a durable verdict and advanced
 the watermark), not reasoned. **Drive them on the real filesystem, with a real model.**)*
-**Phase 4 — Build the demo, then the public-release surface.** The demo (Space 4), plus the **public-repo identity +
-onboarding** pass (the one-repo-vs-two fork · a product front-door README + getting-started · the construction-vs-product
-reframe of `00–11`/`08` · a user-language pass over skill `description:` fields — D121, `07`).
+**Phase 4 — Build the demo (DONE — D124), then the public-release surface.** The demo (Space 4) is **built**; what
+remains is the **public-repo identity + onboarding** pass (the one-repo-vs-two fork · a product front-door README +
+getting-started · the construction-vs-product reframe of `00–11`/`08` · a user-language pass over skill
+`description:` fields — D121, `07`).
 
 **The MVP away-autonomy boundary (D113 — locked, eyes open).** With the runner in, away-autonomy is **real
 end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote socket) → the verdict lands durably

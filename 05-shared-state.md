@@ -184,7 +184,7 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     remote_token    # RUNTIME — the remote socket's STABLE second-factor token, persisted (0600, verified) so a phone paired once survives restarts; a per-boot token would re-pair every WSL restart. Minted once by the daemon, delete-to-rotate. Distinct from bus.json's loopback token — never reused — D122, gitignored · bus:none · pin (for the 0600-honouring mount)
     items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed) · bus:none
     align/          # anchor.json — the drift-scan base_sha (align mkdir's it on first run) — committed · bus:none
-    demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves under a sandbox-CSP opaque origin; pruned on checkpoint-resolve — D102/D104, gitignored · bus:static · no-pin (write-once-then-serve, atomicity-light — D104)
+    demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves (both sockets) under a sandbox-CSP opaque origin; also holds create-demo's .refine.json round counter (a dotfile the server refuses); pruned on TERMINAL checkpoint-resolve by the verdict-apply path, retention's prune_demos backstops stragglers — D102/D104/D124, gitignored · bus:static · no-pin (write-once-then-serve, content-atomic on 9p — D104/D124)
   <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored · bus:none · no-pin
   <project_root>/   # the product (greenfield: project/ ; brownfield: the repo root)
     CLAUDE.md       # the product's own brief

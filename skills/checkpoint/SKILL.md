@@ -41,6 +41,10 @@ carries a per-task outcome) is what the drain later matches to the token and rou
 ## Route
 Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so `debug` is not the universal sink):
 - **demo** — approve → lock the spec state · changes → `create-demo` (refine the sandbox/spec) · reject → `discuss`.
+  On a **terminal** outcome (approve|reject) the sandbox has done its job, so **delete `.workflow/demos/<item-id>/`
+  as part of applying the verdict** (the locked *spec* is the durable artifact, not the demo bytes; the retention
+  audit is only the straggler backstop for a crash between resolve and delete). On **changes** the loop is still
+  refining, so **keep** the bundle (and its `.refine.json` counter).
 - **qa** — approve → `document`/`commit` · reject → `debug` (behaviour ≠ intent) → `refine` (`changes` ≡ reject here).
 - **setup** — approve|changes → **verify the external precondition actually works** (probe the key/webhook) before
   proceeding; a failed probe re-guides via `setup-guide` (an external step can't be `debug`ged); reject → replan or

@@ -10,7 +10,7 @@
 # and does not match the Dxx pattern below.
 set -uo pipefail
 
-dirs=(skills agents shared commands templates hooks rules scripts/codemap scripts/retention.py scripts/check_promise_coverage.py scripts/test_check_promise_coverage.py scripts/check_criterion_discharge.py scripts/test_check_criterion_discharge.py scripts/check_decision_coverage.py scripts/test_check_decision_coverage.py scripts/check_contracts.py scripts/test_check_contracts.py scripts/bus.py scripts/test_bus.py scripts/drain.py scripts/test_drain.py scripts/loop.sh)
+dirs=(skills agents shared commands templates hooks rules scripts/codemap scripts/retention.py scripts/check_promise_coverage.py scripts/test_check_promise_coverage.py scripts/check_criterion_discharge.py scripts/test_check_criterion_discharge.py scripts/check_decision_coverage.py scripts/test_check_decision_coverage.py scripts/check_contracts.py scripts/test_check_contracts.py scripts/bus.py scripts/test_bus.py scripts/drain.py scripts/test_drain.py scripts/loop.sh scripts/check_demo_bundle.py scripts/test_check_demo_bundle.py scripts/test_retention_demos.py)
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

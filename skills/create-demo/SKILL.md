@@ -26,12 +26,24 @@ The visual/behavioural slice of the `spec`.
    **`.workflow/demos/<item-id>/`** (gitignored runtime) via atomic write (`os.replace`).
 2. **Fidelity matches the question:** low-fi first (validate scope/flow), high-fi only when the look itself
    is the decision.
+2a. **Lint the bundle before you park it:** run `check_demo_bundle.py .workflow/demos/<item-id>/`. The serving
+   isolation is a CSP the daemon enforces; the *self-contained* discipline (no external hosts, no `eval`,
+   build-free) is **not** — a CDN reference renders fine locally and then blanks over the tunnel, silently. The
+   lint is the mechanical floor: on a violation it names the file+line — **fix and regenerate**, never park a
+   bundle that fails it.
 3. Surface it via `checkpoint` (kind=demo); the checkpoint record carries the demo path. The bus daemon
    serves the bundle under a **`sandbox`-directive CSP opaque origin** beside the verdict form — **demo = look,
    form = verdict** (the demo is read-only, no POST, no token).
-4. On "change X": edit the **spec**, then **regenerate in place** — never hand-edit the demo. Repeat until
-   approved, **capped at `config.demo.max_refine_rounds` (default 3) regenerations**. At the cap, **do not
-   auto-proceed** — **escalate to a live `discuss` session**, carrying the refine history.
+4. On "change X": edit the **spec**, then **regenerate in place** — never hand-edit the demo (re-run the lint,
+   step 2a). Repeat until approved, **capped at `config.demo.max_refine_rounds` (default 3) regenerations**,
+   **counted plainly** (a circuit-breaker, not a fairness meter). At the cap, **do not auto-proceed** —
+   **escalate to a live `discuss` session**, carrying the refine history.
+   - **The count has a durable home:** `.workflow/demos/<item-id>/.refine.json` (`{ round: N }`) — inside the
+     bundle dir (a dotfile, so the daemon never serves it), read-and-incremented on each regeneration. The refine
+     loop spans park → resume → possibly a fresh relaunched session, and nothing accumulates in the orchestrator's
+     context across those, so the count **cannot** live in memory or the parked record (deleted on resolve): it
+     lives on disk beside the bundle, whose lifetime is exactly the refine loop (pruned only on terminal resolve).
+     Read it back each round; escalate when it would exceed the cap.
 
 ## Sandbox format
 - **Self-contained, no external hosts, no `eval`** — every asset local; renders identically local and over the

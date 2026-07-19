@@ -250,6 +250,56 @@ def prune_items(items_dir, dry_run):
     return pruned, skipped
 
 
+# --- cap 4: demo sandboxes ---------------------------------------------------
+
+def prune_demos(demos_dir, parked_dir, dry_run):
+    """Straggler-prune throwaway demo bundles.
+
+    A demo sandbox is only needed while its checkpoint is open, and an open checkpoint
+    always has a `parked/<id>.json` record pointing at it. So a `demos/<id>/` with no
+    matching parked record is a resolved (approved/rejected) or crashed-past checkpoint's
+    leftover — safe to delete. This is the BACKSTOP: the primary prune is the
+    terminal-verdict apply path (approve -> lock the spec / reject -> discuss), which
+    deletes the bundle at resolve; this sweeps a bundle orphaned by a crash between
+    resolve and delete. Conservative by construction — an unreadable parked record, or
+    one that names this id by ticket or demo pointer, keeps the bundle. Returns
+    (pruned, skipped)."""
+    if not os.path.isdir(demos_dir):
+        return [], []
+    open_ids = set()
+    try:
+        parked_names = os.listdir(parked_dir)
+    except OSError:
+        parked_names = []
+    for n in parked_names:
+        if not n.endswith(".json"):
+            continue
+        open_ids.add(n[:-5])                       # the record stem
+        try:
+            with open(os.path.join(parked_dir, n), encoding="utf-8") as fh:
+                rec = json.load(fh)
+        except (OSError, ValueError):
+            continue                               # unreadable -> stem already kept
+        if isinstance(rec, dict):
+            if rec.get("ticket_id"):
+                open_ids.add(rec["ticket_id"])
+            cp = rec.get("checkpoint") or {}
+            if isinstance(cp, dict) and cp.get("demo_id"):
+                open_ids.add(cp["demo_id"])
+    pruned, skipped = [], []
+    for name in sorted(os.listdir(demos_dir)):
+        d = os.path.join(demos_dir, name)
+        if not os.path.isdir(d):
+            continue
+        if name in open_ids:
+            skipped.append(name)                   # checkpoint still open — keep it
+        else:
+            pruned.append(name)
+            if not dry_run:
+                shutil.rmtree(d, ignore_errors=True)
+    return pruned, skipped
+
+
 # --- driver ------------------------------------------------------------------
 
 def main(argv=None):
@@ -270,6 +320,8 @@ def main(argv=None):
     knowledge_dir = os.path.join(docs, "knowledge")
     decisions_dir = os.path.join(docs, "decisions")
     items_dir = os.path.join(args.workflow_dir, "items")
+    demos_dir = os.path.join(args.workflow_dir, "demos")
+    parked_dir = os.path.join(args.workflow_dir, "parked")
     anchor = git_anchor(args.workflow_dir)
 
     sessions = {}
@@ -284,6 +336,7 @@ def main(argv=None):
 
     gcd = gc_decisions(decisions_dir, anchor, args.dry_run)
     pruned, skipped = prune_items(items_dir, args.dry_run)
+    demos_pruned, demos_skipped = prune_demos(demos_dir, parked_dir, args.dry_run)
 
     summary = {
         "dry_run": args.dry_run,
@@ -293,6 +346,8 @@ def main(argv=None):
         "decisions_gcd": gcd,
         "items_pruned": pruned,
         "items_skipped_unmarked": skipped,
+        "demos_pruned": demos_pruned,
+        "demos_skipped_open": demos_skipped,
     }
     if args.json:
         print(json.dumps(summary, indent=2))
@@ -308,6 +363,11 @@ def main(argv=None):
         if skipped:
             print(f"  skipped {len(skipped)} unmarked item dir(s) (open or not-yet-promoted): "
                   f"{', '.join(skipped)}")
+        print(f"  {verb}prune {len(demos_pruned)} resolved demo bundle(s): "
+              f"{', '.join(demos_pruned) or '-'}")
+        if demos_skipped:
+            print(f"  skipped {len(demos_skipped)} demo bundle(s) with an open checkpoint: "
+                  f"{', '.join(demos_skipped)}")
     return 0
 
 

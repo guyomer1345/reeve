@@ -95,35 +95,48 @@ than a wrong build.
 | "Move logout to top-right" | ✓ | ✓ | ✗ pinned | **No** |
 | "Add dark mode" | ✓ | ✓ | design-system-dependent | **Fence → ask** |
 
-## The sandbox — serving, refine loop, storage **[DECIDED — D102–D104]**
+## The sandbox — serving, refine loop, storage **[DECIDED — D102–D104; BUILT + sharpened — D124]**
 The demo mechanics are **over-determined by the A/B substrate** (like the console stack was, D100): a demo is
 just *more files on disk*, so D93's "the daemon serves files; the orchestrator writes them, never responds"
-already answers who serves it.
-- **Format (D102):** a **build-free, self-contained static bundle** — **no external hosts, no `eval`** (the two
-  invariants that make it render identically local + over the tunnel, offline, never phoning home; the Claude
-  Artifacts discipline). **Vanilla JS + `<template>` + hash routing** by default; **htm + preact vendored
-  locally** (~10 KB, tagged templates, not JSX) as the escape hatch — the *same idiom the console uses* (D100).
-  Banned: CDN `<script>`, `@babel/standalone` / `text/babel` JSX (6 MB + needs `unsafe-eval`), npm/bundlers.
-- **Serve (D102):** the always-on **bus daemon (D94) serves it** — no sibling server, no second port. `create-demo`
-  writes the bundle **before the park** (D90). Isolation from the control surface = the daemon serves `/demo/*`
-  with **`Content-Security-Policy: sandbox allow-scripts allow-forms`** (the `sandbox` *directive* → an **opaque
-  origin** server-side: the demo can't touch the console's storage or token-gated endpoints, and it stays
-  isolated even when the D98 deep-link opens it **top-level** in an away tab), reinforced by the embedded iframe
-  `sandbox="allow-scripts allow-forms"` attribute — **never `allow-same-origin`**. **Demo = look, console = the
-  D97 verdict form around it** (the demo is read-only, no POST, no token). It joins the daemon's **static-asset
-  serving class** (Host-allowlisted, token-free — no secrets), distinct from the token-gated data/command class
-  (`05`). The **away human** reaches it for free over the *existing* remote surface (D112): the demo is static and
-  read-only, so it rides the **reduced remote socket** alongside reads + opinion verdicts — and a `demo` verdict is
-  exactly an *opinion* (no payload), so submitting it remotely is in-scope. That surface is served only behind a
-  **declared identity transport**; with none configured, the demo is loopback-only like everything else.
-- **Refine cap (D103):** the change-request → regenerate mini-loop is bounded at **N regenerations**
-  (config-overridable `config.demo.max_refine_rounds`, **default 3**), counted plainly. On the cap it **never
-  auto-proceeds** (D97) — it **escalates to a live `discuss` session** (a low-bandwidth async channel that won't
-  converge *is* the signal the gap needs high-bandwidth conversation — D93), carrying the refine history.
-- **On disk (D104):** **`.workflow/demos/<item-id>/`** — gitignored runtime (not committed `items/<id>/`; not
-  `/tmp` scratch — it must survive an hours-long park), under the served tree, regenerated in place via atomic
-  write, a pointer in the `parked/<id>` record, **pruned on checkpoint-resolve** (throwaway → just delete; the
-  locked *spec* is the durable artifact, D21). Owner: `create-demo` writes, the audit prune deletes.
+already answers who serves it. The build (D124) drove the isolation in a real browser and `create-demo` on a real
+model, and corrected two things below.
+- **Format (D102) + the discipline's real enforcer (D124):** a **build-free, self-contained static bundle** —
+  **no external hosts, no `eval`** (the two invariants that make it render identically local + over the tunnel,
+  offline, never phoning home; the Claude Artifacts discipline). **Vanilla JS + `<template>` + hash routing** by
+  default; **htm + preact vendored locally** (~10 KB, tagged templates, not JSX) as the escape hatch — the *same
+  idiom the console uses* (D100). Banned: CDN `<script>`, `@babel/standalone` / `text/babel` JSX (needs
+  `unsafe-eval`), npm/bundlers. **The `sandbox` CSP does NOT enforce this** — measured (D124), `eval`/external
+  hosts run under it; it enforces *isolation* only. So the discipline is `create-demo`'s, backed by a shipped
+  mechanical floor **`check_demo_bundle.py`** run before the park (fix-and-regenerate on a hit) — the format
+  enforcer, the CSP the isolator.
+- **Serve (D102), built (D124):** the always-on **bus daemon (D94) serves `/demo/<id>/`** on **both sockets** —
+  no sibling server, no second port. `create-demo` writes the bundle **before the park** (D90). Isolation =
+  **`Content-Security-Policy: sandbox allow-scripts allow-forms`** (the `sandbox` *directive* → an **opaque
+  origin** server-side, **proven in real Chrome**: the demo can't touch the console's storage or token-gated
+  endpoints, at **top-level** navigation from the header alone — the D98 deep-link / away-tab case — **and** when
+  the console **embeds** it in an iframe). Reinforced by the embedded `sandbox="allow-scripts allow-forms"`
+  attribute — **never `allow-same-origin`**; the console gains `frame-src 'self'` to embed it while keeping its own
+  strict `script-src 'self'` (two per-path CSPs from one daemon). Guarded by a realpath check + a **no-dotfile**
+  rule; MIME + `nosniff` + `no-store`; a bounded read-retry so an in-place refine never flashes a 404 (below).
+  **Demo = look, console = the D97 verdict form around it** (read-only, no POST, no token — the **static-asset
+  serving class**, token-free, Host-gated; `05`). The **away human** reaches it for free over the **reduced remote
+  socket** (D112): a `demo` verdict is an *opinion* (no payload), so submitting it remotely is in-scope. That
+  surface needs a **declared identity transport**; with none, the demo is loopback-only like everything else.
+- **Refine cap (D103), with a durable home (D124):** the change-request → regenerate mini-loop is bounded at **N
+  regenerations** (config-overridable `config.demo.max_refine_rounds`, **default 3**), counted plainly. On the cap
+  it **never auto-proceeds** (D97) — it **escalates to a live `discuss` session** (a low-bandwidth async channel
+  that won't converge *is* the signal the gap needs high-bandwidth conversation — D93), carrying the refine
+  history. The count spans park → resume → a possibly-relaunched session and the loop is stateless glue
+  (D92/D123), so it lives on disk at **`.workflow/demos/<id>/.refine.json`** (a dotfile the server refuses),
+  read-and-incremented each round — never in context or the parked record.
+- **On disk (D104), with a pinned prune owner (D124):** **`.workflow/demos/<item-id>/`** — gitignored runtime
+  (not committed `items/<id>/`; not `/tmp` scratch — it must survive an hours-long park), on the repo mount
+  (`no-pin`), regenerated in place via atomic write (`os.replace`; measured **content-atomic** on 9p, `no-store`
+  prevents a stale render — a concurrent read only ever hits a transient open blip that self-heals), a `demo_id`
+  pointer in the `parked/<id>` record. **Pruned on TERMINAL resolve by the verdict-apply path** (approve → lock the
+  spec / reject → `discuss` delete the bundle; `changes` keeps it — the locked *spec* is the durable artifact,
+  D21), with retention's **`prune_demos`** (a demo dir with no open `parked/` record is a resolved leftover) as the
+  straggler backstop. Owner: `create-demo` writes, the apply path deletes, retention sweeps stragglers.
 
 ## Commitment model — locked / provisional / unspecified **[DECIDED — D23]**
 Every spec element carries a **commitment status** that tells the loop how to treat a later deviation:
@@ -159,11 +172,12 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
   urgency is assigned. *(Interrupt model closed: pure queue, D26. **Continue-while-parked interleaving decided —
   D91:** while a ticket is parked on a checkpoint, `prioritize` picks the next **eligible** ticket — dependency-ready
   ∧ file-disjoint ∧ ¬1-hop-neighbor — capped ≤3, prefer-serial.)*
-- **Demo skill mechanics** — **CLOSED (D102–D104, cluster D):** the sandbox is a build-free self-contained
-  bundle the D94 daemon serves under a `sandbox`-CSP opaque origin (§ *The sandbox — serving, refine loop,
-  storage*); the refine loop caps at 3 regenerations → escalate to `discuss`; it lives at
-  `.workflow/demos/<item-id>/`, pruned on resolve. (The demo **trigger** + checkpoint data model / help set
-  closed earlier — D96–D98, `04`.)
+- **Demo skill mechanics** — **CLOSED (D102–D104, cluster D); BUILT — D124:** the sandbox is a build-free
+  self-contained bundle the D94 daemon serves under a `sandbox`-CSP opaque origin (§ *The sandbox — serving,
+  refine loop, storage*); the refine loop caps at 3 regenerations → escalate to `discuss`; it lives at
+  `.workflow/demos/<item-id>/`, pruned on resolve. The build proved the isolation in a real browser and drove
+  `create-demo` on a real model, and pinned the two owners the design left open (the refine-count home + the prune
+  path) — D124. (The demo **trigger** + checkpoint data model / help set closed earlier — D96–D98, `04`.)
 - **Setup checkpoints** — **closed (D96–D98, `04`):** foreseeable ones declared in the spec `integrations[]` +
   an execute-discovered path; verb-enum verdict, machine-verified, plural+coalesced; MVP help = steps + verified
   deep-links + breadcrumbs.

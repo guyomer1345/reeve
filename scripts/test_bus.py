@@ -724,6 +724,88 @@ class LiveServer(Tmp):
         self.assertEqual(code, 413)
 
 
+# --- the demo static class --------------------------------------------------
+class DemoServing(LiveServer):
+    """The /demo/* static class: a throwaway create-demo bundle served under the
+    sandbox-CSP opaque origin, token-free like the page, realpath-guarded."""
+
+    def setUp(self):
+        super().setUp()
+        self.demo = os.path.join(self.w, "demos", "item-42")
+        os.makedirs(self.demo)
+        with open(os.path.join(self.demo, "index.html"), "w") as fh:
+            fh.write("<!doctype html><h1>hi</h1><script>1</script>")
+        with open(os.path.join(self.demo, "app.js"), "w") as fh:
+            fh.write("console.log(1)")
+        # The real published bus.json (paths.record) sits one dir up and holds the live
+        # token — the exact thing a /demo/../ climb would try to reach. Don't fabricate a
+        # decoy (that would clobber the daemon's own record); escape at the real secret.
+
+    def test_index_serves_token_free_under_the_sandbox_csp(self):
+        for path in ("/demo/item-42/", "/demo/item-42/index.html"):
+            code, body, headers = self.get(path)  # NO token — static class
+            self.assertEqual(code, 200, path)
+            self.assertIn(b"<h1>hi</h1>", body)
+            self.assertEqual(headers.get("Content-Security-Policy"), bus.DEMO_CSP)
+            self.assertIn("sandbox", headers.get("Content-Security-Policy", ""))
+            self.assertEqual(headers.get("Cache-Control"), "no-store")
+            self.assertEqual(headers.get("X-Content-Type-Options"), "nosniff")
+            self.assertIn("text/html", headers.get("Content-Type", ""))
+
+    def test_the_console_csp_stays_strict_and_is_never_the_demo_csp(self):
+        _, _, headers = self.get("/")
+        console = headers.get("Content-Security-Policy", "")
+        self.assertIn("script-src 'self'", console)
+        self.assertNotIn("sandbox", console)   # two per-path CSPs, never crossed
+        self.assertIn("frame-src 'self'", console)  # so the console can embed the demo
+
+    def test_mime_is_explicit(self):
+        _, _, headers = self.get("/demo/item-42/app.js")
+        self.assertIn("javascript", headers.get("Content-Type", ""))
+
+    def test_realpath_guard_blocks_the_climb_out(self):
+        # bus.json (paths.record) holds the live capability token — the real target.
+        self.assertIn(b"token", bus.read_text(self.d.paths.record).encode())
+        for esc in ("/demo/item-42/../../bus.json",
+                    "/demo/item-42/../../../bus.json",
+                    "/demo/item-42/..%2f..%2fbus.json"):
+            code, body, _ = self.get(esc)
+            self.assertEqual(code, 404, esc)
+            self.assertNotIn(self.d.token.encode(), body,
+                             "the guard let the token escape: %s" % esc)
+
+    def test_prefix_sibling_cannot_be_reached(self):
+        # demos/item-42 must not serve demos/item-42x via a shared prefix.
+        with open(os.path.join(self.w, "demos", "item-42x"), "w") as fh:
+            fh.write("SIBLING")
+        self.assertEqual(self.get("/demo/item-42/../item-42x")[0], 404)
+
+    def test_unknown_demo_and_missing_asset_404(self):
+        self.assertEqual(self.get("/demo/does-not-exist/")[0], 404)
+        self.assertEqual(self.get("/demo/item-42/missing.js")[0], 404)
+
+    def test_a_bad_demo_id_is_refused(self):
+        self.assertEqual(self.get("/demo/..%2f..%2fbus.json")[0], 404)
+        self.assertEqual(self.get("/demo//index.html")[0], 404)
+
+    def test_demo_is_still_host_gated(self):
+        # Token-free is not Host-free: a rebound page must not reach it either.
+        self.assertEqual(self.get("/demo/item-42/", host="evil.com")[0], 403)
+
+    def test_dotfiles_are_never_served(self):
+        # create-demo keeps the refine-round counter here; it (and any stray .git) must
+        # not be servable even though it lives inside the bundle dir.
+        with open(os.path.join(self.demo, ".refine.json"), "w") as fh:
+            fh.write('{"round": 2}')
+        os.makedirs(os.path.join(self.demo, ".git"), exist_ok=True)
+        with open(os.path.join(self.demo, ".git", "config"), "w") as fh:
+            fh.write("SECRET")
+        self.assertEqual(self.get("/demo/item-42/.refine.json")[0], 404)
+        code, body, _ = self.get("/demo/item-42/.git/config")
+        self.assertEqual(code, 404)
+        self.assertNotIn(b"SECRET", body)
+
+
 # --- the inbox writer -------------------------------------------------------
 class InboxOrdering(Tmp):
     """The measured contract behind the watermark: filename order == VISIBILITY order."""
@@ -1418,6 +1500,40 @@ class RemoteSocket(Tmp):
         self.assertEqual(rec["remote_port"], self.rport)
         self.assertEqual(rec["remote_token"], "remote-token-A")
         self.assertEqual(rec["token"], "loopback-token-B")   # the loopback token, distinct
+
+    # -- the static demo rides A "for free" --
+    def _write_demo(self):
+        demo = os.path.join(self.w, "demos", "item-7")
+        os.makedirs(demo, exist_ok=True)
+        with open(os.path.join(demo, "index.html"), "w") as fh:
+            fh.write("<!doctype html><h1>demo</h1>")
+        with open(os.path.join(self.w, "bus.json"), "a") as fh:
+            fh.write("REMOTE-SECRET")
+
+    def test_demo_serves_token_free_on_the_remote_socket(self):
+        """The reduced remote surface carries the static demo. Token-free (a browser
+        can't header an iframe nav) but under A's Host-allowlist — and it must NOT 403
+        the way the forwarded-Host bug would, nor leak the loopback token."""
+        self._write_demo()
+        # over the tunnel the browser sends the public Host, forwarded by the proxy.
+        code, body, headers = self.req(self.rport, "/demo/item-7/", host="away.example")
+        self.assertEqual(code, 200, body)
+        self.assertIn(b"<h1>demo</h1>", body)
+        self.assertEqual(headers.get("Content-Security-Policy"), bus.DEMO_CSP)
+        # and it serves on loopback too (localhost Host).
+        self.assertEqual(self.req(self.rport, "/demo/item-7/")[0], 200)
+        self.assertEqual(self.req(self.bport, "/demo/item-7/")[0], 200)
+
+    def test_demo_traversal_guard_holds_on_the_remote_socket(self):
+        self._write_demo()
+        code, body, _ = self.req(self.rport, "/demo/item-7/../../bus.json",
+                                 host="away.example")
+        self.assertEqual(code, 404)
+        self.assertNotIn(b"REMOTE-SECRET", body)
+
+    def test_demo_on_A_still_refuses_an_unknown_host(self):
+        self._write_demo()
+        self.assertEqual(self.req(self.rport, "/demo/item-7/", host="evil.com")[0], 403)
 
 
 class RemoteSocketTailscale(RemoteSocket):

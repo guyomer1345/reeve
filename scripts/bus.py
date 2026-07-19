@@ -91,6 +91,41 @@ BACKOFF_BASE = 30            # seconds; a failing away channel backs off, doubli
 DEFAULT_REMOTE_PORT = 8799   # the fixed loopback port the remote socket binds; operator-overridable
 REMOTE_KINDS = ("verdict",)  # Socket A's positive POST allowlist — everything else is loopback-only
 
+# --- the demo static class --------------------------------------------------
+# A throwaway create-demo sandbox served under /demo/<id>/. It joins the token-free
+# STATIC serving class (a browser cannot attach a header to a document/iframe
+# navigation), and its isolation is a per-path CSP, not a token: the `sandbox`
+# DIRECTIVE forces an opaque origin SERVER-SIDE, so the demo is isolated from the
+# console even at top-level navigation (the deep-link / away-tab case an iframe
+# sandbox attribute alone misses) — it can neither read the console's localStorage
+# nor reach its token-gated /api/*. Distinct from the console's own strict
+# `script-src 'self'`, which stays intact: two per-path CSPs from one daemon.
+DEMO_CSP = "sandbox allow-scripts allow-forms"
+# The console page's CSP. Pulled out as a constant so /demo/* can send DEMO_CSP
+# instead. frame-src 'self' is the one addition this slice makes: it lets the
+# console EMBED the same-origin demo in a sandboxed iframe (belt-and-suspenders
+# beside the top-level case); default-src 'none' would otherwise block every frame.
+CONSOLE_CSP = ("default-src 'none'; script-src 'self'; style-src 'self'; "
+               "connect-src 'self'; img-src 'self' data:; frame-src 'self'; "
+               "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+# Explicit MIME map + nosniff (below): a demo asset is raw first-party bytes, and a
+# guessed/omitted type either fails to execute a real asset or, worse, lets a
+# mis-served one sniff into something executable. Unknown extension ⇒ octet-stream,
+# which nosniff then refuses to run — fail-closed.
+DEMO_MIME = {
+    ".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8", ".json": "application/json",
+    ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+    ".ico": "image/x-icon", ".woff2": "font/woff2", ".woff": "font/woff",
+    ".txt": "text/plain; charset=utf-8", ".map": "application/json",
+}
+# A demo id is a work-item id — the dir name under demos/. Kept strict so it can never
+# contribute a path segment that climbs out of the demo root (the realpath guard is the
+# real defense; this refuses the obvious junk before a filesystem call).
+DEMO_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
 # --- the relaunch-runner ----------------------------------------------------
 # Only these kinds ADVANCE a dead/whole-parked loop, so only these are worth spawning a
 # fresh session for. A verdict resumes a parked ticket; an intake starts new work. A
@@ -175,6 +210,12 @@ class Paths:
         self.backlog = os.path.join(self.workflow, "backlog.md")
         self.config = os.path.join(self.workflow, "config.json")
         self.repo = os.path.dirname(self.workflow)
+        # The throwaway demo sandboxes. RUNTIME + gitignored, but NOT relocated to the
+        # native FS like the rest of the runtime tree: it is marked no-pin
+        # (write-once-then-serve, atomicity-light), so it stays under .workflow/ on the
+        # repo mount — a torn render self-heals on the next poll and carries no secret.
+        # It is the served root the /demo/* realpath guard is anchored to.
+        self.demos = os.path.join(self.workflow, "demos")
 
     def _resolve_runtime_root(self):
         pointer = os.path.join(self.workflow, "runtime.json")
@@ -1344,6 +1385,12 @@ class ReadModel:
             if not isinstance(rec, dict):
                 continue
             cp = rec.get("checkpoint") or {}
+            # A demo checkpoint carries the id of its served bundle so the console can
+            # embed /demo/<id>/. Passed through only when it matches the served-id shape,
+            # so a malformed record can never make the page build a junk iframe src.
+            demo_id = cp.get("demo_id")
+            if not (isinstance(demo_id, str) and DEMO_ID_RE.match(demo_id)):
+                demo_id = None
             out.append({
                 "ticket_id": rec.get("ticket_id"),
                 "token": rec.get("token"),
@@ -1351,6 +1398,7 @@ class ReadModel:
                 "request": cp.get("request"),
                 "deadline": rec.get("deadline"),
                 "overdue": self._overdue(rec.get("deadline")),
+                "demo_id": demo_id,
             })
         return out
 
@@ -1542,6 +1590,13 @@ INDEX_HTML = """<!doctype html>
   <article class="card">
     <div class="row"><strong class="kind"></strong><span class="ticket mono"></span></div>
     <p class="request"></p>
+    <div class="demo-wrap" hidden>
+      <!-- The sandbox attribute is belt-and-suspenders beside the server's sandbox-CSP
+           opaque origin; NEVER allow-same-origin (that would hand the demo this page's
+           origin). app.js sets .src; the demo is read-only, the verdict is this form. -->
+      <iframe class="demo-frame" sandbox="allow-scripts allow-forms" title="demo sandbox"></iframe>
+      <a class="demo-open" target="_blank" rel="noopener noreferrer">open the demo full-screen ↗</a>
+    </div>
     <div class="row"><span class="deadline"></span></div>
     <div class="verdict">
       <select class="outcome">
@@ -1700,6 +1755,16 @@ function renderCheckpoints(items) {
     node.querySelector(".ticket").textContent = cp.ticket_id || "";
     node.querySelector(".request").textContent =
       typeof cp.request === "string" ? cp.request : JSON.stringify(cp.request ?? "");
+    // A demo checkpoint shows its sandbox inline (look), with the verdict form below it
+    // (approve → lock · changes → refine · reject → discuss). The demo id is validated
+    // server-side to the served-id shape; encodeURIComponent guards the URL we build.
+    if (cp.kind === "demo" && cp.demo_id) {
+      const wrap = node.querySelector(".demo-wrap");
+      const src = "/demo/" + encodeURIComponent(cp.demo_id) + "/";
+      node.querySelector(".demo-frame").src = src;
+      node.querySelector(".demo-open").href = src;
+      wrap.hidden = false;
+    }
     const d = node.querySelector(".deadline");
     d.textContent = cp.deadline ? (cp.overdue ? "OVERDUE — " : "due ") + cp.deadline : "";
     if (cp.overdue) d.classList.add("overdue");
@@ -1915,6 +1980,10 @@ dd { margin:0; }
 .mono, .sha { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85em; color:var(--dim); }
 .deadline { font-size:.8rem; color:var(--dim); }
 .deadline.overdue { color:var(--bad); font-weight:600; }
+.demo-wrap { margin:.5rem 0; }
+.demo-frame { width:100%; height:26rem; border:1px solid var(--line); border-radius:6px;
+  background:#fff; display:block; }
+.demo-open { display:inline-block; margin-top:.35rem; font-size:.8rem; color:var(--dim); }
 .verdict { display:flex; gap:.4rem; align-items:center; margin-top:.5rem;
   padding-top:.5rem; border-top:1px solid var(--line); flex-wrap:wrap; }
 .verdict .notes { flex:1; min-width:12rem; }
@@ -2293,17 +2362,17 @@ def make_handler(daemon):
         def log_message(self, fmt, *args):
             pass  # the access log is noise; real events go through log()
 
-        def _send(self, code, body=b"", ctype="application/json", extra=None):
+        def _send(self, code, body=b"", ctype="application/json", extra=None, csp=CONSOLE_CSP):
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-store")
-            # The page-side teeth of the trust posture: no inline scripts, no eval,
-            # no third-party anything. This is what forces a zero-build frontend.
-            self.send_header("Content-Security-Policy",
-                             "default-src 'none'; script-src 'self'; style-src 'self'; "
-                             "connect-src 'self'; img-src 'self' data:; base-uri 'none'; "
-                             "form-action 'none'; frame-ancestors 'none'")
+            # The page-side teeth of the trust posture: the console's is no inline
+            # scripts, no eval, no third-party anything (what forces a zero-build
+            # frontend). A demo response instead carries the `sandbox` directive
+            # (opaque origin) — two per-path CSPs from one daemon.
+            if csp:
+                self.send_header("Content-Security-Policy", csp)
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
             for k, v in (extra or {}).items():
@@ -2370,6 +2439,64 @@ def make_handler(daemon):
                 return b""
             return self.rfile.read(length)
 
+        # -- the demo static class --
+        def _serve_demo(self, path):
+            """Serve one file from a throwaway demo bundle under the sandbox-CSP opaque
+            origin. The path is /demo/<id>/<relpath>; <relpath> defaults to index.html.
+
+            The realpath guard is the security boundary, not the DEMO_ID_RE prefilter: it
+            resolves symlinks and `..` on the CONCRETE path and requires the result to sit
+            under the real demo root. So /demo/x/../../bus.json (or a relocated runtime
+            path, or a symlink out) cannot escape to the token or the inbox — the escape
+            resolves outside demos/ and is refused. The root itself is realpath'd once so a
+            symlinked .workflow doesn't defeat the startswith.
+            """
+            rest = path[len("/demo/"):]
+            demo_id, _, rel = rest.partition("/")
+            if not DEMO_ID_RE.match(demo_id or ""):
+                return self._err(404, "no such demo")
+            root = os.path.realpath(daemon.paths.demos)
+            base = os.path.join(root, demo_id)
+            rel = rel or "index.html"
+            if rel.endswith("/"):
+                rel += "index.html"
+            # Never serve a dotfile from a bundle. Bundle assets are never dot-prefixed,
+            # and create-demo keeps its own bookkeeping there (the refine-round counter in
+            # .refine.json, which survives park/resume/relaunch), plus it fends off a stray
+            # .git/.DS_Store. A leading-dot segment anywhere in the path is refused.
+            if any(seg.startswith(".") for seg in rel.replace("\\", "/").split("/") if seg):
+                return self._err(404, "not found")
+            target = os.path.realpath(os.path.join(base, rel))
+            # startswith the base + os.sep so /demo/<id>/ can't be tricked by a sibling
+            # dir sharing a prefix (demos/foo vs demos/foobar), and the base itself is a
+            # dir not a file, so a bare base never matches a real file to serve.
+            if target != base and not target.startswith(base + os.sep):
+                return self._err(404, "not found")
+            # MEASURED on the 9p repo mount: while `create-demo` refines in place
+            # (write-temp → os.replace), a concurrent open of the target transiently
+            # fails with ENODATA even though the rename is atomic and never tears the
+            # CONTENT. A genuinely-absent file (ENOENT/FileNotFoundError) 404s at once;
+            # a transient error retries briefly so a refine is invisible to a viewer
+            # rather than flashing a 404, then 404s if it never resolves.
+            body = None
+            for attempt in range(4):
+                try:
+                    with open(target, "rb") as fh:
+                        body = fh.read()
+                    break
+                except (FileNotFoundError, IsADirectoryError):
+                    return self._err(404, "not found")
+                except OSError as exc:
+                    if attempt == 3:
+                        log("demo serve failed for %s: %s" % (target, exc))
+                        return self._err(404, "not found")
+                    time.sleep(0.02)
+            ctype = DEMO_MIME.get(os.path.splitext(target)[1].lower(),
+                                  "application/octet-stream")
+            # DEMO_CSP (opaque origin) instead of the console's script-src 'self';
+            # no-store so a refine that overwrites index.html is never served stale.
+            return self._send(200, body, ctype, csp=DEMO_CSP)
+
         # -- routes --
         def do_GET(self):
             path = self.path.split("?", 1)[0]
@@ -2399,6 +2526,16 @@ def make_handler(daemon):
                 if not self._guard(need_token=False):
                     return
                 return self._send(200, STYLE_CSS.encode(), "text/css; charset=utf-8")
+
+            # The demo static class: a throwaway create-demo bundle, served token-free
+            # (like the page — a browser cannot header an iframe/document navigation)
+            # under the DEMO_CSP opaque-origin isolation. Host-gated and realpath-guarded.
+            # Serves on BOTH sockets: on Socket A it is exactly the "static demo" the
+            # reduced remote surface is meant to carry.
+            if path.startswith("/demo/"):
+                if not self._guard(need_token=False):
+                    return
+                return self._serve_demo(path)
 
             # The sensitive data class: token required, on reads too. A rebound page
             # must not be able to scrape state.

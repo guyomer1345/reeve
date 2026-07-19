@@ -31,7 +31,9 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `refine` | correction plan | `planner:plan-one` → `execute` |
 | `checkpoint:qa` | pass (or no human-qa criteria → skip) | `document` |
 | `checkpoint:qa` | fail | `debug` |
-| `checkpoint:demo` | fail (rejected) | `create-demo` (refine the sandbox / spec) |
+| `checkpoint:demo` | approve | lock the spec state → **prune the demo** → continue (`planner:decompose` at inception · `execute` per-item) |
+| `checkpoint:demo` | changes | `create-demo` (refine the sandbox / spec — **keep** the bundle + its refine count) |
+| `checkpoint:demo` | reject | `discuss` (→ **prune the demo**) |
 | `checkpoint:setup` | fail (couldn't complete) | re-attempt `checkpoint` (re-guides via setup-guide) / escalate to human |
 | `document` | knowledge + Sessions updated | `commit` |
 | `commit` | snapshot made | `close-issue?` |
