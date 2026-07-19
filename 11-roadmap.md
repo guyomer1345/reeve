@@ -93,15 +93,22 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      (`alerts.json`, fail-toward-noise, survives restart); event 2 ships its **real-source arms** (deadline +
      dead-letter escalation), the thrash/crash arm deferred to increment 6 with its liveness signal; the **doorbell**
      webhook payload carries no request body. *Away becomes triggerable.*
-  5. **The remote socket** — the reduced surface behind a declared identity transport (D112): away becomes *actionable*.
+  5. **The remote socket** — **BUILT 2026-07-19 (D122)**: the structural two-socket split — Socket B loopback/full-
+     surface unchanged, Socket A the reduced remote surface (reads · opinion verdicts · static demo) bound only when
+     `config.remote` declares a transport, gated by a distinct **persisted** token as second factor over the transport
+     identity. Building sharpened four points (the token never on the surface it gates · stable-not-per-boot
+     coordinates · a **structural** `returns`/`tasks` credential boundary, not the `_is_sensitive` heuristic ·
+     `public_url` load-bearing for the forwarded-Host allowlist); pairing ships **copy-paste**, the QR deferred as a
+     scoped fast-follow. *Away becomes actionable.*
   6. **The relaunch-runner** — (D113): away becomes *completing*.
   **[core for unattended autonomy — fully designed (D93/D94/D95 + D108/D111/D112/D113); build = Phase 3.
   **Increments 1+2 BUILT 2026-07-16 (D115/D116** — `scripts/bus.py` + 39 fixture tests, gate suite 89 → 128);
   **increment 3 BUILT 2026-07-16 (D117/D118/D119** — `scripts/drain.py` + the POST surface; gate suite 128 → 177);
-  **increment 4 BUILT 2026-07-18 (D120** — the notifier; gate suite 181 → 199).
-  **The first MVP goal is met: a verdict now lands durably and unparks the loop; and away is now *triggerable*.**
-  Next is **increment 5 — the remote socket** (the reduced surface behind a declared identity transport, D112):
-  away becomes *actionable*.]**
+  **increment 4 BUILT 2026-07-18 (D120** — the notifier; gate suite 181 → 199);
+  **increment 5 BUILT 2026-07-19 (D122** — the remote socket / two-socket split; gate suite 199 → 235).
+  **The first MVP goal is met (a verdict lands durably and unparks the loop), away is *triggerable* (the notifier),
+  and away is now *actionable* (act on a checkpoint from a phone over a declared identity transport).**
+  Next is **increment 6 — the relaunch-runner** (D113): away becomes *completing*.]**
 - **C-map — project map + flow view** (D70) — a read-only cluster diagram over the code-map `graph.json`
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
@@ -307,11 +314,11 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **Phase 3 is UNDERWAY — increments 1+2+3+4 are BUILT (D115/D116 · D117/D118/D119 ·
-D120), the first MVP goal is met, and away is now *triggerable***: a verdict POSTed from the console lands durably on
-the inbox and unparks the loop, and the daemon alerts an away human that a verdict is owed. Next is **increment 5 —
-the remote socket** (the reduced surface behind a declared identity transport, D112): away becomes *actionable*.
-Then the runner.
+**Recommended next slice:** **Phase 3 is UNDERWAY — increments 1–5 are BUILT (D115/D116 · D117/D118/D119 · D120 ·
+D122), the first MVP goal is met, and away is now *triggerable* AND *actionable***: a verdict POSTed from the console
+lands durably and unparks the loop, the daemon alerts an away human that a verdict is owed, and that human can now act
+on a checkpoint from a phone over a declared identity transport. Next is **increment 6 — the relaunch-runner** (D113):
+away becomes *completing* — the last link that resumes a whole-parked loop without a human at the terminal.
 *(**The build is pressure-testing the design, as intended.** Increment 1 alone found the substrate unbuildable as
 specced — a pinned path could not be *found* — and **measured two stated mechanisms to be wrong**: `flock` does not
 fail on the repo mount, while file *mode* does, silently and open. Both are the reverse of what the spec asserted,
@@ -324,7 +331,12 @@ session recorded ids one at a time, exactly as the brief asks. **Increment 4 hel
 filesystem:** alert state had no home (in-memory ⇒ WSL-restart spam), and three stated mechanisms measured wrong —
 `enable-linger` is the wrong *layer* for the WSL death (the daemon is in `/init.scope`, the killer is Windows-side),
 `config.json` was marked `bus:none` on the increment that reads it, and the desktop toast fails for the wrong stated
-reason (no name owner, not "no session bus"). **Drive them on the real filesystem, with a real model.**)*
+reason (no name owner, not "no session bus"). **Increment 5 held it past the filesystem into the trust model:** the
+meta-tag token bootstrap, applied naively to the remote page, would have served the second-factor token to anyone
+past the transport — nullifying it; the remote coordinates were framed per-boot, which breaks a one-time phone
+pairing on every WSL restart; and A's Host-allowlist, left loopback-only, would 403 a forwarded-Host proxy entirely.
+Three of the four were re-measured before the build, one surfaced in it. **Drive them on the real filesystem, with a
+real model.**)*
 **Phase 4 — Build the demo, then the public-release surface.** The demo (Space 4), plus the **public-repo identity +
 onboarding** pass (the one-repo-vs-two fork · a product front-door README + getting-started · the construction-vs-product
 reframe of `00–11`/`08` · a user-language pass over skill `description:` fields — D121, `07`).

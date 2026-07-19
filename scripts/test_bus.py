@@ -281,6 +281,7 @@ class LiveServer(Tmp):
         self.d.token = "test-token-xyz"
         from http.server import ThreadingHTTPServer
         self.d.server = ThreadingHTTPServer(("127.0.0.1", 0), bus.make_handler(self.d))
+        self.d.server.policy = bus.LOOPBACK_POLICY
         self.port = self.d.server.server_address[1]
         self.d.publish(self.port)
         threading.Thread(target=self.d.server.serve_forever, daemon=True).start()
@@ -953,6 +954,243 @@ class NotifierLiveDaemon(Tmp):
             time.sleep(0.2)
         self.assertTrue(sink.received, "the live daemon never POSTed the away alert")
         self.assertEqual(sink.received[0]["body"]["ticket_id"], "item-1")
+
+
+# --- the remote socket: the pure decisions ----------------------------------
+class RemoteConfigParse(unittest.TestCase):
+    def test_absent_or_disabled_is_not_served(self):
+        self.assertIsNone(bus.parse_remote({}))
+        self.assertIsNone(bus.parse_remote({"remote": {"enabled": False,
+                                                        "transport": "tailscale"}}))
+        self.assertIsNone(bus.parse_remote({"remote": {"enabled": True}}))
+
+    def test_a_bogus_transport_is_not_served(self):
+        self.assertIsNone(bus.parse_remote(
+            {"remote": {"enabled": True, "transport": "ngrok"}}))
+
+    def test_access_parses_without_the_credential_carve_out(self):
+        r = bus.parse_remote({"remote": {"enabled": True, "transport": "access",
+                                         "public_url": "https://away.example/"}})
+        self.assertIsNotNone(r)
+        self.assertEqual(r.transport, "access")
+        self.assertFalse(r.allow_credentials)         # a TLS-terminating proxy sees plaintext
+        self.assertEqual(r.public_url, "https://away.example")   # trailing slash stripped
+        self.assertEqual(r.host, "away.example")
+
+    def test_tailscale_unlocks_credentials(self):
+        r = bus.parse_remote({"remote": {"enabled": True, "transport": "tailscale"}})
+        self.assertTrue(r.allow_credentials)          # WireGuard is end-to-end encrypted
+        self.assertEqual(r.port, bus.DEFAULT_REMOTE_PORT)   # a missing port defaults, fixed
+        self.assertIsNone(r.public_url)
+
+    def test_a_declared_port_is_kept_but_a_bad_one_defaults(self):
+        self.assertEqual(bus.parse_remote(
+            {"remote": {"enabled": True, "transport": "access", "port": 9001}}).port, 9001)
+        for bad in (True, 0, 70000, "8799", 1.5):
+            self.assertEqual(bus.parse_remote(
+                {"remote": {"enabled": True, "transport": "access", "port": bad}}).port,
+                bus.DEFAULT_REMOTE_PORT)
+
+
+class RemotePayloadBoundary(unittest.TestCase):
+    """The A/B credential boundary is a STRUCTURAL predicate on the returns/tasks keys —
+    never the shallow _is_sensitive heuristic, whose false negative would be a live key
+    on a plaintext edge."""
+    def test_a_bare_opinion_verdict_is_not_a_payload(self):
+        self.assertFalse(bus.remote_carries_payload(
+            {"verdict": {"outcome": "approve", "notes": "looks good"}}))
+
+    def test_any_returns_key_is_a_payload(self):
+        self.assertTrue(bus.remote_carries_payload(
+            {"verdict": {"outcome": "approve", "returns": {"api_key": "sk-live-x"}}}))
+
+    def test_even_a_returns_that_is_not_flagged_sensitive_is_a_payload(self):
+        # _is_sensitive would MISS this (no `sensitive` marker); the structural gate
+        # does not — presence of the key is enough.
+        body = {"verdict": {"outcome": "approve", "returns": {"value": "not-marked"}}}
+        self.assertFalse(bus._is_sensitive(body["verdict"]["returns"]))
+        self.assertTrue(bus.remote_carries_payload(body))
+
+    def test_the_setup_tasks_shape_is_a_payload(self):
+        self.assertTrue(bus.remote_carries_payload(
+            {"verdict": {"tasks": [{"outcome": "approve"}]}}))
+
+
+class RemoteHelpers(Tmp):
+    def test_url_host_extracts_the_bare_name(self):
+        self.assertEqual(bus._url_host("https://box.tail1234.ts.net"), "box.tail1234.ts.net")
+        self.assertEqual(bus._url_host("https://user@away.example:8443/x"), "away.example")
+
+    def test_remote_token_is_minted_once_then_reused(self):
+        w = mkworkflow(self.root)
+        d1 = bus.Daemon(bus.Paths(w))
+        d1.ensure_remote_token()
+        first = d1.remote_token
+        self.assertTrue(first)
+        self.assertTrue(os.path.exists(bus.Paths(w).remote_token_file))
+        # A restart reuses the SAME token — a phone paired once keeps working.
+        d2 = bus.Daemon(bus.Paths(w))
+        d2.ensure_remote_token()
+        self.assertEqual(d2.remote_token, first)
+
+    def test_pairing_info_is_the_whole_link_when_a_public_url_is_set(self):
+        w = mkworkflow(self.root)
+        d = bus.Daemon(bus.Paths(w))
+        d.ensure_remote_token()
+        d.remote = bus.RemoteConfig("tailscale", 8799, "https://box.ts.net")
+        info = d.pairing_info()
+        self.assertTrue(info["configured"])
+        self.assertEqual(info["url"], "https://box.ts.net/#t=" + d.remote_token)
+        self.assertTrue(info["allow_credentials"])
+
+
+# --- the remote socket: a real Socket A beside a real Socket B ---------------
+class RemoteSocket(Tmp):
+    TRANSPORT = "access"
+
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        self.d = bus.Daemon(bus.Paths(self.w), idle_timeout=3600)
+        self.assertTrue(self.d.acquire_lock())
+        self.d.token = "loopback-token-B"
+        self.d.remote_token = "remote-token-A"
+        from http.server import ThreadingHTTPServer
+        handler = bus.make_handler(self.d)
+        self.d.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        self.d.server.policy = bus.LOOPBACK_POLICY
+        self.bport = self.d.server.server_address[1]
+        self.d.remote_server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        self.rport = self.d.remote_server.server_address[1]
+        allow = self.TRANSPORT == "tailscale"
+        self.d.remote_server.policy = bus.SocketPolicy(
+            "remote", remote=True, allow_credentials=allow, extra_hosts=("away.example",))
+        self.d.remote = bus.RemoteConfig(self.TRANSPORT, self.rport, "https://away.example")
+        self.d.publish(self.bport)
+        threading.Thread(target=self.d.server.serve_forever, daemon=True).start()
+        threading.Thread(target=self.d.remote_server.serve_forever, daemon=True).start()
+        self.addCleanup(self.d.cleanup)
+        self.addCleanup(self.d.server.shutdown)
+        self.addCleanup(self.d.remote_server.shutdown)
+
+    def req(self, port, path, method="GET", token=None, host=None, body=None):
+        h = {"Host": host or ("127.0.0.1:%d" % port)}
+        if token is not None:
+            h[bus.TOKEN_HEADER] = token
+        data = None
+        if body is not None:
+            h["Content-Type"] = "application/json"
+            data = json.dumps(body).encode()
+        r = urllib.request.Request("http://127.0.0.1:%d%s" % (port, path),
+                                   method=method, headers=h, data=data)
+        try:
+            with urllib.request.urlopen(r, timeout=5) as res:
+                return res.status, res.read(), dict(res.headers)
+        except urllib.error.HTTPError as e:
+            return e.code, e.read(), dict(e.headers)
+
+    # -- the two tokens must not cross --
+    def test_the_remote_page_carries_no_loopback_token(self):
+        code, body, _ = self.req(self.rport, "/")
+        self.assertEqual(code, 200)
+        self.assertNotIn(b"loopback-token-B", body, "the loopback token leaked to A")
+        self.assertNotIn(b"remote-token-A", body, "the remote page must not embed a token")
+        self.assertIn(b'name="bus-mode" content="remote"', body)
+
+    def test_the_loopback_page_still_carries_its_own_token(self):
+        code, body, _ = self.req(self.bport, "/")
+        self.assertIn(b"loopback-token-B", body)
+        self.assertIn(b'name="bus-mode" content="loopback"', body)
+
+    def test_each_socket_only_accepts_its_own_token(self):
+        # A read on A needs the remote token; the loopback token is refused there.
+        self.assertEqual(self.req(self.rport, "/api/state", token="remote-token-A")[0], 200)
+        self.assertEqual(self.req(self.rport, "/api/state", token="loopback-token-B")[0], 401)
+        # And the remote token is worthless on B.
+        self.assertEqual(self.req(self.bport, "/api/state", token="loopback-token-B")[0], 200)
+        self.assertEqual(self.req(self.bport, "/api/state", token="remote-token-A")[0], 401)
+
+    # -- A's positive allowlist --
+    def test_release_control_intake_do_not_exist_on_A(self):
+        for kind, payload in (("release", {"action_ids": ["a1"]}),
+                              ("control", {"op": "pause"}),
+                              ("intake", {"ask": "do a thing"})):
+            code, _, _ = self.req(self.rport, "/api/" + kind, method="POST",
+                                  token="remote-token-A", body=payload)
+            self.assertEqual(code, 404, "%s must not exist on the remote surface" % kind)
+            # …and each still works on B.
+            code_b, _, _ = self.req(self.bport, "/api/" + kind, method="POST",
+                                    token="loopback-token-B", body=payload)
+            self.assertEqual(code_b, 202, "%s must still work on loopback" % kind)
+
+    def test_shutdown_is_loopback_only(self):
+        self.assertEqual(self.req(self.rport, "/shutdown", method="POST",
+                                  token="remote-token-A", body={})[0], 404)
+
+    def test_pairing_secret_is_loopback_only(self):
+        self.assertEqual(self.req(self.rport, "/api/pairing", token="remote-token-A")[0], 404)
+        code, body, _ = self.req(self.bport, "/api/pairing", token="loopback-token-B")
+        self.assertEqual(code, 200)
+        info = json.loads(body)
+        self.assertEqual(info["url"], "https://away.example/#t=remote-token-A")
+
+    # -- opinion rides A, payload does not --
+    def test_an_opinion_verdict_rides_A(self):
+        code, body, _ = self.req(self.rport, "/api/verdict", method="POST",
+                                 token="remote-token-A",
+                                 body={"token": "cp1", "verdict": {"outcome": "approve",
+                                                                   "notes": "ship it"}})
+        self.assertEqual(code, 202, body)
+
+    def test_a_returns_bearing_verdict_is_refused_on_access(self):
+        code, _, _ = self.req(self.rport, "/api/verdict", method="POST",
+                              token="remote-token-A",
+                              body={"token": "cp1", "verdict": {"outcome": "approve",
+                                    "returns": {"api_key": "sk-live-x"}}})
+        self.assertEqual(code, 403, "a credential must not ride a plaintext-edge proxy")
+
+    def test_a_setup_shaped_verdict_is_refused_on_access(self):
+        code, _, _ = self.req(self.rport, "/api/verdict", method="POST",
+                              token="remote-token-A",
+                              body={"token": "cp1",
+                                    "verdict": {"tasks": [{"outcome": "approve"}]}})
+        self.assertEqual(code, 403)
+
+    # -- the host allowlist accepts the public host, nothing else --
+    def test_A_accepts_the_declared_public_host(self):
+        self.assertEqual(self.req(self.rport, "/api/state", token="remote-token-A",
+                                  host="away.example")[0], 200)
+
+    def test_A_still_refuses_an_unknown_forged_host(self):
+        self.assertEqual(self.req(self.rport, "/api/state", token="remote-token-A",
+                                  host="evil.com")[0], 403)
+
+    def test_bus_json_publishes_the_remote_coordinates(self):
+        rec = bus.read_json(self.d.paths.record)
+        self.assertEqual(rec["remote_port"], self.rport)
+        self.assertEqual(rec["remote_token"], "remote-token-A")
+        self.assertEqual(rec["token"], "loopback-token-B")   # the loopback token, distinct
+
+
+class RemoteSocketTailscale(RemoteSocket):
+    """The one carve-out: an end-to-end-encrypted transport unlocks credential-bearing
+    setup verdicts on the remote surface."""
+    TRANSPORT = "tailscale"
+
+    def test_a_returns_bearing_verdict_is_refused_on_access(self):
+        # Overridden: on Tailscale the credential IS allowed to ride A.
+        code, body, _ = self.req(self.rport, "/api/verdict", method="POST",
+                                 token="remote-token-A",
+                                 body={"token": "cp1", "verdict": {"outcome": "approve",
+                                       "returns": {"api_key": "sk-live-x"}}})
+        self.assertEqual(code, 202, body)
+
+    def test_a_setup_shaped_verdict_is_refused_on_access(self):
+        code, body, _ = self.req(self.rport, "/api/verdict", method="POST",
+                                 token="remote-token-A",
+                                 body={"token": "cp1",
+                                       "verdict": {"tasks": [{"outcome": "approve"}]}})
+        self.assertEqual(code, 202, body)
 
 
 if __name__ == "__main__":

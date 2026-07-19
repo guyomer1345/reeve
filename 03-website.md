@@ -69,11 +69,13 @@ on a public URL is therefore **not** an adequate gate.
 - **A distinct remote token** gates A as a **second factor** on top of the transport identity (D95's "never reuse
   the loopback token" respected; its "three independent failures" logic applied) — so a misconfigured Access does
   not instantly expose the surface.
-- **Pairing = QR + URL fragment.** The local console renders a QR of `https://<host>/#t=<remote-token>`; the phone
-  scans, stores it in `localStorage`, strips the fragment. **This amends D95's "never in a URL"**: that rule
-  targeted the Jupyter **`?token=` query param** (server-logged, `Referer`-leaked). A **fragment never leaves the
-  browser** — not sent to the server, not in the proxy's logs, not in `Referer`. So: *never in query/path; the
-  fragment is the pairing channel.*
+- **Pairing = a copy-paste link + URL fragment (a QR is a scoped fast-follow).** The local console renders
+  `https://<host>/#t=<remote-token>` as a copy-paste link; the phone opens it, stores the token in `localStorage`,
+  strips the fragment. **This amends D95's "never in a URL"**: that rule targeted the Jupyter **`?token=` query
+  param** (server-logged, `Referer`-leaked). A **fragment never leaves the browser** — not sent to the server, not
+  in the proxy's logs, not in `Referer`. So: *never in query/path; the fragment is the pairing channel.* A
+  hand-rolled QR (no stdlib encoder; a CDN is CSP-barred) is deferred (D122) — an unscannable one cannot be verified
+  in-harness, and a tapped link pairs with zero typing.
 - **A keeps a Host-allowlist, but its role changes** — A is loopback-bound (the proxy connects to it), so a local
   browser could hit it directly: the allowlist is **anti-DNS-rebinding**, **not** the loopback-vs-remote boundary.
   The port topology is the boundary.
@@ -92,6 +94,20 @@ encrypted** private transport (**Tailscale** — WireGuard; nobody in the middle
 **TLS-terminating proxy** (**Cloudflare Access** — the edge sees plaintext, so a Stripe key would transit a third
 party). This matters because `setup` is the *hardest* away-blocker (D97: a missing credential cannot be skipped) —
 so the carve-out is what makes Tailscale the recommended transport: no domain, E2E, and strictly more capable.
+
+**BUILT — D122 (Phase-3 increment 5):** two `ThreadingHTTPServer`s in one process, each tagged at bind with a policy
+the handler reads via `self.server` (the structural per-server boundary, never a per-request Host guess). Building
+sharpened four points, all driven on a real detached daemon. (1) **The remote token is never in the remote page** —
+serving it (as the loopback page serves its own via the meta tag) would hand the surface to anyone past the transport
+in one GET, killing the "a misconfigured Access does not instantly expose it" property; it rides the pairing fragment
+only, and an attacker past a misconfigured proxy lands on a token-less dead-end. (2) **The remote coordinates are
+stable, not per-boot** — `remote_token` persisted (`.workflow/remote_token`), `remote_port` config-declared and
+fixed — else the phone pairing and the operator's tunnel break on every WSL restart. (3) **The credential boundary is
+the structural presence of a `returns`/`tasks` payload**, never the shallow `_is_sensitive` heuristic (a false
+negative there is a live key on a plaintext edge). (4) **A's Host-allowlist must add the declared public host**, or a
+forwarded-Host proxy is entirely 403'd — so `public_url` is load-bearing for the transport, not only the pairing
+link. Socket A's positive POST allowlist is verdict-only (opinion-shaped); `release`/`control`/`intake`/`/shutdown`/
+`/api/pairing` all `404` on A.
 
 ## Console model + screens **[DECIDED — D99 (closes B1/B2/B3)]**
 **MVP = a read-only supervision cockpit, not a project explorer.** The console has two latent modes — *supervise a

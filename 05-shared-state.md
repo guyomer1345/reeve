@@ -133,6 +133,19 @@ anti-DNS-rebinding only. A **distinct remote token** (never the loopback one —
 paired by QR + a **URL fragment** (which never leaves the browser — the precise amendment to "never in a URL",
 whose target was the log-leaking `?token=` query param). The bar is set by D90: a verdict rides as an
 *authoritative prompt*, so a forged one is **agent control**, not merely "local work".
+**Built (D122 — increment 5); building sharpened four points.** (1) The remote token is **never served in the
+remote page** — injecting it (as the loopback page does its own via the meta tag) would hand the surface to anyone
+past the transport in a single GET, killing the "a misconfigured Access does not instantly expose it" property; it
+rides the pairing fragment only. (2) The remote coordinates are **stable, not per-boot**: `remote_token` is persisted
+(`.workflow/remote_token`, 0600-verified, minted once) and `remote_port` is **config-declared and fixed** — a
+reminted token/port would break the phone pairing and the operator's tunnel on every WSL restart, the platform the
+away channel most needs to survive. (3) The A/B credential boundary is the **structural presence of a `returns`/
+`tasks` payload**, never the shallow `_is_sensitive` heuristic — a false negative there is a live key on a plaintext
+edge, exactly the silent failure a structural boundary exists to prevent. (4) A's Host-allowlist must **add the
+declared public host**, or a proxy that forwards the original Host has all its traffic 403'd — so
+`config.remote.public_url` is load-bearing for the transport itself, not only the pairing link. **Pairing ships as a
+copy-paste link** (the token in the fragment, which never leaves the browser); a hand-rolled QR is a **scoped
+fast-follow** (no stdlib encoder, and an unscannable one cannot be verified in-harness).
 **Two serving classes (D102 clarification):** the token gates the **sensitive data/command class** (state reads +
 POSTs); the **static app-shell class** — the console page, its assets, and the **demo sandbox** (`/demo/*`) — is
 served **token-free under the Host-allowlist**, because a browser can't attach a token header to a document/iframe
@@ -161,12 +174,13 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     handoff.md      # durable resume anchor: the orchestrator's PROSE + a drain.py-owned machine block (consumed[]/consumed_through/dead_letters[]) — two authors, neither rewriting the other's half — D108/D117  (committed) · bus:read (the consumed_through watermark — the bus GCs the inbox on it; and dead_letters[]/consumed[] — the console's "my requests" surface resolves a ticket off them)
     backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed) · bus:read
     outbox/         # RUNTIME — pending-outward-action queue (push/issue/deploy the orchestrator deferred, awaiting a console `release`) — D105 (retires the D60-reserved checkpoints/), gitignored · bus:read (the console's release panel) · pin
-    bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at} discovery record — D94, gitignored · bus:write · pin (for the 0600-honouring mount FIRST, atomicity second — D115)
+    bus.json        # RUNTIME — the bus daemon's {pid,port,token,started_at,remote_port?,remote_token?} discovery record — D94/D122, gitignored · bus:write · pin (for the 0600-honouring mount FIRST, atomicity second — D115)
     bus.lock        # RUNTIME — the daemon's singleton-election lock, held for process lifetime. A SEPARATE file from bus.json by necessity: bus.json is republished by rename, and a rename swaps the inode out from under a held lock, so a second daemon would find the new inode unlocked and start (measured, both filesystems) — D115, gitignored · bus:write · pin (co-location with the record it guards; flock itself does NOT require it — D115)
     alerts.json     # RUNTIME — the daemon's away-alert bookkeeping (which checkpoints/dead-letters it has already alerted on). Cannot live in parked/ (not the daemon's partition) nor boot-scoped bus.json; a fourth daemon-owned path, loaded at start so a restart does not re-alert; lost ⇒ re-alert, never silent — D120, gitignored · bus:write · pin
     parked/<id>.json # RUNTIME — a parked ticket's resume record (token, state, predicted_outcome, deadline) — D91, gitignored · bus:read · pin
     inbox/          # RUNTIME — append-only TYPED command queue (verdict|intake|control|release) the bus writes; matched at boundaries — D90/D91/D93/D105, gitignored · bus:write · pin
     secrets/        # RUNTIME — live credentials returned at a setup checkpoint; 0600/ACL, atomic write; orchestrator writes+reads; NEVER retention-swept — D111, gitignored · bus:none · pin (for the 0600-honouring mount, not for atomicity)
+    remote_token    # RUNTIME — the remote socket's STABLE second-factor token, persisted (0600, verified) so a phone paired once survives restarts; a per-boot token would re-pair every WSL restart. Minted once by the daemon, delete-to-rotate. Distinct from bus.json's loopback token — never reused — D122, gitignored · bus:none · pin (for the 0600-honouring mount)
     items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed) · bus:none
     align/          # anchor.json — the drift-scan base_sha (align mkdir's it on first run) — committed · bus:none
     demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves under a sandbox-CSP opaque origin; pruned on checkpoint-resolve — D102/D104, gitignored · bus:static · no-pin (write-once-then-serve, atomicity-light — D104)

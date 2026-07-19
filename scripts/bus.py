@@ -86,6 +86,8 @@ DEFAULT_REMINDER_HOURS = 4    # how often an open checkpoint re-alerts while not
 WEBHOOK_TIMEOUT = 5           # seconds; an away-alert POST must never pin the janitor
 TOAST_TIMEOUT = 5            # seconds; a desktop toast is best-effort, never blocking
 BACKOFF_BASE = 30            # seconds; a failing away channel backs off, doubling from here
+DEFAULT_REMOTE_PORT = 8799   # the fixed loopback port the remote socket binds; operator-overridable
+REMOTE_KINDS = ("verdict",)  # Socket A's positive POST allowlist — everything else is loopback-only
 
 
 # --- path resolution --------------------------------------------------------
@@ -119,6 +121,12 @@ class Paths:
         # on a tree whose mount may ignore 0600 and say nothing. The bus never touches
         # this path — it is here because path resolution has one owner.
         self.secrets = os.path.join(self.runtime, "secrets")
+        # A STABLE remote-socket credential, unlike the per-boot loopback token. The
+        # phone pairs once and the operator points a tunnel once; a token reminted every
+        # boot would go stale on every restart — routine on WSL, the platform the away
+        # channel most needs to survive. So it is persisted here (0600, verified) and
+        # reused; delete-to-rotate = un-pair. Pinned for the loopback token's reason.
+        self.remote_token_file = os.path.join(self.runtime, "remote_token")
         # committed half (always on the repo mount, never relocated)
         self.handoff = os.path.join(self.workflow, "handoff.md")
         self.backlog = os.path.join(self.workflow, "backlog.md")
@@ -1141,13 +1149,30 @@ INDEX_HTML = """<!doctype html>
      navigation), so it hands the token to its own scripts here. Whoever can load
      this page from an allowlisted Host holds the token; that is a local browser. -->
 <meta name="bus-token" content="__BUS_TOKEN__">
+<!-- loopback | remote. The remote page's bus-token is deliberately EMPTY (the token
+     rides the pairing fragment, never the served surface it gates); the mode drives
+     which sections app.js shows. -->
+<meta name="bus-mode" content="__BUS_MODE__">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <header>
   <h1>loop console</h1>
   <span id="conn" class="pill">connecting</span>
+  <span id="mode" class="pill" hidden></span>
 </header>
+
+<section id="pairing" hidden>
+  <h2>Pair a phone</h2>
+  <p class="hint">Open this link on your phone (over your tunnel) to pair it. The token
+    rides the URL fragment — it never reaches the server or its logs. Pair once; the
+    phone remembers it.</p>
+  <div id="pair-url" class="mono"></div>
+  <div class="row">
+    <button id="pair-copy" type="button">Copy pairing link</button>
+    <span id="pair-msg" class="msg"></span>
+  </div>
+</section>
 
 <section id="now">
   <h2>Now</h2>
@@ -1231,11 +1256,35 @@ INDEX_HTML = """<!doctype html>
 APP_JS = r"""// Vanilla, no build step, no eval: cloned <template> + textContent only.
 // textContent (never innerHTML) is what keeps loop-authored strings — a commit
 // subject, a checkpoint request — from being parsed as markup.
-const TOKEN = document.querySelector('meta[name="bus-token"]').content;
+const $ = (s) => document.querySelector(s);
+
+const META = (n) => (document.querySelector('meta[name="' + n + '"]') || {}).content || "";
+const MODE = META("bus-mode") || "loopback";
+const REMOTE = MODE === "remote";
+const TOKEN_KEY = "bus.token";
+
+// Token bootstrap. The loopback page carries its token in the meta tag. The REMOTE page
+// carries none — it was paired out-of-band, so it reads the token from the pairing
+// fragment on first visit (then stores it and strips the fragment so it never lingers
+// in history) and from localStorage thereafter. A / B are different origins, so their
+// stored tokens never cross.
+function consumeFragment() {
+  const m = (location.hash || "").match(/(?:^#|&)t=([^&]*)/);
+  if (!m || !m[1]) return null;
+  const tok = decodeURIComponent(m[1]);
+  try { localStorage.setItem(TOKEN_KEY, tok); } catch (e) { /* private mode */ }
+  history.replaceState(null, "", location.pathname + location.search);
+  return tok;
+}
+function readToken() {
+  const fromFragment = consumeFragment();
+  let stored = null;
+  try { stored = localStorage.getItem(TOKEN_KEY); } catch (e) { /* blocked store */ }
+  return fromFragment || stored || META("bus-token") || "";
+}
+const TOKEN = readToken();
 let etag = null;
 let timer = null;
-
-const $ = (s) => document.querySelector(s);
 
 function setConn(text, ok) {
   const el = $("#conn");
@@ -1358,7 +1407,9 @@ function renderOutbox(items) {
     node.querySelector(".item").textContent = ob.item_ref || "";
     node.querySelector(".pick").value = ob.id || "";
   }, "none queued");
-  $("#ob-actions").hidden = !items.length;
+  // The remote surface can SEE pending outward actions (a read) but never release them
+  // (release is loopback-only). The list shows; the release control never does.
+  $("#ob-actions").hidden = REMOTE || !items.length;
 }
 
 function renderLog(items) {
@@ -1466,9 +1517,47 @@ $("#ob-release").addEventListener("click", async () => {
 
 renderRequests(null);
 
+// The pairing card is the local console's job alone: it fetches the pairing secret (a
+// loopback-only endpoint) and shows the link to move to a phone. On the remote surface
+// the endpoint 404s and the intake form is gone, because neither belongs there.
+async function initPairing() {
+  try {
+    const res = await fetch("/api/pairing", {
+      headers: { "X-Bus-Token": TOKEN }, cache: "no-store" });
+    if (!res.ok) return;
+    const p = await res.json();
+    if (!p.configured) return;
+    const box = $("#pair-url");
+    box.textContent = p.url || (p.token + "  (set config.remote.public_url for a full link)");
+    $("#pairing").hidden = false;
+    $("#pair-copy").addEventListener("click", async () => {
+      const text = p.url || p.token;
+      try { await navigator.clipboard.writeText(text); flash($("#pair-msg"), "copied", true); }
+      catch (e) { flash($("#pair-msg"), "select the link above and copy it", false); }
+    });
+  } catch (e) { /* pairing is a convenience; its absence is not an error */ }
+}
+
+function setupMode() {
+  const pill = $("#mode");
+  if (REMOTE) {
+    pill.textContent = "remote"; pill.hidden = false;
+    // Not part of A's surface: intake posts and outward release are loopback-only.
+    $("#ask").hidden = true;
+    $("#pairing").hidden = true;
+  } else {
+    initPairing();
+  }
+}
+setupMode();
+
 // A chained timeout, not setInterval: a slow response must never stack requests.
 // Polling pauses when the tab is hidden and resumes with an immediate read.
 async function loop() {
+  if (REMOTE && !TOKEN) {
+    setConn("not paired — open the pairing link from the local console", false);
+    return;  // nothing to poll for until a token is paired in
+  }
   if (!document.hidden) await poll();
   timer = setTimeout(loop, 2500);
 }
@@ -1513,6 +1602,9 @@ label { display:inline-flex; align-items:center; gap:.4rem; }
 .msg { font-size:.8rem; }
 .msg.ok { color:var(--ok); }
 .msg.bad { color:var(--bad); }
+.hint { color:var(--dim); font-size:.85rem; margin:.25rem 0 .5rem; }
+#pair-url { word-break:break-all; padding:.4rem .5rem; border:1px solid var(--line);
+  border-radius:5px; margin-bottom:.5rem; }
 #ask .row, #ob-actions { margin-top:.5rem; display:flex; gap:.75rem;
   align-items:center; justify-content:flex-start; }
 #rq-list .card .row { gap:.75rem; }
@@ -1524,6 +1616,104 @@ ol#log time { color:var(--dim); font-size:.8rem; white-space:nowrap; }
 """
 
 
+# --- the remote socket (Socket A) -------------------------------------------
+# Remote access is a STRUCTURAL two-socket split, not a per-request Host guess
+# (a Host is a header the untrusted proxy controls, and a Host boundary fails SILENTLY
+# when the proxy rewrites it). Socket B — the loopback socket above — is the full
+# surface and is never fronted. Socket A is this reduced surface, served ONLY when
+# config.remote declares an identity transport, and the operator stands the transport
+# (Cloudflare Access | Tailscale) up in front of it. The boundary is the port topology.
+def _url_host(url):
+    """The bare hostname of a public URL, for Socket A's Host-allowlist."""
+    from urllib.parse import urlparse
+    try:
+        net = urlparse(url).netloc
+    except (ValueError, AttributeError):
+        return None
+    return (net.rsplit("@", 1)[-1].rsplit(":", 1)[0].strip("[]") or None)
+
+
+class RemoteConfig:
+    """The parsed, validated config.remote — or None means Socket A is not served."""
+    def __init__(self, transport, port, public_url):
+        self.transport = transport
+        self.port = port
+        self.public_url = public_url
+
+    @property
+    def allow_credentials(self):
+        """Only an END-TO-END-ENCRYPTED transport may carry a returned credential. A
+        TLS-terminating proxy (Cloudflare Access) sees plaintext at its edge, so a
+        returned key would transit a third party — structurally refused. WireGuard
+        (Tailscale) has nobody in the middle, so it unlocks the setup carve-out."""
+        return self.transport == "tailscale"
+
+    @property
+    def host(self):
+        return _url_host(self.public_url) if self.public_url else None
+
+
+def parse_remote(cfg):
+    """config.remote → a RemoteConfig, or None when the remote socket is not served.
+
+    Absent / disabled / no valid transport → None (loopback only). The port is
+    config-declared and FIXED (defaulting), not daemon-chosen: the operator points a
+    tunnel at it once and the phone is paired against it once, so a per-boot port would
+    break the very away channel this exists for.
+    """
+    r = cfg.get("remote") if isinstance(cfg.get("remote"), dict) else {}
+    if not r.get("enabled"):
+        return None
+    transport = r.get("transport")
+    if transport not in ("access", "tailscale"):
+        return None
+    port = r.get("port")
+    if not isinstance(port, int) or isinstance(port, bool) or not (0 < port < 65536):
+        port = DEFAULT_REMOTE_PORT
+    pub = r.get("public_url")
+    public_url = pub.rstrip("/") if isinstance(pub, str) and pub.strip() else None
+    return RemoteConfig(transport, port, public_url)
+
+
+class SocketPolicy:
+    """What ONE listening socket is allowed to serve, decided at bind and read per
+    request via self.server.policy. A per-server fact, never a per-request guess — the
+    structural boundary the remote split requires.
+
+      remote            this is the reduced remote surface (Socket A)
+      allow_credentials a returns-bearing setup verdict may land here (Tailscale only)
+      extra_hosts       Host names the anti-DNS-rebinding allowlist also accepts (the
+                        public tunnel host, so forwarded-Host proxy traffic is not
+                        rejected; loopback names are always accepted)
+    """
+    def __init__(self, name, remote, allow_credentials=False, extra_hosts=()):
+        self.name = name
+        self.remote = remote
+        self.allow_credentials = allow_credentials
+        self.extra_hosts = tuple(h for h in extra_hosts if h)
+
+
+# Socket B's policy is a constant: the full surface, credentials allowed, loopback host
+# only. Socket A's policy is built per-serve from the transport (below).
+LOOPBACK_POLICY = SocketPolicy("loopback", remote=False, allow_credentials=True)
+
+
+def remote_carries_payload(clean):
+    """Structural: does this verdict write a payload or gate a setup?
+
+    THE credential boundary for Socket A, and it is deliberately NOT _is_sensitive():
+    that helper is "shallow and permissive" by design, and a boundary built on a
+    heuristic false-negatives silently — which here means a live key crossing a
+    plaintext proxy edge, exactly the silent failure a structural boundary prevents. The crisp,
+    false-negative-proof predicate is the PRESENCE of the returns/tasks keys: a bare
+    opinion verdict ({outcome, notes}) has neither, anything setup-shaped has one.
+    """
+    v = clean.get("verdict")
+    if not isinstance(v, dict):
+        return False
+    return "tasks" in v or "returns" in v
+
+
 # --- the daemon -------------------------------------------------------------
 class Daemon:
     def __init__(self, paths, idle_timeout=DEFAULT_IDLE_TIMEOUT):
@@ -1533,6 +1723,12 @@ class Daemon:
         self.port = None
         self.lock_fd = None
         self.server = None
+        # Socket A — the reduced remote surface. None until serve() reads config.remote
+        # and finds a declared transport; then a second server binds a fixed port and
+        # a stable, persisted remote token gates it.
+        self.remote = None            # a RemoteConfig, or None (not served)
+        self.remote_token = None
+        self.remote_server = None
         self.model = ReadModel(paths)
         self.inbox = InboxWriter(paths)
         self.notifier = Notifier(paths)
@@ -1573,9 +1769,57 @@ class Daemon:
     def publish(self, port):
         rec = {"pid": os.getpid(), "port": port, "token": self.token,
                "started_at": now_iso()}
+        if self.remote_server is not None:
+            # The operator points cloudflared / tailscale serve at remote_port, and
+            # NEVER at port (the full-surface loopback socket). remote_token is the
+            # separate second factor, paired to the phone out-of-band.
+            rec["remote_port"] = self.remote.port
+            rec["remote_token"] = self.remote_token
         atomic_write(self.paths.record, json.dumps(rec, indent=1) + "\n", mode=0o600)
         self.warn(verify_mode(self.paths.record, 0o600))
         return rec
+
+    # -- the remote socket's stable credential --
+    def ensure_remote_token(self):
+        """Read-or-create the persisted remote token; verify its achieved mode.
+
+        Stable across restarts by construction — a phone paired once must keep working
+        through the routine WSL restarts the away channel exists to survive. Minted only
+        on first use; every later boot reuses the file. Deleting it re-pairs everyone.
+        """
+        tok = read_text(self.paths.remote_token_file)
+        if tok and tok.strip():
+            self.remote_token = tok.strip()
+        else:
+            self.remote_token = secrets.token_urlsafe(32)
+            atomic_write(self.paths.remote_token_file,
+                         self.remote_token + "\n", mode=0o600)
+        self.warn(verify_mode(self.paths.remote_token_file, 0o600))
+
+    def pairing_info(self):
+        """What the LOCAL console renders to pair a phone. Loopback-only by the handler
+        — the remote token is a secret that must never ride the surface it gates. When
+        public_url is set, url is the whole pairing link (token in the fragment, which
+        never leaves the browser); absent, the human still gets the token to place by
+        hand once they know their tunnel host.
+        """
+        if self.remote is None:
+            return {"configured": False}
+        out = {"configured": True, "transport": self.remote.transport,
+               "public_url": self.remote.public_url, "token": self.remote_token,
+               "allow_credentials": self.remote.allow_credentials}
+        if self.remote.public_url:
+            out["url"] = "%s/#t=%s" % (self.remote.public_url, self.remote_token)
+        return out
+
+    def remote_status(self):
+        """The remote-channel state a human reads in `status`/`/health`."""
+        if self.remote is None:
+            return {"enabled": False}
+        return {"enabled": True, "bound": self.remote_server is not None,
+                "transport": self.remote.transport, "port": self.remote.port,
+                "public_url": bool(self.remote.public_url),
+                "allow_credentials": self.remote.allow_credentials}
 
     # -- the janitor --
     def idle_check(self):
@@ -1607,10 +1851,11 @@ class Daemon:
 
     def stop(self):
         self._stopping.set()
-        if self.server:
-            # From a one-shot thread, never inline: shutdown() blocks until the
-            # serving loop exits, so calling it on that loop deadlocks.
-            threading.Thread(target=self.server.shutdown, daemon=True).start()
+        # From a one-shot thread, never inline: shutdown() blocks until the serving
+        # loop exits, so calling it on that loop deadlocks. Both sockets go down together.
+        for srv in (self.server, self.remote_server):
+            if srv:
+                threading.Thread(target=srv.shutdown, daemon=True).start()
 
     def cleanup(self):
         for p in (self.paths.record,):
@@ -1637,8 +1882,33 @@ class Daemon:
         handler = make_handler(self)
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.server.daemon_threads = True
+        self.server.policy = LOOPBACK_POLICY
         port = self.server.server_address[1]
         self.port = port
+        # Socket A — the reduced remote surface, bound ONLY when config.remote declares
+        # an identity transport. A distinct, persisted token gates it; the operator
+        # fronts it with Cloudflare Access / Tailscale. A bind failure (port in use)
+        # degrades to no-remote with a warning rather than taking the whole daemon down.
+        self.remote = parse_remote(self.paths.load_config())
+        if self.remote is not None:
+            self.ensure_remote_token()
+            try:
+                self.remote_server = ThreadingHTTPServer(
+                    ("127.0.0.1", self.remote.port), handler)
+            except OSError as exc:
+                self.remote_server = None
+                self.warn("remote socket could not bind 127.0.0.1:%d (%s); remote "
+                          "access is OFF this run." % (self.remote.port, exc))
+            else:
+                self.remote_server.daemon_threads = True
+                self.remote_server.policy = SocketPolicy(
+                    "remote", remote=True,
+                    allow_credentials=self.remote.allow_credentials,
+                    extra_hosts=(self.remote.host,))
+                if not self.remote.public_url:
+                    self.warn("config.remote has no public_url: the pairing link and "
+                              "the forwarded-Host allowlist both need it — set it to "
+                              "your tunnel's https URL.")
         self.publish(port)
         # The away channel is only as alive as this process. On WSL the Windows host
         # tears the VM (and this daemon) down shortly after the last terminal closes,
@@ -1655,9 +1925,20 @@ class Daemon:
         log("serving on http://127.0.0.1:%d (pid %d, runtime %s)"
             % (port, os.getpid(), self.paths.runtime))
         threading.Thread(target=self.janitor, daemon=True).start()
+        if self.remote_server is not None:
+            log("remote socket on http://127.0.0.1:%d (transport=%s, credentials=%s)"
+                % (self.remote.port, self.remote.transport,
+                   "yes" if self.remote.allow_credentials else "no"))
+            threading.Thread(target=self.remote_server.serve_forever,
+                             kwargs={"poll_interval": 0.5}, daemon=True).start()
         try:
             self.server.serve_forever(poll_interval=0.5)
         finally:
+            if self.remote_server is not None:
+                try:
+                    self.remote_server.shutdown()
+                except Exception:
+                    pass
             self.cleanup()
             log("stopped")
 
@@ -1700,18 +1981,27 @@ def make_handler(daemon):
 
         # -- trust checks --
         def _host_ok(self):
-            """The one browser-independent DNS-rebinding defense.
+            """The browser-independent DNS-rebinding defense.
 
-            A rebound page reaches this port with an attacker-controlled Host. Only
-            the literal loopback names are ever legitimate here.
+            On Socket B (loopback), only the literal loopback names are ever legitimate.
+            On Socket A the allowlist ALSO accepts the declared public host, because a
+            proxy that forwards the original Host would otherwise have all its traffic
+            rejected — here the port topology is the boundary and this is anti-rebinding
+            defense-in-depth, not the boundary itself.
             """
             host = self.headers.get("Host", "")
             name = host.rsplit(":", 1)[0].strip("[]") if host else ""
-            return name in ("127.0.0.1", "localhost", "::1")
+            if name in ("127.0.0.1", "localhost", "::1"):
+                return True
+            return name in self.server.policy.extra_hosts
 
         def _token_ok(self):
+            # Each socket authenticates against its OWN token. The remote token is a
+            # distinct secret (the loopback token is never reused remotely), and it
+            # is what makes a misconfigured proxy not instantly expose the surface.
+            want = daemon.remote_token if self.server.policy.remote else daemon.token
             got = self.headers.get(TOKEN_HEADER, "")
-            return bool(got) and secrets.compare_digest(got, daemon.token or "")
+            return bool(got) and bool(want) and secrets.compare_digest(got, want)
 
         def _cross_site(self):
             # Fail closed only when the browser positively tells us it is cross-site.
@@ -1754,7 +2044,16 @@ def make_handler(daemon):
             if path in ("/", "/index.html"):
                 if not self._guard(need_token=False):
                     return
-                page = INDEX_HTML.replace("__BUS_TOKEN__", html.escape(daemon.token or ""))
+                # The remote page carries NO server-injected token: injecting it would
+                # hand the surface to anyone who breaches the transport in one GET,
+                # nullifying the second factor. It bootstraps its token from the pairing
+                # fragment / localStorage instead. Only the loopback page uses the meta
+                # tag, and only there is the token safe to embed.
+                remote = self.server.policy.remote
+                tok = "" if remote else (daemon.token or "")
+                mode = "remote" if remote else "loopback"
+                page = (INDEX_HTML.replace("__BUS_TOKEN__", html.escape(tok))
+                                  .replace("__BUS_MODE__", mode))
                 return self._send(200, page.encode(), "text/html; charset=utf-8")
             if path == "/app.js":
                 if not self._guard(need_token=False):
@@ -1775,6 +2074,7 @@ def make_handler(daemon):
                     "ok": True, "pid": os.getpid(), "started_at": daemon_started,
                     "idle": idle, "idle_blockers": blockers,
                     "away": daemon.notifier.readiness(),
+                    "remote": daemon.remote_status(),
                     "warnings": daemon.warnings,
                 }).encode())
 
@@ -1799,6 +2099,16 @@ def make_handler(daemon):
                 return self._send(200, json.dumps(
                     resolve_request(daemon.model.requests(), ticket)).encode())
 
+            # The pairing secret lives here, and only the local console may read it — so
+            # this endpoint does not exist on the remote surface it gates. Structural, not
+            # a Host guess: the remote page could never obtain the token it hands out.
+            if path == "/api/pairing":
+                if self.server.policy.remote:
+                    return self._err(404, "no such endpoint")
+                if not self._guard():
+                    return
+                return self._send(200, json.dumps(daemon.pairing_info()).encode())
+
             return self._err(404, "no such endpoint")
 
         def do_HEAD(self):
@@ -1818,6 +2128,9 @@ def make_handler(daemon):
                 return
 
             if path == "/shutdown":
+                # Bringing the daemon down is a control op — not part of A's surface.
+                if self.server.policy.remote:
+                    return self._err(404, "no such endpoint")
                 self._send(200, json.dumps({"stopping": True}).encode())
                 log("shutdown requested over http")
                 daemon.stop()
@@ -1830,6 +2143,11 @@ def make_handler(daemon):
             # ticket to ask about later.
             if path.startswith("/api/") and path[len("/api/"):] in KINDS:
                 kind = path[len("/api/"):]
+                # Socket A's positive allowlist: release / control / intake simply do not
+                # exist on the remote surface (it is reads · opinion verdicts · static
+                # demo). 404, not 403: the surface does not have them.
+                if self.server.policy.remote and kind not in REMOTE_KINDS:
+                    return self._err(404, "no such endpoint")
                 try:
                     payload = json.loads(body or b"{}")
                 except ValueError:
@@ -1838,6 +2156,16 @@ def make_handler(daemon):
                     clean, sensitive = validate(kind, payload)
                 except Invalid as exc:
                     return self._err(400, str(exc))
+                # The remote credential boundary. A returns-bearing / setup-shaped verdict
+                # is loopback-only unless the transport is end-to-end encrypted — a
+                # structural check on the returns/tasks keys, never the _is_sensitive
+                # heuristic (whose false negative would be a live key on a plaintext edge).
+                if (self.server.policy.remote
+                        and not self.server.policy.allow_credentials
+                        and remote_carries_payload(clean)):
+                    return self._err(403, "returns-bearing / setup verdicts are "
+                                     "loopback-only; deliver this from the local console "
+                                     "or over a Tailscale transport")
                 try:
                     message_id = daemon.inbox.append(kind, clean, sensitive=sensitive)
                 except OSError as exc:
@@ -2018,6 +2346,15 @@ def main(argv=None):
             if away.get("consecutive_failures"):
                 print("  away channel FAILING: %d in a row (%s)"
                       % (away["consecutive_failures"], away.get("last_error")))
+        remote = h.get("remote") or {}
+        if remote.get("enabled"):
+            print("  remote socket: %s on port %s (transport=%s, credentials=%s)"
+                  % ("BOUND" if remote.get("bound") else "NOT BOUND",
+                     remote.get("port"), remote.get("transport"),
+                     "yes" if remote.get("allow_credentials") else "no"))
+            if not remote.get("public_url"):
+                print("  remote WARNING: no public_url set (pairing link + host "
+                      "allowlist need it)")
         for w in h.get("warnings", []):
             print("  WARNING: %s" % w)
         return 0

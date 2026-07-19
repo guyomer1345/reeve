@@ -2880,3 +2880,54 @@ consumer (it hardcodes a local absolute path as "Home"); `07` already tracks the
 surface + self-hosting prereq) and the *framework version-update skill* (keeping installed copies fresh) but had
 **no** entry for the front-door/identity gap; the skill descriptions carry design vocabulary today. Relates to the
 project-state view and self-hosting; revisited at Phase 4. → `00`/`07`/`11`.
+
+## D122 — The remote socket built: a structural two-socket split, and four points the design didn't have — the token never on the surface it gates, stable-not-per-boot coordinates, a structural (not heuristic) credential boundary, and a load-bearing public host **[DECIDED + BUILT — Phase-3 increment 5; realizes D112's two-socket split; corrects D112/schemas' per-boot framing and the meta-tag-token reading; MEASURED on a real detached daemon]**
+Increment 5 makes away **actionable** — act on a checkpoint from a phone. The split is buildable exactly as D112
+framed it — two `ThreadingHTTPServer`s in one process, each tagged at bind with a `SocketPolicy` the handler reads
+via `self.server.policy` (a structural per-server boundary, never a per-request Host guess — the header a proxy
+controls). Socket B is unchanged (loopback, full surface, meta-tag token); Socket A binds only when `config.remote`
+declares a transport. Building sharpened **four** points, three re-measured before the build and one surfaced by it:
+- **(1) The remote token is never served in the remote page.** The naive reading of the meta-tag bootstrap — inject
+  `remote_token` into A's page as B injects its own — **nullifies the second factor**: D112 wants the token so that
+  "a misconfigured Access does not *instantly* expose the surface", but a token *in the page* is handed to anyone who
+  reaches A in one GET. So A's page carries **no** token; it bootstraps from the pairing **fragment** → `localStorage`
+  (loopback origin and A origin are different origins, so their stores never cross). An attacker past a misconfigured
+  proxy but without the paired token lands on a token-less dead-end and reads nothing.
+- **(2) The remote coordinates are stable, not per-boot.** The loopback `port`/`token` are minted fresh each boot —
+  fine, because `/start` re-discovers them via `bus.json` every session. The remote pair **cannot** work that way: a
+  phone pairs once and the operator points a tunnel once, so a per-boot `remote_token` goes stale on **every restart**
+  — routine on WSL, the platform increment 4 bent over backwards to keep the away channel alive on. So `remote_token`
+  is **persisted** (`.workflow/remote_token`, 0600-verified, minted once, delete-to-rotate) and `remote_port` is
+  **config-declared and fixed**; `bus.json` echoes both for discovery but sources them from durable state.
+- **(3) The credential boundary is structural, not the `_is_sensitive` heuristic.** Using the "shallow and permissive"
+  `_is_sensitive` as the A/B gate rebuilds the exact anti-pattern D112 outlaws — a boundary that **false-negatives
+  silently**, except the silent failure is now a live key crossing Cloudflare's plaintext edge. The gate is the crisp
+  **presence of a `returns`/`tasks` payload** (a bare opinion verdict has neither); `_is_sensitive` keeps its jobs
+  (file-mode tightening, the shred prompt) but is never the gate. On `access` a payload verdict is `403`; on
+  `tailscale` (E2E) it is admitted — the one carve-out.
+- **(4) A's Host-allowlist must add the declared public host.** Left as loopback-only, a proxy that **forwards** the
+  original Host has **all** its traffic `403`'d. So A's allowlist = loopback names ∪ the `public_url` host, which makes
+  `config.remote.public_url` **load-bearing for the transport itself**, not merely the pairing link. The port topology
+  stays the boundary; the Host check is anti-DNS-rebinding defense-in-depth.
+- **A's positive POST allowlist is verdict-only.** `release` / `control` / `intake` / `/shutdown` / `/api/pairing`
+  all `404` on A (the surface simply does not have them); the pairing secret is served only on loopback, so the page
+  that hands out the token can never itself be the remote surface.
+- **Pairing ships copy-paste; the QR is a scoped fast-follow.** No stdlib QR encoder, `qrcode`/`segno` absent, the
+  page is `script-src 'self'` (no CDN) — so a QR means hand-rolling Reed-Solomon+masking, and the decisive fact is
+  that an unscannable QR passes every structural test and only fails against a real phone camera (unverifiable
+  in-harness — the surface this project refuses to accrue). A tapped `#t=` link pairs with zero typing; pairing is
+  one-time. The not-yet-built demo's `/demo/*` route joins A's static class in Phase 4, unbuilt here.
+*Rejected:* the meta-tag token on A (defeats the second factor — the finding above); per-boot remote coordinates
+(breaks pairing + the tunnel every WSL restart); `_is_sensitive` as the credential gate (a silent false-negative =
+a key on a plaintext edge); a loopback-only Host-allowlist on A (403s a forwarded-Host proxy entirely); `intake`/
+`control` on A (kept off the reduced surface — fail-closed for MVP, a one-line widening later); building the QR now
+(unverifiable in-harness; copy-paste + a tapped fragment link is a complete one-time pairing).
+*Evidence:* driven on a real detached daemon — the remote page carries neither token; each socket accepts only its
+own token (loopback token → `401` on A, remote token → `401` on B); `release`/`control`/`intake`/`/shutdown` → `404`
+on A; an opinion verdict → `202`, a returns-bearing verdict → `403` **and the secret never reached the inbox**;
+`/api/pairing` → `404` on A / `200` on B with a well-formed fragment link; a forged Host → `403`, the public host →
+`200`. 36 new fixture tests (bus suite 77 → 113; full suite 199 → 235), all green; the leak gate holds (no `D<N>`
+slugs in the shipped `bus.py`). D112 (the split this realizes) · D95 (token discipline, never-reuse) · D90 (verdict-
+as-authoritative-prompt, the bar) · D97 (a missing credential can't be skipped) · D100 (stdlib-only → no QR lib, no
+JWT) · D116 (the meta-tag bootstrap this scopes to loopback) · D119 (the POST validation this partitions per socket).
+→ `03`/`05`/`shared/schemas.md`/`11`.

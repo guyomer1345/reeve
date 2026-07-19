@@ -299,14 +299,22 @@ fires it.
   marker before launching**: a duplicate orchestrator would be the package's own defect rather than operator error
   (the single exception to the otherwise operator-assumed one-orchestrator rule). Absent → off: the console still
   works, but nothing resumes a whole-parked loop without a human at the terminal.
-- `remote` — opt-in remote (phone) access, read by the daemon: `{ enabled, transport: access | tailscale }`.
-  **Absent / `enabled: false` / no transport → the remote socket is not served at all** (loopback only). The
-  transport is a **declaration**: the operator stands up Cloudflare Access or `tailscale serve` in front of
+- `remote` — opt-in remote (phone) access, read by the daemon: `{ enabled, transport: access | tailscale, port?,
+  public_url? }`. **Absent / `enabled: false` / no transport → the remote socket is not served at all** (loopback
+  only). The transport is a **declaration**: the operator stands up Cloudflare Access or `tailscale serve` in front of
   `bus.json`'s `remote_port` and is responsible for it being real — the same operator-responsibility stance as the
   single-orchestrator run-constraint. It is *not* a free-text URL: the value picks what the daemon will serve.
   `transport: tailscale` additionally unlocks **credential-bearing `setup` verdicts** on the remote surface,
   because WireGuard is **end-to-end encrypted**; `transport: access` does **not** — Cloudflare terminates TLS, so a
   returned key would transit their edge in plaintext. Everything else on the remote surface is identical.
+  - `port` — the **fixed loopback port** the remote socket binds (default `8799`). Fixed, not daemon-chosen: the
+    operator points a tunnel at it once and the phone is paired against it once, so a per-boot port would break the
+    away channel every restart. Bind-in-use degrades to no-remote with a warning, never a dead daemon.
+  - `public_url` — the tunnel's `https://` origin. **Load-bearing for the transport, not just the pairing link:**
+    the daemon builds the copy-paste pairing URL from it (`<public_url>/#t=<remote_token>`), *and* adds
+    its host to Socket A's Host-allowlist — a proxy that forwards the original Host would otherwise have all its
+    traffic rejected. Absent → the pairing link and the forwarded-Host allowlist are both unavailable (surfaced in
+    `status`); only loopback-Host proxy traffic (Host-rewriting proxies) still reaches A.
 - `guard` — the Layer-1 floor's only knob: `protected_branches` (**add-only**). `main` and `master` are **always**
   protected and cannot be removed; this list *adds* to them (e.g. `release`, `prod`). The floor itself is
   non-overridable — the loop never pushes a protected branch and never pushes a secret in the outgoing range,
@@ -368,8 +376,26 @@ reads that value as authority.
 - `remote_port` / `remote_token` — present **only** when `config.remote` declares an identity transport. This is
   the **reduced remote surface** (reads · opinion verdicts · the static demo); the operator points their
   `cloudflared` / `tailscale serve` at `remote_port`, and **never** at `port` — `port` is the full-surface loopback
-  socket (outward `release`, returns-bearing `setup` verdicts) that must never be fronted. `remote_token` is a
-  **separate** CSPRNG secret, never the loopback `token`, paired to the phone by QR + URL fragment.
+  socket (outward `release`, returns-bearing `setup` verdicts) that must never be fronted. **Both are echoed here for
+  discovery but SOURCED from durable state, not minted per boot:** `remote_port` is `config.remote.port`
+  (fixed), and `remote_token` is read from the persisted `.workflow/remote_token` file (below). This is the load-
+  bearing difference from the loopback `port`/`token`, which are freshly minted each boot — a phone paired once must
+  keep working across restarts. `remote_token` is a **separate** CSPRNG secret, never the loopback `token`, paired to
+  the phone by a copy-paste link (a QR is a scoped fast-follow) whose URL fragment never leaves the browser.
+
+## remote_token  · minted once by the bus daemon on first remote-enabled boot, read on every boot thereafter · *`.workflow/remote_token`; RUNTIME, gitignored, atomic `0600`-create + `stat`-verify; kept on a native filesystem*
+- A single CSPRNG line — the **stable second factor** gating Socket A, over the transport identity. **Distinct from
+  the loopback `token`** in `bus.json` (the loopback token is never reused remotely), and unlike it
+  **persisted, not per-boot**: a phone pairs against this token once and the operator points a tunnel once, so a
+  token reminted each boot would go stale on **every restart** — routine on WSL, the platform the away channel most
+  needs to survive. Minted only on first use; every later boot reuses the file. `bus.json` echoes its current value
+  for discovery, but this file is the source of truth.
+- **Never served on the surface it gates.** The remote page carries no token in its HTML — it would hand the surface
+  to anyone past the transport in one GET. The token reaches the phone only through the pairing fragment (loopback
+  `/api/pairing` → a copy-paste link), which never leaves the browser.
+- **Same atomic-`0600`-create + `stat`-verify discipline as the loopback token and the secret store** (a mount that
+  ignores mode returns `0777` silently). **Deleting the file re-pairs everyone** — the only rotation path, and a
+  deliberately visible, owner-level act.
 
 ## alerts.json  · written and read by the bus daemon alone, to record which checkpoints it has already alerted on · *`.workflow/alerts.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ checkpoints: { "<ticket_id>|<deadline>": { first_alert, last_alert, escalated } }, dead_letters: { "<message_id>": { at } } }`
