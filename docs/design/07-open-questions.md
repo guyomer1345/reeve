@@ -200,6 +200,14 @@ Deliberately deferred — known unknowns, to close during build or later.
     instead of reporting a protection that does not exist. The daemon does this today; the residual is the Windows
     ACL path, still unexercised.
   Validate the family together when a real target-OS decision is forced.
+- **Brownfield bootstrap vs freshly-adopted gates (D130, deferred) — surfaced 2026-07-20.** A brownfield `/start`
+  wires the stack gates at step 5, then step 7's bootstrap commit runs them **repo-wide on the adopted, unmodified
+  code**. If that code does not pass the freshly-adopted lint/typecheck/test — or the deps (`node_modules`/venv)
+  are not installed in the working tree — the bootstrap commit could **wedge init** (the F2 fail-closed backstop
+  firing on code the human did not write). Mitigated in principle by *adopt existing **passing** gates* (a project's
+  own configs, which its code already passes), but the deps-availability and does-adopted-code-actually-pass cases
+  are untested (Wave-2 stripped the venv/`node_modules`, so the real brownfield gate-run was not exercised). Surface
+  when a real deps-present brownfield build is driven — or, most likely, in first dogfooding.
 - **Project-state view (`03`/`05`/`06`) — user-raised 2026-06-30.** No single synthesized "where is this
   project" surface — *what's done · how the pieces connect · what's left*. The data exists but is scattered
   (`00–11` + `08` decisions + this register + `handoff.md` + `backlog.md` + the `docs/knowledge/` graph). The user
