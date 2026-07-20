@@ -140,6 +140,6 @@ Skill bodies **authored** (session 2026-07-01); each delta maps to its landed ho
   continue-while-parked interleaving. `prioritize` owns the predicate; `verify` owns the rebase-onto-trunk
   speculative-merge on a parked ticket's resume.
 - `init` **brownfield-ingest** — mechanics decided (D68); `ingest` skill authored + the code-map engine (five
-  arms + tier-0 floor, thread CLOSED D77/D79) wired into `/start`. Remaining is **runtime** (unexercised until a
-  real bootstrap); open code-map follow-ons (living observed layer, D83 charter) live in `11` Space 6.
+  arms + tier-0 floor, thread CLOSED D77/D79) wired into `/start`. Runtime driven (D130) + lived (D131–D134 —
+  the Phase-6 experience fixes); open code-map follow-ons (living observed layer, D83 charter) live in `11` Space 6.
 - D41 freshness mechanisms (staleness signal, prune pass) + #8 (verify reads diff?) — `07`.

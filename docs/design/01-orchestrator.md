@@ -129,6 +129,15 @@ Driving model: `CLAUDE.md` is **advisory context, not enforced configuration** �
 model-on-rails while the **hard gates are deterministic hooks**. Layout is per-mode (greenfield launch-root +
 `project/`; brownfield a marked block in the existing root `CLAUDE.md`) — see `commands/start.md` + `05`.
 
+## Bootstrap motion **[DECIDED — D131/D134; NOT built, Phase 6 `11`]**
+`/start` is **one enforced, resumable motion** that ends only at the first human gate — brownfield
+`/start → ingest → checkpoint:reconcile` (parked), greenfield `/start → discuss` — never at the scaffold commit
+(the first lived onboarding stopped there and split into two chats). "Initialised" means **bootstrap-complete,
+not install-complete**: the durable phase lives in `handoff.md` (the D48 anchor), and §0's re-run guard resumes
+at the recorded phase (extends D129's install-completeness key). The motion also **ends the context window**
+(D134): the reconcile park / discuss handoff is the designed reset point — the loop resumes post-verdict in a
+fresh session (D92/D108/D123), never by rolling the bootstrap window into feature work.
+
 ## Model + effort routing **[DEFERRED]**
 Not every task runs at the same model/effort. The orchestrator assigns a model+effort per task type
 (e.g. graph-maintenance cheap; Arbiter/planning expensive). Exact mapping not specced now.

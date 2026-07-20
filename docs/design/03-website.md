@@ -144,6 +144,16 @@ checkpoint verdict + status away from the terminal).
   output and moved by `drain.py secret` (D119).
 - **Pending outward actions (D105)** ride the cockpit as a **pull** surface (a count + the release form), **not** a
   notification (D101 excluded outward-gate pings) — an outward action doesn't block the loop, so it doesn't interrupt.
+- **The console is the bootstrap's front door [DECIDED — D132/D133; NOT built, Phase 6 `11`].** The first lived
+  onboarding proved the cockpit invisible-in-practice: the daemon launched and stayed live, but the URL printed once
+  into install output and the cockpit had nothing bootstrap-shaped to show — the maintainer concluded the website
+  "never launched." So: `/start` ensures the daemon as early as the install allows, surfaces the URL prominently,
+  **best-effort auto-opens a browser**, and states the interaction contract (terminal = dialogue · console =
+  progress + intake + checkpoints); the cockpit's "Now" renders the **bootstrap phase/step** the motion writes into
+  `state.json` (D133) via the existing snapshot poll — live progress with no new channel. Intake filed during
+  bootstrap queues in `inbox/` and drains at the first boundary after reconcile (D108). D93/D99 are **reaffirmed**,
+  not amended — the maintainer's "discuss priorities while infra builds" *is* the intake form + boundary drain,
+  finally made visible.
 
 ## Stack **[DECIDED — D100 (closes B4)]**
 A **daemon process + a static page it serves**, not a web app — the shape is forced by A2/A3/A4 + the pure-config

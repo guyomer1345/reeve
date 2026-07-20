@@ -22,8 +22,10 @@ Deliberately deferred — known unknowns, to close during build or later.
   is AUTHORED** (`skills/ingest/SKILL.md`) — the ingest *mechanics* (own per-stack generator, two lenses,
   three-tier seed, `CLAUDE.md`-seeded intent, unspecified-default + reconciliation checkpoint) are closed; the
   **code-map arm build thread is CLOSED (D77/D79)** — five precise arms built + ground-truth-measured (Python,
-  JS/TS, Go, Java, C#); C++/Rust/PHP stay on the tier-0 floor by design. Residual is **runtime**: brownfield
-  `/start` is unexercised until a real bootstrap (validation-blocked).
+  JS/TS, Go, Java, C#); C++/Rust/PHP stay on the tier-0 floor by design. The runtime residual **closed**:
+  brownfield `/start` was driven (D130) and then **lived** in a real onboarding (2026-07-20) — correctness held;
+  the first-run *experience* did not, opening **Phase 6 (D131–D135, `11`)**: one-motion `/start` · console
+  front-door · bootstrap progress · bootstrap context law — decided, NOT built.
 - **Commit-message convention** — **CLOSED (D32):** Conventional Commits + `Refs:`/`Closes:` trailers.
   Remaining sliver: whether the workflow's own generated commits carry the `Co-Authored-By` trailer.
 - **Agent roster v1** — **CLOSED in `10`** (names, I/O contracts, skill-vs-agent, topology). Remaining
@@ -224,16 +226,30 @@ Deliberately deferred — known unknowns, to close during build or later.
   "Home" path dropped); and the skill `description:` fields were scrubbed of construction vocabulary. The
   **distilled-package** arm was rejected — a sync seam + lost dogfooding, the exact drift this project exists to
   kill (the construction record IS the workflow's own output). Full record: D125. **Still open (below):** the
-  **framework version-update skill** (keeping *installed* copies fresh) and the **project-state view**
-  (self-hosting prereq); and **`/start`'s full bootstrap runtime** stays unexercised — **now the tracked Phase 5
-  pre-test-hardening slice (D126, `11`), no longer a loose "standing residual."**
+  **framework version-update skill** (keeping *installed* copies fresh — promoted into Phase 6, D135) and the
+  **project-state view** (self-hosting prereq); `/start`'s full bootstrap runtime has since been **driven
+  (D128/D130) and lived (2026-07-20)** — the experience findings are the tracked **Phase 6** slice (D131–D135, `11`).
 - **Framework version-update skill (`10`, D57) — user-raised 2026-06-30.** The package is now a **public
   repo**; consuming projects install a snapshot (`.claude/` skills/agents/commands + `templates`/`shared`/
   `hooks`). As the framework evolves (fixes, new skills, schema/format changes) installed copies go **stale**,
   and stale references mislead the loop. Need an `/update` skill that pulls the latest package and re-applies
   it, **reconciling local customizations + migrating schema/format changes** (a version bump can change
   `state.json`/`schemas` shapes — not a blind overwrite). The natural follow-on to packaging (D57); the
-  framework-level analogue of the retention/freshness law.
+  framework-level analogue of the retention/freshness law. **PROMOTED into Phase 6 (D135, 2026-07-21)** — the
+  first real out-of-tree install (`idea testing`) now exists and will go stale; constraints pinned by that run:
+  **version-stamped installs** (nothing in a target records its package snapshot — no migration key today) ·
+  **regenerate `[G]`/`graph.json` under a new schema, never clobber `[D]`/adopted docs** (D39/D50 + D130's
+  case-variant adoptees) · **diff against the manifest `install[]` map** — real targets carry a pre-existing
+  `.claude/` the skill must not treat as its own. Design still pending (its own slice).
+- **Interaction-model expectation vs the locked terminal/bus split (D132) — surfaced 2026-07-20, HELD.** The
+  maintainer left the first real onboarding believing "the whole interaction happens through the website" — the
+  opposite of the locked design (D93 dialogue = terminal, bus = requests + bounded clarifications; D99 console =
+  read-only cockpit + contact-UX). D132 ruled the confusion a *surfacing* defect and reaffirmed the lock (the
+  orchestrator is a batch consumer — a browser chat would sit in Claude's request path, D3), fixing visibility
+  instead: console as bootstrap front door + a stated interaction contract + defined intake-during-bootstrap.
+  **Open sliver, deliberately left for the maintainer:** if — with the contract stated and the console visible
+  from minute one — he *still* wants live dialogue in the browser, that is a real D93/D99 overturn (and a D3
+  collision) needing his explicit call. Re-test after the Phase-6 items are built and one more real onboarding.
 - **Doc-authoring agent (reserved — D65; trigger fired, still not added — D68).** A specialized
   heavy-doc-reconstruction worker (e.g. brownfield `ingest` building a spec from code — a generative task that
   doesn't fit `execute`'s plan-driven model). The "revisit when building brownfield `ingest`" trigger **fired
