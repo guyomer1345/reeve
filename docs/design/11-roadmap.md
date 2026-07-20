@@ -328,14 +328,60 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice:** **Phase 4 is COMPLETE — the MVP is release-ready.** Phase-4 first half (build the demo,
-D124) and second half (the public-repo identity + onboarding, D125) are both DONE: the shipped plugin now lives
-under `product/` with **`product/MANIFEST.json`** as the single ship boundary (the leak gate, `/start` install, and
-the release build all derive from it), the construction record is `docs/design/`, and the product installs via
-`claude plugin install` behind a front-door `README.md`. What remains is all `[stageable]`/`[later]`: the
-first-launch **trust-UX doc** (D58), the **framework version-update/migration skill**, the **project-state view** +
-**self-hosting**, and **`/start`'s full bootstrap runtime** validation (the standing residual — install + source
-resolution are proven, a full greenfield/brownfield bootstrap is not yet driven).
+**Recommended next slice — Phase 5: pre-test hardening (D126).** Phase 4 is **build-complete** (the demo D124 +
+the release surface D125), but "release-ready" was a *build-completeness* claim: the whole **install → `/start` →
+loop** runtime has **never been driven end-to-end once** (every Phase-3 increment was driven in isolation; the only
+prior loop run — D52 — was a pre-D66 throwaway that *simulated* dispatch). A pre-first-run audit (two independent
+sweeps — doc-status vs shipped-code) found a hardening gauntlet that must close before a clean first test,
+**including three latent bugs verified against the artifacts** (not just unexercised paths): `checks.sh` ships no
+generator yet gates every commit · the hooks read a `state.json` `/start` relocates off a 9p mount (verify-before-
+commit silently no-ops on `/mnt/c`) · `verify-verdict` is an unwritten hook↔artifact contract. Sequenced
+**greenfield-on-a-Linux-native-path first, then brownfield-on-`/mnt/c`** (the native-path first test collapses the
+FS-relocation family out of run #1). Full worklist in `### Phase 5` below; capture rationale in D126.
+
+### Phase 5 — Pre-test hardening: the gauntlet before a first clean end-to-end test (D126)
+The unexercised `/start`→loop runtime, audited before a first real run. Tags: **[blocker]** a first run can't
+complete without it · **[bug]** a defect reading confirmed against the artifact · **[drive]** authored-but-
+unexercised, expected to break on first contact. Two waves; Phase 5 owns the *sequencing* — each item's status
+stays in its space above.
+
+**Wave 1 — greenfield on a Linux-native path (the smallest gauntlet):**
+- **`checks.sh` has no generator/template** — authored *freehand* by `/start`, run by the git `pre-commit` hook +
+  the `commit` skill on **every** item commit. A syntax slip or wrong gate/manifest path dead-ends the loop at its
+  first commit. Ship a scaffold/generator so the per-item gate isn't LLM-freehand. **[blocker · bug]** — highest
+  risk; both sweeps landed on it independently.
+- **`verify-verdict` is an unwritten hook↔artifact contract** — `guard.sh:91`/`pre-commit.sh:35` grep for
+  `.workflow/items/<id>/verify-verdict.md` + a literal fail token, but `verify`/`shared/schemas.md` pin no
+  filename/extension/serialization. A `.json` or a differently-worded fail either mis-blocks or waves a real
+  failure through. Pin the artifact contract both sides. **[blocker · bug]**
+- **`/start` ships no manual workspace-trust path** — until the folder is trusted the shipped settings + `guard.sh`
+  are inert, and the WSL trust dialog doesn't render; add the `hasTrustDialogAccepted` method to `start.md`
+  (+ the D58 trust-UX doc). Without it the loop stalls on the first prompt. **[blocker]**
+- **Drive the greenfield bootstrap + loop, fix what breaks:** rules specialization + enforcer wiring · `codemap.sh`
+  generation + first run (**fix the greenfield import-root bug** — `codemap.py` names modules relative to CWD but
+  `/start` invokes it from the launch root, so greenfield Python edges silently fail to resolve) · **real**
+  orchestrator→subagent dispatch (`research`/`setup-guide`, only ever *simulated*) + outbox-release firing ·
+  `handoff.md` session-end crash-durability (a text-tool model can't express an atomic rename; git-recoverable but
+  the fix shape is undesigned). **[drive]**
+
+**Wave 2 — brownfield on `/mnt/c` (adds the FS + ingest families):**
+- **Hooks hard-code `.workflow/state.json`; `/start` relocates it off a 9p mount** → `guard.sh:89`/`pre-commit.sh:33`
+  read an absent file, the `json.load` is swallowed by `2>/dev/null || true`, and **verify-before-commit silently
+  no-ops.** Resolve the runtime root via `runtime.json` the way `bus.py:180` does. **[bug]** — silent safety-gate
+  defeat on the maintainer's own platform.
+- **The FS-relocation step itself is unexercised** on the mount it targets (token/creds land `0777`, renames go
+  non-atomic if it misfires — the D115 failure mode). **[drive]**
+- **Brownfield `ingest` entry path** — codemap-at-scale over a real tree → spec reconstruction → reconciliation
+  checkpoint, never run. **[drive]**
+
+**Opportunistic (real bugs a first run won't reach):** the `align` skill invokes meta-repo-only gates
+(`check-status-coherence.sh`/`check-no-spec-refs.sh`) absent from the install manifest and meaningless in a target
+**[bug]** · `start.md`'s "Expand later" prose still claims the console write-path/forms are unbuilt (shipped since
+increment 3) **[doc]**.
+
+Everything past Phase 5 stays `[stageable]`/`[later]` (the living code-map observed layer, D84 reclassification, the
+proportional-rigor gate, build-once-per-wave, model/effort routing, the project-map tab, the project-state view,
+`/update`, `align`'s semantic layer, the away-channel config prerequisites) — none sit on "run the loop once."
 *(**The build is pressure-testing the design, as intended.** Increment 1 alone found the substrate unbuildable as
 specced — a pinned path could not be *found* — and **measured two stated mechanisms to be wrong**: `flock` does not
 fail on the repo mount, while file *mode* does, silently and open. Both are the reverse of what the spec asserted,
@@ -360,10 +406,12 @@ drive surfaced a mechanism wrong only when run — an **untrusted workspace make
 allowlist and stall**, which no static read shows, and which drove a stall-timeout the crash-only design lacked. The
 resume path was **driven end-to-end on a real model** (a runner-spawned `claude` drained a durable verdict and advanced
 the watermark), not reasoned. **Drive them on the real filesystem, with a real model.**)*
-**Phase 4 — COMPLETE.** The demo (Space 4) is **built (D124)** and the **public-release surface is built (D125)**:
-one transparent repo, `product/` as the plugin root, `product/MANIFEST.json` as the single ship boundary, the
-construction record reframed into `docs/design/`, a product front-door `README.md`, and the skill `description:`
-user-language pass. **The MVP is release-ready** — everything else is `[stageable]`/`[later]`.
+**Phase 4 — BUILD-COMPLETE (not yet runtime-validated).** The demo (Space 4) is **built (D124)** and the
+**public-release surface is built (D125)**: one transparent repo, `product/` as the plugin root,
+`product/MANIFEST.json` as the single ship boundary, the construction record reframed into `docs/design/`, a product
+front-door `README.md`, and the skill `description:` user-language pass. But the MVP is **not yet release-ready**: a
+pre-first-run audit (D126) opened **Phase 5 — pre-test hardening** (the unexercised `/start`→loop runtime + three
+latent bugs), the next slice before a clean end-to-end test. Everything past Phase 5 is `[stageable]`/`[later]`.
 
 **The MVP away-autonomy boundary (D113 — locked, eyes open).** With the runner in, away-autonomy is **real
 end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote socket) → the verdict lands durably
@@ -389,4 +437,6 @@ The engine **drives**, is **self-maintaining** (retention + freshness + docs-roo
 `rules/` + the drift gate), **knowledge-complete** (code-map generation → brownfield ingest), **visible + reachable**
 (the console + bus, away-autonomy end-to-end), and **alignment-ready** (the demo + checkpoint mechanics). It is now
 **packaged for release** — one transparent repo, `product/` behind a `claude plugin install` front door (D125).
-The MVP is release-ready; what remains is all `[stageable]`/`[later]`.
+It is **build-complete** but **not yet runtime-validated end-to-end**: Phase 5 (pre-test hardening, D126) closes the
+unexercised bootstrap→loop gauntlet — three latent bugs + the never-driven `/start` runtime — before a first clean
+test. What remains past it is all `[stageable]`/`[later]`.

@@ -79,7 +79,7 @@ Deliberately deferred — known unknowns, to close during build or later.
   (cross-cutting) is now CLOSED (D105–D107 — the outward-action outbox · commitment-status storage · project-map
   residuals + loopback-only-release), so the Phase-2 DESIGN is COMPLETE (next = Phase 3, `11`).**
 - **Real dispatch validation** — the dogfood *simulated* the `research` agent dispatch; the orchestrator→agent
-  call + structured return is validated in the harness-real run.
+  call + structured return is validated in the harness-real run. **→ scheduled: Phase 5 Wave-1 drive (D126, `11`).**
 - **Package install** — **plugin packaging BUILT (D125):** the repo self-markets (`.claude-plugin/marketplace.json`,
   `source: ./product`) and installs via `claude plugin install`; `/start` copies the shipped scripts/hooks out per
   `product/MANIFEST.json`'s `install` map, resolved from `${CLAUDE_PLUGIN_ROOT}`. Loose `.claude/` files remain the
@@ -94,7 +94,8 @@ Deliberately deferred — known unknowns, to close during build or later.
   `/start` step-4 enforcement wiring, the `commit` mechanical-gate step, and the `prioritize` drift-ticket note
   are written. **Remaining sliver:** `/start`'s per-stack **`checks.sh` generator** (detect the stack → emit
   the concrete `--fix`/`--check` runner + configs) — a `/start` runtime detail, not yet exercised in a real
-  bootstrap.
+  bootstrap. **→ promoted to a Phase-5 Wave-1 BLOCKER (D126, `11`):** nothing ships to produce/scaffold
+  `checks.sh`, yet it gates every commit — so it is authored freehand today, the highest-risk first-run item.
 
 - **`handoff.md`'s durability mandate is met at the drain and nowhere else (raised by D117).** D93 calls it "the one
   file where crash-durability, not just atomicity, is mandatory" (write-temp → `fsync` → `rename` → `fsync(dir)`).
@@ -203,8 +204,8 @@ Deliberately deferred — known unknowns, to close during build or later.
   **distilled-package** arm was rejected — a sync seam + lost dogfooding, the exact drift this project exists to
   kill (the construction record IS the workflow's own output). Full record: D125. **Still open (below):** the
   **framework version-update skill** (keeping *installed* copies fresh) and the **project-state view**
-  (self-hosting prereq); and **`/start`'s full bootstrap runtime** stays unexercised (the standing validation
-  residual, `11`).
+  (self-hosting prereq); and **`/start`'s full bootstrap runtime** stays unexercised — **now the tracked Phase 5
+  pre-test-hardening slice (D126, `11`), no longer a loose "standing residual."**
 - **Framework version-update skill (`10`, D57) — user-raised 2026-06-30.** The package is now a **public
   repo**; consuming projects install a snapshot (`.claude/` skills/agents/commands + `templates`/`shared`/
   `hooks`). As the framework evolves (fixes, new skills, schema/format changes) installed copies go **stale**,
