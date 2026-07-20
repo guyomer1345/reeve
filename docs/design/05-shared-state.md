@@ -15,7 +15,11 @@ the **orchestrator** solely writes `state.json` / `handoff.md` / `backlog.md` / 
 would make it two-writer) — it lands in the bus-owned inbox and the orchestrator **promotes** it into `backlog.md`
 at a boundary (D69 triage). No `flock` — single-writer removes the write-conflict class. Every file that crosses the
 process boundary is **published atomically** (write-temp → `fsync` → `rename` → `fsync(dir)`) so a reader never
-catches a torn file — `state.json` included; `handoff.md` additionally fsyncs the dir for crash-durability.
+catches a torn file — `state.json` included, and `drain.py`'s `handoff.md` machine-block republish. The
+orchestrator's `handoff.md` **prose** rewrite gets its atomicity from the harness `Write`/`Edit` tools (temp +
+`rename`, inode-verified — D128), not an fsync it can express; the residual power-loss durability is **git**'s job
+(committed each item), so `handoff.md`'s crash-safety is real for a process kill and git-backstopped otherwise. The
+one rule that carries: **never rewrite `handoff.md` via a `Bash` `>` redirect** (in-place truncate — would tear).
 
 **One orchestrator is an operator-guaranteed invariant, not an enforced one (D109).** Nothing *elects* the single
 orchestrator: two concurrent `/start`/`--resume` processes would each believe they are the sole writer, and

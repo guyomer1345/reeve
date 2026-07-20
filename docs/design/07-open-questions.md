@@ -78,8 +78,10 @@ Deliberately deferred — known unknowns, to close during build or later.
   CLOSED (D102–D104 — serving/format + sandbox-CSP isolation · refine cap · on-disk location).** **Cluster E
   (cross-cutting) is now CLOSED (D105–D107 — the outward-action outbox · commitment-status storage · project-map
   residuals + loopback-only-release), so the Phase-2 DESIGN is COMPLETE (next = Phase 3, `11`).**
-- **Real dispatch validation** — the dogfood *simulated* the `research` agent dispatch; the orchestrator→agent
-  call + structured return is validated in the harness-real run. **→ scheduled: Phase 5 Wave-1 drive (D126, `11`).**
+- **Real dispatch validation** — **RESOLVED (D128).** The first real end-to-end greenfield loop drove both leaf
+  agents through the Task tool with a real model (`research` via `decision-engineer`, `setup-guide` via a setup
+  checkpoint) — structured returns intact, orchestrator context stayed clean (hub-and-spoke holds). The agents
+  resolve only **namespaced** (`dev-autonomous-workflow:<name>`), not bare.
 - **Package install** — **plugin packaging BUILT (D125):** the repo self-markets (`.claude-plugin/marketplace.json`,
   `source: ./product`) and installs via `claude plugin install`; `/start` copies the shipped scripts/hooks out per
   `product/MANIFEST.json`'s `install` map, resolved from `${CLAUDE_PLUGIN_ROOT}`. Loose `.claude/` files remain the
@@ -96,19 +98,22 @@ Deliberately deferred — known unknowns, to close during build or later.
   + a generated `.workflow/checks.env` data file — the `--fix`/`--check` dispatch + the coverage-gate loop are no
   longer LLM-freehand (refines D67), and it was driven end-to-end on a real greenfield bootstrap (`~/p5-test`).
   Residual: stack-enforcer wiring (`checks.env` commands + the `rules/` `enforced by:` tags) is **deferred to
-  `tech_stack` lock** — a faithful greenfield has no stack to detect at `/start` (D127).
+  `tech_stack` lock** — a faithful greenfield has no stack to detect at `/start` (D127). **But that deferral has
+  no owner (F2, D128):** driving showed the stack locks in `decision-engineer`/`planner` yet **no skill fills
+  `checks.env`**, so `checks.sh --check` silently runs only the coverage-linkage gates — a failing test passed the
+  commit gate live. **→ Wave-1 fix slice (next session, D128, `11`).**
 
-- **`handoff.md`'s durability mandate is met at the drain and nowhere else (raised by D117).** D93 calls it "the one
-  file where crash-durability, not just atomicity, is mandatory" (write-temp → `fsync` → `rename` → `fsync(dir)`).
-  `drain.py record` does exactly that for the machine block. But the **handoff step** — the orchestrator rewriting
-  the prose anchor at session end — is a model with a text-writing tool, which **physically cannot express a
-  rename**, let alone a directory `fsync`. So the mandate is unmet on the very write it was authored for.
-  **Bounded, not open-ended:** `handoff.md` is committed, so a torn or unflushed copy is recoverable from git — the
-  last good anchor is a `git show` away. The fix's *shape* is the open part: a CLI taking a markdown blob is poor
-  ergonomics, and a "model writes the prose → a script republishes it atomically" two-step is plausible but needs
-  design. **→ now a tracked Phase-5 Wave-1 REMAINING item (`11`, D126/D127) — a `[design]`, not a build**;
-  inclination: a shipped publisher helper the orchestrator calls to atomically+durably publish the whole file
-  (`drain.py`-style), git as the recovery backstop. To be settled alongside the real-model dispatch drive.
+- **`handoff.md`'s durability mandate (raised by D117) — RESOLVED (D128): the premise was largely false.** The
+  worry was that the orchestrator's text-writing tool "cannot express a rename" so the prose anchor could tear on
+  crash. Reproduced before deciding: the harness **`Write`/`Edit` tools are atomic** — they publish via temp +
+  `rename` (verified, the inode changes on overwrite), so a session killed mid-write leaves the **previous** file
+  whole, never torn (a naive in-place truncate-write, by contrast, tore a copy to a fragment on the same kill — so
+  the harness provides the guarantee the model can't *express*). The one real rule: **never rewrite `handoff.md`
+  via a `Bash` `>`/`tee` redirect** (in-place truncate — would tear); use the tools. Residual is only power-loss
+  `fsync` durability, which **git already backstops** (committed each item; a cold start rebuilds from
+  `handoff.md + git log`). **The call:** downgrade the `schemas.md` claim to the real guarantee + the no-redirect
+  rule — **no shipped publisher** (it would re-buy only what git backstops, at the cost of a new must-call-it
+  discipline, i.e. another F2/F3-class fail-open surface). `drain.py` still writes its machine block fully durably.
 
 - **The console page's legibility is now reviewed (D120), one nit left.** The twice-carried "nobody has rendered
   the page in a browser" residual is **closed** — the live cockpit was rendered in headless Chrome and read as

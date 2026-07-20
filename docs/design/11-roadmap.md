@@ -184,7 +184,8 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   seeds behavioural-core **intent from the existing `CLAUDE.md`/spec** (un-derivable from code), builds
   `docs/knowledge/` + a reconstructed `docs/spec/` (default **unspecified**, reconciliation checkpoint locks
   invariants). Residual is **runtime, not spec**: brownfield `/start` (§3) is authored but **unexercised** until a
-  real bootstrap run (validation-blocked, like dispatch). **[core for brownfield — skill authored; unexercised]**
+  real bootstrap run — the **Wave-2** target (greenfield `/start` + the full loop + real dispatch are now driven, D128).
+  **[core for brownfield — skill authored; unexercised]**
 - **Retention script** — **BUILT 2026-07-02 (D71):** `scripts/retention.py` (stdlib Python, idempotent) does the
   three deterministic caps (Sessions cap-and-archive · superseded-decision GC + index tombstone · promoted-item
   prune), wired into `/start` (copy → `.claude/scripts/`) + `document` audit mode (invoke; and `document` writes
@@ -220,7 +221,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   "Home" path dropped), and the skill `description:` fields were scrubbed of construction vocabulary — validated +
   installed + release-built, all gates + the full suite green after the move. Full record: D125 (`07` fork CLOSED).
   **[DONE — D125]**
-- **Validation gaps** — real orchestrator→agent **dispatch** in a harness run; `@import`-survives-`/compact`;
+- **Validation gaps** — real orchestrator→agent **dispatch** ✅ **validated (D128, real-model loop)**; `@import`-survives-`/compact`;
   whether `verify` samples the real `git diff` vs trusts the `changelog` (#8); **shipped bash glue assumes a
   bash interpreter on the target OS — unverified on native Windows (D89; the D71 split stands, no refactor)**. **[stageable]**
 - **Commitment-status storage** — where locked/provisional/unspecified is recorded (spec vs node
@@ -366,14 +367,42 @@ the predicted codemap bug **and found a second silent-gate defeat the audit miss
   commands must be scoped to `project_root` · `/start`'s install must honour the manifest `exclude` (test files leak
   into the target today).
 
-**Wave 1 — REMAINING (the next slice, driven with a real model):**
-- **Real orchestrator→subagent dispatch + one full real-model loop iteration** — `research`/`setup-guide` dispatch
-  has only ever been *simulated*; drive `discuss → planner → execute → verify → document → commit` on `~/p5-test`
-  with a real model (`claude -p`) + the outbox-release firing, and fix what breaks. **[drive]**
-- **`handoff.md` session-end crash-durability** — `schemas.md` asserts a `write-temp → fsync → rename → fsync(dir)`
-  guarantee the orchestrator's text tools can't express (`drain.py` owns only the machine block). The fix shape is
-  **undesigned** — inclination: a shipped publisher helper the orchestrator calls to atomically+durably publish the
-  whole file, `drain.py`-style, with git as the recovery backstop. **[design]**
+**Wave 1 — REMAINING: DRIVEN end-to-end (D128) — both items closed.** The first real greenfield loop ran on
+`~/p5-test` against a real `claude` running the **installed plugin**, and found three wrong-mechanism bugs (F1–F3,
+below — captured, fix next session per the maintainer). DONE:
+- ✅ **Real orchestrator→subagent dispatch + one full real-model loop iteration** — drove `/start → discuss →
+  decompose → prioritize → plan-one → decision-engineer → execute → verify → document → commit → setup-checkpoint →
+  outbox → release` with a real model. **Both leaf agents dispatched via Task** (`research` through
+  `decision-engineer`, `setup-guide` through a setup checkpoint — namespaced `dev-autonomous-workflow:<name>`);
+  context stayed clean. codemap resolved the real greenfield import edge; `verify-verdict` first line `pass: true`;
+  the **outbox → console `release` → guard push** fired end to end (feature branch, nothing pushed until released).
+  **[drive — DONE D128]**
+- ✅ **`handoff.md` session-end crash-durability — RESOLVED, no new code (D128).** The premise was largely false:
+  the harness `Write`/`Edit` tools are **atomic** (temp + `rename`, inode-verified), so a mid-write kill leaves the
+  previous file whole; git backstops the residual power-loss case (committed each item). Fix = **downgrade the
+  `schemas.md` claim** to the real guarantee + one rule (**never rewrite `handoff.md` via a `Bash` redirect**);
+  **rejected** a shipped publisher (re-buys only what git backstops, adds an F2/F3-class must-call-it fail-open).
+  **[design — DONE D128]**
+
+**Wave 1 — FIX SLICE (next session, the three findings the drive surfaced — D128):**
+- **F1 — `/start` non-interactive install hard-blocks to a hollow scaffold.** The manifest install writes into
+  `.claude/scripts/` + `.claude/hooks/`, which Claude Code guards **above** the settings allowlist (trust +
+  `Write`/`Bash` allow don't waive it); in `claude -p` there is no grant path so all 13 entries + the daemon are
+  silently skipped, **yet `.workflow/` still commits** (re-run → "already initialised", a hollow-scaffold trap). No
+  post-install verification; the start.md permission message implies trust makes local writes prompt-free (false).
+  Design question: interactive-only `/start` + a post-install assertion, or move the installed scripts off the
+  guarded `.claude/` path. Also fold the D127 install-`exclude` gap (test files leak) here. **[bug · design]**
+- **F2 — greenfield stack-wiring has no owner → the commit gate silently has no stack teeth.** The stack locks in
+  `decision-engineer`/`planner` but **no skill fills `.workflow/checks.env`** or specialises the `rules/` `enforced
+  by:` tags — so `checks.sh --check` runs only the coverage-linkage gates and a failing test passes the commit gate
+  (demonstrated live). Assign an owner for the `tech_stack`-lock stack-wiring (fill `checks.env`, scoped to
+  `project/`; specialise rules; add build-output `.gitignore` patterns). **[bug]** — silent stack-gate defeat.
+- **F3 — verify-before-commit fails OPEN on a `state.json` shape drift (native/Wave-1 sibling of the Wave-2
+  `state.json` bug).** `pre-commit.sh:36`/`guard.sh` read top-level `state.json.current_item` behind
+  `if [ -n "$item" ]`; the real orchestrator wrote a nested `position.item` and initially omitted the top-level key,
+  silently disarming the verify gate (self-corrected only by vigilance). Fix with the Wave-2 item: fail **closed** /
+  derive the item from the staged `.workflow/items/<id>/` diff, not a fragile state.json key. **[bug]** — silent
+  safety-gate defeat, reachable on the native path (not only off a 9p mount).
 
 **Wave 2 — brownfield on `/mnt/c` (adds the FS + ingest families):**
 - **Hooks hard-code `.workflow/state.json`; `/start` relocates it off a 9p mount** → `guard.sh:89`/`pre-commit.sh:33`
@@ -416,7 +445,13 @@ a *published* `flock` marker and the `loop.sh` launcher (real orchestrator-side 
 drive surfaced a mechanism wrong only when run — an **untrusted workspace makes `claude -p` ignore the settings
 allowlist and stall**, which no static read shows, and which drove a stall-timeout the crash-only design lacked. The
 resume path was **driven end-to-end on a real model** (a runner-spawned `claude` drained a durable verdict and advanced
-the watermark), not reasoned. **Drive them on the real filesystem, with a real model.**)*
+the watermark), not reasoned. **The Phase-5 Wave-1 drive held it a seventh time — the first *whole loop* on the
+*installed* plugin (D128):** three findings, two of them **silent safety-gate defeats** — `checks.sh --check` passes a
+failing test because nothing fills `checks.env` at stack-lock (F2), and verify-before-commit disarms itself when the
+orchestrator writes a `state.json` shape the hook can't read (F3) — plus `/start` half-installing to a hollow scaffold
+non-interactively (F1). None was reachable by reading; F2/F3 survive green unit tests exactly as the pattern predicts.
+And the *opposite* also held: the feared `handoff.md` tear **couldn't be reproduced** — the harness write is already
+atomic, so a spec mandate was over-stated, not unmet. **Drive them on the real filesystem, with a real model.**)*
 **Phase 4 — BUILD-COMPLETE (not yet runtime-validated).** The demo (Space 4) is **built (D124)** and the
 **public-release surface is built (D125)**: one transparent repo, `product/` as the plugin root,
 `product/MANIFEST.json` as the single ship boundary, the construction record reframed into `docs/design/`, a product
@@ -439,8 +474,8 @@ end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote 
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, model/effort routing,
 packaging, the state-view, the version-update skill, **and the D84 skill→agent reclassification** (`execute` +
 `create-demo` → leaf agents: the file moves, agent-format rewrites, orchestrator dispatch-by-kind wiring, and the
-`17 skills + 2 agents` → `15 + 4` count update — a dedicated session, validation-blocked until the loop runs) —
-slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
+`17 skills + 2 agents` → `15 + 4` count update — a dedicated session; **the loop has now run (D128), so this is no
+longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6.)*
 
 ## The one-liner
@@ -448,6 +483,9 @@ The engine **drives**, is **self-maintaining** (retention + freshness + docs-roo
 `rules/` + the drift gate), **knowledge-complete** (code-map generation → brownfield ingest), **visible + reachable**
 (the console + bus, away-autonomy end-to-end), and **alignment-ready** (the demo + checkpoint mechanics). It is now
 **packaged for release** — one transparent repo, `product/` behind a `claude plugin install` front door (D125).
-It is **build-complete** but **not yet runtime-validated end-to-end**: Phase 5 (pre-test hardening, D126) closes the
-unexercised bootstrap→loop gauntlet — three latent bugs + the never-driven `/start` runtime — before a first clean
-test. What remains past it is all `[stageable]`/`[later]`.
+It is **build-complete**, and the **whole loop has now been driven end-to-end on the installed plugin with a real
+model** (Phase-5 Wave-1, D128): greenfield `/start` → the full build loop → real `research`/`setup-guide` subagent
+dispatch → the outbox→release→guard push. That first real run did its job — it surfaced three wrong-mechanism bugs
+(F1 hollow-scaffold `/start`; F2 + F3 **silent safety-gate defeats**) now queued as the Wave-1 fix slice, and it
+retired the `handoff.md` crash-durability worry (the harness write is already atomic). Wave 2 (brownfield on `/mnt/c`)
+and the fix slice are next; what remains past Phase 5 is all `[stageable]`/`[later]`.
