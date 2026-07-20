@@ -168,7 +168,8 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     config.json     # project_root (./project | .) + run config; the daemon reads notify/checkpoint for the away channel — committed, so read across the repo mount (static after init; a parse failure ⇒ no away channel, surfaced) · bus:read
     runtime.json    # RUNTIME — the pointer to the pinned runtime root; absent ⇒ this dir IS the runtime root (the no-relocation case). Machine-specific absolute path ⇒ never committed. NEVER pinned itself: it is *how* the pinned tree is found, so it must sit at a fixed spot on the repo mount — D115, gitignored · bus:none · no-pin
     loop.md         # routing graph + diagram (fixed topology)      (committed) · bus:none
-    checks.sh       # mechanical-gate runner (generated per-stack; --fix / --check)  (committed) · bus:none
+    checks.sh       # mechanical-gate runner — installed FIXED from templates/ (--fix / --check), D127  (committed) · bus:none
+    checks.env      # per-stack commands checks.sh reads — data /start writes (empty ⇒ skip), D127  (committed) · bus:none
     codemap.sh      # code-map generator (generated per-stack; writes docs/knowledge/graph.json)  (committed) · bus:none
     state.json      # live position (item/phase/wave) — RUNTIME (atomic-publish, D93), gitignored · bus:read · pin
     handoff.md      # durable resume anchor: the orchestrator's PROSE + a drain.py-owned machine block (consumed[]/consumed_through/dead_letters[]) — two authors, neither rewriting the other's half — D108/D117  (committed) · bus:read (the consumed_through watermark — the bus GCs the inbox on it; and dead_letters[]/consumed[] — the console's "my requests" surface resolves a ticket off them)

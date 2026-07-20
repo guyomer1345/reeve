@@ -129,8 +129,8 @@ Skill bodies **authored** (session 2026-07-01); each delta maps to its landed ho
 - `commit` — **secret-scan** the staged diff, stop on a hit (D44); **+ mechanical-gate step** (`checks.sh --fix`
   → log; semantic drift → `create-issue`, never resolved inline) (D65/D67).
 - thin **`rules/`** baseline (enforced-by tags) + **`/start` step-4 enforcement wiring** + git `pre-commit`
-  backstop + generated `.workflow/checks.sh`, nearest-file-wins (D40/D65/D67). **Remaining:** the per-stack
-  `checks.sh` generator (a `/start` runtime detail).
+  backstop + the **fixed `.workflow/checks.sh` runner + generated `.workflow/checks.env`**, nearest-file-wins
+  (D40/D65/D67; `checks.sh` shipped fixed + driven, D127).
 - **Also landed earlier:** `document` same-item doc + Mermaid-C4 freshness + audit prune (D41);
   `shared/memory-model.md` (D38); `shared/schemas.md` plan `risk_class`/`backup`/`decisions[]`.
 

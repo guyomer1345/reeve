@@ -89,9 +89,15 @@ DEFAULT_EXCLUDE = (
 # --------------------------------------------------------------------------- #
 # Python arm (tier 2) — stdlib ast, precise dotted-module resolution.
 # --------------------------------------------------------------------------- #
-def _module_name(path):
-    """Module dotted-name relative to cwd (the import root)."""
-    rel = os.path.relpath(path).replace(os.sep, ".")
+def _module_name(path, root="."):
+    """Module dotted-name relative to the IMPORT ROOT (the scan root), so names match the
+    project's own import statements even when codemap runs from a parent directory. In a
+    greenfield bootstrap the product lives under `./project` and `/start` invokes codemap
+    from the launch root (`codemap.py project`); naming relative to cwd would prefix every
+    module with `project.`, which no `from pkg.mod import x` statement carries — so every
+    intra-project Python edge would silently fail to resolve. With `root="."` (brownfield,
+    project_root == repo root) this is identical to the old cwd-relative behaviour."""
+    rel = os.path.relpath(path, root).replace(os.sep, ".")
     if rel.endswith(".py"):
         rel = rel[:-3]
     if rel.endswith(".__init__"):
@@ -152,15 +158,16 @@ class PythonArm:
     def lang_of(self, path):
         return "python"
 
-    def index(self, files):
-        return {_module_name(p): p for p in files}
+    def index(self, files, root="."):
+        # Carry the import root alongside the map so edges() names self_mod the same way.
+        return {"root": root, "mod2file": {_module_name(p, root): p for p in files}}
 
     def edges(self, path, source, index):
         tree = ast.parse(source, filename=path)  # SyntaxError -> caught by driver
-        self_mod = _module_name(path)
+        self_mod = _module_name(path, index["root"])
         out = set()
         for mod in _py_import_targets(tree, self_mod):
-            target = _py_resolve(mod, index)
+            target = _py_resolve(mod, index["mod2file"])
             if target and target != path:
                 out.add(target)
         return out
@@ -289,7 +296,7 @@ class GenericArm:
             by_base[ne.rsplit("/", 1)[-1]].append(f)
         return {"by_noext": by_noext, "by_base": by_base}
 
-    def index(self, files):
+    def index(self, files, root="."):
         # One resolution sub-index PER FAMILY, over edge-capable files only. Node-only
         # languages are nodes but never edge targets; families keep imports intra-language
         # (so a Ruby `require 'utils'` can't resolve to an unrelated utils.lua), C/C++ sharing.
@@ -557,7 +564,7 @@ class JsTsArm(GenericArm):
                 out.setdefault(pj["name"], (pkg_dir, self._pkg_entry(d, pj, idx), pj))
         return out
 
-    def index(self, files):
+    def index(self, files, root="."):
         idx = self._flat_index(files)  # JS+TS resolve together -> one flat index, not per-family
         idx["baseUrl"], idx["paths"] = self._load_tsconfig()
         idx["workspaces"] = self._load_workspaces(idx)
@@ -728,7 +735,7 @@ class GoArm:
     def lang_of(self, path):
         return "go"
 
-    def index(self, files):
+    def index(self, files, root="."):
         # modules: (module_path, module_root_dir), longest path first for nested-module match
         modules = []
         for dp, dns, fns in os.walk("."):
@@ -819,7 +826,7 @@ class JavaArm:
                 out.append(m.group(1))
         return out
 
-    def index(self, files):
+    def index(self, files, root="."):
         fqn2file, pkg2types, meta = {}, collections.defaultdict(dict), {}
         for f in files:
             clean = self._strip(open(f, encoding="utf-8", errors="replace").read())
@@ -961,7 +968,7 @@ class CSharpArm:
                         stack.pop()
         return namespaces, types
 
-    def index(self, files):
+    def index(self, files, root="."):
         ns_types = collections.defaultdict(lambda: collections.defaultdict(set))
         fqn, declared, globals_ = collections.defaultdict(set), set(), set()
         meta = {}
@@ -1093,7 +1100,9 @@ def main():
     by_arm = collections.defaultdict(list)
     for p in files:
         by_arm[ext2arm[os.path.splitext(p)[1].lower()]].append(p)
-    indexes = {arm: arm.index(paths) for arm, paths in by_arm.items()}
+    # Every arm is handed the scan root; only position-derived module naming (Python) uses it —
+    # manifest/path-suffix resolvers (Go/Java/C#/JS/TS/floor) are import-root-independent and ignore it.
+    indexes = {arm: arm.index(paths, args.root) for arm, paths in by_arm.items()}
 
     key = {p: os.path.relpath(p) for p in files}
     arm_of = {p: ext2arm[os.path.splitext(p)[1].lower()] for p in files}

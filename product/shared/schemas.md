@@ -73,8 +73,15 @@ input and edits `plan.md` in place; a delta with no `target_plan_ref` is a fresh
   `prerequisite-repair` is committed separately from the item's planned change; a `structural` divergence
   stops execution and escalates.
 
-## verify-verdict  · produced by `verify` · *created per item in `.workflow/items/<id>/`; item-scoped ephemeral*
-- `pass`
+## verify-verdict  · produced by `verify` · *on disk at `.workflow/items/<id>/verify-verdict.md`; item-scoped ephemeral*
+**On-disk contract (load-bearing — both git-native commit gates read it):** the filename is
+`verify-verdict.md` (Markdown, never `.json`), and its **first line is exactly `pass: true` or `pass: false`**
+(lowercase, one space after the colon) — the machine token `guard.sh` / `pre-commit.sh` parse. The mismatches
+and confidence follow as prose on later lines. The consumer **fails closed**: it proceeds only on a well-formed
+`pass: true`; a missing file, a wrong extension, or a reworded/absent token **blocks** (a real failure must never
+wave through on a format slip). So `verify` MUST emit this token verbatim — never reword it, never move it off
+line 1.
+- `pass` — line 1, as above
 - `mismatches[]` — `{ expected, actual }`
 - `confidence`
 
@@ -311,9 +318,10 @@ fires it.
     (deploy/network); `guard.sh` still gates it. The resume prompt forces the boundary drain rather than
     relying on the "drive only if state.json shows an active run" guard.
   - **Trust precondition (MEASURED):** a `claude -p` in a workspace Claude Code has not trusted **ignores
-    `settings.json`'s allowlist** and stalls, so the loop can't run its own tools. `/start`'s trust dialog establishes
-    it; the daemon **surfaces** an untrusted workspace in `status` (a warning, never a spawn gate — a misread must not
-    silently disable the runner).
+    `settings.json`'s allowlist** and stalls, so the loop can't run its own tools. `/start` establishes it by
+    recording `projects["<abs path>"].hasTrustDialogAccepted: true` in `~/.claude.json` (the manual path for when
+    the WSL trust dialog does not render — equivalent to accepting it); the daemon **surfaces** an untrusted
+    workspace in `status` (a warning, never a spawn gate — a misread must not silently disable the runner).
   - **Crash-loop + stall safety.** A relaunch that exits **without advancing the watermark** backs off (doubling) and,
     after a cap, **hard-stops and fires an away alert** — closing the notifier's deferred thrash/crash alert arm. A relaunch
     that **hangs without draining** (an inert/untrusted `claude`) is killed after a stall timeout and scored the same

@@ -397,5 +397,46 @@ class Fidelity(unittest.TestCase):
         self.assertEqual(g["languages"]["elixir"]["fidelity"], "nodes-only")
 
 
+class ImportRootGreenfield(unittest.TestCase):
+    """Greenfield: the product lives under ./project and /start runs codemap FROM THE LAUNCH
+    ROOT as `codemap.py project`. Module names must resolve relative to that scan root, not
+    cwd — else every intra-project Python import silently fails to edge (measured: 0 edges).
+    The default run_codemap() helper can't catch this: it always uses cwd==root, ROOT='.',
+    where the two coincide. This runs codemap the way /start actually does."""
+
+    def _run_from_parent(self, files, root_arg):
+        with tempfile.TemporaryDirectory() as parent:
+            for rel, content in files.items():
+                path = os.path.join(parent, rel)
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(content)
+            out = os.path.join(parent, "graph.json")
+            subprocess.run([sys.executable, _CODEMAP, root_arg, "--out", out],
+                           cwd=parent, check=True, capture_output=True)
+            with open(out, encoding="utf-8") as fh:
+                return json.load(fh)
+
+    def test_intraproject_edge_resolves_when_scanning_a_subdir(self):
+        g = self._run_from_parent({
+            "project/pkg/__init__.py": "",
+            "project/pkg/util.py": "def x(): return 1\n",
+            "project/app.py": "from pkg.util import x\n",
+        }, "project")
+        # node paths stay repo-relative (launch-root-relative), unchanged contract...
+        self.assertIn("project/app.py", nodes(g))
+        # ...but the import now resolves to an edge (the bug: this set was empty).
+        self.assertIn(("project/app.py", "project/pkg/util.py"), edges(g))
+
+    def test_brownfield_root_dot_unchanged(self):
+        # ROOT='.' (project_root == repo root) must behave exactly as before.
+        g = self._run_from_parent({
+            "pkg/__init__.py": "",
+            "pkg/util.py": "def x(): return 1\n",
+            "app.py": "from pkg.util import x\n",
+        }, ".")
+        self.assertIn(("app.py", "pkg/util.py"), edges(g))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -16,8 +16,8 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   conjunction-of-signals · `commit` secret-scan) + the prerequisite-repair two-commit carve-out and
   machine-actionable divergence `tier` (D66); the **`rules/` baseline + `/start` enforcement wiring** and the
   **two-tier drift gate** authored (thin `rules/*.md` with enforced-by tags · `/start` step-4 · `commit`
-  mechanical step + git `pre-commit` backstop + generated `checks.sh` · `prioritize` drift-ticket queue —
-  D40/D65/D67; only the per-stack `checks.sh` generator remains).
+  mechanical step + git `pre-commit` backstop + the fixed `checks.sh` runner + generated `checks.env` ·
+  `prioritize` drift-ticket queue — D40/D65/D67; `checks.sh` shipped fixed + driven, D127).
 - **Space 5 — Disk layout + retention.** `.workflow/` tree + schemas (D53); the **retention/read law**
   (cap-and-archive, D59–D61) + the **retention script built** (`scripts/retention.py`, D71); the **unified
   `<project_root>/docs/` root** (D62).
@@ -52,9 +52,9 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **`rules/` baseline + `/start` enforcement wiring** (D40) + **two-tier drift defense** (D65/D67) —
   **AUTHORED 2026-07-01.** Thin `rules/*.md` (enforced-by tags), the `/start` step-4 enforcement wiring
   (auto-write greenfield / adopt-and-gap-fill brownfield), the `commit` mechanical-gate step + git `pre-commit`
-  backstop + generated `.workflow/checks.sh`, and the `prioritize` drift-ticket queue. What makes output
-  *disciplined*, not just working. **Remaining sliver:** the per-stack `checks.sh` generator (a `/start`
-  runtime detail, unexercised until a real bootstrap). **[core — done bar the generator]**
+  backstop + the fixed `.workflow/checks.sh` runner (+ generated `.workflow/checks.env`), and the `prioritize`
+  drift-ticket queue. What makes output *disciplined*, not just working. **[core — DONE; `checks.sh` shipped
+  fixed + driven end-to-end, D127]**
 - **Proportional-rigor decision gate (D69)** — a cheap O(seconds) triage in `planner` grades **every** output by
   reversibility × blast-radius → a rigor tier (0 judgment · 1 `research` · 2 pressure-test-if-cheap · escalate to
   the human), escalating to `decision-engineer` at that tier. The D68 **impact lens is the mechanical floor**
@@ -345,24 +345,35 @@ complete without it · **[bug]** a defect reading confirmed against the artifact
 unexercised, expected to break on first contact. Two waves; Phase 5 owns the *sequencing* — each item's status
 stays in its space above.
 
-**Wave 1 — greenfield on a Linux-native path (the smallest gauntlet):**
-- **`checks.sh` has no generator/template** — authored *freehand* by `/start`, run by the git `pre-commit` hook +
-  the `commit` skill on **every** item commit. A syntax slip or wrong gate/manifest path dead-ends the loop at its
-  first commit. Ship a scaffold/generator so the per-item gate isn't LLM-freehand. **[blocker · bug]** — highest
-  risk; both sweeps landed on it independently.
-- **`verify-verdict` is an unwritten hook↔artifact contract** — `guard.sh:91`/`pre-commit.sh:35` grep for
-  `.workflow/items/<id>/verify-verdict.md` + a literal fail token, but `verify`/`shared/schemas.md` pin no
-  filename/extension/serialization. A `.json` or a differently-worded fail either mis-blocks or waves a real
-  failure through. Pin the artifact contract both sides. **[blocker · bug]**
-- **`/start` ships no manual workspace-trust path** — until the folder is trusted the shipped settings + `guard.sh`
-  are inert, and the WSL trust dialog doesn't render; add the `hasTrustDialogAccepted` method to `start.md`
-  (+ the D58 trust-UX doc). Without it the loop stalls on the first prompt. **[blocker]**
-- **Drive the greenfield bootstrap + loop, fix what breaks:** rules specialization + enforcer wiring · `codemap.sh`
-  generation + first run (**fix the greenfield import-root bug** — `codemap.py` names modules relative to CWD but
-  `/start` invokes it from the launch root, so greenfield Python edges silently fail to resolve) · **real**
-  orchestrator→subagent dispatch (`research`/`setup-guide`, only ever *simulated*) + outbox-release firing ·
-  `handoff.md` session-end crash-durability (a text-tool model can't express an atomic rename; git-recoverable but
-  the fix shape is undesigned). **[drive]**
+**Wave 1 — greenfield on a Linux-native path (the smallest gauntlet). BUILT + DRIVEN end-to-end (D127) — bar two
+items.** The three blockers are shipped and driven on a real native-path bootstrap (`~/p5-test`); driving confirmed
+the predicted codemap bug **and found a second silent-gate defeat the audit missed**. DONE:
+- ✅ **`checks.sh`** — shipped as a FIXED runner (`templates/checks.sh`, copied verbatim) + a generated
+  `.workflow/checks.env` data file (stack commands; empty ⇒ skip). The `--fix`/`--check` dispatch + the
+  coverage-gate loop over open items are **never LLM-freehand** again (refines D67). **[blocker · bug — DONE D127]**
+- ✅ **`verify-verdict` contract** — pinned both sides (`schemas.md`/`verify`: first line exactly `pass: true|false`)
+  and the hooks flipped **fail-closed** (proceed only on a well-formed `pass: true`; `.json`/missing/reworded all
+  block). Closes a measured fail-OPEN hole. **[blocker · bug — DONE D127]**
+- ✅ **Manual workspace-trust** — `/start` writes `projects["<abs>"].hasTrustDialogAccepted` into `~/.claude.json`
+  (merge-preserving, idempotent, atomic, safe on an unparseable file). **[blocker — DONE D127]**
+- ✅ **`codemap.py` greenfield import-root** — confirmed live (0 edges) + fixed (Python module names relative to the
+  scan root, not cwd; brownfield `root="."` unchanged; only `PythonArm` touched). **[bug — DONE D127]**
+- ✅ **`checks.sh` `cd`-leak (NEW — off-audit)** — a natural `cd project && pytest` stack command moved the runner's
+  CWD via `eval` and **silently skipped every coverage gate**; fixed by running each stack command in a subshell.
+  Unit tests missed it (cd-free stubs); only driving surfaced it. **[bug — DONE D127]**
+- **Findings folded in (D127):** greenfield can't detect a stack at `/start` (bootstrap `checks.env` is
+  coverage-gates-only; stack-enforcer + `rules/` `enforced by:` tag wiring deferred to `tech_stack` lock) · stack
+  commands must be scoped to `project_root` · `/start`'s install must honour the manifest `exclude` (test files leak
+  into the target today).
+
+**Wave 1 — REMAINING (the next slice, driven with a real model):**
+- **Real orchestrator→subagent dispatch + one full real-model loop iteration** — `research`/`setup-guide` dispatch
+  has only ever been *simulated*; drive `discuss → planner → execute → verify → document → commit` on `~/p5-test`
+  with a real model (`claude -p`) + the outbox-release firing, and fix what breaks. **[drive]**
+- **`handoff.md` session-end crash-durability** — `schemas.md` asserts a `write-temp → fsync → rename → fsync(dir)`
+  guarantee the orchestrator's text tools can't express (`drain.py` owns only the machine block). The fix shape is
+  **undesigned** — inclination: a shipped publisher helper the orchestrator calls to atomically+durably publish the
+  whole file, `drain.py`-style, with git as the recovery backstop. **[design]**
 
 **Wave 2 — brownfield on `/mnt/c` (adds the FS + ingest families):**
 - **Hooks hard-code `.workflow/state.json`; `/start` relocates it off a 9p mount** → `guard.sh:89`/`pre-commit.sh:33`

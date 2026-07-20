@@ -5,7 +5,7 @@
 # (a human `git commit`, an editor/IDE commit, a `make` target). So it carries
 # the same never-want-irreversible hard blocks as guard.sh — secret-scan +
 # verify-before-commit — plus the mechanical check runner (`.workflow/checks.sh`,
-# generated per-stack by /start). It validates the STAGED diff, not the whole
+# installed fixed by /start; per-stack commands in `.workflow/checks.env`). It validates the STAGED diff, not the whole
 # working tree, so a two-commit split (a prerequisite-repair committed separately
 # from the planned change) stays atomic.
 #
@@ -30,11 +30,18 @@ if git diff --cached 2>/dev/null | grep -Eiq \
 fi
 
 # --- verify-before-commit (git-native backstop) ---
+# CONTRACT (shared/schemas.md · verify): `.workflow/items/<id>/verify-verdict.md`, first line
+# exactly `pass: true|false`. Fail CLOSED — proceed only on an explicit, well-formed `pass: true`;
+# a missing file, a `.json`, or a reworded token all block (mirror of guard.sh).
 item="$(python3 -c 'import json; print(json.load(open(".workflow/state.json")).get("current_item") or "")' 2>/dev/null || true)"
 if [ -n "$item" ]; then
   verdict=".workflow/items/$item/verify-verdict.md"
-  [ -f "$verdict" ] || block "item $item has no verify-verdict; run verify before committing."
-  grep -Eiq 'pass[^[:alnum:]]{1,8}false' "$verdict" && block "item $item has a failing verify-verdict; debug -> refine -> verify first."
+  [ -f "$verdict" ] || block "item $item has no verify-verdict.md; run verify before committing."
+  first="$(head -n1 "$verdict" 2>/dev/null || true)"
+  printf '%s' "$first" | grep -Eiq '^[[:space:]]*pass:[[:space:]]*false([^[:alnum:]]|$)' \
+    && block "item $item has a FAILING verify-verdict; debug -> refine -> verify first."
+  printf '%s' "$first" | grep -Eiq '^[[:space:]]*pass:[[:space:]]*true([^[:alnum:]]|$)' \
+    || block "item $item verify-verdict first line must be 'pass: true' (got: '$first'); re-run verify."
 fi
 
 # --- mechanical check runner in CHECK-ONLY mode (never rewrites the tree here) ---

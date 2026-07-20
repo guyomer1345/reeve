@@ -41,7 +41,11 @@ Lean: for small changes, judge directly without fanning out workers.
   can merely *infer/suspect*, with nothing to point at, stays advisory (low confidence), not a hard fail.
 
 ## Output
-`verify-verdict { pass, mismatches[], confidence }`.
+`verify-verdict { pass, mismatches[], confidence }`, written to `.workflow/items/<id>/verify-verdict.md`.
+**Its first line MUST be exactly `pass: true` or `pass: false`** (lowercase, one space) — the machine token the
+git-native commit gates (`guard.sh` / `pre-commit.sh`) read to allow or block the item's commit. They **fail
+closed**: a missing file, a `.json` instead of `.md`, or a reworded token blocks the commit. Never move, reword,
+or omit this line; the mismatches and confidence follow as prose beneath it.
 
 ## Route
 - **pass** → `document` / `commit`. If the `plan` declared any `human-qa` acceptance criteria, the

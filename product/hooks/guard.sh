@@ -85,14 +85,22 @@ if is_git commit; then
     block "possible secret in the staged diff (secret-scan). Remove it or use a placeholder before committing."
   fi
 
-  # verify-before-commit: a set item must have a PASSING verdict on disk
+  # verify-before-commit: a set item must have a PASSING verdict on disk.
+  # CONTRACT (shared/schemas.md · verify): the verdict is `.workflow/items/<id>/verify-verdict.md`
+  # whose FIRST LINE is exactly `pass: true` or `pass: false`. We read line 1 and fail CLOSED:
+  # proceed ONLY on an explicit, well-formed `pass: true`. A missing file, a `.json` instead of
+  # `.md`, or a reworded/absent token all block — a real failure must never wave through on a
+  # format slip (the old grep-for-"false" was fail-OPEN and would).
   item="$(python3 -c 'import json; print(json.load(open(".workflow/state.json")).get("current_item") or "")' 2>/dev/null || true)"
   if [ -n "$item" ]; then
     verdict=".workflow/items/$item/verify-verdict.md"
-    [ -f "$verdict" ] || block "item $item has no verify-verdict; run verify before committing."
-    if grep -Eiq 'pass[^[:alnum:]]{1,8}false' "$verdict"; then
-      block "item $item has a failing verify-verdict; run debug -> refine -> verify before committing."
+    [ -f "$verdict" ] || block "item $item has no verify-verdict.md; run verify before committing."
+    first="$(head -n1 "$verdict" 2>/dev/null || true)"
+    if printf '%s' "$first" | grep -Eiq '^[[:space:]]*pass:[[:space:]]*false([^[:alnum:]]|$)'; then
+      block "item $item has a FAILING verify-verdict; run debug -> refine -> verify before committing."
     fi
+    printf '%s' "$first" | grep -Eiq '^[[:space:]]*pass:[[:space:]]*true([^[:alnum:]]|$)' \
+      || block "item $item verify-verdict first line must be 'pass: true' (got: '$first'); re-run verify."
   fi
 fi
 

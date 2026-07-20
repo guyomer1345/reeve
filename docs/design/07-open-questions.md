@@ -92,10 +92,11 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Rules baseline + `/start` enforcement wiring (D40) + two-tier drift defense (D65/D67) — AUTHORED
   2026-07-01.** The `rules/*.md` baseline (enforced-by tags), the `shared/format.md` rules convention, the
   `/start` step-4 enforcement wiring, the `commit` mechanical-gate step, and the `prioritize` drift-ticket note
-  are written. **Remaining sliver:** `/start`'s per-stack **`checks.sh` generator** (detect the stack → emit
-  the concrete `--fix`/`--check` runner + configs) — a `/start` runtime detail, not yet exercised in a real
-  bootstrap. **→ promoted to a Phase-5 Wave-1 BLOCKER (D126, `11`):** nothing ships to produce/scaffold
-  `checks.sh`, yet it gates every commit — so it is authored freehand today, the highest-risk first-run item.
+  are written. **RESOLVED (D127):** `checks.sh` ships as a **fixed runner** (`templates/checks.sh`, copied verbatim)
+  + a generated `.workflow/checks.env` data file — the `--fix`/`--check` dispatch + the coverage-gate loop are no
+  longer LLM-freehand (refines D67), and it was driven end-to-end on a real greenfield bootstrap (`~/p5-test`).
+  Residual: stack-enforcer wiring (`checks.env` commands + the `rules/` `enforced by:` tags) is **deferred to
+  `tech_stack` lock** — a faithful greenfield has no stack to detect at `/start` (D127).
 
 - **`handoff.md`'s durability mandate is met at the drain and nowhere else (raised by D117).** D93 calls it "the one
   file where crash-durability, not just atomicity, is mandatory" (write-temp → `fsync` → `rename` → `fsync(dir)`).
@@ -105,8 +106,9 @@ Deliberately deferred — known unknowns, to close during build or later.
   **Bounded, not open-ended:** `handoff.md` is committed, so a torn or unflushed copy is recoverable from git — the
   last good anchor is a `git show` away. The fix's *shape* is the open part: a CLI taking a markdown blob is poor
   ergonomics, and a "model writes the prose → a script republishes it atomically" two-step is plausible but needs
-  design. Deliberately **not** folded into Phase-3 increment 3 (it touches the handoff step and the brief, not the
-  drain).
+  design. **→ now a tracked Phase-5 Wave-1 REMAINING item (`11`, D126/D127) — a `[design]`, not a build**;
+  inclination: a shipped publisher helper the orchestrator calls to atomically+durably publish the whole file
+  (`drain.py`-style), git as the recovery backstop. To be settled alongside the real-model dispatch drive.
 
 - **The console page's legibility is now reviewed (D120), one nit left.** The twice-carried "nobody has rendered
   the page in a browser" residual is **closed** — the live cockpit was rendered in headless Chrome and read as
@@ -165,8 +167,8 @@ Deliberately deferred — known unknowns, to close during build or later.
   not built.
 - **Target OS/FS portability family (D89 + D93/D94/D95)** — a cluster of "the target isn't POSIX-ext4" gaps, tracked
   together:
-  - **Shipped-glue interpreter (D89)** — the shipped bash glue (`guard.sh`, generated `checks.sh`/`codemap.sh`)
-    assumes a **bash interpreter on the target OS**; unverified on **native Windows** (git-invoked `pre-commit.sh`
+  - **Shipped-glue interpreter (D89)** — the shipped bash glue (`guard.sh`, the fixed `checks.sh` + generated
+    `codemap.sh`) assumes a **bash interpreter on the target OS**; unverified on **native Windows** (git-invoked `pre-commit.sh`
     likely survives via Git-Bash; the Claude-Code-invoked glue is the risk). Fix later with a targeted fallback (a
     thin Python launcher — `python3` is already a hard dependency — or a documented Git-Bash/WSL requirement),
     **not** a `.sh→.py` refactor (the D71 bash-glue/python-logic split stands).
