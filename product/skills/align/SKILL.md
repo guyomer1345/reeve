@@ -39,8 +39,9 @@ them is the trap:
    - the **contract linter** (`.claude/scripts/check_contracts.py`) — the routing graph is real structured
      data, so its consistency is a fact: every routing target resolves; every `node:mode` a skill invokes is
      routed; every skill is a node or a declared side-door; commitment/kind tags stay in their schema enum.
-   - the **coverage gates** — decision-coverage and promise-coverage (`check_promise_coverage.py`).
-   - the **status-coherence** and **no-spec-refs** gates.
+   - the **coverage gates** — promise-, criterion-, and decision-coverage (`check_promise_coverage.py`,
+     `check_criterion_discharge.py`, `check_decision_coverage.py`); the same ones `checks.sh --check` runs.
+   These are the gates the package **installs** (see `MANIFEST.json`) and that mean something in a product repo.
    Decidable → a finding is a *fact*, not a suspicion. Hard-graph breaks block; auto-fixable drift → fix + log;
    anything needing judgment → step 3, never auto-resolved. *(Honest ceiling: the linter settles only what the
    graph structure makes decidable — schema producer/consumer mismatches and spec↔code alignment are NOT

@@ -183,9 +183,12 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   `checkpoint`; `document` authors the durable `why`/Sessions later, **not** during ingest — no new agent) that
   seeds behavioural-core **intent from the existing `CLAUDE.md`/spec** (un-derivable from code), builds
   `docs/knowledge/` + a reconstructed `docs/spec/` (default **unspecified**, reconciliation checkpoint locks
-  invariants). Residual is **runtime, not spec**: brownfield `/start` (§3) is authored but **unexercised** until a
-  real bootstrap run — the **Wave-2** target (greenfield `/start` + the full loop + real dispatch are now driven, D128).
-  **[core for brownfield — skill authored; unexercised]**
+  invariants). **DRIVEN end-to-end (D130, Phase-5 Wave-2):** brownfield `/start` (§3) → `ingest` → codemap-at-scale
+  over a real ~720-file repo → real `research` GATHER → `spec` reconstructed (`unspecified`) → schema-correct node
+  seeds → blocking `checkpoint:reconcile` (relocation-aware, daemon-surfaced); adopt-without-clobber held. The drive
+  hardened the skill: the `knowledge-node` format got an authoritative `schemas.md` owner, and adopt-existing-docs
+  is now case-insensitive (the `architecture.md`/`ARCHITECTURE.md` clobber on a case-insensitive mount).
+  **[core for brownfield — DONE: skill authored + driven (D130)]**
 - **Retention script** — **BUILT 2026-07-02 (D71):** `scripts/retention.py` (stdlib Python, idempotent) does the
   three deterministic caps (Sessions cap-and-archive · superseded-decision GC + index tombstone · promoted-item
   prune), wired into `/start` (copy → `.claude/scripts/`) + `document` audit mode (invoke; and `document` writes
@@ -406,20 +409,37 @@ spine: **fail closed / derive from the artifact** — never restore the missing 
   **fails closed**. Both drift vectors now block on both hooks; the genuine ROADMAP-1 commit still passes off the
   staged diff alone. **[bug — DONE D129; the Wave-2 `state.json` path-drift fail-open is resolved with it].**
 
-**Wave 2 — brownfield on `/mnt/c` (adds the FS + ingest families):**
+**Wave 2 — brownfield on `/mnt/c` — DRIVEN end-to-end (D130); the design HELD, three issues fixed + re-driven.**
+Driven on a real full-stack repo (the `stock simulator`, ~720 source files, rich docs) copied under `/mnt/c` (9p):
 - ✅ **Hooks hard-code `.workflow/state.json`; `/start` relocates it off a 9p mount** → the verify gate silently
-  no-op'd on a relocated tree. **RESOLVED (D129, folded into F3):** the shared `hooks/verify_check.py` runtime-resolves
-  the root via `runtime.json` (the `bus.py` way) **and** primarily derives the item from the staged diff, and fails
-  **closed** — so neither the path drift nor the shape drift can disarm it. **[bug — DONE D129]**
-- **The FS-relocation step itself is unexercised** on the mount it targets (token/creds land `0777`, renames go
-  non-atomic if it misfires — the D115 failure mode). **[drive]**
-- **Brownfield `ingest` entry path** — codemap-at-scale over a real tree → spec reconstruction → reconciliation
-  checkpoint, never run. **[drive]**
+  no-op'd on a relocated tree. **RESOLVED (D129, folded into F3); VERIFIED on a *real* relocation (D130)** — with
+  `state.json` genuinely on native ext4 off `/mnt/c`, `verify_check.py` runtime-resolves it and **fails closed**
+  (the decisive test + shape-drift + failing-verdict + genuine-pass + an end-to-end `git commit` block; session 12
+  had only a synthetic `runtime.json`). **[bug — DONE D129, verified D130]**
+- ✅ **The FS-relocation step itself** — driven on the mount it targets. Real model detects the 9p mount → relocates;
+  the runtime half lands native ext4 at `0600` (token not world-readable), rename atomic, per-project daemon keying
+  holds, and `probe_mode` is load-bearing (warns on 9p, silent on ext4 — the `0777` bug re-measured live). No
+  findings — the design was right *and* the mechanism was right. **[drive — DONE D130]**
+- ✅ **Brownfield `ingest` entry path** — driven end-to-end (first ever): codemap-at-scale (752 nodes / 0 fails /
+  2.8s, both lenses, per-lang tiers) → real `research` GATHER (hub-and-spoke held) → `spec` reconstructed
+  (`unspecified`) → node seeds (schema-correct, mirrored tree) → **blocking `checkpoint:reconcile`** parked
+  relocation-aware + daemon-surfaced. Adopt-without-clobber held. **[drive — DONE D130]**
+- ✅ **`docs/architecture.md` case-collision on case-insensitive mounts (NEW — D130).** The `document`-owned
+  `docs/architecture.md` case-collides with an adopted `docs/ARCHITECTURE.md`; on the 9p/Windows/macOS
+  case-insensitive mount they are one file, so `document` would silently clobber the adopted doc (measured: same
+  inode). Fixed — `document`/`ingest`/`start.md` adopt an existing case-variant **in place**, never a lowercase
+  twin; re-driven (no clobber). **[bug — DONE D130]**
+- ✅ **`ingest` re-derived the node/spec/parked formats each bootstrap → missed the blocking checkpoint (NEW — D130).**
+  The knowledge-node `.md` format had **no owner** in `schemas.md`, so the model hunted 5 files and ran out of budget
+  before parking reconcile. Fixed — a new authoritative **`knowledge-node`** section in `schemas.md` (D80) + precise
+  pointers from `ingest`/`checkpoint`; re-driven: format reads dropped 5 files → `schemas.md`-only, ingest completed
+  in **one session**. **[bug — DONE D130]**
 
-**Opportunistic (real bugs a first run won't reach):** the `align` skill invokes meta-repo-only gates
-(`check-status-coherence.sh`/`check-no-spec-refs.sh`) absent from the install manifest and meaningless in a target
-**[bug]** · ✅ `start.md`'s "Expand later" prose claiming the console write-path/forms are unbuilt — **fixed (D129,
-folded into F1):** the stale bullet is removed **[doc — DONE]**.
+**Opportunistic (real bugs a first run won't reach):** ✅ the `align` skill listed meta-repo-only gates
+(`check-status-coherence.sh`/`check-no-spec-refs.sh`) absent from the install manifest and meaningless in a target —
+**fixed (D130):** the shipped `align` lists only the gates it installs (`check_contracts.py` + coverage), and
+`format.md`'s meta-script reference is dropped **[bug — DONE D130]** · ✅ `start.md`'s "Expand later" prose claiming
+the console write-path/forms are unbuilt — **fixed (D129, folded into F1):** the stale bullet is removed **[doc — DONE]**.
 
 Everything past Phase 5 stays `[stageable]`/`[later]` (the living code-map observed layer, D84 reclassification, the
 proportional-rigor gate, build-once-per-wave, model/effort routing, the project-map tab, the project-state view,
@@ -493,8 +513,11 @@ The engine **drives**, is **self-maintaining** (retention + freshness + docs-roo
 It is **build-complete**, and the **whole loop has now been driven end-to-end on the installed plugin with a real
 model** (Phase-5 Wave-1, D128): greenfield `/start` → the full build loop → real `research`/`setup-guide` subagent
 dispatch → the outbox→release→guard push. That first real run did its job — it surfaced three wrong-mechanism bugs
-(F1 hollow-scaffold `/start`; F2 + F3 **silent safety-gate defeats**), and the **Wave-1 FIX SLICE has now fixed all
-three fail-closed and re-driven them on the real tree (D129)** — the stack gate and the verify gate can no longer
-silently disarm, and `/start` cannot commit a hollow scaffold; F3 also folded the Wave-2 `state.json` fail-open. Wave 2
-(the FS-relocation + brownfield-`ingest` families on `/mnt/c`) is next; what remains past Phase 5 is all
-`[stageable]`/`[later]`.
+(F1 hollow-scaffold `/start`; F2 + F3 **silent safety-gate defeats**), and the **Wave-1 FIX SLICE fixed all three
+fail-closed and re-drove them on the real tree (D129)**. **Wave 2 is now DRIVEN on the real `/mnt/c` 9p mount (D130):**
+the FS-relocation + D129 verify design **held with no findings** (mechanisms re-measured, not trusted — the 9p `0777`
+bug is still real, relocation lands native at `0600`, the verify gate fails closed on a genuinely relocated
+`state.json`), **brownfield `ingest` ran end-to-end** (codemap-at-scale → real `research` → reconstructed `spec` →
+node seeds → the blocking reconcile checkpoint), and three drive-found issues were **fixed + re-driven** (the `align`
+meta-gate leak, the `architecture.md` case-insensitive clobber, and an `ingest` format-hunt that a new `schemas.md`
+`knowledge-node` owner closed). **Phase 5 is COMPLETE;** what remains is all `[stageable]`/`[later]`.

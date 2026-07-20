@@ -22,15 +22,18 @@ code alone.
    *orchestration* (composes many → where behaviour lives). Generated, never hand-authored.
 2. **Recover the behavioural core first** (so node seeding isn't driven by centrality). Dispatch `research` to
    **gather** — read, not synthesize — the existing `CLAUDE.md`/docs/README + the orchestration-central files and
-   return `findings`; **`ingest` then synthesizes** the reconstructed `spec` from them (audience, purpose,
-   screens, features, data model). Synthesis is ingest's job, not `research`'s gather-only charter. Tag every
+   return `findings`; **`ingest` then synthesizes** the reconstructed `spec` from them — **write it per the
+   `spec` schema (`schemas.md`)**: audience, runtime, purpose, screens[], features[], data_model, integrations[],
+   tech_stack. Synthesis is ingest's job, not `research`'s gather-only charter. Tag every
    reconstructed element `unspecified`. **Fallback when the docs are thin/absent** (the common case): recover the
    core from **entry-points + BOTH centrality lenses** (impact ∪ orchestration), tag even more `unspecified`, and
    **widen the reconciliation checkpoint** — ask the human more, since less intent was recorded.
-3. **Seed the nodes.** One node per source file: fill the generated skeleton (path, type, edge targets, the two
-   signals) and add a cheap extractive `purpose` (from signatures/docstrings), prioritising the **recovered
-   spec-core ∪ high-centrality** set — never centrality *alone* (the import graph's most-central file is not the
-   app's core). Leave the durable `why` and `# Sessions` empty — `document` authors those on first real touch.
+3. **Seed the nodes.** One node per source file, **written per the `knowledge-node` schema (`schemas.md`)** —
+   don't re-derive the node format: copy the frontmatter fields (path, type, lang, tier, the two centrality
+   signals) straight from `graph.json`, add a cheap extractive `purpose` (from signatures/docstrings), and leave
+   the edge `why` and `# Sessions` empty (`document` authors those on first real touch). Prioritise the
+   **recovered spec-core ∪ high-centrality** set — never centrality *alone* (the import graph's most-central file
+   is not the app's core), and bound the set (the memory model is bounded by construction — don't seed all N).
 4. **Reconcile.** Route to a blocking `checkpoint` (kind=reconcile): present the reconstructed understanding —
    what the app does, its stack, its core flows — for the human to confirm or correct, and lock the load-bearing
    invariants they name (those flip `unspecified → locked`). Corrections rewrite the spec before the loop starts.
@@ -44,6 +47,11 @@ code alone.
 - **Never hand-edit `graph.json`** — regenerate it. `ingest` writes durable prose (the spec + node seeds), not
   structure.
 - **Adopt an existing `docs/`**: write to known subpaths, never clobber; namespace ours on a name collision.
+  Match existing subpaths **case-insensitively** — the committed `docs/` usually sits on a case-insensitive
+  filesystem (Windows / WSL `/mnt/*` 9p / default macOS), where a workflow-owned `docs/architecture.md` and an
+  adopted `docs/ARCHITECTURE.md` are the **same file**. On a case-variant collision, **adopt the existing file**
+  (record its real path so `document` refreshes it in place) — never create a lowercase twin that silently
+  overwrites it.
 
 ## Output
 A populated `docs/knowledge/` (graph + seeded nodes) + a reconstructed, commitment-tagged `spec` + the

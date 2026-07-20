@@ -17,6 +17,13 @@ The product definition `discuss` produces and the whole build runs against.
 - `tech_stack` — value | `"TBD → decision-engineer"`
 - `commitment` ∈ `{ locked, provisional, unspecified }` — tagged per element
 
+## knowledge-node  · seeded by `ingest`, authored/refreshed by `document` · *one `.md` per source file at `<project_root>/docs/knowledge/<source-path>.md` (mirror the source tree); STABLE frontmatter + APPEND-ONLY `# Sessions`*
+The prose layer over `graph.json`: the structural fields are **copied from `graph.json`** (regenerated, never hand-edited); the `Purpose`/edge-`why`/`# Sessions` are the durable layer. Write each node **exactly** this shape so `retention.py`/`document` can parse it — no hunting the format:
+- **Frontmatter** (structural, from `graph.json`): `path` · `type` · `lang` · `tier` · `centrality: { impact, orchestration, in_degree, out_degree }` (the two lenses + degrees) · `commitment` ∈ `{ locked, provisional, unspecified }` · `seeded_by` (e.g. `ingest`).
+- **`## Purpose`** — cheap extractive intent (signatures/docstrings); `ingest` seeds it, `document` sharpens intent-vs-actual on touch.
+- **`## Edges out`** — one line per `graph.json` edge: `` `<target>` (import|call) — why: `` with the **`why` left empty at seed time** (`document` authors it on first real touch). *(`## Key symbols` is an optional extractive aid.)*
+- **`# Sessions`** — the node's **terminal** section, APPEND-ONLY; each entry headed **`## [date] kind | title`** (the strict form `retention.py` splits on); empty until a postmortem (`debug-report`) applies.
+
 ## roadmap  · produced by `planner` (decompose mode) · *emitted as items into the live `backlog.md` queue*
 - `phases[]` — `{ name, goal, depends_on[], acceptance, commitment }`
 

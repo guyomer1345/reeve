@@ -21,7 +21,12 @@ judge intent-vs-actual divergence against the recorded intent).
    `why`.
 2. Refresh the **architecture doc** (inline Mermaid-C4 L1/L2) in the **same item** when the change moves
    system/container structure — STABLE, changes only with the code. *(It lives at
-   `<project_root>/docs/architecture.md`; resolve `<project_root>` from `config.json`.)*
+   `<project_root>/docs/architecture.md`; resolve `<project_root>` from `config.json`.)* **Adopt an existing
+   architecture doc — never a second one:** scan `<project_root>/docs/` **case-insensitively** first; if the
+   project already ships one (e.g. an adopted `ARCHITECTURE.md`), refresh **that** file in place. The committed
+   `docs/` often lives on a case-insensitive filesystem (Windows / WSL `/mnt/*` 9p / default macOS), where
+   `architecture.md` and `ARCHITECTURE.md` are the **same file** — so creating the lowercase name would silently
+   overwrite the adopted doc. Only create `docs/architecture.md` when no case-variant exists (the greenfield case).
 3. Append a per-file `# Sessions` entry where a postmortem applies (a `debug-report` maps directly:
    symptom / cause / fix / avoid). Each entry's header is **`## [date] kind | title`** — the strict,
    lint-parseable form `retention.py` splits entries on; keep `# Sessions` the node's terminal section.

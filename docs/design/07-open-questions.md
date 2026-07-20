@@ -186,6 +186,10 @@ Deliberately deferred — known unknowns, to close during build or later.
     DrvFs/network mount and relocates-or-warns, recording where via the gitignored `runtime.json` pointer. **What
     was measured (D115): file *mode* is the guarantee that actually fails on 9p (a 0600 create returns 0777,
     silently) — `flock` does not fail at all, so "flock is unreliable on DrvFs" is retired as a reason to pin.**
+    **DRIVEN on the real 9p mount (D130):** the relocation *step* (unexercised until Wave 2) works — a real model
+    detects the mount and relocates; the runtime half lands native ext4 at `0600`, the daemon keys per-project via
+    `runtime.json`, `probe_mode` warns on 9p / silent on ext4, and the D129 verify gate fails closed on a genuinely
+    relocated `state.json`. Residual is the **native-Windows** path (no WSL 9p), still unexercised.
   - **WSL2 bus lifecycle (D94)** — a detached daemon can't hold the distro VM open; the bus dies ~8s after the
     last terminal closes and re-spawns on the next `/start` (owner-accepted; `enable-linger` / `vmIdleTimeout=-1`
     the opt-in upgrade).

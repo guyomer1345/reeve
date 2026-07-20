@@ -286,8 +286,10 @@ built-in Claude Code command.
 - **Run `ingest`.** The skill runs `.workflow/codemap.sh` to build the structural graph, seeds
   `docs/knowledge/` nodes, and reconstructs `docs/spec/` from the existing `CLAUDE.md`/docs + code (tagged
   `unspecified`). **Adopt an existing `docs/`** if present — write to known subpaths, never clobber; namespace
-  ours on a name collision. The durable per-file `why`/Sessions stay empty until `document` authors them on
-  first touch.
+  ours on a name collision. Match subpaths **case-insensitively**: `docs/` here sits on the repo mount, which on
+  Windows / WSL `/mnt/*` 9p / macOS is case-insensitive, so a workflow-owned `docs/architecture.md` and an
+  adopted `docs/ARCHITECTURE.md` are one file — adopt the existing case-variant in place, never write a lowercase
+  twin over it. The durable per-file `why`/Sessions stay empty until `document` authors them on first touch.
 - **Reconciliation checkpoint** — `ingest` surfaces the reconstructed understanding ("here's what I think the
   app does, its core flows, its stack") via a blocking `checkpoint` for the user to confirm/correct; confirmed
   invariants flip `unspecified → locked` before the loop drives.

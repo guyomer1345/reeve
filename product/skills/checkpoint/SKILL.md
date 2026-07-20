@@ -24,9 +24,13 @@ A `checkpoint.request` `{ kind: demo|qa|setup|reconcile, what, expected, how?(�
 
 ## Workflow
 1. Assemble the `request` + its correlation `token`.
-2. **Park — never wait.** Write the `parked-ticket` record (token, kind, request, and a `deadline` stamped as
-   *now + `config.checkpoint.deadline_hours`*), then **yield**. There is no blocking wait step and no hook
-   exit-code trick: nothing in the loop can sit and wait for a person.
+2. **Park — never wait.** Write the `parked-ticket` record **per its schema (`schemas.md § parked-ticket`)** —
+   don't re-derive the shape: `{ ticket_id, token, loop_position, checkpoint: {kind, request}, predicted_outcome,
+   deadline }` (a pre-build `demo`/`reconcile` park carries no `worktree`/`branch`), `deadline` stamped
+   *now + `config.checkpoint.deadline_hours`*. Write it to the runtime tree's `parked/`, **resolving the runtime
+   root via `.workflow/runtime.json`** (absent ⇒ `.workflow/` itself) — it is a native-filesystem path, relocated
+   off the repo mount, so never assume `.workflow/parked/`. Mirror the entry into `handoff.parked[]`, then
+   **yield**. There is no blocking wait step and no hook exit-code trick: nothing in the loop can sit and wait for a person.
 3. **Don't send the alert.** You do not notify anyone — writing the parked record *is* the signal. The always-alive
    console daemon watches for it and raises the alert (and the reminders, and the overdue escalation), because it
    is the only process still running when the loop is busy on another ticket, whole-parked, or dead.

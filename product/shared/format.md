@@ -64,8 +64,7 @@ check it. One file per topic (`code-style`, `testing`, `security`, `ops`), princ
 - **No spec-internal references.** State behaviour in plain language across the *entire* shipped package —
   `skills/`, `agents/`, `shared/`, `commands/`, `templates/`, `hooks/`. Decision IDs (`Dxx`), design-doc
   numbers, and `Space N` labels live only in the design docs + decision log, which point *down* to the file —
-  never the reverse. A commit-time grep gate (`scripts/check-no-spec-refs.sh`) enforces this so it can't
-  silently regress.
+  never the reverse. A commit-time grep gate enforces this in the package's own repo so it can't silently regress.
 - This format is **v1** — validated as we apply it skill-by-skill; if a skill fights it, that's signal
   about the format, not the skill.
 
