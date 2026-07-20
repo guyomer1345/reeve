@@ -460,7 +460,11 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
 ## state.json  · the live loop pointer (volatile, gitignored) · *`.workflow/state.json`; published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
 - `status` ∈ `{ intake, building, idle }`
 - `node` — current loop node; value ∈ the `loop.md` node labels (e.g. `planner:plan-one`, `verify`)
-- `current_item` — backlog id or `null` · `wave` — wave id or `null` · `note` — human-readable cursor
+- `current_item` — backlog id or `null` · `wave` — wave id or `null` · `note` — human-readable cursor.
+  `current_item` (top-level) is the canonical active-item key. **The verify-before-commit gate does not depend on
+  it:** it derives the item(s) under commit from the staged `.workflow/items/<id>/` diff and reads state.json only
+  runtime-resolved (via `runtime.json`) and tolerantly (`current_item` **or** a nested `position.item`), and it
+  fails **closed** — so neither a state.json shape slip nor a relocated runtime tree can silently disarm it.
 
 ## handoff.md  · the durable resume anchor (committed) · *`.workflow/handoff.md`; rewritten whole each handoff, never appended. **Atomicity is real but harness-provided:** the orchestrator rewrites the prose with the `Write`/`Edit` tools, which publish via a temp-file + `rename` (the inode changes on overwrite), so a session killed mid-write leaves the **previous** file whole, never torn. The model cannot *express* the atomic `rename`/`fsync`, but the tool provides it — the one thing it must never do is rewrite this file via a `Bash` `>`/`tee` redirect, which truncates in place and **would** tear. **Durable floor = git:** the file is committed each item, so the one case a bare `rename` may not survive — power-loss/kernel-panic before the pages flush — recovers from `git show HEAD:.workflow/handoff.md`, the same `handoff.md + git log` a cold start already rebuilds from. Committed, so it stays on the repo mount (never relocated); `drain.py` writes its own machine block fully durably (write-temp → `fsync` → `rename` → `fsync(dir)`); the bus reads the file for the `consumed_through` watermark, and a torn read can only make inbox GC lag, never over-collect*
 - `current_item`, `loop_position`, `parked[]`, `base_sha` — the commit it was written against; a cold start

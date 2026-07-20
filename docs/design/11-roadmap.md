@@ -384,31 +384,33 @@ below — captured, fix next session per the maintainer). DONE:
   **rejected** a shipped publisher (re-buys only what git backstops, adds an F2/F3-class must-call-it fail-open).
   **[design — DONE D128]**
 
-**Wave 1 — FIX SLICE (next session, the three findings the drive surfaced — D128):**
-- **F1 — `/start` non-interactive install hard-blocks to a hollow scaffold.** The manifest install writes into
-  `.claude/scripts/` + `.claude/hooks/`, which Claude Code guards **above** the settings allowlist (trust +
-  `Write`/`Bash` allow don't waive it); in `claude -p` there is no grant path so all 13 entries + the daemon are
-  silently skipped, **yet `.workflow/` still commits** (re-run → "already initialised", a hollow-scaffold trap). No
-  post-install verification; the start.md permission message implies trust makes local writes prompt-free (false).
-  Design question: interactive-only `/start` + a post-install assertion, or move the installed scripts off the
-  guarded `.claude/` path. Also fold the D127 install-`exclude` gap (test files leak) here. **[bug · design]**
-- **F2 — greenfield stack-wiring has no owner → the commit gate silently has no stack teeth.** The stack locks in
-  `decision-engineer`/`planner` but **no skill fills `.workflow/checks.env`** or specialises the `rules/` `enforced
-  by:` tags — so `checks.sh --check` runs only the coverage-linkage gates and a failing test passes the commit gate
-  (demonstrated live). Assign an owner for the `tech_stack`-lock stack-wiring (fill `checks.env`, scoped to
-  `project/`; specialise rules; add build-output `.gitignore` patterns). **[bug]** — silent stack-gate defeat.
-- **F3 — verify-before-commit fails OPEN on a `state.json` shape drift (native/Wave-1 sibling of the Wave-2
-  `state.json` bug).** `pre-commit.sh:36`/`guard.sh` read top-level `state.json.current_item` behind
-  `if [ -n "$item" ]`; the real orchestrator wrote a nested `position.item` and initially omitted the top-level key,
-  silently disarming the verify gate (self-corrected only by vigilance). Fix with the Wave-2 item: fail **closed** /
-  derive the item from the staged `.workflow/items/<id>/` diff, not a fragile state.json key. **[bug]** — silent
-  safety-gate defeat, reachable on the native path (not only off a 9p mount).
+**Wave 1 — FIX SLICE: BUILT + DRIVE-VERIFIED (D129) — all three closed, fail-closed not signal-restored.** Each
+finding was reproduced live, fixed, and re-verified by driving on the real `~/p5-test` tree (not by reading). The
+spine: **fail closed / derive from the artifact** — never restore the missing signal that made the defeat silent. DONE:
+- ✅ **F1 — hollow-scaffold `/start`.** `/start` is now **interactive-only by design** (the `.claude/` write-guard
+  above the settings allowlist makes headless self-install impossible for settings/hooks — and the relaunch-runner
+  never runs `/start`, so away-autonomy is untouched). Step-0's re-run guard keys on install-**completeness**
+  (incomplete → *resume the install*, never "already initialised" over a hollow tree); **step 7 verifies every
+  manifest `install[].dest` landed + no excluded test leaked + the daemon answered, and refuses to commit if not**.
+  Folded: the install copy honours the manifest `exclude` (the `test_codemap.py` leak), the trust message no longer
+  implies the `.claude/` install is prompt-free, and the stale console-write-path "Expand later" bullet is removed.
+  **[bug · design — DONE D129]**
+- ✅ **F2 — greenfield stack-wiring owner + fail-closed backstop.** *Owner:* the **stack-wiring step** (the
+  stack-dependent half of `/start` step 5) is deferred by greenfield to `tech_stack` lock, where **the orchestrator
+  re-runs it** (new `loop.md` section) — a one-time transition, router-owned so leaf skills stay in lane. *Teeth:*
+  `checks.sh --check` now **fails closed when `project_root` holds source but no `--check` stack command is wired** —
+  a forgotten trigger stops the loop loudly instead of waving a failing test through. **[bug — DONE D129]**
+- ✅ **F3 — verify-before-commit fails closed (folds the Wave-2 `state.json` bug).** A shared **`hooks/verify_check.py`**
+  both hooks call derives the item from the staged `.workflow/items/<id>/` diff (immune to the shape drift *and* the
+  path drift), runtime-resolves `state.json` via `runtime.json`, tolerates `current_item` ∪ `position.item`, and
+  **fails closed**. Both drift vectors now block on both hooks; the genuine ROADMAP-1 commit still passes off the
+  staged diff alone. **[bug — DONE D129; the Wave-2 `state.json` path-drift fail-open is resolved with it].**
 
 **Wave 2 — brownfield on `/mnt/c` (adds the FS + ingest families):**
-- **Hooks hard-code `.workflow/state.json`; `/start` relocates it off a 9p mount** → `guard.sh:89`/`pre-commit.sh:33`
-  read an absent file, the `json.load` is swallowed by `2>/dev/null || true`, and **verify-before-commit silently
-  no-ops.** Resolve the runtime root via `runtime.json` the way `bus.py:180` does. **[bug]** — silent safety-gate
-  defeat on the maintainer's own platform.
+- ✅ **Hooks hard-code `.workflow/state.json`; `/start` relocates it off a 9p mount** → the verify gate silently
+  no-op'd on a relocated tree. **RESOLVED (D129, folded into F3):** the shared `hooks/verify_check.py` runtime-resolves
+  the root via `runtime.json` (the `bus.py` way) **and** primarily derives the item from the staged diff, and fails
+  **closed** — so neither the path drift nor the shape drift can disarm it. **[bug — DONE D129]**
 - **The FS-relocation step itself is unexercised** on the mount it targets (token/creds land `0777`, renames go
   non-atomic if it misfires — the D115 failure mode). **[drive]**
 - **Brownfield `ingest` entry path** — codemap-at-scale over a real tree → spec reconstruction → reconciliation
@@ -416,8 +418,8 @@ below — captured, fix next session per the maintainer). DONE:
 
 **Opportunistic (real bugs a first run won't reach):** the `align` skill invokes meta-repo-only gates
 (`check-status-coherence.sh`/`check-no-spec-refs.sh`) absent from the install manifest and meaningless in a target
-**[bug]** · `start.md`'s "Expand later" prose still claims the console write-path/forms are unbuilt (shipped since
-increment 3) **[doc]**.
+**[bug]** · ✅ `start.md`'s "Expand later" prose claiming the console write-path/forms are unbuilt — **fixed (D129,
+folded into F1):** the stale bullet is removed **[doc — DONE]**.
 
 Everything past Phase 5 stays `[stageable]`/`[later]` (the living code-map observed layer, D84 reclassification, the
 proportional-rigor gate, build-once-per-wave, model/effort routing, the project-map tab, the project-state view,
@@ -451,7 +453,12 @@ failing test because nothing fills `checks.env` at stack-lock (F2), and verify-b
 orchestrator writes a `state.json` shape the hook can't read (F3) — plus `/start` half-installing to a hollow scaffold
 non-interactively (F1). None was reachable by reading; F2/F3 survive green unit tests exactly as the pattern predicts.
 And the *opposite* also held: the feared `handoff.md` tear **couldn't be reproduced** — the harness write is already
-atomic, so a spec mandate was over-stated, not unmet. **Drive them on the real filesystem, with a real model.**)*
+atomic, so a spec mandate was over-stated, not unmet. **And the Wave-1 FIX SLICE held it an eighth time, from the
+other side (D129):** fixing F2/F3 confirmed the *cure* is the same shape as the disease's discovery — **fail closed /
+derive from the artifact, never restore the missing signal** that made the defeat silent — and each fix was proven
+only by re-driving on the real tree (the fix that passes the genuine model-produced commit off the staged diff while
+blocking the drift vectors is not one a re-read would have trusted). **Drive them on the real filesystem, with a real
+model — and fix them fail-closed.**)*
 **Phase 4 — BUILD-COMPLETE (not yet runtime-validated).** The demo (Space 4) is **built (D124)** and the
 **public-release surface is built (D125)**: one transparent repo, `product/` as the plugin root,
 `product/MANIFEST.json` as the single ship boundary, the construction record reframed into `docs/design/`, a product
@@ -486,6 +493,8 @@ The engine **drives**, is **self-maintaining** (retention + freshness + docs-roo
 It is **build-complete**, and the **whole loop has now been driven end-to-end on the installed plugin with a real
 model** (Phase-5 Wave-1, D128): greenfield `/start` → the full build loop → real `research`/`setup-guide` subagent
 dispatch → the outbox→release→guard push. That first real run did its job — it surfaced three wrong-mechanism bugs
-(F1 hollow-scaffold `/start`; F2 + F3 **silent safety-gate defeats**) now queued as the Wave-1 fix slice, and it
-retired the `handoff.md` crash-durability worry (the harness write is already atomic). Wave 2 (brownfield on `/mnt/c`)
-and the fix slice are next; what remains past Phase 5 is all `[stageable]`/`[later]`.
+(F1 hollow-scaffold `/start`; F2 + F3 **silent safety-gate defeats**), and the **Wave-1 FIX SLICE has now fixed all
+three fail-closed and re-driven them on the real tree (D129)** — the stack gate and the verify gate can no longer
+silently disarm, and `/start` cannot commit a hollow scaffold; F3 also folded the Wave-2 `state.json` fail-open. Wave 2
+(the FS-relocation + brownfield-`ingest` families on `/mnt/c`) is next; what remains past Phase 5 is all
+`[stageable]`/`[later]`.

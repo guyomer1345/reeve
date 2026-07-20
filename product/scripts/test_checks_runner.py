@@ -116,6 +116,44 @@ def test_cd_ing_stack_command_does_not_skip_coverage_gates(tmp_path):
     assert r.returncode != 0, "cd in a stack command let the coverage gates be skipped"
 
 
+def _git_project(tmp_path, checks_env="", project_files=None):
+    """A bootstrapped project inside a real git repo (the backstop reads `git ls-files`)."""
+    root = _project(tmp_path, checks_env)
+    (root / ".workflow" / "config.json").write_text(json.dumps({"project_root": "./project"}))
+    proj = root / "project"
+    proj.mkdir()
+    for name, body in (project_files or {}).items():
+        (proj / name).write_text(body)
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.email", "t@t"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "t"], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    return root
+
+
+def test_check_blocks_source_without_stack_gate(tmp_path):
+    # F2 backstop: source under project_root but no --check stack command wired is the silent
+    # stack-gate defeat (a greenfield stack locks but nothing fills checks.env). Must fail closed.
+    root = _git_project(tmp_path, "", {"mod.py": "def add(a, b):\n    return a + b\n"})
+    r = _run(root, "--check")
+    assert r.returncode != 0, "source with an empty checks.env must fail the gate, not skip it"
+    assert "no stack gate" in r.stderr
+
+
+def test_check_allows_empty_project_without_stack_gate(tmp_path):
+    # The bootstrap window: project_root has no source yet (only docs). Nothing to gate → pass.
+    root = _git_project(tmp_path, "", {"README.md": "# spec\n"})
+    r = _run(root, "--check")
+    assert r.returncode == 0, r.stderr
+
+
+def test_check_allows_source_once_stack_gate_wired(tmp_path):
+    # Once checks.env wires a --check command, the backstop is silent (no false block).
+    root = _git_project(tmp_path, "TEST=true\n", {"mod.py": "def add(a, b):\n    return a + b\n"})
+    r = _run(root, "--check")
+    assert r.returncode == 0, r.stderr
+
+
 def test_fix_passes_staged_files_to_fixer(tmp_path):
     # A logging stub stands in for the formatter; prove the file list reaches it verbatim.
     root = _project(tmp_path, "")

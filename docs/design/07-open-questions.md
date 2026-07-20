@@ -98,10 +98,12 @@ Deliberately deferred — known unknowns, to close during build or later.
   + a generated `.workflow/checks.env` data file — the `--fix`/`--check` dispatch + the coverage-gate loop are no
   longer LLM-freehand (refines D67), and it was driven end-to-end on a real greenfield bootstrap (`~/p5-test`).
   Residual: stack-enforcer wiring (`checks.env` commands + the `rules/` `enforced by:` tags) is **deferred to
-  `tech_stack` lock** — a faithful greenfield has no stack to detect at `/start` (D127). **But that deferral has
-  no owner (F2, D128):** driving showed the stack locks in `decision-engineer`/`planner` yet **no skill fills
-  `checks.env`**, so `checks.sh --check` silently runs only the coverage-linkage gates — a failing test passed the
-  commit gate live. **→ Wave-1 fix slice (next session, D128, `11`).**
+  `tech_stack` lock** — a faithful greenfield has no stack to detect at `/start` (D127). **That deferral had no owner
+  (F2, D128) — now RESOLVED (D129):** the **stack-wiring step** is deferred by greenfield `/start` and **the
+  orchestrator re-runs it at `tech_stack` lock** (a router-owned one-time transition, `loop.md`); and the
+  load-bearing half — `checks.sh --check` now **fails closed when `project_root` holds source but no stack gate is
+  wired** — makes a forgotten trigger a loud block, not a silent skip. (F3's shared `verify_check.py` and F1's
+  interactive-only `/start` + post-install verification gate landed in the same slice — D129.)
 
 - **`handoff.md`'s durability mandate (raised by D117) — RESOLVED (D128): the premise was largely false.** The
   worry was that the orchestrator's text-writing tool "cannot express a rename" so the prose anchor could tear on

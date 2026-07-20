@@ -72,6 +72,23 @@ and that half stays here. `record` recomputes `consumed_through` (the low-waterm
 is consumed, so the bus may collect it) and **prunes the consumed-set to ids above it**, which is what keeps
 `handoff.md` bounded — a cold start reads that file whole.
 
+## Stack-wiring at tech_stack lock
+A greenfield project starts with an empty product tree, so `/start` cannot detect a stack and writes only the
+**coverage-only** `checks.env` + the unspecialized `rules/` baseline. The stack is chosen later, by
+`decision-engineer` resolving the spec's `tech_stack` (a `TBD → decision-engineer` pointer). **The moment that
+resolution flips `tech_stack` to `locked` while `.workflow/checks.env` still wires no stack gate, run the
+stack-wiring step** (the stack-dependent half of `/start` step 5) before the next `execute`:
+- fill `.workflow/checks.env` with the concrete `FMT_CHECK`/`LINT`/`TYPECHECK`/`TEST` (+ `FMT_FIX`/`LINT_FIX`)
+  commands for the chosen stack, **scoped to `project_root`**;
+- specialize each `rules/` `— enforced by:` tag to the concrete tool, and wire the enforcers (formatter, linter,
+  typechecker, test runner, CI) — gap-fill, never clobber;
+- add the stack's build-output paths to `.gitignore`; regenerate the code map.
+
+This is a **one-time transition** (stack `unspecified/TBD → locked`), not a per-item step — it is the orchestrator's
+to run, so the leaf skills stay in their lane. It is a positive fast-path: `checks.sh --check` **fails the commit
+closed** whenever source exists under `project_root` with no stack gate wired, so skipping this step cannot silently
+disarm the gate — it stops the loop loudly until the stack is wired.
+
 ## Maintenance items
 `prioritize` injects a **maintenance item** on a threshold (§ `prioritize`): a *retention/size* threshold →
 `document:audit` (bound the append-only tier); a *drift* threshold → `align` (reconcile spec/decisions/promises

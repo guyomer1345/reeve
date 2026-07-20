@@ -10,11 +10,24 @@ Run once to turn the current directory into a workflow-driven project and initia
 built-in Claude Code command.
 
 ## 0. Detect mode & guard
-- If `.workflow/` already exists → the project is already initialised. Do **not** clobber: report current
-  state and offer to resume from `.workflow/handoff.md` instead. Stop.
+- If `.workflow/` already exists, the scaffold is present — but a `.workflow/` on disk proves only that a
+  *previous* `/start` scaffolded, **not** that it finished. Check whether the **install actually completed**
+  (the step-7 verification: every manifest `install[].dest` present + the daemon reachable), because a
+  non-interactive first run leaves a **half-installed, uncommitted hollow scaffold**:
+  - **Install complete** → the project is fully initialised. Do **not** clobber: report current state and offer to
+    resume from `.workflow/handoff.md`. Stop.
+  - **Install incomplete** (a hollow scaffold from an earlier non-interactive run) → do **not** re-scaffold and do
+    **not** report "already initialised"; **resume the install** — re-run steps 4–7 (idempotent copies + the
+    verification gate). Say plainly you are completing a previous half-init, not starting over.
 - Else pick the mode: `$ARGUMENTS` if given, otherwise **detect** — existing source files present →
   **brownfield**; empty (or package only) → **greenfield**. **Confirm the detected mode with the user**
   before proceeding (mis-classifying is costly).
+- **`/start` is interactive-only.** The install (step 4) writes into `.claude/`, which Claude Code guards **above**
+  the settings allowlist — trust and a `Write`/`Bash` allow do *not* waive it, so a non-interactive session
+  (`claude -p`, the relaunch-runner) has no grant path and silently skips those writes. Run `/start` in an
+  interactive session where the `.claude/` write prompts can be accepted; step 7 verifies the writes landed and
+  **refuses to commit a hollow scaffold** if they did not. (The relaunch-runner never runs `/start` — it only
+  resumes an already-initialised project — so this constraint does not touch away-autonomy.)
 
 ## 1. Shared steps (both modes)
 1. **repo-setup:** ensure git is initialised (`git init -b main`), a git identity is set, and a
@@ -84,7 +97,11 @@ built-in Claude Code command.
      network — stays `ask`).
    - **Install the shipped scripts + hooks — from the manifest, not enumerated here.** Read
      **`${CLAUDE_PLUGIN_ROOT}/MANIFEST.json`**; for every `{src, dest}` in its **`install`** array, copy
-     `${CLAUDE_PLUGIN_ROOT}/<src>` → `${CLAUDE_PROJECT_DIR}/<dest>` (creating parent dirs). That manifest is the
+     `${CLAUDE_PLUGIN_ROOT}/<src>` → `${CLAUDE_PROJECT_DIR}/<dest>` (creating parent dirs). **Honour the manifest
+     `exclude`:** when `<src>` is a **directory** (e.g. `scripts/codemap`), do not copy files matching an `exclude`
+     glob (`**/test_*.py`) — the beside-code tests must not land in the target. Use a filtering copy, e.g.
+     `rsync -a --exclude='test_*.py' <src>/ <dest>/` (or `cp -r` then delete the matches); step 7's verification
+     rejects a leaked test file. That manifest is the
      **single source** for what installs into `.claude/`; because nothing is listed here, a script added to the
      package is picked up automatically — the drift that once dropped `loop.sh` and the demo-bundle lint from a
      hand-kept copy list cannot recur. Everything it installs is **stack-agnostic** (it reads only the workflow's
@@ -109,7 +126,9 @@ built-in Claude Code command.
        blanks over the remote surface);
      - the git **hooks** into **`.claude/hooks/`** — `guard.sh` (secret-scan + verify-before-commit + the **push
        floor**: never move a protected branch, never push a secret) and `pre-commit.sh` (the mechanical-gate
-       backstop, registered as the git hook in step 5). `build-once-per-wave` is deferred.
+       backstop, registered as the git hook in step 5), plus `verify_check.py`, the **shared verify-before-commit
+       helper both hooks call** (so the two gates enforce it identically; it fails closed and derives the item from
+       the staged diff, immune to state.json shape/path drift). `build-once-per-wave` is deferred.
    - **Trust the workspace so the shipped allowlist is live.** Claude Code only honours
      `.claude/settings.json`'s `permissions.allow` when the launch root is **trusted**; until then `claude -p`
      (and the relaunch-runner) ignore the allowlist and **stall on the first tool prompt** — and on WSL the
@@ -142,16 +161,30 @@ built-in Claude Code command.
      without a prompt. If the script warned that `~/.claude.json` was unparseable, say so and have them accept the
      dialog (or set `projects["<abs path>"].hasTrustDialogAccepted: true`) by hand.
    - **Surface the one-time permission message** to the human: *"This is an autonomous loop. This workspace is
-     now **trusted** (recorded in `~/.claude.json`) — that is what makes the package's pre-approved local actions
-     run prompt-free; if a trust dialog still appears in your setup, accept it. Pushes and issue create/close are
+     now **trusted** (recorded in `~/.claude.json`) — that is what makes the **running loop's** pre-approved local
+     actions run prompt-free. (The one-time `/start` install writes into `.claude/`, which Claude Code guards
+     **above** trust — those are the prompts you accept during setup; they are not waived by trust, and going
+     forward the loop's allowlisted local actions do not prompt.) If a trust dialog still appears in your setup,
+     accept it. Pushes and issue create/close are
      **not** approved by a terminal prompt — they queue to `.workflow/outbox/` and wait for you to release them
      from the console, so the loop keeps working while you are away; deploys and other outward commands still ask.
      Two things are hard blocks, not prompts, and nothing can waive them: the loop never moves `main`/`master`,
      and it never pushes a secret. You don't need `--dangerously-skip-permissions`."*
-5. **Specialize rules + wire enforcement** (the disciplined layer — auto-write greenfield, adopt-and-gap-fill
-   brownfield):
-   - **Seed the rules.** Copy the package baseline `${CLAUDE_PLUGIN_ROOT}/rules/*.md` → **`<project_root>/rules/`**. Detect the
-     stack (languages, frameworks, package manager) and rewrite each `— enforced by: <mechanism>` tag with the
+5. **Specialize rules + wire enforcement** (the disciplined layer). The **stack-dependent** half — specializing
+   the `rules/` `— enforced by:` tags to concrete tools, filling `.workflow/checks.env`, wiring the concrete
+   enforcers, and adding build-output `.gitignore` patterns — is **the stack-wiring step**. Run it **only when a
+   stack is known**:
+   - **Brownfield** (or greenfield with a stack already declared in the spec): the stack is detectable now — run
+     the stack-wiring step here, adopt-and-gap-fill (never clobber an existing config).
+   - **Greenfield with no stack yet** (an empty `project/`): there is **nothing to detect**. Seed only the
+     stack-independent floor now — the rules **baseline** (unspecialized), `checks.sh` verbatim, a **coverage-only**
+     `checks.env`, the git backstop, the `codemap.sh` wrapper — and **defer the stack-wiring step to `tech_stack`
+     lock**: the orchestrator re-runs it the moment `decision-engineer` resolves the stack (see `.workflow/loop.md`
+     → *Stack-wiring at tech_stack lock*). Until then `checks.sh --check` **fails the commit closed** the instant
+     source lands under `project_root` with no stack gate wired — so a missed re-run cannot silently disarm the
+     gate, it stops the loop loudly instead.
+   - **Seed the rules.** Copy the package baseline `${CLAUDE_PLUGIN_ROOT}/rules/*.md` → **`<project_root>/rules/`**. When the
+     stack is known, rewrite each `— enforced by: <mechanism>` tag with the
      project's *concrete* tool (e.g. `formatter` → `prettier`/`black`/`gofmt`), so the agent reads real commands.
      Nearest-file-wins: this project copy is the floor a subtree `rules/` can override.
    - **Wire the enforcers named by the tags.** For each enforceable principle, install the concrete gate from
@@ -173,7 +206,9 @@ built-in Claude Code command.
        item's staged file list in `--fix`, so `commit` scopes fixers to staged files, never a repo-wide sweep);
      - `FMT_CHECK` / `LINT` / `TYPECHECK` / `TEST` — the repo-wide `--check` gates (each carries its own path;
        omit `TYPECHECK` for a language with no typechecker).
-     Both files are committed. `--check` also runs the three stack-agnostic coverage gates over every open item —
+     **Greenfield with no stack yet writes an empty (coverage-only) `checks.env` now and fills these at
+     `tech_stack` lock** (the stack-wiring step above); the `checks.sh` backstop fails the commit closed if source
+     lands before then. Both files are committed. `--check` also runs the three stack-agnostic coverage gates over every open item —
      a load-bearing promise with no resolvable / boundary test, an `artifact` criterion with no `discharge`, or a
      governing decision mapped to no step fails the commit (the mechanical plan-coverage gates; teeth, not advice).
    - **Register the git backstop.** Install `pre-commit.sh` (copied to `.claude/hooks/` in step 4) as git's
@@ -203,7 +238,39 @@ built-in Claude Code command.
      machine. The fix is to place the runtime tree on a local filesystem (step 3).
    - On WSL the daemon dies a few seconds after the last terminal closes (a detached process cannot hold the distro
      alive); it comes back on the next `/start`, and nothing already written to the inbox is lost.
-7. **Commit** the initialised scaffold.
+7. **Verify the install landed, then commit — never commit a hollow scaffold.** This gate is what makes the
+   half-installed state impossible: initialisation is "done" only when the scaffold **and** the installed files are
+   present. Assert every manifest `install[].dest` exists in the project, no excluded test file leaked into an
+   installed directory, and the daemon answered in step 6:
+   ```bash
+   python3 - "${CLAUDE_PLUGIN_ROOT}" "${CLAUDE_PROJECT_DIR}" <<'PY'
+   import fnmatch, json, os, sys
+   plugin, project = sys.argv[1], sys.argv[2]
+   man = json.load(open(os.path.join(plugin, "MANIFEST.json")))
+   missing = [e["dest"] for e in man["install"]
+              if not os.path.exists(os.path.join(project, e["dest"]))]
+   leaked = []
+   for e in man["install"]:
+       d = os.path.join(project, e["dest"])
+       if os.path.isdir(d):
+           for root, _, files in os.walk(d):
+               for f in files:
+                   if any(fnmatch.fnmatch(f, os.path.basename(p)) for p in man.get("exclude", [])):
+                       leaked.append(os.path.relpath(os.path.join(root, f), project))
+   if missing or leaked:
+       for m in missing: print("MISSING:", m)
+       for l in leaked:  print("LEAKED excluded file:", l)
+       sys.exit(1)
+   print("install verified:", len(man["install"]), "entries present, no excluded leaks")
+   PY
+   ```
+   - **All present (exit 0)** → commit the initialised scaffold.
+   - **Anything missing (exit 1)** → **STOP. Do not commit.** A missing `install[].dest` means the `.claude/` writes
+     were skipped — the signature of a **non-interactive** `/start` (Claude Code guards `.claude/` above the
+     settings allowlist, so `claude -p` has no grant path). Report exactly which files are missing and that
+     `/start` must be re-run in an **interactive** session where the `.claude/` write prompts can be accepted. The
+     scaffold stays **uncommitted**, so the re-run resumes cleanly via step 0 rather than reporting "already
+     initialised" over a hollow tree.
 
 ## 2. Greenfield (new project)  — fully supported
 - Scaffold an empty `<project_root>/docs/` (spec, architecture, knowledge, decisions); it grows as the project
@@ -232,6 +299,4 @@ built-in Claude Code command.
   prevalence-ranked precise arms (C++ — needs a compile-DB — then Rust · PHP) are **zero-dep resolver arms** on the
   same engine + `graph.json` contract, each upgrading its language from the floor's best-effort edges to precise
   resolution. tree-sitter is reserved for parse-hard languages (optional upgrade — absent → the floor).
-- The console's **write** path — delivering a verdict, filing an intake, releasing a queued outward action. The
-  daemon serves the read-only cockpit today; the forms land next.
 - The full **disk layout** — the tree above is a provisional first cut.

@@ -30,19 +30,13 @@ if git diff --cached 2>/dev/null | grep -Eiq \
 fi
 
 # --- verify-before-commit (git-native backstop) ---
+# Delegated to the shared helper both hooks call, so guard.sh and this file enforce it IDENTICALLY.
+# It fails CLOSED and does not trust a single state.json key/path: it derives the item(s) from the
+# staged diff (immune to state.json shape/path drift) and cross-checks a runtime-resolved state.json.
 # CONTRACT (shared/schemas.md · verify): `.workflow/items/<id>/verify-verdict.md`, first line
-# exactly `pass: true|false`. Fail CLOSED — proceed only on an explicit, well-formed `pass: true`;
-# a missing file, a `.json`, or a reworded token all block (mirror of guard.sh).
-item="$(python3 -c 'import json; print(json.load(open(".workflow/state.json")).get("current_item") or "")' 2>/dev/null || true)"
-if [ -n "$item" ]; then
-  verdict=".workflow/items/$item/verify-verdict.md"
-  [ -f "$verdict" ] || block "item $item has no verify-verdict.md; run verify before committing."
-  first="$(head -n1 "$verdict" 2>/dev/null || true)"
-  printf '%s' "$first" | grep -Eiq '^[[:space:]]*pass:[[:space:]]*false([^[:alnum:]]|$)' \
-    && block "item $item has a FAILING verify-verdict; debug -> refine -> verify first."
-  printf '%s' "$first" | grep -Eiq '^[[:space:]]*pass:[[:space:]]*true([^[:alnum:]]|$)' \
-    || block "item $item verify-verdict first line must be 'pass: true' (got: '$first'); re-run verify."
-fi
+# exactly `pass: true|false`.
+vmsg="$(python3 .claude/hooks/verify_check.py 2>&1)"; vrc=$?
+[ "$vrc" -eq 0 ] || block "${vmsg:-verify-before-commit could not run (python3?). Failing closed.}"
 
 # --- mechanical check runner in CHECK-ONLY mode (never rewrites the tree here) ---
 runner=".workflow/checks.sh"

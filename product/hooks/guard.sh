@@ -85,23 +85,16 @@ if is_git commit; then
     block "possible secret in the staged diff (secret-scan). Remove it or use a placeholder before committing."
   fi
 
-  # verify-before-commit: a set item must have a PASSING verdict on disk.
-  # CONTRACT (shared/schemas.md · verify): the verdict is `.workflow/items/<id>/verify-verdict.md`
-  # whose FIRST LINE is exactly `pass: true` or `pass: false`. We read line 1 and fail CLOSED:
-  # proceed ONLY on an explicit, well-formed `pass: true`. A missing file, a `.json` instead of
-  # `.md`, or a reworded/absent token all block — a real failure must never wave through on a
-  # format slip (the old grep-for-"false" was fail-OPEN and would).
-  item="$(python3 -c 'import json; print(json.load(open(".workflow/state.json")).get("current_item") or "")' 2>/dev/null || true)"
-  if [ -n "$item" ]; then
-    verdict=".workflow/items/$item/verify-verdict.md"
-    [ -f "$verdict" ] || block "item $item has no verify-verdict.md; run verify before committing."
-    first="$(head -n1 "$verdict" 2>/dev/null || true)"
-    if printf '%s' "$first" | grep -Eiq '^[[:space:]]*pass:[[:space:]]*false([^[:alnum:]]|$)'; then
-      block "item $item has a FAILING verify-verdict; run debug -> refine -> verify before committing."
-    fi
-    printf '%s' "$first" | grep -Eiq '^[[:space:]]*pass:[[:space:]]*true([^[:alnum:]]|$)' \
-      || block "item $item verify-verdict first line must be 'pass: true' (got: '$first'); re-run verify."
-  fi
+  # verify-before-commit — delegated to the shared helper both hooks call, so this PreToolUse gate
+  # and the git-native pre-commit backstop enforce it IDENTICALLY (two copies would eventually
+  # drift, which is how a safety gate quietly dies). It fails CLOSED and does not trust a single
+  # state.json key or path: it derives the item(s) under commit from the STAGED diff — immune to
+  # both the shape drift (a nested `position.item`, no top-level `current_item`) and the path drift
+  # (a relocated runtime tree) that each left the old read empty and silently skipped the gate —
+  # and cross-checks a runtime-resolved state.json. CONTRACT (shared/schemas.md · verify):
+  # `.workflow/items/<id>/verify-verdict.md`, first line exactly `pass: true|false`.
+  vmsg="$(python3 .claude/hooks/verify_check.py 2>&1)"; vrc=$?
+  [ "$vrc" -eq 0 ] || block "${vmsg:-verify-before-commit could not run (python3?). Failing closed.}"
 fi
 
 # --- push floor: never move a protected branch, never push a secret ---

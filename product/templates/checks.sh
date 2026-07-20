@@ -49,6 +49,23 @@ case "$MODE" in
     exit 0
     ;;
   --check)
+    # Fail-CLOSED stack-gate backstop: source under project_root with NO stack check wired is the
+    # silent-defeat state. A greenfield stack locks in decision-engineer, but if nothing then fills
+    # checks.env (the stack-wiring step at tech_stack lock), --check would run ONLY the coverage
+    # gates and a failing test would wave through the commit. So: if no --check stack command is set
+    # AND the product tree already holds source, block. The positive path (filling checks.env at
+    # lock) makes the common case work; THIS makes forgetting it loud instead of silent. Skips
+    # cleanly on the empty bootstrap tree (no source yet) and once checks.env is wired.
+    if [ -z "${FMT_CHECK:-}${LINT:-}${TYPECHECK:-}${TEST:-}" ]; then
+      proot="$(python3 -c 'import json; print(json.load(open(".workflow/config.json")).get("project_root") or ".")' 2>/dev/null || echo .)"
+      if git ls-files -- "$proot" 2>/dev/null | grep -Eiq '\.(py|pyi|js|jsx|ts|tsx|mjs|cjs|go|java|cs|rb|rs|c|cc|cpp|cxx|h|hpp|hh|php|swift|kt|kts|scala|m|mm|clj|ex|exs|dart|lua|sh)$'; then
+        echo "BLOCKED: source under '$proot' but .workflow/checks.env wires no stack gate" >&2
+        echo "  (FMT_CHECK/LINT/TYPECHECK/TEST all unset). The stack must be wired when tech_stack" >&2
+        echo "  locks: specialize rules + fill checks.env (the stack-wiring step — /start step 5)." >&2
+        fail=1
+      fi
+    fi
+
     # Each stack command runs in a SUBSHELL. This is load-bearing, not tidiness: a natural
     # command like `cd project && pytest` would otherwise `cd` THIS shell, and the coverage-gate
     # loop below (paths relative to CWD) would then find zero items and SILENTLY skip every gate.
