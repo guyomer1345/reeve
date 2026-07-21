@@ -144,7 +144,7 @@ checkpoint verdict + status away from the terminal).
   output and moved by `drain.py secret` (D119).
 - **Pending outward actions (D105)** ride the cockpit as a **pull** surface (a count + the release form), **not** a
   notification (D101 excluded outward-gate pings) — an outward action doesn't block the loop, so it doesn't interrupt.
-- **The console is the bootstrap's front door [DECIDED — D132/D133; NOT built, Phase 6 `11`].** The first lived
+- **The console is the bootstrap's front door [DECIDED + BUILT 2026-07-21 — D132/D133; re-drive pending, `11`].** The first lived
   onboarding proved the cockpit invisible-in-practice: the daemon launched and stayed live, but the URL printed once
   into install output and the cockpit had nothing bootstrap-shaped to show — the maintainer concluded the website
   "never launched." So: `/start` ensures the daemon as early as the install allows, surfaces the URL prominently,

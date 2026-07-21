@@ -25,6 +25,9 @@ information it needs.
 ## Constraints
 - Never decide or recommend a course of action — return evidence, not a verdict.
 - Never spawn sub-agents (leaf worker).
+- **`findings` is bounded:** return a condensed summary + pointers (paths, line anchors, source links) — never
+  paste whole files or long raw transcripts back to the caller. The point of the dispatch is that heavy raw
+  reading happens in *this* window and stays here as ephemeral scratch; what returns is the distillate.
 
 ## Output
 `findings` — a sourced summary **returned to the caller**, which distills it into *its* durable record (a

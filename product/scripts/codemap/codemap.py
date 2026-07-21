@@ -1072,6 +1072,26 @@ def discover(root, exclude, ext2arm):
     return sorted(files)
 
 
+def seed_select(graph, top_k, include):
+    """The bounded seed-set selection: top-K by each centrality lens, unioned
+    with the caller-declared spec-core paths. Deterministic, computed here so the
+    orchestrator never has to read graph.json (all-N) into LLM context to pick the set.
+    Returns the selected node records (full frontmatter fields), spec-core first,
+    then by combined centrality rank."""
+    nodes = graph.get("nodes", [])
+    by_path = {n["path"]: n for n in nodes}
+    by_impact = sorted(nodes, key=lambda n: -n.get("impact", 0.0))[:top_k]
+    by_orch = sorted(nodes, key=lambda n: -n.get("orchestration", 0.0))[:top_k]
+    core = [p for p in include if p in by_path]
+    missing = sorted(set(include) - set(core))
+    picked, seen = [], set()
+    for n in ([by_path[p] for p in core] + by_impact + by_orch):
+        if n["path"] not in seen:
+            seen.add(n["path"])
+            picked.append(n)
+    return picked, missing
+
+
 def main():
     ap = argparse.ArgumentParser(description="Multi-language code-map extractor -> graph.json")
     ap.add_argument("root", nargs="?", default=".")
@@ -1079,6 +1099,13 @@ def main():
                     help="graph.json path (default: <project_root>/docs/knowledge/graph.json, "
                          "project_root read from .workflow/config.json, else ./docs/knowledge/graph.json)")
     ap.add_argument("--exclude", default="")
+    ap.add_argument("--seed-list", type=int, default=None, metavar="K",
+                    help="selection mode: read the existing graph.json (at --out or its default) and "
+                         "print the bounded seed set to stdout — top-K per centrality lens "
+                         "(impact + orchestration) unioned with --include paths. Does not rescan.")
+    ap.add_argument("--include", default="",
+                    help="comma-separated repo-relative paths to force into the seed set "
+                         "(the spec-core; used with --seed-list)")
     args = ap.parse_args()
 
     # Default the output under <project_root>/docs, not the repo root — a greenfield
@@ -1091,6 +1118,21 @@ def main():
         except (FileNotFoundError, ValueError):
             project_root = "."
         args.out = os.path.join(project_root, "docs", "knowledge", "graph.json")
+
+    if args.seed_list is not None:
+        try:
+            with open(args.out, encoding="utf-8") as fh:
+                graph = json.load(fh)
+        except FileNotFoundError:
+            sys.exit(f"seed-list: no graph at {args.out} — generate it first (run without --seed-list)")
+        include = [p for p in args.include.split(",") if p]
+        picked, missing = seed_select(graph, args.seed_list, include)
+        json.dump({"seed_count": len(picked), "top_k": args.seed_list,
+                   "include_missing": missing, "seeds": picked}, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        for p in missing:
+            print(f"seed-list: --include path not in graph: {p}", file=sys.stderr)
+        return
 
     exclude = set(DEFAULT_EXCLUDE) | {e for e in args.exclude.split(",") if e}
     ext2arm = _ext_to_arm()

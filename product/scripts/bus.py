@@ -1477,6 +1477,7 @@ class ReadModel:
             "generated_at": now_iso(),
             "state": {
                 "status": state.get("status"),
+                "phase": state.get("phase"),
                 "node": state.get("node"),
                 "current_item": state.get("current_item"),
                 "wave": state.get("wave"),
@@ -1676,7 +1677,7 @@ function setConn(text, ok) {
 function renderState(s) {
   const dl = $("#state-dl");
   dl.textContent = "";
-  const rows = [["status", s.status], ["node", s.node],
+  const rows = [["status", s.status], ["phase", s.phase], ["node", s.node],
                 ["item", s.current_item], ["wave", s.wave], ["note", s.note]];
   for (const [k, v] of rows) {
     if (v === null || v === undefined || v === "") continue;

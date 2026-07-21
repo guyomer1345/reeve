@@ -438,5 +438,57 @@ class ImportRootGreenfield(unittest.TestCase):
         self.assertIn(("app.py", "pkg/util.py"), edges(g))
 
 
+class TestSeedList(unittest.TestCase):
+    """--seed-list (D134): the bounded seed-set selection is computed here, mechanically,
+    so the orchestrator never reads the all-N graph.json into LLM context to pick it."""
+
+    def _graph_dir(self, files):
+        root = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        for rel, content in files.items():
+            path = os.path.join(root, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(content)
+        out = os.path.join(root, "graph.json")
+        subprocess.run([sys.executable, _CODEMAP, ".", "--out", out],
+                       cwd=root, check=True, capture_output=True)
+        return root, out
+
+    def test_seed_list_bounded_union_with_include(self):
+        # hub.py is imported by everything (impact); app.py imports everything
+        # (orchestration); lonely.py is central in neither lens.
+        files = {"hub.py": "X = 1\n", "lonely.py": "Y = 2\n"}
+        files["app.py"] = "import hub\nimport lonely\n" + "".join(
+            f"import m{i}\n" for i in range(6))
+        for i in range(6):
+            files[f"m{i}.py"] = "import hub\n"
+        root, out = self._graph_dir(files)
+        res = subprocess.run(
+            [sys.executable, _CODEMAP, ".", "--out", out,
+             "--seed-list", "2", "--include", "lonely.py,ghost.py"],
+            cwd=root, check=True, capture_output=True, text=True)
+        sel = json.loads(res.stdout)
+        paths = [n["path"] for n in sel["seeds"]]
+        self.assertEqual(paths[0], "lonely.py")          # spec-core include comes first
+        self.assertIn("hub.py", paths)                    # top by impact
+        self.assertIn("app.py", paths)                    # top by orchestration
+        self.assertEqual(sel["include_missing"], ["ghost.py"])
+        self.assertLessEqual(sel["seed_count"], 2 * 2 + 1)  # bounded: ≤ 2K + includes
+        for n in sel["seeds"]:                            # full frontmatter fields ride along
+            for field in ("path", "type", "lang", "tier", "impact", "orchestration"):
+                self.assertIn(field, n)
+
+    def test_seed_list_requires_existing_graph(self):
+        root = tempfile.mkdtemp()
+        self.addCleanup(lambda: __import__("shutil").rmtree(root, ignore_errors=True))
+        res = subprocess.run(
+            [sys.executable, _CODEMAP, ".", "--out", os.path.join(root, "graph.json"),
+             "--seed-list", "5"],
+            cwd=root, capture_output=True, text=True)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("generate it first", res.stderr)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

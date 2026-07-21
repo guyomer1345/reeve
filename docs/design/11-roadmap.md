@@ -126,9 +126,9 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   cut) + snapshot-poll refresh + the contact-UX (verdict/intake forms + a "my requests" surface) (D99); the stack —
   a stdlib-Python detached daemon + a zero-build CSP-clean page (D100); the two-event notification taxonomy (D101).
 - **Console as the bootstrap front door + cockpit bootstrap-progress render (D132/D133)** — daemon-ensure early in
-  `/start`, prominent URL + best-effort browser auto-open, the stated interaction contract, and the cockpit "Now"
-  rendering the bootstrap phase/step from `state.json`. Decided from the first lived onboarding; worklist = Phase 6.
-  **[core — decided (D132/D133), NOT built]**
+  `/start` (now step 5), prominent URL + best-effort browser auto-open, the stated interaction contract, and the
+  cockpit "Now" rendering the bootstrap `phase`/step from `state.json` (`bus.py` snapshot + page row). Decided from
+  the first lived onboarding; built same day. **[core — BUILT (D132/D133); re-drive pending]**
 
 ### Space 4 — Checkpoints & the demo skill
 - **Demo skill mechanics** — **DESIGNED (D102–D104) → BUILT 2026-07-19 (D124), Phase-4 first half:** the D94
@@ -194,9 +194,10 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   is now case-insensitive (the `architecture.md`/`ARCHITECTURE.md` clobber on a case-insensitive mount).
   **[core for brownfield — DONE: skill authored + driven (D130)]**
 - **Ingest bootstrap-context law (D134)** — `graph.json` is machine-data, never read whole into LLM context
-  (a mechanical `codemap.py` seed-selection emission replaces the step-3 whole-file read — pins `06`'s deferred
-  `[X]` mechanism); `[X]` extraction in batched subagents; a `research` findings size budget; the bootstrap motion
-  ends the context window at the reconcile park. Worklist = Phase 6. **[core — decided (D134), NOT built]**
+  (the mechanical `codemap.py --seed-list` emission replaced the step-3 whole-file read — pins `06`'s deferred
+  `[X]` mechanism); `[X]` extraction in batched subagents; a `research` findings bound; the bootstrap motion
+  ends the context window at the reconcile park. **[core — BUILT (D134); drive-verified on the real 374-node
+  graph, ingest-side re-drive pending]**
 - **Retention script** — **BUILT 2026-07-02 (D71):** `scripts/retention.py` (stdlib Python, idempotent) does the
   three deterministic caps (Sessions cap-and-archive · superseded-decision GC + index tombstone · promoted-item
   prune), wired into `/start` (copy → `.claude/scripts/`) + `document` audit mode (invoke; and `document` writes
@@ -244,11 +245,11 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   **migrates** schema/format changes (not a blind overwrite). Follow-on to packaging. **Promoted into Phase 6
   (D135)** — the first real out-of-tree install now exists and will go stale; constraints pinned (version-stamped
   installs · regenerate `[G]`/never clobber `[D]`-or-adopted · additive over a pre-existing `.claude/`), design
-  still pending. **[core — promoted (D135); design pending, NOT built]**
-- **Onboarding-experience hardening (D131–D134) — user-lived, decided 2026-07-21, NOT built:** the first real
+  still pending; the version-stamp half is BUILT. **[core — promoted (D135); stamp BUILT, skill design pending]**
+- **Onboarding-experience hardening (D131–D134) — user-lived, decided + BUILT 2026-07-21:** the first real
   brownfield onboarding "performed the task but the process wasn't what it should be" — one-motion `/start` (D131) ·
   console front-door + stated interaction contract (D132) · bootstrap progress signal (D133) · bootstrap context
-  law (D134). Worklist = **Phase 6** (below). **[core — decided, NOT built]**
+  law (D134). Record = **Phase 6** (below). **[core — BUILT; re-drive pending]**
 
 ## Recommended sequence — phased (user-set, 2026-06-30)
 **Phase 1 — Close the foundations + guiding documents.** Finish the decided-but-unwritten core at the spec
@@ -522,35 +523,40 @@ packaging, the state-view, **and the D84 skill→agent reclassification** (`exec
 longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 
-### Phase 6 — Onboarding-experience hardening (D131–D135) — **DECIDED 2026-07-21, NOT built**
+### Phase 6 — Onboarding-experience hardening (D131–D135) — **DECIDED + BUILT 2026-07-21; re-drive pending**
 Born from the first **lived** onboarding — the maintainer's real brownfield run on `idea testing` (WSL over
 `/mnt/c`, 2026-07-20). The *process* held (D130's correctness stood: full bootstrap → ingest → reconcile → a real
 feature item landed and parked cleanly), but the *experience* failed: the motion split into two chats at the
 scaffold commit, the console never surfaced (the daemon was live the whole time), ~52 silent minutes read as
-"stuck," and the session ended at ~600k tokens. Every item below is a **captured decision awaiting a mechanical
-`product/**` pass — nothing in this phase is built.** Tags: **[ux]** first-run experience · **[ctx]** context
-economy · **[fwd]** install lifecycle.
+"stuck," and the session ended at ~600k tokens. **The `product/**` pass landed same-day (330 tests green; the
+seed-selection drive-verified against the real run's 374-node graph). The phase's exit test is a re-driven live
+onboarding — not yet run.** Tags: **[ux]** first-run experience · **[ctx]** context economy · **[fwd]** install
+lifecycle.
 
 - **One-motion `/start` (D131)** — `start.md`: the bootstrap-phase ledger in `handoff.md` (written at each phase
   boundary); §0's guard keys on **bootstrap**-completeness (installed-but-not-ingested → *resume at
-  `ingest`/`discuss`*, never "already initialised"); §2/§3 become continue-in-this-session imperatives; fix §0's
-  "install complete → fully initialised" conflation. Motion ends at the first human gate (reconcile park /
-  discuss). **[ux — decided D131, NOT built]**
-- **Console = the bootstrap front door (D132)** — `start.md`: daemon-ensure moves to immediately after step 4;
-  prominent URL + best-effort browser auto-open (`wslview` → `xdg-open` → `open` → `explorer.exe` chain, printed
-  URL as fallback); the one-paragraph interaction contract (terminal = dialogue · console = progress + intake +
-  checkpoints) stated at daemon-ensure and motion-end; intake-during-bootstrap semantics documented (queued in
-  `inbox/`, drained at the first boundary after reconcile). **[ux — decided D132, NOT built]**
+  `ingest`/`discuss`*, never "already initialised"); §2/§3 are continue-in-this-session imperatives; §0's
+  "install complete → fully initialised" conflation fixed. Motion ends at the first human gate (reconcile park /
+  discuss). **[ux — BUILT (D131); re-drive pending]**
+- **Console = the bootstrap front door (D132)** — `start.md`: daemon-ensure is now step 5, immediately after the
+  step-4 install (rules-wiring moved to step 6); URL surfaced as a headline + best-effort browser auto-open
+  (`wslview` → `xdg-open` → `open` → `explorer.exe` chain, printed URL as fallback); the one-paragraph
+  interaction contract (terminal = dialogue · console = progress + intake + checkpoints) stated at daemon-up and
+  motion-end; intake-during-bootstrap semantics documented (queued in `inbox/`, drained at the first boundary
+  after reconcile). **[ux — BUILT (D132); re-drive pending]**
 - **Bootstrap progress signal (D133)** — the motion writes `state.json` `phase: bootstrap` + node + a
-  human-readable step marker at every stage boundary; the cockpit "Now" renders it (`bus.py`); terminal stage
-  banners in `start.md` + `ingest`; the new `state.json` fields get their `schemas.md` owner (D80).
-  **[ux — decided D133, NOT built]**
-- **Bootstrap context law (D134)** — `codemap.py` grows a seed-selection mode emitting the bounded seed list +
-  per-node frontmatter (impact ∪ orchestration ∪ spec-core, top-K) so `graph.json` is never read whole; `ingest`
-  runs `[X]` extraction in batched subagents; `research` gets a stated findings size budget; the skill says
-  plainly the motion ends the context window at the park. **[ctx — decided D134, NOT built]**
-- **Version-stamped installs (D135)** — `/start` stamps the installed plugin version into the scaffold; the
-  `/update` migration key. **[fwd — decided D135, NOT built]**
+  human-readable step marker at every stage boundary (`start.md` §1 preamble + `ingest`'s stage rule); the
+  cockpit "Now" renders the `phase` row (`bus.py` snapshot + page); the fields have their `schemas.md` owner
+  (D80). **[ux — BUILT (D133); re-drive pending]**
+- **Bootstrap context law (D134)** — `codemap.py --seed-list K --include <spec-core>` emits the bounded seed
+  list + per-node frontmatter (spec-core first, then top-K per lens; 2 new tests; drive-verified read-only on
+  the real 374-node graph → 30 seeds); `ingest` step 3 forbids whole-graph reads and runs the extractive
+  `purpose` pass in batched subagents; `research`'s charter bounds `findings` (pointers, never file bodies);
+  `ingest`/`start.md` state plainly that the motion ends the context window at the park.
+  **[ctx — BUILT (D134); ingest-side re-drive pending]**
+- **Version-stamped installs (D135)** — `/start` step 7 writes `workflow_version` (from the plugin's
+  `plugin.json`, currently `0.1.0`) into `.workflow/config.json`; `schemas.md` owns the field.
+  **[fwd — BUILT (D135)]**
 - **`/update` — design, then build (D135)** — constraints pinned (regenerate `[G]`/`graph.json` under the new
   schema · never clobber `[D]`/adopted docs (D39/D50/D130) · diff against the manifest `install[]` map over a
   pre-existing `.claude/`); **needs its own design slice before any build.** **[fwd — promoted D135; design
@@ -572,5 +578,6 @@ bug is still real, relocation lands native at `0600`, the verify gate fails clos
 node seeds → the blocking reconcile checkpoint), and three drive-found issues were **fixed + re-driven** (the `align`
 meta-gate leak, the `architecture.md` case-insensitive clobber, and an `ingest` format-hunt that a new `schemas.md`
 `knowledge-node` owner closed). **Phase 5 is COMPLETE.** The first **lived** onboarding (2026-07-20) then opened
-**Phase 6 — onboarding-experience hardening (D131–D135): decided, NOT built** — the process held, the experience
-didn't; beyond Phase 6, what remains is all `[stageable]`/`[later]`.
+**Phase 6 — onboarding-experience hardening (D131–D135): decided + BUILT same-day** — the process held, the
+experience didn't; its exit test (a re-driven live onboarding) and the `/update` design slice are what remain of
+it; beyond that, everything is `[stageable]`/`[later]`.

@@ -71,7 +71,8 @@ step only.)
   - `[X]` **generated-extractive** — a cheap LLM-summarised `purpose.actual` + tags, for a prioritised set.
     **The prioritised set = both lenses (impact ∪ orchestration) ∪ the spec's declared core flows — never
     impact alone**, else seeding documents the plumbing and skips the behavioural core (the miss the two lenses
-    exist to prevent). Mechanism **DECIDED (D134; NOT built, Phase 6 `11`)**: the selection is computed
+    exist to prevent). Mechanism **DECIDED + BUILT (D134, 2026-07-21 — `--seed-list`, drive-verified on the
+    real 374-node graph)**: the selection is computed
     *mechanically* by the codemap engine — a `codemap.py` seed-selection mode emits the bounded seed list +
     per-node frontmatter, so **`graph.json` is machine-data, never read whole into LLM context** (the real run
     pulled a 140KB/374-node graph into the main window just to pick the set) — and the `[X]` extraction itself

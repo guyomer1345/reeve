@@ -25,7 +25,7 @@ Deliberately deferred — known unknowns, to close during build or later.
   JS/TS, Go, Java, C#); C++/Rust/PHP stay on the tier-0 floor by design. The runtime residual **closed**:
   brownfield `/start` was driven (D130) and then **lived** in a real onboarding (2026-07-20) — correctness held;
   the first-run *experience* did not, opening **Phase 6 (D131–D135, `11`)**: one-motion `/start` · console
-  front-door · bootstrap progress · bootstrap context law — decided, NOT built.
+  front-door · bootstrap progress · bootstrap context law — decided + BUILT 2026-07-21; re-drive pending.
 - **Commit-message convention** — **CLOSED (D32):** Conventional Commits + `Refs:`/`Closes:` trailers.
   Remaining sliver: whether the workflow's own generated commits carry the `Co-Authored-By` trailer.
 - **Agent roster v1** — **CLOSED in `10`** (names, I/O contracts, skill-vs-agent, topology). Remaining

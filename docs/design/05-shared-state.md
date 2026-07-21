@@ -260,11 +260,11 @@ durable resume anchor (program counter — current item + loop position + parked
 append-only completed-step log** (each item ends in a `commit`). Mid-run the orchestrator reads `state.json`;
 a cold start reads `handoff.md` + `git log` and rebuilds. **Bounded by construction (D51):** every
 always-read file (`CLAUDE.md`, `state.json`, `handoff.md`, `loop.md`) holds current state only — never history.
-**Bootstrap extension [DECIDED — D131/D133; NOT built, Phase 6 `11`]:** during the `/start` motion the same two
+**Bootstrap extension [DECIDED + BUILT 2026-07-21 — D131/D133]:** during the `/start` motion the same two
 files carry the bootstrap — `handoff.md` records the durable **bootstrap phase** (installed → ingested/discussing →
 reconciled; what §0's re-run guard keys on, extending D129's install-completeness), and `state.json` carries
-`phase: bootstrap` + node + a human-readable step marker the cockpit renders (fields get their `schemas.md` owner
-at build, D80). Same owners, same tiers, no new file.
+`phase: bootstrap` + node + a human-readable step marker the cockpit renders (both fields owned in `schemas.md`,
+D80). Same owners, same tiers, no new file.
 
 ## Outward-action permission — the outbox **[DECIDED — D105/D35]**
 Local/reversible work runs autonomously; every **outward, side-effecting** action (`git push`, `gh issue create`,

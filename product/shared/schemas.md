@@ -264,6 +264,9 @@ fires it.
 
 ## config.json  · written once by `/start`, read on demand · *rewrite-in-place · static after init (committed)*
 - `project_root` — `./project` (greenfield) | `.` (brownfield); makes code-touching skills path-agnostic
+- `workflow_version` — the installed package version, copied by `/start` step 7 from the plugin's
+  `plugin.json`; the migration key the future `/update` skill diffs against (an install that cannot say which
+  snapshot it holds cannot be migrated)
 - `run` — per-project run config (model/effort routing, wave caps — fields grow as those land)
 - `retention` — the memory-bound knobs the `audit` pass reads: `sessions_k` (per-node `# Sessions` cap — the
   retention script's only knob) + the scheduling thresholds `prioritize` trips on (`decisions_superseded_n` —
@@ -466,6 +469,10 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
 
 ## state.json  · the live loop pointer (volatile, gitignored) · *`.workflow/state.json`; published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
 - `status` ∈ `{ intake, building, idle }`
+- `phase` — **present only during the `/start` bootstrap motion**, value `bootstrap`; absent once the loop
+  drives. With it, `node` carries the bootstrap stage (`start:<step>` / `ingest:<stage>`) and `note` the
+  human-readable step marker (`"seeding knowledge nodes 40/95"`) — the console's "Now" panel renders these, so
+  the motion is visible from the first minute. Written at every stage boundary, same atomic publish.
 - `node` — current loop node; value ∈ the `loop.md` node labels (e.g. `planner:plan-one`, `verify`)
 - `current_item` — backlog id or `null` · `wave` — wave id or `null` · `note` — human-readable cursor.
   `current_item` (top-level) is the canonical active-item key. **The verify-before-commit gate does not depend on
@@ -474,6 +481,11 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
   fails **closed** — so neither a state.json shape slip nor a relocated runtime tree can silently disarm it.
 
 ## handoff.md  · the durable resume anchor (committed) · *`.workflow/handoff.md`; rewritten whole each handoff, never appended. **Atomicity is real but harness-provided:** the orchestrator rewrites the prose with the `Write`/`Edit` tools, which publish via a temp-file + `rename` (the inode changes on overwrite), so a session killed mid-write leaves the **previous** file whole, never torn. The model cannot *express* the atomic `rename`/`fsync`, but the tool provides it — the one thing it must never do is rewrite this file via a `Bash` `>`/`tee` redirect, which truncates in place and **would** tear. **Durable floor = git:** the file is committed each item, so the one case a bare `rename` may not survive — power-loss/kernel-panic before the pages flush — recovers from `git show HEAD:.workflow/handoff.md`, the same `handoff.md + git log` a cold start already rebuilds from. Committed, so it stays on the repo mount (never relocated); `drain.py` writes its own machine block fully durably (write-temp → `fsync` → `rename` → `fsync(dir)`); the bus reads the file for the `consumed_through` watermark, and a torn read can only make inbox GC lag, never over-collect*
+- `bootstrap` ∈ `{ installed, ingesting, discussing, reconcile-parked, complete }` — the bootstrap-motion
+  ledger `/start` §0 keys its re-run guard on ("initialised" = bootstrap-complete, not install-complete).
+  Written at each phase boundary: step 7 writes `installed`; §2/§3 advance it; the session that consumes the
+  reconcile verdict (brownfield) or lands the spec (greenfield) writes `complete`. Absent = an older install —
+  treated as bootstrap-incomplete, resume the motion.
 - `current_item`, `loop_position`, `parked[]`, `base_sha` — the commit it was written against; a cold start
   reads this + `git log <base_sha>..HEAD` (bounded to one session's delta) and rebuilds position. **Prose, written
   by the orchestrator.**
