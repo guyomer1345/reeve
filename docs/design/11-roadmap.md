@@ -523,7 +523,7 @@ packaging, the state-view, **and the D84 skill→agent reclassification** (`exec
 longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 
-### Phase 6 — Onboarding-experience hardening (D131–D135) — **DECIDED + BUILT 2026-07-21; re-drive pending**
+### Phase 6 — Onboarding-experience hardening (D131–D136) — **D131–D135 BUILT 2026-07-21 (re-drive pending); D136 + `/update` build pending**
 Born from the first **lived** onboarding — the maintainer's real brownfield run on `idea testing` (WSL over
 `/mnt/c`, 2026-07-20). The *process* held (D130's correctness stood: full bootstrap → ingest → reconcile → a real
 feature item landed and parked cleanly), but the *experience* failed: the motion split into two chats at the
@@ -561,6 +561,19 @@ lifecycle.
   schema · never clobber `[D]`/adopted docs (D39/D50/D130) · diff against the manifest `install[]` map over a
   pre-existing `.claude/`); **needs its own design slice before any build.** **[fwd — promoted D135; design
   pending]**
+- **Interactive context governor (D136)** — a shipped **statusline** budget-warning (`config.context.warn_pct` %,
+  never a hardcoded 300k) → **`/dispatch`** on-demand `handoff.md` → `/clear` → **`SessionStart`**(clear)
+  auto-rehydrate, with a **`PreCompact`** backstop. The context-management mechanism interactive (`runner:false`)
+  sessions never had — the away-runner (D123) retires the manual `/clear` cycle only in away-mode; detection must
+  live in the statusline (the one surface the running token count reaches). **[ctx — DECIDED (D136); build pending]**
+
+**Sequence (set 2026-07-26).** Build the governor (D136) → forced-reinstall the plugin to HEAD (a version-pinned
+`update` is a no-op — verify `gitCommitSha` == HEAD) → **one clean re-drive on a pristine p5-brownfield** (resets to
+fixture `d707ea9`) verifying D131/D132/D134 **and** the governor together, so the built-but-undriven surface is proven
+before more is built → design + build `/update` (D135) → **`/update` the real `idea testing` install onto HEAD** (it
+can't be safely refreshed any other way — a re-run hits "already initialised"; a manual copy risks its parked RunPod
+setup checkpoint + ADR + 95 nodes). `/update` is thus the **critical path** to the maintainer resuming real work. The
+interaction-model rework (browser-primary async chat — `07`) waits behind this re-drive.
 
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +

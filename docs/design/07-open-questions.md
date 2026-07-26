@@ -241,15 +241,25 @@ Deliberately deferred — known unknowns, to close during build or later.
   **regenerate `[G]`/`graph.json` under a new schema, never clobber `[D]`/adopted docs** (D39/D50 + D130's
   case-variant adoptees) · **diff against the manifest `install[]` map** — real targets carry a pre-existing
   `.claude/` the skill must not treat as its own. Design still pending (its own slice).
-- **Interaction-model expectation vs the locked terminal/bus split (D132) — surfaced 2026-07-20, HELD.** The
-  maintainer left the first real onboarding believing "the whole interaction happens through the website" — the
-  opposite of the locked design (D93 dialogue = terminal, bus = requests + bounded clarifications; D99 console =
-  read-only cockpit + contact-UX). D132 ruled the confusion a *surfacing* defect and reaffirmed the lock (the
-  orchestrator is a batch consumer — a browser chat would sit in Claude's request path, D3), fixing visibility
-  instead: console as bootstrap front door + a stated interaction contract + defined intake-during-bootstrap.
-  **Open sliver, deliberately left for the maintainer:** if — with the contract stated and the console visible
-  from minute one — he *still* wants live dialogue in the browser, that is a real D93/D99 overturn (and a D3
-  collision) needing his explicit call. Re-test after the Phase-6 items are built and one more real onboarding.
+- **Interaction-model expectation vs the locked terminal/bus split (D132) — surfaced 2026-07-20; maintainer's call
+  now MADE (2026-07-26): he wants browser-primary conversation; async-chat is the frontrunner; build DEFERRED behind
+  a proper re-drive.** D132 ruled the first-onboarding confusion a *surfacing* defect and reaffirmed the lock (D93
+  dialogue = terminal, bus = requests + bounded clarifications; D99 console = read-only cockpit + contact-UX; the
+  orchestrator is a batch consumer — a browser chat would sit in Claude's request path, D3). Pressed on the open
+  sliver, the maintainer confirmed he genuinely wants to **talk to the project and get responses through the
+  website**, not merely file intake. The resolution that honours the master rule is **async chat**: the browser
+  writes to `inbox/` (D99/D108 — already the intake path), the running loop drains it at a turn boundary and appends
+  free-text replies to a durable conversation thread the console renders — **the daemon never calls Claude** (no
+  request-path component), so it is mostly a presentation layer over the D108 drain + D123 runner. The irreducible
+  cost is inherent to the master rule: a **cold-start (spawn + rehydrate, real tokens) per message whenever no loop
+  is live** (warm/piggyback when one is); an **always-on runner** (D123, off by default; dies with the terminal on
+  WSL — D94); the **terminal-only first bootstrap** (D131/F1); and **D90/D112 auth** the moment it is reachable
+  beyond localhost (a redirecting message is *agent control*). **The call: do NOT build it yet** — the maintainer
+  first *experiences a proper re-drive* of the current Phase-6 website (front-door + progress + intake), because the
+  async-chat gap may read differently once the built-but-undriven surface is actually seen, and building
+  conversational replies on an unverified progress/intake layer is the "reasoned, not driven" trap. Revisit
+  immediately after the re-drive (roadmap Phase-6 sequence). *(True sync streaming chat stays off the table — it
+  requires the daemon to become a Claude proxy, overturning the founding premise.)*
 - **Doc-authoring agent (reserved — D65; trigger fired, still not added — D68).** A specialized
   heavy-doc-reconstruction worker (e.g. brownfield `ingest` building a spec from code — a generative task that
   doesn't fit `execute`'s plan-driven model). The "revisit when building brownfield `ingest`" trigger **fired
