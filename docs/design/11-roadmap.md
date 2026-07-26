@@ -244,8 +244,9 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **Framework version-update skill (user-raised)** — `/update` pulls the latest public-repo package +
   **migrates** schema/format changes (not a blind overwrite). Follow-on to packaging. **Promoted into Phase 6
   (D135)** — the first real out-of-tree install now exists and will go stale; constraints pinned (version-stamped
-  installs · regenerate `[G]`/never clobber `[D]`-or-adopted · additive over a pre-existing `.claude/`), design
-  still pending; the version-stamp half is BUILT. **[core — promoted (D135); stamp BUILT, skill design pending]**
+  installs · regenerate `[G]`/never clobber `[D]`-or-adopted · additive over a pre-existing `.claude/`); the
+  version-stamp half is BUILT and the **design is SETTLED (D137)**. **[core — promoted (D135); design settled (D137);
+  build pending the Phase-6 re-drive]**
 - **Onboarding-experience hardening (D131–D134) — user-lived, decided + BUILT 2026-07-21:** the first real
   brownfield onboarding "performed the task but the process wasn't what it should be" — one-motion `/start` (D131) ·
   console front-door + stated interaction contract (D132) · bootstrap progress signal (D133) · bootstrap context
@@ -523,7 +524,7 @@ packaging, the state-view, **and the D84 skill→agent reclassification** (`exec
 longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 
-### Phase 6 — Onboarding-experience hardening (D131–D136) — **D131–D136 BUILT (re-drive pending); `/update` design+build pending**
+### Phase 6 — Onboarding-experience hardening (D131–D137) — **D131–D136 BUILT (re-drive pending); `/update` design SETTLED (D137), build pending the re-drive**
 Born from the first **lived** onboarding — the maintainer's real brownfield run on `idea testing` (WSL over
 `/mnt/c`, 2026-07-20). The *process* held (D130's correctness stood: full bootstrap → ingest → reconcile → a real
 feature item landed and parked cleanly), but the *experience* failed: the motion split into two chats at the
@@ -557,10 +558,13 @@ lifecycle.
 - **Version-stamped installs (D135)** — `/start` step 7 writes `workflow_version` (from the plugin's
   `plugin.json`, currently `0.1.0`) into `.workflow/config.json`; `schemas.md` owns the field.
   **[fwd — BUILT (D135)]**
-- **`/update` — design, then build (D135)** — constraints pinned (regenerate `[G]`/`graph.json` under the new
-  schema · never clobber `[D]`/adopted docs (D39/D50/D130) · diff against the manifest `install[]` map over a
-  pre-existing `.claude/`); **needs its own design slice before any build.** **[fwd — promoted D135; design
-  pending]**
+- **`/update` — design SETTLED (D137), build pending the re-drive (D135)** — constraints pinned (regenerate
+  `[G]`/`graph.json` under the new schema · never clobber `[D]`/adopted docs (D39/D50/D130) · diff against the manifest
+  `install[]` map over a pre-existing `.claude/`). **Design (D137):** a 3-way file taxonomy (package-refresh ·
+  target-preserve · regenerate-from-code), version-stamp-driven, + four calls (a **command** sibling of `/start` ·
+  package-owns-`settings.json`/user-owns-`.local` · record-install-set→proven-orphan-removal · unify-greenfield-on-marked-block).
+  Two small `/start` tweaks (record the install-set · greenfield markers) ride the build, which the Phase-6 sequence
+  puts **after** the re-drive. **[fwd — promoted D135; design settled D137; build pending re-drive]**
 - **Interactive context governor (D136)** — a shipped **statusline** budget-warning (`config.context.warn_pct` %,
   never a hardcoded 300k) → **`/dispatch`** on-demand `handoff.md` → `/clear` → **`SessionStart`**(clear)
   auto-rehydrate, with a **`PreCompact`** backstop. The context-management mechanism interactive (`runner:false`)

@@ -240,7 +240,11 @@ Deliberately deferred — known unknowns, to close during build or later.
   **version-stamped installs** (nothing in a target records its package snapshot — no migration key today) ·
   **regenerate `[G]`/`graph.json` under a new schema, never clobber `[D]`/adopted docs** (D39/D50 + D130's
   case-variant adoptees) · **diff against the manifest `install[]` map** — real targets carry a pre-existing
-  `.claude/` the skill must not treat as its own. Design still pending (its own slice).
+  `.claude/` the skill must not treat as its own. **Design SETTLED (D137, 2026-07-26):** a 3-way file taxonomy
+  (package-refresh · target-preserve · regenerate-from-code), version-stamp-driven, + four calls — a **command**
+  (sibling of `/start`, interactive-only) · **package owns `.claude/settings.json`** (user owns `settings.local.json`)
+  · **record the install-set** → remove only proven orphans (flag-only when unrecorded) · **unify greenfield onto the
+  sentinel-marked block**. Build sequenced **after the Phase-6 re-drive** (two small `/start` tweaks ride it).
 - **Interaction-model expectation vs the locked terminal/bus split (D132) — surfaced 2026-07-20; maintainer's call
   now MADE (2026-07-26): he wants browser-primary conversation; async-chat is the frontrunner; build DEFERRED behind
   a proper re-drive.** D132 ruled the first-onboarding confusion a *surfacing* defect and reaffirmed the lock (D93
