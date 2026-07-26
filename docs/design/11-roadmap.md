@@ -523,7 +523,7 @@ packaging, the state-view, **and the D84 skill→agent reclassification** (`exec
 longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 
-### Phase 6 — Onboarding-experience hardening (D131–D136) — **D131–D135 BUILT 2026-07-21 (re-drive pending); D136 + `/update` build pending**
+### Phase 6 — Onboarding-experience hardening (D131–D136) — **D131–D136 BUILT (re-drive pending); `/update` design+build pending**
 Born from the first **lived** onboarding — the maintainer's real brownfield run on `idea testing` (WSL over
 `/mnt/c`, 2026-07-20). The *process* held (D130's correctness stood: full bootstrap → ingest → reconcile → a real
 feature item landed and parked cleanly), but the *experience* failed: the motion split into two chats at the
@@ -565,9 +565,14 @@ lifecycle.
   never a hardcoded 300k) → **`/dispatch`** on-demand `handoff.md` → `/clear` → **`SessionStart`**(clear)
   auto-rehydrate, with a **`PreCompact`** backstop. The context-management mechanism interactive (`runner:false`)
   sessions never had — the away-runner (D123) retires the manual `/clear` cycle only in away-mode; detection must
-  live in the statusline (the one surface the running token count reaches). **[ctx — DECIDED (D136); build pending]**
+  live in the statusline (the one surface the running token count reaches). **BUILT 2026-07-26** (`product/**`):
+  `scripts/statusline.py` (composes over a `/start`-captured `statusline.delegate`, never clobbers), `commands/dispatch.md`,
+  `hooks/session_start.py` (SessionStart `clear` → re-inject `handoff.md`), `hooks/precompact.py` (both `manual`+`auto`,
+  never blocks); `config.context.warn_pct` + `statusline.delegate` own their `schemas.md`; 20 governor tests + full
+  321-test suite + 5 meta-gates green. **[ctx — BUILT (D136); re-drive pending]**
 
-**Sequence (set 2026-07-26).** Build the governor (D136) → forced-reinstall the plugin to HEAD (a version-pinned
+**Sequence (set 2026-07-26).** Build the governor (D136) **[BUILT 2026-07-26 — unit-verified; re-drive pending]** →
+forced-reinstall the plugin to HEAD (a version-pinned
 `update` is a no-op — verify `gitCommitSha` == HEAD) → **one clean re-drive on a pristine p5-brownfield** (resets to
 fixture `d707ea9`) verifying D131/D132/D134 **and** the governor together, so the built-but-undriven surface is proven
 before more is built → design + build `/update` (D135) → **`/update` the real `idea testing` install onto HEAD** (it

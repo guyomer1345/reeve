@@ -73,7 +73,7 @@ loop's normal `state.json` takes over when the motion ends.
    `.workflow/items/<id>/` and `.workflow/align/` are **not** scaffolded here — `planner` `mkdir`s each item
    dir on demand, and `align` `mkdir`s `.workflow/align/` on its first run (writing `anchor.json`).
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
-   `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, **`secrets/`**, `remote_token`, `demos/`, and the per-ticket worktrees (created at runtime by the
+   `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,
    `checks.env`, `codemap.sh`, `handoff.md`, `backlog.md`, `items/`, and `docs/`) are committed. **`secrets/` holds live
    credentials** a human hands over at a setup checkpoint — it must be gitignored *and* live on a filesystem that
@@ -105,11 +105,45 @@ loop's normal `state.json` takes over when the motion ends.
        that existing `CLAUDE.md` as a **primary ingest source**; set `project_root: .`.
    - Copy `${CLAUDE_PLUGIN_ROOT}/templates/loop.md` → **`.workflow/loop.md`** and write
      **`.workflow/config.json`** (`project_root` + run config).
+   - **Capture any pre-existing statusline *before* the copy (composition — never clobber).** The template
+     `settings.json` wires the interactive context governor's `statusLine`, and a project `statusLine` shadows
+     the user's global one; so the governor **delegates** to whatever statusline already existed rather than
+     replacing it. Record that command into **`.workflow/statusline.delegate`** (gitignored) *before* overwriting
+     `.claude/settings.json` — the shipped `statusline.py` runs it and appends only the budget banner. Idempotent
+     (a resumed install finds only the governor itself and writes nothing), and a no-op when the user has no
+     statusline (the governor then renders its own minimal base line):
+     ```bash
+     python3 - <<'PY'
+     import json, os
+     GOV = "statusline.py"                         # our own command — never delegate to it
+     candidates = [".claude/settings.local.json", ".claude/settings.json",
+                   os.path.expanduser("~/.claude/settings.json")]
+     found = None
+     for p in candidates:                          # highest precedence first
+         try:
+             cmd = (json.load(open(p)).get("statusLine") or {}).get("command", "")
+         except Exception:
+             cmd = ""
+         if cmd and GOV not in cmd:
+             found = cmd; break
+     if found:
+         os.makedirs(".workflow", exist_ok=True)
+         open(".workflow/statusline.delegate", "w").write(found + "\n")
+         print("statusline: composing over existing ->", found)
+     else:
+         print("statusline: no pre-existing statusline to compose over (governor renders its own base)")
+     PY
+     ```
    - Copy `${CLAUDE_PLUGIN_ROOT}/templates/settings.json` → **`.claude/settings.json`** (loop permission rules:
      `allow` local actions; the outbox-covered outward classes — `git push`, `gh issue` — are deliberately
      **not** `ask`ed, because they are approved through the outbox + a console `release` and fired later at a
      boundary, when a terminal prompt would reach nobody; every other outward command — deploy / publish / cloud /
-     network — stays `ask`).
+     network — stays `ask`). The template also wires the **interactive context governor**: a `statusLine`
+     (`.claude/scripts/statusline.py`) that shows a persistent banner once context passes `config.context.warn_pct`
+     telling the human to run `/dispatch` then `/clear`; a `SessionStart`(matcher `clear`) hook that
+     re-injects `.workflow/handoff.md` so a cleared session **auto-rehydrates**; and a `PreCompact` backstop that
+     preserves the handoff through an auto-compaction. `/dispatch` (a shipped command) writes a complete handoff on
+     demand so the `/clear` is always safe.
    - **Install the shipped scripts + hooks — from the manifest, not enumerated here.** Read
      **`${CLAUDE_PLUGIN_ROOT}/MANIFEST.json`**; for every `{src, dest}` in its **`install`** array, copy
      `${CLAUDE_PLUGIN_ROOT}/<src>` → `${CLAUDE_PROJECT_DIR}/<dest>` (creating parent dirs). **Honour the manifest

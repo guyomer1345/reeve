@@ -25,8 +25,11 @@
     { "src": "scripts/check_decision_coverage.py", "dest": ".claude/scripts/check_decision_coverage.py" },
     { "src": "scripts/check_demo_bundle.py", "dest": ".claude/scripts/check_demo_bundle.py" },
     { "src": "scripts/codemap", "dest": ".claude/scripts/codemap" },
+    { "src": "scripts/statusline.py", "dest": ".claude/scripts/statusline.py" },
     { "src": "hooks/guard.sh", "dest": ".claude/hooks/guard.sh" },
     { "src": "hooks/pre-commit.sh", "dest": ".claude/hooks/pre-commit.sh" },
-    { "src": "hooks/verify_check.py", "dest": ".claude/hooks/verify_check.py" }
+    { "src": "hooks/verify_check.py", "dest": ".claude/hooks/verify_check.py" },
+    { "src": "hooks/session_start.py", "dest": ".claude/hooks/session_start.py" },
+    { "src": "hooks/precompact.py", "dest": ".claude/hooks/precompact.py" }
   ]
 }

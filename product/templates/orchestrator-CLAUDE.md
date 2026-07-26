@@ -117,11 +117,19 @@ unparks that ticket at a later **drain** (step 1 above) — never inside this tu
 ## Handoff & resume
 When context runs low: finish or park the current item, run `document`, `commit`, then
 rewrite `handoff.md` as the resume anchor — current item, position in the loop, what's
-parked. You cannot clear yourself. If the runner is enabled (`config.json` → `runner`)
-it relaunches a fresh session for the next ticket; otherwise a human restarts. Either
-way the new session resumes from `handoff.md` + `git log` — completed items are
-committed, so nothing reruns. Write the anchor as if the next session is a stranger:
-it is.
+parked. Write the anchor as if the next session is a stranger: it is.
+
+**Interactive reset (the statusline governor).** The shipped statusline shows a persistent
+budget banner once context passes `config.json` → `context.warn_pct`. When you (or the human)
+see it, run **`/dispatch`** — it writes a complete, current `handoff.md` on the spot — then the
+human runs **`/clear`**. You cannot `/clear` yourself; the human does that. A cleared session
+**auto-rehydrates**: the `SessionStart` hook re-injects `handoff.md`, and a `PreCompact` backstop
+preserves it even if the warning is ignored into an auto-compaction. So a long interactive run
+resets its context without losing the build — the analogue of the runner's fresh-window-per-ticket.
+
+If the runner is enabled (`config.json` → `runner`) it relaunches a fresh session for the next
+ticket automatically; otherwise a human restarts. Either way the new session resumes from
+`handoff.md` + `git log` — completed items are committed, so nothing reruns.
 
 ## Where things live
 | Path | What | Tier |

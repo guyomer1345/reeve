@@ -268,6 +268,11 @@ fires it.
   `plugin.json`; the migration key the future `/update` skill diffs against (an install that cannot say which
   snapshot it holds cannot be migrated)
 - `run` — per-project run config (model/effort routing, wave caps — fields grow as those land)
+- `context` — the interactive context-governor knob, **read by the shipped statusline** (the one
+  surface the running token count reaches — hooks and the model receive none): `warn_pct` (the
+  context-usage **percentage** past which the statusline shows the persistent "run /dispatch, then
+  /clear" banner). A percentage, never a token count, so it is model-window-agnostic — a 200k and a
+  1M window warn at the same fraction full. Absent → shipped default (`warn_pct` 75).
 - `retention` — the memory-bound knobs the `audit` pass reads: `sessions_k` (per-node `# Sessions` cap — the
   retention script's only knob) + the scheduling thresholds `prioritize` trips on (`decisions_superseded_n` —
   **superseded** decision bodies awaiting GC, the count retention actually lowers, not the active count;
@@ -389,6 +394,16 @@ the one place the loop keeps a secret.
   sit at a fixed, known spot on the repo mount.
 - A pointer naming a **missing** root is a hard error, never a fallback to the repo mount: falling back silently
   would land the capability token and the inbox on the very filesystem the relocation exists to avoid.
+
+## statusline.delegate  · written by `/start` when it finds a pre-existing user statusline, read by the shipped statusline every render · *`.workflow/statusline.delegate`; RUNTIME, gitignored, plain text; lives on the repo mount (no atomicity/mode sensitivity — it is a command string, not a runtime path)*
+A single line: the **shell command of a statusline that already existed** when `/start` ran (the
+user's global `~/.claude/settings.json` `statusLine.command`, or a brownfield project's prior one).
+The shipped statusline **composes, never clobbers**: it runs this delegate with the same status JSON
+on stdin, takes its stdout as the base line, and appends the budget banner only when over
+`config.context.warn_pct`. Absent ⇒ no pre-existing statusline ⇒ the shipped statusline renders its
+own minimal `model · dir · ctx N%` base. **Gitignored and machine-specific** (the delegate command
+names paths that exist only on the machine that ran `/start`); a clone re-derives it on its own
+`/start`, so committing it would hand another machine a wrong command.
 
 ## bus.lock  · created and held by the bus daemon for its process lifetime · *`.workflow/bus.lock`; RUNTIME, gitignored, created-never-replaced; kept on a native filesystem*
 The daemon's **singleton election**. Holding it *is* the liveness claim: the kernel releases it when the holder dies,
