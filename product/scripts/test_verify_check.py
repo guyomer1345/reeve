@@ -138,5 +138,28 @@ def test_no_state_no_staged_item_proceeds(tmp_path):
     assert r.returncode == 0, r.stdout
 
 
+def test_bootstrap_phase_building_no_item_proceeds(tmp_path):
+    # /start's scaffold/spec commit publishes status=building + phase=bootstrap with no item to verify
+    # (the first real item only exists after reconcile->prioritize->plan). The gate must NOT fail closed
+    # on it — D133's bootstrap state-publishing meeting the D129 fail-closed gate. Regression for D138.
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "phase": "bootstrap", "node": "start:7"})
+    (root / ".workflow" / "config.json").write_text("{}")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout
+
+
+def test_building_no_phase_still_blocks(tmp_path):
+    # The real drift keeps its teeth: status=building, NO phase, no identifiable item still fails closed.
+    root = _repo(tmp_path)
+    _state(root, {"status": "building"})
+    (root / "note.txt").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1
+    assert "no item is identifiable" in r.stdout
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

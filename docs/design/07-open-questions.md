@@ -264,6 +264,19 @@ Deliberately deferred — known unknowns, to close during build or later.
   conversational replies on an unverified progress/intake layer is the "reasoned, not driven" trap. Revisit
   immediately after the re-drive (roadmap Phase-6 sequence). *(True sync streaming chat stays off the table — it
   requires the daemon to become a Claude proxy, overturning the founding premise.)*
+- **Phase-6 re-drive follow-ups (D138, 2026-07-27) — three package findings LOGGED, not yet fixed.** The
+  re-drive confirmed D131/D132/D133/D134 and fixed the sharp one (the `verify_check.py` bootstrap-commit
+  contradiction, in-commit), leaving three: (1) **mid-flow human questions** — the bootstrap interrupted the human
+  for clarifications instead of resolving them (`research`/`decision-engineer`) or batching them to the reconcile
+  gate; `ingest` should default `unspecified` and defer confirmation to reconcile, so a mid-flow interrupt breaks
+  the one-motion-to-the-first-gate principle (route-fix: decidable → `decision-engineer`, judgment → the reconcile
+  question set). (2) **the `--check` stack lint scoped over the vendored `.claude/scripts/`** (143 findings on the
+  workflow's own code) — the stack gates must scope to `project_root`, never `.claude/` (extends D127). (3)
+  **`xdg-open` hung ~2 min on WSL** before the `explorer.exe` fallback — the `/start` step-5 browser-open chain
+  needs a per-attempt timeout. Also confirmed live: the **brownfield-adopted-gates** question (above) — the repo
+  failed its own gates and the model scoped `checks.env` to the staged diff + filed the debt rather than wedging
+  the bootstrap; confirm that as the intended behaviour when the fixes land. These ride the next Phase-6 slice
+  (bundle with `/update` or a quick fix pass). → `08` D138.
 - **Doc-authoring agent (reserved — D65; trigger fired, still not added — D68).** A specialized
   heavy-doc-reconstruction worker (e.g. brownfield `ingest` building a spec from code — a generative task that
   doesn't fit `execute`'s plan-driven model). The "revisit when building brownfield `ingest`" trigger **fired

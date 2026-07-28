@@ -108,10 +108,14 @@ def main():
         active = state.get("current_item") or (state.get("position") or {}).get("item")
         if active and active not in candidates:
             candidates.append(active)
-        if not candidates:
+        if not candidates and state.get("phase") != "bootstrap":
             print("state.json status=building but no item is identifiable (no current_item, no "
                   "position.item, no staged .workflow/items/<id>/) — verify-before-commit fails closed.")
             return 1
+        # phase=="bootstrap": /start publishes status=building with no item during the scaffold/spec
+        # commit (the first real item only exists after reconcile->prioritize->plan). There is nothing
+        # to verify, so this is NOT the "building but no item" drift the block above guards — proceed.
+        # (The real drift keeps its teeth: no phase, or any non-bootstrap phase, still fails closed.)
 
     # No active build and nothing staged under an item dir => a genuine bootstrap / pre-item
     # commit (the /start scaffold, the pre-stack spec) => nothing to verify => proceed.
