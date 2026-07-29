@@ -24,11 +24,17 @@ relaunch runner both stall on. That closes itself; there is nothing to do about 
 
 ## 0. Look, before touching anything
 ```bash
-python3 .claude/scripts/rebind.py check --project-root "${CLAUDE_PROJECT_DIR}"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/rebind.py" check --project-root "${CLAUDE_PROJECT_DIR}"
 ```
-Read-only and non-interactive: it classifies, prints what it *would* do, and writes nothing. If
-`.claude/scripts/rebind.py` is absent, this project predates the command — run `/update` first, then come back
-(`/update` does not block on an unbound project, exactly so this route exists).
+Read-only and non-interactive: it classifies, prints what it *would* do, and writes nothing.
+
+**Run it from the plugin root, not the project's `.claude/scripts/`** — the same deliberate exception `/update`
+makes, for a stronger reason. `/start`'s never-invoke-in-place rule exists because `${CLAUDE_PLUGIN_ROOT}` is
+replaced on every plugin update, which is a hazard for a long-lived reference; this is a one-shot, stateless read
+inside an interactive command, so it is not exposed to that. And the project copy is exactly what a rebind cannot
+rely on: **the projects that most need this command are the ones whose `.claude/` predates it.** A project
+stranded on an old version would otherwise be told to `/update` first — inverting the order that makes the update
+diagnosable at all.
 
 Show the human the report before applying. What the classification means:
 
@@ -47,7 +53,7 @@ completely intact and unreachable only by its prefix.
 
 ## 1. Apply
 ```bash
-python3 .claude/scripts/rebind.py apply --project-root "${CLAUDE_PROJECT_DIR}"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/rebind.py" apply --project-root "${CLAUDE_PROJECT_DIR}"
 ```
 It never overwrites an existing runtime file — it creates what is absent and repoints what is dead — so it is
 safe to re-run and a healthy install is a fixed point. Exit `2` means it refused: either there is no
