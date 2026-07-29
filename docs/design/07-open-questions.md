@@ -300,26 +300,17 @@ hang). These two stay open because each is a design change, not a patch:
   `checks.env` generation, or teach `checks.sh` a standing exclusion (a fixed-runner change, so it needs the
   D127 care).
 
-## Machine-move remediation — the Phase-7 design questions (D140, opened 2026-07-29)
-The audit is done and captured (D140); the remediation is **not designed**. What must be settled before building:
-- **What re-binds a per-machine artifact, and when?** A dedicated `/rebind` command (a third sibling of
-  `/start`/`/update`), a new `/start` §0 arm (a fourth completeness state: installed + bootstrapped + *unbound*),
-  or daemon self-heal (it already detects the dead pointer and exits — it could offer to re-create the root).
-  The trade is discoverability against yet another command; the `/start` arm reuses a guard the human already
-  knows but overloads a command whose contract is "bootstrap once".
-- **Is re-binding recovery or re-creation?** A new machine has no old runtime tree to move — so re-binding
-  *creates* an empty one and the question becomes what must be **reconstructed into it** (position from
-  `handoff.md` + `git log` already works) versus what is **genuinely lost** (parked records, outbox, secrets)
-  and must be surfaced as loss rather than silently started fresh.
-- **Should `handoff.parked[]` become a machine-written block?** `drain.py` owns its fenced block in the same
-  file precisely because the *set* was too easy for a model to drop. The parked mirror has the identical
-  property and the identical failure (measured absent on the real install). Open: same pattern, or is a parked
-  ticket's record better made *committed* outright — and if so, how does that square with `parked/` being
-  runtime-and-gitignored for filesystem-mode reasons?
-- **Where does the git `pre-commit` hook get re-asserted?** Git never clones `.git/hooks/`, so today a clone
-  silently drops the mechanical-gate backstop. A `SessionStart` hook could re-assert it every session (cheap,
-  idempotent) — but that puts a shipped hook in the business of installing another hook, which needs the same
-  fail-closed scrutiny as F3.
-- **Do secrets get a re-elicit path?** Today a moved project reads a credential that is not there. The `setup`
-  checkpoint already knows how to ask a human for one; open is what *detects* the absence and re-raises it,
-  versus failing at the point of use.
+## Machine-move remediation (D140 audit) — **the five design questions are CLOSED by D141**
+All five retired: the re-bind capability is a `/rebind` command with four routing arms (detectors route, none
+heals); re-binding is neither recovery nor re-creation but a **three-case probe** the runner classifies;
+`handoff.parked[]` becomes a machine block only by giving parking a code writer (`bus.py park`); the git hook is
+re-asserted from `SessionStart`, non-clobbering (and `07`'s "same scrutiny as F3" is corrected there — the gate is
+already disarmed on every clone, so re-asserting can only arm it); secrets get a declared `config.json`
+`secrets_required[]`, with point-of-use fail-closed kept as the floor. The build items live in `11` (Phase 7a/7b).
+**Two residuals stay open**, both build-time and neither blocking the design:
+- **What counts as a "weak mount", portably.** `Paths` is to fail closed when there is no pointer *and* the mount
+  cannot hold the runtime tree — but the probe must be cheap and correct on WSL (9p/drvfs), macOS, and Linux, and a
+  false positive would hard-stop a working install. D141 names the fallback (the loud-warn arm) but not the test.
+- **Does `prioritize`'s GC retire a local `issue` with no `github_ref`?** D141 files rebind losses as typed `issue`
+  entries precisely so D59's closability bounds them. If the GC filters only *on* `github_ref`, that path must be
+  extended before the loss entries are safe to rely on — otherwise `backlog.md` grows without a collector.

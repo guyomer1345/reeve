@@ -587,28 +587,49 @@ forced-reinstall the plugin to HEAD (a version-pinned `update` is a no-op — ve
 now gated on Phase 7: that install's runtime half was stranded by a machine rebuild (D140), so it needs *rebinding*
 before an update is meaningful. The interaction-model rework (browser-primary async chat — `07`) waits behind both.
 
-### Phase 7 — Machine-move / portability hardening (D140) — **AUDITED; remediation not yet designed**
+### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design) — **DESIGNED; 7a is the critical path**
 Opened by a real loss, not a hypothesis: a PC rebuild renamed `$HOME`, so `idea testing`'s `runtime.json` names a
 directory that no longer exists and its whole runtime tree is unreachable. The audit (D140, measured against that
 real install) found the durable half **is** portable — committed, no absolute paths, package included — and the
-runtime half is not, with **correct detection everywhere and a repair path nowhere**. Tags: **[bind]** re-binding a
-per-machine artifact · **[dur]** durability of state that should have survived.
-- **No re-bind capability (the structural gap)** — `runtime.json` is gitignored *correctly* (a committed absolute
-  path hands another machine a wrong root, worse than none), but nothing can re-point or rebuild it: `/start` §0
-  sees a complete install and resumes the *bootstrap motion* instead, `/update` never touches runtime paths, the
-  daemon fails loud and exits. **Shape undecided** — a `/rebind`-style command vs a `/start` §0 arm vs daemon
-  self-heal. **[bind — the critical path; blocks `/update` on `idea testing`]**
-- **`handoff.parked[]` is prose, not a mechanism** — `schemas.md` promises every parked ticket is mirrored there
-  "for cold-start rebuild", but the orchestrator writes it by hand; measured absent on the real install, so a
-  parked checkpoint's only record died with the runtime tree. Same shape as F2/F3. Candidate: a machine-written
-  block like `drain.py`'s. **[dur]**
-- **`.git/hooks/pre-commit` is never cloned** — a fresh clone silently loses the mechanical-gate backstop.
-  Candidate: re-assert it from a session hook rather than only at `/start`. **[dur]**
-- **`outbox/` + `secrets/` have no recovery story** — approved-but-unfired outward actions vanish untraceably;
-  secrets are correctly never committed but have **no re-elicit path**, so the loop later reads a key that is not
-  there. **[dur]**
-- **Per-machine trust** (`~/.claude.json`) is re-granted only by `/start`, so a moved project stalls `claude -p`
-  and the relaunch-runner (D123). **[bind]**
+runtime half is not, with **correct detection everywhere and a repair path nowhere**. **D141 settles the
+remediation** (all five `07` questions + two findings the audit missed) and splits it in two, deliberately: 7a is
+what `/update` on `idea testing` is gated on; nothing in 7b blocks it. Tags: **[bind]** re-binding a per-machine
+artifact · **[dur]** durability of state that should have survived.
+
+**7a — the bind capability (build first, then drive).**
+- **`/rebind` + `scripts/rebind.py`** — a third sibling on a third axis (*this machine is not the machine that
+  installed*), the runner fixed + unit-tested (`check` = dry-run, `apply` = no-op when healthy), the command owning
+  the judgment. `apply` classifies **RE-POINT** (literal old path → old path with `$HOME` re-prefixed → canonical
+  derived path) · **ADOPT-IN-PLACE** · **RE-CREATE**. **[bind — the critical path; gates `/update` on `idea testing`]**
+- **Four routing arms** — `bus.Paths`' raise, `/start` §0 (a fourth completeness state: installed + bootstrapped +
+  *unbound* — a **guard that stops and routes**, never a repair), the daemon's exit, and `/update` (**warn and
+  proceed** — it is repo-side only, and blocking would deadlock the delivery of `rebind.py` itself). **[bind]**
+- **`runtime_root_for(project_path)` in code** — `$XDG_STATE_HOME/dev-autonomous-workflow/<slug>-<hash-of-abspath>`,
+  shared by `/start` step 3 and `rebind.py`. Today the location is model-chosen prose, so two same-named projects
+  cross-bind. **[bind]**
+- **`.workflow-runtime` identity stamp** `{project_path, bound_at, bound_host}` — `Paths` fails on **mismatch**, not
+  just absence; tolerant-read / strict-write so no existing install breaks. **[bind]**
+- **`Paths` fails closed on a weak mount with no pointer** — the *silent* mis-bind (a clone under `/mnt/c` resolves
+  to the repo mount and lands the token + `secrets/` on a `0600`-ignoring filesystem). Fallback if the mount probe
+  proves unreliable cross-platform: the loud-warn arm. **[bind]**
+- **Loss filed as typed `issue` entries in `backlog.md`** — durable *and* bounded by D59's closability.
+  **Build-time obligation:** confirm `prioritize`'s GC retires a local issue with **no** `github_ref`; extend that
+  path first if it does not. **[dur]**
+- **Per-machine trust closes for free** — `/rebind` is interactive-only, so running it re-grants `~/.claude.json`.
+  Nothing to build. **[bind — closed by D141]**
+
+**7b — the durability trio (after the `idea testing` drive).**
+- **`bus.py park` becomes the writer** of `parked/<id>.json` **and** a fenced `<!-- parked:begin/end -->` block —
+  parking has no code writer today, so the mirror cannot become a mechanism without one; it also retires
+  `checkpoint/SKILL.md`'s "resolve the runtime root yourself". **[dur]**
+- **`SessionStart` re-asserts `.git/hooks/pre-commit`, non-clobbering** — absent ⇒ install · identical ⇒ silent ·
+  different ⇒ warn, never clobber. Proportionate: the git hook backstops *out-of-loop* commits only. Residual: the
+  warning is invisible to `claude -p`. **[dur]**
+- **`config.json` `secrets_required[]`** — key names only, written by the `setup` checkpoint at elicitation; absence
+  becomes provable; point-of-use fail-closed stays as the floor. `outbox/` loss is reported, not recovered. **[dur]**
+
+**Then:** force-reinstall the plugin at HEAD → **`/rebind`** on `idea testing` (stamping `bootstrap: complete` —
+that install predates D131 and carries no `bootstrap:` line) → **`/update`**, the run still owed from Phase 6.
 
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
@@ -632,6 +653,10 @@ pristine brownfield fixture and found one high-severity integration bug (a D133�
 brownfield bootstrap commit), and `/update` was designed (D137) then **built** (D139). Two residuals leave the
 phase: the D136 governor's `/dispatch → /clear → rehydrate` **cycle is still unexercised** (the banner never fired —
 the context law kept the window too lean to trip it), and `/update` has never run against a real install.
-**Phase 7 — machine-move / portability hardening (D140)** then opened from a real loss: a PC rebuild stranded a
-live project's whole runtime tree, and the audit found no repair path exists for any per-machine artifact. That is
-now the critical path — it gates `/update` on `idea testing`. Beyond these, everything is `[stageable]`/`[later]`.
+**Phase 7 — machine-move / portability hardening** then opened from a real loss: a PC rebuild stranded a live
+project's whole runtime tree, and the audit (D140) found no repair path exists for any per-machine artifact. The
+remediation is now **designed** (D141): a `/rebind` command that **binds**, detectors that **route and never heal**,
+and a runtime root that finally has a code-owned *derivation* and a verifiable *identity* — plus the half the audit
+missed, the **silent** mis-bind on a mount with no pointer. It splits into **7a (bind — the critical path, gating
+`/update` on `idea testing`)** and **7b (the durability trio)**, unbuilt. Beyond these, everything is
+`[stageable]`/`[later]`.
