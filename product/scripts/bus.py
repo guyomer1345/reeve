@@ -68,6 +68,7 @@ import re
 import secrets
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -169,7 +170,72 @@ RUNNER_RESUME_PROMPT = (
 # the daemon's own discovery record lives inside it.
 #
 # Absent pointer => no relocation happened => the workflow dir IS the runtime root.
-# That is the common (non-WSL) case and costs zero indirection.
+# That is the common (non-WSL) case and costs zero indirection — but only on a
+# filesystem that can actually hold the tree; see _unrelocated_root.
+
+# The runtime root's IDENTITY, written inside the root itself. isdir() is not
+# identity: a restored backup, a second WSL distro, or any stray directory at the
+# pointed path binds clean and starts writing this project's state into a tree that
+# belongs to something else. The stamp makes that a MISMATCH rather than a silent
+# adoption. Read tolerantly (absent => a pre-stamp install, which is legacy, not
+# wrong) and written strictly (accept it once, then stamp it, so the NEXT resolution
+# is checked) — that is what lets it land on live installs without breaking one.
+RUNTIME_STAMP = ".workflow-runtime"
+
+
+def slugify(name, cap=32):
+    """A filesystem-safe, stable fragment of a project name (for humans reading `ls`)."""
+    s = re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")
+    return s[:cap].rstrip("-") or "project"
+
+
+def runtime_root_for(project_path):
+    """Where a project's relocated runtime tree BELONGS — derived, not chosen.
+
+    This was prose until now ("create a runtime tree on a local filesystem, under the
+    user's home"), which meant a model picked the path. Two projects with the same
+    basename in different parents therefore derived the SAME path and cross-bound two
+    live installs — silent, two-project corruption. The abspath hash kills the
+    collision; the determinism is also what makes `/rebind`'s third probe candidate
+    exist at all (a canonical location can be guessed from the project alone).
+    """
+    project = os.path.abspath(os.path.expanduser(project_path))
+    base = os.environ.get("XDG_STATE_HOME") or os.path.join(
+        os.path.expanduser("~"), ".local", "state")
+    digest = hashlib.sha256(project.encode("utf-8")).hexdigest()[:8]
+    return os.path.join(os.path.abspath(os.path.expanduser(base)),
+                        "dev-autonomous-workflow",
+                        "%s-%s" % (slugify(os.path.basename(project)), digest))
+
+
+def read_stamp(root):
+    """The runtime root's identity, or None when it has none / cannot be read.
+
+    An unreadable or corrupt stamp is NOT evidence of a mis-bind, so it reads as
+    absent: this check exists to catch a wrong tree, not to invent a new way to fail.
+    """
+    try:
+        with open(os.path.join(root, RUNTIME_STAMP)) as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def write_stamp(root, project_path):
+    """Stamp a runtime root with the project it is bound to. Best effort by design:
+    failing to record an identity must never break a resolution that already worked."""
+    try:
+        atomic_write(os.path.join(root, RUNTIME_STAMP), json.dumps({
+            "project_path": os.path.abspath(os.path.expanduser(project_path)),
+            "bound_at": now_iso(),
+            "bound_host": socket.gethostname(),
+        }, indent=2) + "\n", mode=0o600)
+    except OSError:
+        return False
+    return True
+
+
 class Paths:
     def __init__(self, workflow_dir):
         self.workflow = os.path.abspath(workflow_dir)
@@ -223,17 +289,70 @@ class Paths:
             with open(pointer) as fh:
                 root = json.load(fh).get("runtime_root")
         except FileNotFoundError:
-            return self.workflow
+            return self._unrelocated_root()
         except (OSError, ValueError) as exc:
             raise SystemExit("runtime pointer %s is unreadable: %s" % (pointer, exc))
         if not root:
-            return self.workflow
+            return self._unrelocated_root()
         root = os.path.abspath(os.path.expanduser(root))
         if not os.path.isdir(root):
             # Fail loudly. Silently falling back to the repo mount would put the
             # token and the inbox on the very filesystem the relocation avoided.
-            raise SystemExit("runtime_root %s does not exist (pointer: %s)" % (root, pointer))
+            raise SystemExit(
+                "runtime_root %s does not exist (pointer: %s). This project was bound "
+                "on another machine, or its runtime tree was deleted — the durable half "
+                "is intact and the runtime half is unreachable. Run /rebind to bind it "
+                "to this machine; it is the only thing that repairs this." % (root, pointer))
+        self._check_identity(root, pointer)
         return root
+
+    def _unrelocated_root(self):
+        """No pointer means "no relocation happened" — RIGHT on a filesystem that can
+        hold the runtime tree, and WRONG on one that cannot.
+
+        The wrong case is not hypothetical: a fresh clone under /mnt/c has no pointer
+        (it is gitignored, by design — a committed absolute path would hand another
+        machine a wrong root), so this resolver would hand back the repo mount and the
+        capability token plus secrets/ would land on the very 0600-ignoring filesystem
+        the relocation exists to avoid. Nothing would say so. The mount check that
+        would have caught it lives in /start step 3 PROSE, and a clone never runs
+        /start; the daemon's existing mode warning fires after the fact, which is a
+        notification that the control already failed.
+
+        So the path resolver — not a prose step — owns "may this filesystem hold the
+        runtime tree", and it fails closed with the same error the dead pointer gets.
+        Only a MEASURED failure stops: undecidable (a read-only tree, a missing dir)
+        returns the old answer, because a false positive here would hard-stop a
+        working install, which is worse than the silence it replaces.
+        """
+        if mount_honours_modes(self.workflow) is False:
+            raise SystemExit(
+                "%s has no runtime pointer, and this filesystem does not honour file "
+                "modes (a 0600 create comes back world-readable). Binding the runtime "
+                "tree here would put the console's capability token, the inbox, and "
+                "secrets/ where any user on this machine can read them. This is the "
+                "signature of a clone made on a Windows-interop or network mount. Run "
+                "/rebind to bind the runtime tree to a filesystem that can hold it."
+                % self.workflow)
+        return self.workflow
+
+    def _check_identity(self, root, pointer):
+        """A pointed-at directory is not proof it is OUR directory."""
+        project = os.path.dirname(self.workflow)
+        stamp = read_stamp(root)
+        if stamp is None:
+            # Tolerant read: an install made before stamps existed is legacy, not
+            # wrong. Adopt it, then stamp it — strict write — so the next resolution
+            # is a real check. This is what makes the mechanism land without breaking
+            # a single live install.
+            write_stamp(root, project)
+            return
+        bound = stamp.get("project_path")
+        if bound and os.path.abspath(bound) != os.path.abspath(project):
+            raise SystemExit(
+                "runtime_root %s is bound to a DIFFERENT project (%s), not %s (pointer: "
+                "%s). Writing here would corrupt two installs at once. Run /rebind."
+                % (root, bound, project, pointer))
 
     def load_config(self):
         try:
@@ -350,6 +469,46 @@ def workspace_trusted(repo):
     return bool(entry["hasTrustDialogAccepted"])
 
 
+def probe_mode_bits(root):
+    """MEASURE what mode a 0600 create actually achieves under `root`.
+
+    Returns `(bits, None)` on a real measurement and `(None, reason)` when the
+    filesystem would not let us measure at all. The two cases are kept apart on
+    purpose: "measured, and it is wrong" is grounds to stop, "could not measure" is
+    not — a read-only checkout must never be mistaken for an unsafe mount.
+
+    Measuring beats sniffing the mount type. `9p` / `drvfs` / `cifs` / `nfs` is an
+    open-ended list that would need a per-platform table (and would be wrong on the
+    next one); a create-then-stat is one syscall pair and is correct on WSL, macOS
+    and Linux by construction, because it asks the only question that matters.
+    """
+    probe = os.path.join(root, ".mode-probe.%d" % os.getpid())
+    try:
+        fd = os.open(probe, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
+        os.close(fd)
+    except OSError as exc:
+        return None, "cannot probe file mode under %s: %s" % (root, exc)
+    try:
+        got = os.stat(probe).st_mode & 0o777
+    except OSError as exc:
+        return None, "cannot stat the mode probe under %s: %s" % (root, exc)
+    finally:
+        try:
+            os.unlink(probe)
+        except OSError:
+            pass
+    return got, None
+
+
+def mount_honours_modes(root):
+    """True / False / **None when undecidable**. The third value is the whole point:
+    every caller that acts on `False` must decline to act on "could not tell"."""
+    bits, _ = probe_mode_bits(root)
+    if bits is None:
+        return None
+    return not (bits & ~0o600)
+
+
 def probe_mode(root):
     """Ask the filesystem whether it honours a file mode at all, by measuring it.
 
@@ -359,21 +518,9 @@ def probe_mode(root):
     setup checkpoint, and the secret store. So probe the tree once and say what is
     exposed, rather than discovering it per-file or, worse, never.
     """
-    probe = os.path.join(root, ".mode-probe.%d" % os.getpid())
-    try:
-        fd = os.open(probe, os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o600)
-        os.close(fd)
-    except OSError as exc:
-        return "cannot probe file mode under %s: %s" % (root, exc)
-    try:
-        got = os.stat(probe).st_mode & 0o777
-    except OSError as exc:
-        return "cannot stat the mode probe under %s: %s" % (root, exc)
-    finally:
-        try:
-            os.unlink(probe)
-        except OSError:
-            pass
+    got, err = probe_mode_bits(root)
+    if err:
+        return err
     if got & ~0o600:
         return ("%s does not honour file modes (a 0600 create came back %s). The "
                 "capability token, any credential returned at a setup checkpoint while "

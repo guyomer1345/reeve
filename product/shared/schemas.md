@@ -382,7 +382,7 @@ the one place the loop keeps a secret.
   gap (the original framing); it is **any mount that ignores mode**, and it is why this path is pinned. Windows has
   no `0600` → explicit ACLs, the same target-OS/FS family as the other runtime pins.
 
-## runtime.json  · written by `/start` when it relocates the runtime tree, read by every process that touches a runtime path · *`.workflow/runtime.json`; RUNTIME, gitignored, atomic write; deliberately NOT on a native filesystem — it is the pointer TO it*
+## runtime.json  · written by `rebind.py` (`bind` at `/start` step 3, `apply` at `/rebind`), read by every process that touches a runtime path · *`.workflow/runtime.json`; RUNTIME, gitignored, atomic write; deliberately NOT on a native filesystem — it is the pointer TO it*
 - `{ runtime_root }` — an absolute path. The workflow tree spans **two filesystems** whenever the repo lives on a
   mount whose file-mode or `rename` guarantees are weak: the atomicity- and mode-sensitive runtime paths are
   relocated to a native filesystem, while committed artifacts stay in the repo by construction. This pointer is what
@@ -394,7 +394,34 @@ the one place the loop keeps a secret.
   wrong root; and it cannot itself be relocated, since it is the thing that says where the relocation went — it must
   sit at a fixed, known spot on the repo mount.
 - A pointer naming a **missing** root is a hard error, never a fallback to the repo mount: falling back silently
-  would land the capability token and the inbox on the very filesystem the relocation exists to avoid.
+  would land the capability token and the inbox on the very filesystem the relocation exists to avoid. The error
+  **names `/rebind`** — a detector that does not route is a dead end, since the operator on a new machine has no
+  other way to learn the cure exists.
+- **The root's location is DERIVED, never chosen** — `bus.runtime_root_for(project_path)` →
+  `$XDG_STATE_HOME/dev-autonomous-workflow/<slug>-<sha256(abspath)[:8]>`. It used to be prose, which meant a
+  model picked it, and two projects with the same basename in different parents derived the *same* root and
+  cross-bound two live installs. The hash kills the collision; the determinism is also what lets `/rebind` guess a
+  canonical location from the project path alone when the pointer is lost.
+- **Absent pointer + a mount that does not honour file modes is ALSO a hard error** (the *silent* mis-bind). A
+  fresh clone under a Windows-interop or network mount has no pointer — it is gitignored by design — so "absent ⇒
+  no relocation" would hand back the repo mount and land the capability token and `secrets/` on a `0600`-ignoring
+  filesystem, saying nothing. The path resolver, not `/start`'s prose, owns *may this filesystem hold the runtime
+  tree*; the probe **measures** (`0600` create, then `stat`) rather than sniffing a mount type, and its third
+  value — *undecidable* — never stops, because a false positive would break a working install.
+
+## .workflow-runtime  · written by `rebind.py`, verified by `bus.Paths` on every resolution · *inside the runtime root; RUNTIME, never committed (it lives with the tree it identifies); atomic write, `0600`*
+The runtime root's **identity**. Present only on a **relocated** root — inside `.workflow/` the binding is true by
+construction, so there is nothing to verify and no gitignore entry to earn.
+- `{ project_path, bound_at, bound_host }` — the absolute path of the project this tree belongs to, when it was
+  bound, and to which host.
+- **Why it exists:** `isdir()` is not identity. A restored backup, a second WSL distro, or any stray directory at
+  the pointed path binds clean and starts writing one project's state into another's. `Paths` therefore fails on
+  **mismatch**, not merely on absence.
+- **Tolerant read / strict write.** An absent stamp is an install made before stamps existed — legacy, not wrong:
+  it is adopted **and
+  then stamped**, so the next resolution is a real check. That is what let the mechanism land without breaking a
+  single live install. A corrupt or unreadable stamp reads as absent (it is evidence of nothing), and a failed
+  stamp write never breaks a resolution that already worked.
 
 ## install-set.json  · written by `/start` step 7 and rewritten by every `/update`, read by `/update` · *`.workflow/install-set.json`; **committed** (its paths are repo-relative and machine-independent, unlike `runtime.json`); atomic write; produced only by `update_reconcile.py record|apply` — never hand-authored*
 The **install ledger**: what this package wrote into this project, and the hash it wrote.

@@ -15,8 +15,12 @@ On any backlog change (a new roadmap, a new issue) and whenever a phase/item com
 The backlog (items with `depends_on`, `kind`, `severity`).
 
 ## Workflow
-1. **GC the queue first:** drop done items so `backlog.md` stays a live *open* queue, not a ledger —
-   roadmap items `commit` flipped done, and `issue` entries whose `github_ref` is closed on GitHub.
+1. **GC the queue first:** drop done items so `backlog.md` stays a live *open* queue, not a ledger — **any entry
+   `commit` flipped done** (roadmap items *and* local `issue` entries, which is every issue carrying no
+   `github_ref`: a mirrored issue's open/closed state lives in GitHub, a local one's lives in its own done-flip),
+   and `issue` entries whose `github_ref` **is** closed on GitHub. Both rules matter: local issues are not a
+   greenfield edge case — `/rebind` files machine-move losses as exactly that shape, and an entry no rule
+   collects is permanent sediment.
 2. **Schedule maintenance — two decoupled triggers** (memory pressure ≠ drift risk, so separate thresholds):
    - *Retention/size* → inject a `document:audit` item when a threshold retention can actually **reduce** is
      tripped — a node's `# Sessions` exceeds `sessions_k` **by a margin** (retention caps back to `sessions_k`,

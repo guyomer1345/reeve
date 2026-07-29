@@ -39,6 +39,19 @@ grant path and would silently skip those writes.
 - **Uncommitted changes in the working tree** → show `git status --short` and ask whether to proceed.
   An update is much easier to reason about (and to revert) from a clean tree.
 
+**And one situation to WARN about and then proceed anyway** — the project's runtime half is not bound to this
+machine:
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/rebind.py" check --project-root "${CLAUDE_PROJECT_DIR}"
+```
+Anything other than `HEALTHY` → say so plainly, name `/rebind`, and **continue the update**. Do not block. Two
+reasons, and they are not stylistic. `/update` is **repo-side only** — `update_reconcile.py` reads the manifest,
+the project's files and `install-set.json`, and never touches a runtime path, so it does not depend on the
+binding at all. And blocking would **deadlock**: `rebind.py` ships *inside* the package `/update` installs, so a
+project stranded on a version that predates `/rebind` could never reach the fix. The one thing to defer is §5.2
+(restarting the daemon) — an unbound project has no runtime root for the daemon to start against; tell the human
+to run `/rebind` and then start the console.
+
 ## 1. Plan — read-only, and show the human
 Run the **new package's** reconcile runner. This is the one deliberate exception to `/start`'s
 never-invoke-in-place rule: an update must be driven by the version being installed, because that

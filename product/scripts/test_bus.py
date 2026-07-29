@@ -33,6 +33,19 @@ def mkworkflow(root):
     return w
 
 
+def with_env(case, **kw):
+    """Set env vars for one test and restore them afterwards (None deletes)."""
+    for key, value in kw.items():
+        had = os.environ.get(key)
+        case.addCleanup(
+            (lambda k, v: (os.environ.__setitem__(k, v) if v is not None
+                           else os.environ.pop(k, None))), key, had)
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+
+
 class Tmp(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp()
@@ -65,10 +78,15 @@ class RuntimePointer(Tmp):
             self.assertTrue(got.startswith(os.path.abspath(w)), "%s must not relocate" % got)
 
     def test_pointer_expands_user(self):
+        # HOME is redirected at a fixture: resolving a root now STAMPS it (D141), and a
+        # test has no business writing into the developer's real home directory.
+        home = os.path.join(self.root, "home")
+        os.makedirs(home)
+        with_env(self, HOME=home)
         w = mkworkflow(self.root)
         with open(os.path.join(w, "runtime.json"), "w") as fh:
             json.dump({"runtime_root": "~"}, fh)
-        self.assertEqual(bus.Paths(w).runtime, os.path.expanduser("~"))
+        self.assertEqual(bus.Paths(w).runtime, home)
 
     def test_missing_runtime_root_fails_loud(self):
         """Never silently fall back to the repo mount: that is precisely where the
@@ -91,6 +109,149 @@ class RuntimePointer(Tmp):
         with open(os.path.join(w, "runtime.json"), "w") as fh:
             json.dump({}, fh)
         self.assertEqual(bus.Paths(w).runtime, os.path.abspath(w))
+
+    def test_dead_pointer_error_names_the_cure(self):
+        """A detector that does not route is a dead end: the operator on a new machine
+        has no way to learn that /rebind exists (D141 — detectors route, none heals)."""
+        w = mkworkflow(self.root)
+        with open(os.path.join(w, "runtime.json"), "w") as fh:
+            json.dump({"runtime_root": os.path.join(self.root, "gone")}, fh)
+        with self.assertRaises(SystemExit) as cm:
+            bus.Paths(w)
+        self.assertIn("/rebind", str(cm.exception))
+
+
+# --- the derived runtime root -----------------------------------------------
+class RuntimeRootDerivation(Tmp):
+    """The location was model-chosen prose until D141, so two projects with the same
+    basename in different parents derived the same path and cross-bound."""
+
+    def test_same_basename_different_parents_do_not_collide(self):
+        with_env(self, XDG_STATE_HOME=os.path.join(self.root, "state"))
+        a = bus.runtime_root_for(os.path.join(self.root, "one", "idea testing"))
+        b = bus.runtime_root_for(os.path.join(self.root, "two", "idea testing"))
+        self.assertNotEqual(a, b)
+        # ...and both stay human-legible: the slug survives, only the hash differs.
+        self.assertTrue(os.path.basename(a).startswith("idea-testing-"))
+        self.assertTrue(os.path.basename(b).startswith("idea-testing-"))
+
+    def test_derivation_is_stable_across_calls(self):
+        """The probe's third candidate only exists because this is guessable from the
+        project path alone — an unstable derivation would silently un-guess it."""
+        with_env(self, XDG_STATE_HOME=os.path.join(self.root, "state"))
+        p = os.path.join(self.root, "proj")
+        self.assertEqual(bus.runtime_root_for(p), bus.runtime_root_for(p + "/"))
+
+    def test_honours_xdg_state_home_else_falls_back_under_home(self):
+        with_env(self, XDG_STATE_HOME=os.path.join(self.root, "xdg"))
+        self.assertTrue(bus.runtime_root_for("/p/q").startswith(
+            os.path.join(self.root, "xdg", "dev-autonomous-workflow")))
+        with_env(self, XDG_STATE_HOME=None, HOME=os.path.join(self.root, "home"))
+        self.assertTrue(bus.runtime_root_for("/p/q").startswith(
+            os.path.join(self.root, "home", ".local", "state",
+                         "dev-autonomous-workflow")))
+
+    def test_slug_survives_a_name_with_nothing_usable_in_it(self):
+        with_env(self, XDG_STATE_HOME=os.path.join(self.root, "state"))
+        self.assertTrue(os.path.basename(bus.runtime_root_for("/tmp/...")).startswith(
+            "project-"))
+
+
+# --- the runtime root's identity --------------------------------------------
+class RuntimeIdentity(Tmp):
+    """isdir() is not identity. A restored backup or a second WSL distro binds clean
+    and starts writing this project's state into another project's tree."""
+
+    def _bind(self, root_name="native"):
+        w = mkworkflow(self.root)
+        native = os.path.join(self.root, root_name)
+        os.makedirs(native, exist_ok=True)
+        with open(os.path.join(w, "runtime.json"), "w") as fh:
+            json.dump({"runtime_root": native}, fh)
+        return w, native
+
+    def test_a_legacy_unstamped_root_is_adopted_and_then_stamped(self):
+        """Tolerant read / strict write — this is what lets the mechanism land on live
+        installs. If an absent stamp broke resolution, every existing install would."""
+        w, native = self._bind()
+        self.assertEqual(bus.Paths(w).runtime, native)          # adopted, no raise
+        stamp = bus.read_stamp(native)
+        self.assertEqual(stamp["project_path"], os.path.abspath(self.root))
+        self.assertIn("bound_at", stamp)
+        self.assertIn("bound_host", stamp)
+
+    def test_a_root_bound_to_another_project_fails_closed(self):
+        w, native = self._bind()
+        bus.write_stamp(native, "/some/other/project")
+        with self.assertRaises(SystemExit) as cm:
+            bus.Paths(w)
+        self.assertIn("/rebind", str(cm.exception))
+        self.assertIn("/some/other/project", str(cm.exception))
+
+    def test_a_matching_stamp_resolves_and_is_not_rewritten(self):
+        w, native = self._bind()
+        bus.write_stamp(native, self.root)
+        before = open(os.path.join(native, bus.RUNTIME_STAMP)).read()
+        self.assertEqual(bus.Paths(w).runtime, native)
+        self.assertEqual(open(os.path.join(native, bus.RUNTIME_STAMP)).read(), before)
+
+    def test_a_corrupt_stamp_is_not_evidence_of_a_misbind(self):
+        """This check exists to catch a WRONG tree, not to invent a new way to fail."""
+        w, native = self._bind()
+        with open(os.path.join(native, bus.RUNTIME_STAMP), "w") as fh:
+            fh.write("{not json")
+        self.assertEqual(bus.Paths(w).runtime, native)
+
+    def test_a_stamp_write_failure_never_breaks_a_working_resolution(self):
+        w, native = self._bind()
+        os.chmod(native, 0o500)
+        self.addCleanup(os.chmod, native, 0o700)
+        self.assertEqual(bus.Paths(w).runtime, native)
+
+
+# --- the SILENT mis-bind ----------------------------------------------------
+class WeakMountFailsClosed(Tmp):
+    """The half D140's audit missed. A dead pointer fails LOUDLY; an ABSENT pointer on
+    a mount that cannot hold the tree used to succeed and put the capability token and
+    secrets/ on a 0600-ignoring filesystem, saying nothing."""
+
+    def test_no_pointer_on_a_mount_that_ignores_modes_fails_closed(self):
+        w = mkworkflow(self.root)
+        self._force(bus, False)
+        with self.assertRaises(SystemExit) as cm:
+            bus.Paths(w)
+        self.assertIn("/rebind", str(cm.exception))
+
+    def test_no_pointer_on_a_sound_mount_is_unchanged(self):
+        w = mkworkflow(self.root)
+        self._force(bus, True)
+        self.assertEqual(bus.Paths(w).runtime, os.path.abspath(w))
+
+    def test_an_UNDECIDABLE_probe_never_hard_stops(self):
+        """A false positive here would break a WORKING install — strictly worse than
+        the silence it replaces. Only a MEASURED failure stops."""
+        w = mkworkflow(self.root)
+        self._force(bus, None)
+        self.assertEqual(bus.Paths(w).runtime, os.path.abspath(w))
+
+    def test_the_probe_measures_rather_than_sniffing_the_mount_type(self):
+        """No fstype table to go stale: it asks the only question that matters."""
+        bits, err = bus.probe_mode_bits(self.root)
+        self.assertIsNone(err)
+        self.assertEqual(bits, 0o600)
+        self.assertIs(bus.mount_honours_modes(self.root), True)
+
+    def test_an_unwritable_tree_reads_as_undecidable_not_unsafe(self):
+        ro = os.path.join(self.root, "ro")
+        os.makedirs(ro)
+        os.chmod(ro, 0o500)
+        self.addCleanup(os.chmod, ro, 0o700)
+        self.assertIsNone(bus.mount_honours_modes(ro))
+
+    def _force(self, mod, verdict):
+        real = mod.mount_honours_modes
+        mod.mount_honours_modes = lambda root: verdict
+        self.addCleanup(setattr, mod, "mount_honours_modes", real)
 
 
 # --- the measured facts -----------------------------------------------------

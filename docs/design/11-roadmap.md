@@ -585,9 +585,12 @@ forced-reinstall the plugin to HEAD (a version-pinned `update` is a no-op — ve
 **one clean re-drive on a pristine p5-brownfield** **[DRIVEN 2026-07-27 — D138]** → design + build `/update`
 **[D137 designed · D139 BUILT]** → **`/update` the real `idea testing` install onto HEAD** — **STILL PENDING**, and
 now gated on Phase 7: that install's runtime half was stranded by a machine rebuild (D140), so it needs *rebinding*
-before an update is meaningful. The interaction-model rework (browser-primary async chat — `07`) waits behind both.
+before an update is meaningful. **The gate is now lifted on the build side — 7a is BUILT (D142) and its dry run
+against that exact install is verified** — so what remains is the interactive run itself, in this order:
+force-reinstall at HEAD → `/rebind` → `/update`. The interaction-model rework (browser-primary async chat — `07`)
+waits behind both.
 
-### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design) — **DESIGNED; 7a is the critical path**
+### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design → D142 build) — **7a BUILT + dry-run verified; the interactive drive on `idea testing` is OWED; 7b follows it**
 Opened by a real loss, not a hypothesis: a PC rebuild renamed `$HOME`, so `idea testing`'s `runtime.json` names a
 directory that no longer exists and its whole runtime tree is unreachable. The audit (D140, measured against that
 real install) found the durable half **is** portable — committed, no absolute paths, package included — and the
@@ -596,27 +599,28 @@ remediation** (all five `07` questions + two findings the audit missed) and spli
 what `/update` on `idea testing` is gated on; nothing in 7b blocks it. Tags: **[bind]** re-binding a per-machine
 artifact · **[dur]** durability of state that should have survived.
 
-**7a — the bind capability (build first, then drive).**
+**7a — the bind capability — BUILT (D142). Every item below is landed and unit-tested; what is still owed is the
+interactive drive, which Claude cannot run (`/rebind` and `/update` are interactive sessions in another project).**
 - **`/rebind` + `scripts/rebind.py`** — a third sibling on a third axis (*this machine is not the machine that
   installed*), the runner fixed + unit-tested (`check` = dry-run, `apply` = no-op when healthy), the command owning
   the judgment. `apply` classifies **RE-POINT** (literal old path → old path with `$HOME` re-prefixed → canonical
-  derived path) · **ADOPT-IN-PLACE** · **RE-CREATE**. **[bind — the critical path; gates `/update` on `idea testing`]**
+  derived path) · **ADOPT-IN-PLACE** · **RE-CREATE**. **[bind — BUILT (D142): `scripts/rebind.py` + 41 tests; `check` dry-run VERIFIED against the real `idea testing` install (RE-CREATE, wrote nothing). A fourth verb `bind` split out for `/start` — same arithmetic, no loss accounting]**
 - **Four routing arms** — `bus.Paths`' raise, `/start` §0 (a fourth completeness state: installed + bootstrapped +
   *unbound* — a **guard that stops and routes**, never a repair), the daemon's exit, and `/update` (**warn and
-  proceed** — it is repo-side only, and blocking would deadlock the delivery of `rebind.py` itself). **[bind]**
+  proceed** — it is repo-side only, and blocking would deadlock the delivery of `rebind.py` itself). **[bind — BUILT (D142); the daemon's arm is `Paths`' raise, which now names the cure]**
 - **`runtime_root_for(project_path)` in code** — `$XDG_STATE_HOME/dev-autonomous-workflow/<slug>-<hash-of-abspath>`,
   shared by `/start` step 3 and `rebind.py`. Today the location is model-chosen prose, so two same-named projects
-  cross-bind. **[bind]**
+  cross-bind. **[bind — BUILT (D142): `bus.runtime_root_for()`; `/start` step 3 now shells to `rebind.py bind`]**
 - **`.workflow-runtime` identity stamp** `{project_path, bound_at, bound_host}` — `Paths` fails on **mismatch**, not
-  just absence; tolerant-read / strict-write so no existing install breaks. **[bind]**
+  just absence; tolerant-read / strict-write so no existing install breaks. **[bind — BUILT (D142); written only on a RELOCATED root — inside `.workflow/` identity is true by construction]**
 - **`Paths` fails closed on a weak mount with no pointer** — the *silent* mis-bind (a clone under `/mnt/c` resolves
   to the repo mount and lands the token + `secrets/` on a `0600`-ignoring filesystem). Fallback if the mount probe
-  proves unreliable cross-platform: the loud-warn arm. **[bind]**
+  proves unreliable cross-platform: the loud-warn arm. **[bind — BUILT (D142) FAIL-CLOSED, not the fallback: `probe_mode` already MEASURES (0600 create → stat), and a tri-state probe whose *undecidable* arm never stops removes the false-positive risk]**
 - **Loss filed as typed `issue` entries in `backlog.md`** — durable *and* bounded by D59's closability.
   **Build-time obligation:** confirm `prioritize`'s GC retires a local issue with **no** `github_ref`; extend that
-  path first if it does not. **[dur]**
+  path first if it does not. **[dur — BUILT (D142); the obligation FIRED — `prioritize/SKILL.md`'s issue rule was `github_ref`-only and disagreed with `schemas.md`; extended to any done-flipped entry]**
 - **Per-machine trust closes for free** — `/rebind` is interactive-only, so running it re-grants `~/.claude.json`.
-  Nothing to build. **[bind — closed by D141]**
+  Nothing to build. **[bind — closed by D141; stated in `commands/rebind.md` (D142)]**
 
 **7b — the durability trio (after the `idea testing` drive).**
 - **`bus.py park` becomes the writer** of `parked/<id>.json` **and** a fenced `<!-- parked:begin/end -->` block —
@@ -655,8 +659,11 @@ phase: the D136 governor's `/dispatch → /clear → rehydrate` **cycle is still
 the context law kept the window too lean to trip it), and `/update` has never run against a real install.
 **Phase 7 — machine-move / portability hardening** then opened from a real loss: a PC rebuild stranded a live
 project's whole runtime tree, and the audit (D140) found no repair path exists for any per-machine artifact. The
-remediation is now **designed** (D141): a `/rebind` command that **binds**, detectors that **route and never heal**,
-and a runtime root that finally has a code-owned *derivation* and a verifiable *identity* — plus the half the audit
-missed, the **silent** mis-bind on a mount with no pointer. It splits into **7a (bind — the critical path, gating
-`/update` on `idea testing`)** and **7b (the durability trio)**, unbuilt. Beyond these, everything is
-`[stageable]`/`[later]`.
+remediation was **designed** (D141) then **built** (D142): a `/rebind` command that **binds**, detectors that
+**route and never heal**, and a runtime root that finally has a code-owned *derivation* and a verifiable
+*identity* — plus the half the audit missed, the **silent** mis-bind on a mount with no pointer, which ships
+**fail-closed** because the mount probe measures behaviour rather than guessing a filesystem type. **7a (bind) is
+BUILT and dry-run verified** against the real stranded install (`RE-CREATE`, read-only, nothing written); what is
+owed is the **interactive drive** — force-reinstall at HEAD → `/rebind` → `/update` on `idea testing` — which only
+a human can run. **7b (the durability trio)** waits behind that drive by design, so it is built from real
+evidence. Beyond these, everything is `[stageable]`/`[later]`.

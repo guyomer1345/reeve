@@ -26,6 +26,21 @@ built-in Claude Code command.
     waiting on a human verdict, not on you.
   - **Bootstrap complete** (`bootstrap: complete`) → the project is fully initialised. Do **not** clobber: report
     current state and offer to resume from `.workflow/handoff.md`. Stop.
+- **Then a third check, on a different axis entirely — is this project BOUND to this machine?** The two above ask
+  *did a previous `/start` finish*; this asks *did it finish **here***. The durable half is committed and travels
+  for free; the runtime half is machine-local and gitignored, so a move to another machine (or a rebuild of this
+  one) leaves a project that is fully initialised and whose whole runtime tree is unreachable. A human on a new
+  machine types `/start` first, so this is where they must be caught — it is the **fourth completeness state**:
+  *installed + bootstrapped + **unbound***.
+  ```bash
+  python3 "${CLAUDE_PLUGIN_ROOT}/scripts/rebind.py" check --project-root "${CLAUDE_PROJECT_DIR}"
+  ```
+  Anything other than `HEALTHY` (or `NOT-STARTED`, which just means you are in the normal first-run case below)
+  → **stop and route to `/rebind`**. Report what `check` said and do not proceed.
+  **This is a guard, not a repair.** Do not re-scaffold, do not "resume the motion", and above all do not treat an
+  unbound project as bootstrap-incomplete: `/start`'s motion re-runs `ingest`, and re-ingesting a 95-node
+  brownfield project because its runtime pointer is stale is the wrong blast radius by an order of magnitude.
+  Re-binding is also an **N-times** job (every machine move) and `/start` is a **once** command. `/rebind` owns it.
 - Else pick the mode: `$ARGUMENTS` if given, otherwise **detect** — existing source files present →
   **brownfield**; empty (or package only) → **greenfield**. **Confirm the detected mode with the user**
   before proceeding (mis-classifying is costly).
@@ -85,12 +100,28 @@ loop's normal `state.json` takes over when the motion ends.
    reliably atomic and — the one that bites silently — **a file created `0600` can come back world-readable with no
    error at all**, which would leave the console's capability token and any stored credential readable by other
    users on the machine.
-   - **Local mount (the common case):** nothing to do. `.workflow/` is the runtime root; write no pointer.
-   - **Network-style / interop mount** (e.g. a repo under a mounted Windows drive): create a runtime tree on a local
-     filesystem (under the user's home), and write **`.workflow/runtime.json`** = `{"runtime_root": "<abs path>"}`.
-     That pointer is how every other process finds the relocated tree, so it stays on the repo mount and is
-     **gitignored** (the path is machine-specific — committing it would hand a clone a wrong root). Tell the user
-     plainly that `.workflow/` now spans two filesystems, and why.
+   **Do not decide either half of this by hand** — both the check and the location are code-owned:
+   ```bash
+   python3 "${CLAUDE_PLUGIN_ROOT}/scripts/rebind.py" bind --project-root "${CLAUDE_PROJECT_DIR}"
+   ```
+   (Read in place from the plugin root deliberately, and only here: step 4 has not copied it into the project
+   yet, and this is a one-shot, stateless read invoked by an interactive command — not a long-lived reference
+   that a later plugin update could pull out from under. `bind`, not `apply`: on a project's first minute there
+   is nothing to have lost, so it does no loss accounting and never guesses a loop position.)
+   On a fresh scaffold this measures the mount (a `0600` create, then a `stat` — behaviour, not a mount-type
+   guess), derives the runtime root, creates it `0700`, stamps it with this project's identity, and writes the
+   pointer if and only if one is needed. Report what it did.
+   - **Local mount (the common case):** nothing to do. `.workflow/` is the runtime root; no pointer is written.
+   - **Network-style / interop mount** (e.g. a repo under a mounted Windows drive): the tree is created at
+     `$XDG_STATE_HOME/dev-autonomous-workflow/<slug>-<hash-of-the-project's-abspath>` and
+     **`.workflow/runtime.json`** = `{"runtime_root": "<abs path>"}` is written. That pointer is how every other
+     process finds the relocated tree, so it stays on the repo mount and is **gitignored** (the path is
+     machine-specific — committing it would hand a clone a wrong root). Tell the user plainly that `.workflow/`
+     now spans two filesystems, and why.
+   **Never pick the path yourself.** It used to be prose, and a chosen path meant two projects with the same
+   basename in different parents derived the *same* root and cross-bound two live installs — silent, two-project
+   corruption. The hash of the absolute path is what prevents it, and the determinism is also what lets `/rebind`
+   guess a canonical location from the project alone when a pointer is lost.
    - Committed artifacts (`handoff.md`, `backlog.md`, `config.json`, `docs/`) **never** relocate — they live with the
      repo by definition. Only the runtime half moves.
 4. **Install the package into the project.** Claude Code exposes the bundled package at

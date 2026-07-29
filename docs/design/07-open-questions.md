@@ -307,10 +307,20 @@ heals); re-binding is neither recovery nor re-creation but a **three-case probe*
 re-asserted from `SessionStart`, non-clobbering (and `07`'s "same scrutiny as F3" is corrected there — the gate is
 already disarmed on every clone, so re-asserting can only arm it); secrets get a declared `config.json`
 `secrets_required[]`, with point-of-use fail-closed kept as the floor. The build items live in `11` (Phase 7a/7b).
-**Two residuals stay open**, both build-time and neither blocking the design:
-- **What counts as a "weak mount", portably.** `Paths` is to fail closed when there is no pointer *and* the mount
-  cannot hold the runtime tree — but the probe must be cheap and correct on WSL (9p/drvfs), macOS, and Linux, and a
-  false positive would hard-stop a working install. D141 names the fallback (the loud-warn arm) but not the test.
-- **Does `prioritize`'s GC retire a local `issue` with no `github_ref`?** D141 files rebind losses as typed `issue`
-  entries precisely so D59's closability bounds them. If the GC filters only *on* `github_ref`, that path must be
-  extended before the loss entries are safe to rely on — otherwise `backlog.md` grows without a collector.
+**Both residuals are DISCHARGED by the D142 build** — and one of them fired:
+- ~~**What counts as a "weak mount", portably.**~~ **Closed: it is measured, not classified.** `bus.probe_mode()`
+  already did the only correct thing — a `0600` create then a `stat`, which asks the question directly instead of
+  keeping a `9p`/`drvfs`/`cifs`/`nfs` table that would be wrong on the next platform. The build split it into a
+  tri-state `mount_honours_modes()` → **True / False / None**, and `Paths` stops **only** on a measured `False`.
+  The undecidable arm is what made the fallback unnecessary: `/rebind` ships **fail-closed**, not loud-warn.
+- ~~**Does `prioritize`'s GC retire a local `issue` with no `github_ref`?**~~ **Closed — and the answer was no.**
+  `schemas.md` said a local item closes on its backlog done-flip and `prioritize` collects it; `prioritize/SKILL.md`
+  step 1 named only two rules and the issue rule was `github_ref`-only. The owner and the skill disagreed, and the
+  skill is what the model reads. Extended to *any entry `commit` flipped done*, naming local issues explicitly.
+
+**One residual OPENS from the build** (noted, not fixed — deliberately):
+- **`hooks/verify_check.py` carries its own copy of the runtime resolver** and degrades to the workflow dir on a
+  dead pointer, so it neither routes to `/rebind` nor sees the weak-mount rule. It is not one of D141's four arms
+  and it fails **closed** on the gate it guards regardless — but it is now a second, diverging resolver. Either it
+  earns a shared read-only helper or the duplication gets stated as intended. Touching the verify gate to add a
+  warning a `pre-commit` hook cannot usefully display is the trade that kept it out of 7a.
