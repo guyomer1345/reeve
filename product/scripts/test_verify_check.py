@@ -129,6 +129,31 @@ def test_bootstrap_idle_proceeds(tmp_path):
     assert r.returncode == 0, r.stdout
 
 
+def test_bootstrap_phase_scaffold_commit_proceeds(tmp_path):
+    # /start publishes status=building + phase=bootstrap at every stage boundary, before any
+    # item exists. The scaffold commit it then makes must not be blocked as unidentifiable —
+    # this used to reject EVERY brownfield bootstrap commit.
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "phase": "bootstrap",
+                  "node": "start:7", "note": "verifying install (step 7)"})
+    (root / ".workflow" / "config.json").write_text("{}")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout
+
+
+def test_bootstrap_carveout_does_not_excuse_a_failing_item(tmp_path):
+    # The carve-out only skips the unidentifiable-item block; a staged item with a FAILING
+    # verdict still blocks, so it cannot be used to smuggle unverified work past the gate.
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "phase": "bootstrap", "node": "start:2"})
+    _verdict(root, "false")
+    _stage(root)
+    r = _run(root)
+    assert r.returncode == 1, "bootstrap phase must not wave a failing item through"
+    assert "FAILING" in r.stdout
+
+
 def test_no_state_no_staged_item_proceeds(tmp_path):
     # A pure scaffold commit: nothing under an item dir, no active build → nothing to verify.
     root = _repo(tmp_path)

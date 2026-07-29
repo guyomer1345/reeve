@@ -46,6 +46,8 @@ overlap into one adjudicator.
 | capability | kind | one-line job | file |
 |---|---|---|---|
 | start (init) | command | bootstrap the workflow; greenfield/brownfield (D28/D29) | `commands/start` |
+| update | command | migrate an initialised project onto the installed package version (D137/D139) | `commands/update` |
+| dispatch | command | write a complete `handoff.md` on demand so a `/clear` is safe (D136) | `commands/dispatch` |
 | adjudicate | skill (base) | gather views → judge → confidence-gate | `skills/adjudicate` |
 | discuss | skill | intake conversation → `spec` | `skills/discuss` |
 | create-demo | skill *(→ agent, D84 — pending)* | throwaway sandbox for product approval | `skills/create-demo` |

@@ -80,6 +80,20 @@ def read_state(runtime_root):
         return None
 
 
+def _bootstrapping(state):
+    """The /start motion publishes `status: building, phase: bootstrap` at every stage boundary
+    so the console can render progress — before any item exists. That is NOT drift, and the
+    unidentifiable-item block would otherwise reject EVERY bootstrap commit (the scaffold commit
+    included), dead-ending a brownfield install at step 7.
+
+    Deliberately narrow: it takes the explicit `phase` marker, never an inference from an absent
+    item, so the only state that skips the fail-closed is one the bootstrap ITSELF published.
+    A `building` state with no item and no bootstrap phase still blocks, and a bootstrap commit
+    that DOES stage an item dir still has that item's verdict checked below.
+    """
+    return (state.get("phase") or (state.get("position") or {}).get("phase")) == "bootstrap"
+
+
 def verdict_ok(item):
     """Fail-closed verdict check: proceed only on a well-formed `pass: true` first line."""
     path = os.path.join(WORKFLOW, "items", item, "verify-verdict.md")
@@ -108,14 +122,10 @@ def main():
         active = state.get("current_item") or (state.get("position") or {}).get("item")
         if active and active not in candidates:
             candidates.append(active)
-        if not candidates and state.get("phase") != "bootstrap":
+        if not candidates and not _bootstrapping(state):
             print("state.json status=building but no item is identifiable (no current_item, no "
                   "position.item, no staged .workflow/items/<id>/) — verify-before-commit fails closed.")
             return 1
-        # phase=="bootstrap": /start publishes status=building with no item during the scaffold/spec
-        # commit (the first real item only exists after reconcile->prioritize->plan). There is nothing
-        # to verify, so this is NOT the "building but no item" drift the block above guards — proceed.
-        # (The real drift keeps its teeth: no phase, or any non-bootstrap phase, still fails closed.)
 
     # No active build and nothing staged under an item dir => a genuine bootstrap / pre-item
     # commit (the /start scaffold, the pre-stack spec) => nothing to verify => proceed.

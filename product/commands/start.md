@@ -58,6 +58,7 @@ loop's normal `state.json` takes over when the motion ends.
      codemap.sh        # code-map generator (generated per-stack; writes docs/knowledge/graph.json) (committed)
      state.json        # live position — RUNTIME, add to .gitignore
      orchestrator.lock # single-orchestrator liveness marker (runner's precondition) — RUNTIME, add to .gitignore
+     install-set.json  # what this install wrote + the hashes — /update's ledger (committed)
      handoff.md        # durable resume anchor          (committed)
      backlog.md        # live OPEN queue (issues + roadmap; closed leave) (committed)
      outbox/           # RUNTIME — pending outward-action queue (push/issue awaiting a console release); add to .gitignore
@@ -96,12 +97,22 @@ loop's normal `state.json` takes over when the motion ends.
    **`${CLAUDE_PLUGIN_ROOT}`** and the project root at **`${CLAUDE_PROJECT_DIR}`** (both substituted in this
    command). Always copy *out* of the plugin into the project — never invoke a shipped script in place, because
    `${CLAUDE_PLUGIN_ROOT}` is replaced on every plugin update.
-   - **Orchestrator brief** (the driver):
-     - **greenfield:** copy `${CLAUDE_PLUGIN_ROOT}/templates/orchestrator-CLAUDE.md` → the launch-root
-       **`CLAUDE.md`** (fill `<project>`/`<project_root>`) and put the product under **`project/`** (its own
+   - **Orchestrator brief** (the driver). **In both modes the brief goes into the root `CLAUDE.md` wrapped in
+     the managed-block markers** — `shared/schemas.md` owns the exact strings:
+     ```
+     <!-- dev-autonomous-workflow:brief:begin -->
+     <!-- managed block: /update replaces everything between these markers. Put project notes OUTSIDE them. -->
+     …the filled template…
+     <!-- dev-autonomous-workflow:brief:end -->
+     ```
+     Greenfield wraps its brief too even though it is writing a fresh file: the markers are what let a later
+     `/update` refresh the brief **without** clobbering notes the human adds to that file afterwards, and a
+     greenfield `CLAUDE.md` collects those notes just as surely as a brownfield one. One shape, both modes.
+     - **greenfield:** write the launch-root **`CLAUDE.md`** from `${CLAUDE_PLUGIN_ROOT}/templates/orchestrator-CLAUDE.md`
+       (fill `<project>`/`<project_root>`, wrap in the markers) and put the product under **`project/`** (its own
        `CLAUDE.md` left to the product); set `project_root: ./project`.
-     - **brownfield:** the product stays at the repo root; wrap that same template in the **sentinel markers**
-       and **append** it to the *existing* root `CLAUDE.md` (never clobber — idempotent via the markers); read
+     - **brownfield:** the product stays at the repo root; wrap that same filled template in the markers and
+       **append** it to the *existing* root `CLAUDE.md` (never clobber — idempotent via the markers); read
        that existing `CLAUDE.md` as a **primary ingest source**; set `project_root: .`.
    - Copy `${CLAUDE_PLUGIN_ROOT}/templates/loop.md` → **`.workflow/loop.md`** and write
      **`.workflow/config.json`** (`project_root` + run config).
@@ -148,9 +159,12 @@ loop's normal `state.json` takes over when the motion ends.
      **`${CLAUDE_PLUGIN_ROOT}/MANIFEST.json`**; for every `{src, dest}` in its **`install`** array, copy
      `${CLAUDE_PLUGIN_ROOT}/<src>` → `${CLAUDE_PROJECT_DIR}/<dest>` (creating parent dirs). **Honour the manifest
      `exclude`:** when `<src>` is a **directory** (e.g. `scripts/codemap`), do not copy files matching an `exclude`
-     glob (`**/test_*.py`) — the beside-code tests must not land in the target. Use a filtering copy, e.g.
-     `rsync -a --exclude='test_*.py' <src>/ <dest>/` (or `cp -r` then delete the matches); step 7's verification
-     rejects a leaked test file. That manifest is the
+     glob — the beside-code tests must not land in the target, and neither must build cruft (a plugin sourced
+     from a working directory rather than a release snapshot carries `__pycache__/*.pyc`, which slips past a
+     `test_*.py` glob because a `.pyc` basename is not a `*.py`). Read the globs from the manifest rather than
+     hardcoding them here, e.g.
+     `rsync -a --exclude='test_*.py' --exclude='*.pyc' --exclude='*.pyo' <src>/ <dest>/` (or `cp -r` then delete
+     the matches); step 7's verification rejects a leaked excluded file. That manifest is the
      **single source** for what installs into `.claude/`; because nothing is listed here, a script added to the
      package is picked up automatically — the drift that once dropped `loop.sh` and the demo-bundle lint from a
      hand-kept copy list cannot recur. Everything it installs is **stack-agnostic** (it reads only the workflow's
@@ -172,7 +186,8 @@ loop's normal `state.json` takes over when the motion ends.
        mechanical `discharge`; no governing decision mapped to no step; every routing target resolves); and the
        **demo-bundle lint** `create-demo` runs before it parks a sandbox (the CSP enforces *isolation*, but
        *self-contained* — no external hosts, no `eval`, build-free — it does not, so a slip renders locally and
-       blanks over the remote surface);
+       blanks over the remote surface); and the **reconcile runner** (`update_reconcile.py`) that records this
+       install's ledger below (step 7) and that `/update` later drives to migrate the project onto a newer package;
      - the git **hooks** into **`.claude/hooks/`** — `guard.sh` (secret-scan + verify-before-commit + the **push
        floor**: never move a protected branch, never push a secret) and `pre-commit.sh` (the mechanical-gate
        backstop, registered as the git hook in step 6), plus `verify_check.py`, the **shared verify-before-commit
@@ -229,7 +244,15 @@ loop's normal `state.json` takes over when the motion ends.
      (`Console: http://127.0.0.1:<port>/ — open this now`), and **best-effort open a browser on it**: try
      `wslview <url>` → `xdg-open <url>` → `open <url>` → `explorer.exe <url>`, first available wins; if none
      exists (headless/SSH), the printed URL is the always-works fallback — say the user can reach it from a
-     browser on the host machine.
+     browser on the host machine. **Never let the opener block the bootstrap** — run it detached with a hard
+     timeout and ignore its exit status: on WSL `xdg-open` sits for ~2 minutes before giving up, which stalls
+     the motion at the exact moment the human is being told to look at the console.
+     ```bash
+     ( for o in wslview xdg-open open explorer.exe; do
+         command -v "$o" >/dev/null 2>&1 && { timeout 5 "$o" "$URL" >/dev/null 2>&1 & break; }
+       done ) &
+     ```
+     The printed URL is the contract; the auto-open is a convenience that must never cost time.
    - **State the interaction contract, in one short paragraph, right here** (and again at the end of the
      motion): *"The terminal is where we talk — live dialogue and design discussion. The console is where you
      watch and steer: live bootstrap progress, checkpoint verdicts, and an **intake form** for feature
@@ -328,10 +351,18 @@ loop's normal `state.json` takes over when the motion ends.
    print("install verified:", len(man["install"]), "entries present, no excluded leaks")
    PY
    ```
-   - **All present (exit 0)** → **stamp the install, write the ledger, then commit**:
+   - **All present (exit 0)** → **stamp the install, write both ledgers, then commit**:
      - add `"workflow_version": "<version>"` to `.workflow/config.json`, read from
-       `${CLAUDE_PLUGIN_ROOT}/plugin.json` — the migration key a future `/update` diffs against; without it an
-       installed copy cannot say which package snapshot it holds;
+       `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` — the migration key a future `/update` diffs against;
+       without it an installed copy cannot say which package snapshot it holds;
+     - **record the install-set** — run
+       `python3 .claude/scripts/update_reconcile.py record --plugin-root "${CLAUDE_PLUGIN_ROOT}" --project-root "${CLAUDE_PROJECT_DIR}"`,
+       which writes **`.workflow/install-set.json`**: every path this install wrote, with the hash it wrote.
+       That record is what lets a later `/update` tell a **retired package file** (recorded by us, no longer
+       shipped ⇒ removable) from **a file the human dropped in** (never recorded ⇒ never touched), and a
+       pristine package file from a hand-edited one. Without it, an update can only ever flag. If the command
+       warns that no managed brief block was found, fix the `CLAUDE.md` markers now (step 4) rather than
+       leaving a future `/update` unable to refresh the brief;
      - write the bootstrap phase line **`bootstrap: installed`** into `.workflow/handoff.md` — the durable
        ledger §0's re-run guard keys on;
      - commit the initialised scaffold. **The commit is not the end of `/start`** — it closes the *install*,

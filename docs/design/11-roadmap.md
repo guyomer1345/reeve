@@ -128,7 +128,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **Console as the bootstrap front door + cockpit bootstrap-progress render (D132/D133)** — daemon-ensure early in
   `/start` (now step 5), prominent URL + best-effort browser auto-open, the stated interaction contract, and the
   cockpit "Now" rendering the bootstrap `phase`/step from `state.json` (`bus.py` snapshot + page row). Decided from
-  the first lived onboarding; built same day. **[core — BUILT + RE-DRIVEN (D132/D133/D138)]**
+  the first lived onboarding; built same day. **[core — BUILT (D132/D133); RE-DRIVEN (D138)]**
 
 ### Space 4 — Checkpoints & the demo skill
 - **Demo skill mechanics** — **DESIGNED (D102–D104) → BUILT 2026-07-19 (D124), Phase-4 first half:** the D94
@@ -197,7 +197,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   (the mechanical `codemap.py --seed-list` emission replaced the step-3 whole-file read — pins `06`'s deferred
   `[X]` mechanism); `[X]` extraction in batched subagents; a `research` findings bound; the bootstrap motion
   ends the context window at the reconcile park. **[core — BUILT (D134); drive-verified on the real 374-node
-  graph, ingest-side RE-DRIVEN (D138)]**
+  graph; RE-DRIVEN ingest-side (D138 — 744 nodes/2.8s, 36 seeds, graph.json never read whole)]**
 - **Retention script** — **BUILT 2026-07-02 (D71):** `scripts/retention.py` (stdlib Python, idempotent) does the
   three deterministic caps (Sessions cap-and-archive · superseded-decision GC + index tombstone · promoted-item
   prune), wired into `/start` (copy → `.claude/scripts/`) + `document` audit mode (invoke; and `document` writes
@@ -245,12 +245,13 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   **migrates** schema/format changes (not a blind overwrite). Follow-on to packaging. **Promoted into Phase 6
   (D135)** — the first real out-of-tree install now exists and will go stale; constraints pinned (version-stamped
   installs · regenerate `[G]`/never clobber `[D]`-or-adopted · additive over a pre-existing `.claude/`); the
-  version-stamp half is BUILT and the **design is SETTLED (D137)**. **[core — promoted (D135); design settled (D137);
-  build pending the Phase-6 re-drive]**
+  version-stamp half is BUILT and the **design is SETTLED (D137)**; **BUILT (D139)** — a fixed reconcile runner
+  (`update_reconcile.py`) owns the arithmetic, `commands/update.md` the judgment, and `install-set.json` makes an
+  orphan provable. **[core — promoted (D135); designed (D137); BUILT (D139) — unexercised on a real target]**
 - **Onboarding-experience hardening (D131–D134) — user-lived, decided + BUILT 2026-07-21:** the first real
   brownfield onboarding "performed the task but the process wasn't what it should be" — one-motion `/start` (D131) ·
   console front-door + stated interaction contract (D132) · bootstrap progress signal (D133) · bootstrap context
-  law (D134). Record = **Phase 6** (below). **[core — BUILT + RE-DRIVEN (D138)]**
+  law (D134). Record = **Phase 6** (below). **[core — BUILT; RE-DRIVEN (D138)]**
 
 ## Recommended sequence — phased (user-set, 2026-06-30)
 **Phase 1 — Close the foundations + guiding documents.** Finish the decided-but-unwritten core at the spec
@@ -524,7 +525,7 @@ packaging, the state-view, **and the D84 skill→agent reclassification** (`exec
 longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 
-### Phase 6 — Onboarding-experience hardening (D131–D138) — **D131–D134 RE-DRIVEN + confirmed (D138); D136 plumbing re-driven / live banner unexercised; `/update` design SETTLED (D137), build NEXT**
+### Phase 6 — Onboarding-experience hardening (D131–D139) — **COMPLETE: D131–D136 BUILT + RE-DRIVEN (D138); `/update` BUILT (D139). Residual: the D136 governor's cycle is still unexercised.**
 Born from the first **lived** onboarding — the maintainer's real brownfield run on `idea testing` (WSL over
 `/mnt/c`, 2026-07-20). The *process* held (D130's correctness stood: full bootstrap → ingest → reconcile → a real
 feature item landed and parked cleanly), but the *experience* failed: the motion split into two chats at the
@@ -538,33 +539,37 @@ lifecycle.
   boundary); §0's guard keys on **bootstrap**-completeness (installed-but-not-ingested → *resume at
   `ingest`/`discuss`*, never "already initialised"); §2/§3 are continue-in-this-session imperatives; §0's
   "install complete → fully initialised" conflation fixed. Motion ends at the first human gate (reconcile park /
-  discuss). **[ux — BUILT + RE-DRIVEN (D131/D138)]**
+  discuss). **[ux — BUILT (D131); RE-DRIVEN (D138)]**
 - **Console = the bootstrap front door (D132)** — `start.md`: daemon-ensure is now step 5, immediately after the
   step-4 install (rules-wiring moved to step 6); URL surfaced as a headline + best-effort browser auto-open
   (`wslview` → `xdg-open` → `open` → `explorer.exe` chain, printed URL as fallback); the one-paragraph
   interaction contract (terminal = dialogue · console = progress + intake + checkpoints) stated at daemon-up and
   motion-end; intake-during-bootstrap semantics documented (queued in `inbox/`, drained at the first boundary
-  after reconcile). **[ux — BUILT + RE-DRIVEN (D132/D138)]**
+  after reconcile). **[ux — BUILT (D132); RE-DRIVEN (D138)]**
 - **Bootstrap progress signal (D133)** — the motion writes `state.json` `phase: bootstrap` + node + a
   human-readable step marker at every stage boundary (`start.md` §1 preamble + `ingest`'s stage rule); the
   cockpit "Now" renders the `phase` row (`bus.py` snapshot + page); the fields have their `schemas.md` owner
-  (D80). **[ux — BUILT + RE-DRIVEN (D133/D138)]**
+  (D80). **[ux — BUILT (D133); RE-DRIVEN (D138)]**
 - **Bootstrap context law (D134)** — `codemap.py --seed-list K --include <spec-core>` emits the bounded seed
   list + per-node frontmatter (spec-core first, then top-K per lens; 2 new tests; drive-verified read-only on
   the real 374-node graph → 30 seeds); `ingest` step 3 forbids whole-graph reads and runs the extractive
   `purpose` pass in batched subagents; `research`'s charter bounds `findings` (pointers, never file bodies);
   `ingest`/`start.md` state plainly that the motion ends the context window at the park.
-  **[ctx — BUILT + RE-DRIVEN (D134/D138)]**
+  **[ctx — BUILT (D134); RE-DRIVEN (D138)]**
 - **Version-stamped installs (D135)** — `/start` step 7 writes `workflow_version` (from the plugin's
   `plugin.json`, currently `0.1.0`) into `.workflow/config.json`; `schemas.md` owns the field.
   **[fwd — BUILT (D135)]**
-- **`/update` — design SETTLED (D137), build pending the re-drive (D135)** — constraints pinned (regenerate
-  `[G]`/`graph.json` under the new schema · never clobber `[D]`/adopted docs (D39/D50/D130) · diff against the manifest
-  `install[]` map over a pre-existing `.claude/`). **Design (D137):** a 3-way file taxonomy (package-refresh ·
-  target-preserve · regenerate-from-code), version-stamp-driven, + four calls (a **command** sibling of `/start` ·
-  package-owns-`settings.json`/user-owns-`.local` · record-install-set→proven-orphan-removal · unify-greenfield-on-marked-block).
-  Two small `/start` tweaks (record the install-set · greenfield markers) ride the build, which the Phase-6 sequence
-  puts **after** the re-drive. **[fwd — promoted D135; design settled D137; build pending re-drive]**
+- **`/update` — BUILT (D139)** — constraints pinned by D135 (regenerate `[G]`/`graph.json` under the new schema ·
+  never clobber `[D]`/adopted docs (D39/D50/D130) · diff against the manifest `install[]` map over a pre-existing
+  `.claude/`); **design (D137):** a 3-way file taxonomy (package-refresh · target-preserve · regenerate-from-code),
+  version-stamp-driven, + four calls (a **command** sibling of `/start` · package-owns-`settings.json`/user-owns-`.local` ·
+  record-install-set→proven-orphan-removal · unify-greenfield-on-marked-block). **Built (D139)** as a split:
+  `scripts/update_reconcile.py` ships **fixed** and owns the arithmetic (`plan`/`apply`/`record`; writes only
+  package-owned paths, proven by a whole-tree snapshot test; `apply` **exits 2** rather than overwrite an edited
+  `settings.json`/brief without `--confirm-overwrite`), `commands/update.md` owns the judgment. `install-set.json`
+  (committed) is the ledger that makes an orphan provable; both `/start` tweaks landed. **Unexercised on a real
+  target** — a read-only `plan` against `idea testing` is all that has run (it found the `.pyc` exclude hole).
+  **[fwd — promoted D135; designed D137; BUILT D139 — `/update` on a real install still pending]**
 - **Interactive context governor (D136)** — a shipped **statusline** budget-warning (`config.context.warn_pct` %,
   never a hardcoded 300k) → **`/dispatch`** on-demand `handoff.md` → `/clear` → **`SessionStart`**(clear)
   auto-rehydrate, with a **`PreCompact`** backstop. The context-management mechanism interactive (`runner:false`)
@@ -573,16 +578,37 @@ lifecycle.
   `scripts/statusline.py` (composes over a `/start`-captured `statusline.delegate`, never clobbers), `commands/dispatch.md`,
   `hooks/session_start.py` (SessionStart `clear` → re-inject `handoff.md`), `hooks/precompact.py` (both `manual`+`auto`,
   never blocks); `config.context.warn_pct` + `statusline.delegate` own their `schemas.md`; 20 governor tests + full
-  321-test suite + 5 meta-gates green. **[ctx — BUILT (D136); plumbing re-driven, live banner unexercised (D138)]**
+  321-test suite + 5 meta-gates green. **[ctx — BUILT (D136); installed + rendering, but the /dispatch→/clear→rehydrate CYCLE stays UNEXERCISED — the banner never fired in the D138 re-drive because the context law kept the window lean]**
 
-**Sequence (set 2026-07-26; re-drive DONE 2026-07-27 — D138).** Build the governor (D136) **[BUILT 2026-07-26;
-plumbing re-driven D138, live banner still unexercised]** → forced-reinstall the plugin to HEAD (a version-pinned
-`update` is a no-op — verify `gitCommitSha` == HEAD) **[DONE]** → **one clean re-drive on a pristine p5-brownfield [DONE — D138: D131/D132/D133/D134 confirmed; the `verify_check.py` bootstrap-commit bug found + fixed]** (resets to
-fixture `d707ea9`) verifying D131/D132/D134 **and** the governor together, so the built-but-undriven surface is proven
-before more is built → design + build `/update` (D135) → **`/update` the real `idea testing` install onto HEAD** (it
-can't be safely refreshed any other way — a re-run hits "already initialised"; a manual copy risks its parked RunPod
-setup checkpoint + ADR + 95 nodes). `/update` is thus the **critical path** to the maintainer resuming real work. The
-interaction-model rework (browser-primary async chat — `07`) waits behind this re-drive.
+**Sequence (set 2026-07-26) — DONE except its last step.** Build the governor (D136) **[BUILT 2026-07-26]** →
+forced-reinstall the plugin to HEAD (a version-pinned `update` is a no-op — verify `gitCommitSha` == HEAD) →
+**one clean re-drive on a pristine p5-brownfield** **[DRIVEN 2026-07-27 — D138]** → design + build `/update`
+**[D137 designed · D139 BUILT]** → **`/update` the real `idea testing` install onto HEAD** — **STILL PENDING**, and
+now gated on Phase 7: that install's runtime half was stranded by a machine rebuild (D140), so it needs *rebinding*
+before an update is meaningful. The interaction-model rework (browser-primary async chat — `07`) waits behind both.
+
+### Phase 7 — Machine-move / portability hardening (D140) — **AUDITED; remediation not yet designed**
+Opened by a real loss, not a hypothesis: a PC rebuild renamed `$HOME`, so `idea testing`'s `runtime.json` names a
+directory that no longer exists and its whole runtime tree is unreachable. The audit (D140, measured against that
+real install) found the durable half **is** portable — committed, no absolute paths, package included — and the
+runtime half is not, with **correct detection everywhere and a repair path nowhere**. Tags: **[bind]** re-binding a
+per-machine artifact · **[dur]** durability of state that should have survived.
+- **No re-bind capability (the structural gap)** — `runtime.json` is gitignored *correctly* (a committed absolute
+  path hands another machine a wrong root, worse than none), but nothing can re-point or rebuild it: `/start` §0
+  sees a complete install and resumes the *bootstrap motion* instead, `/update` never touches runtime paths, the
+  daemon fails loud and exits. **Shape undecided** — a `/rebind`-style command vs a `/start` §0 arm vs daemon
+  self-heal. **[bind — the critical path; blocks `/update` on `idea testing`]**
+- **`handoff.parked[]` is prose, not a mechanism** — `schemas.md` promises every parked ticket is mirrored there
+  "for cold-start rebuild", but the orchestrator writes it by hand; measured absent on the real install, so a
+  parked checkpoint's only record died with the runtime tree. Same shape as F2/F3. Candidate: a machine-written
+  block like `drain.py`'s. **[dur]**
+- **`.git/hooks/pre-commit` is never cloned** — a fresh clone silently loses the mechanical-gate backstop.
+  Candidate: re-assert it from a session hook rather than only at `/start`. **[dur]**
+- **`outbox/` + `secrets/` have no recovery story** — approved-but-unfired outward actions vanish untraceably;
+  secrets are correctly never committed but have **no re-elicit path**, so the loop later reads a key that is not
+  there. **[dur]**
+- **Per-machine trust** (`~/.claude.json`) is re-granted only by `/start`, so a moved project stalls `claude -p`
+  and the relaunch-runner (D123). **[bind]**
 
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
@@ -600,6 +626,12 @@ bug is still real, relocation lands native at `0600`, the verify gate fails clos
 node seeds → the blocking reconcile checkpoint), and three drive-found issues were **fixed + re-driven** (the `align`
 meta-gate leak, the `architecture.md` case-insensitive clobber, and an `ingest` format-hunt that a new `schemas.md`
 `knowledge-node` owner closed). **Phase 5 is COMPLETE.** The first **lived** onboarding (2026-07-20) then opened
-**Phase 6 — onboarding-experience hardening (D131–D135): decided + BUILT same-day** — the process held, the
-experience didn't; its exit test (a re-driven live onboarding) and the `/update` design slice are what remain of
-it; beyond that, everything is `[stageable]`/`[later]`.
+**Phase 6 — onboarding-experience hardening (D131–D139): COMPLETE.** The process held, the experience didn't; the
+fixes were decided + built, then its exit test **ran** — the re-drive (D138) confirmed D131–D134 by driving on a
+pristine brownfield fixture and found one high-severity integration bug (a D133↔D129 collision that blocked every
+brownfield bootstrap commit), and `/update` was designed (D137) then **built** (D139). Two residuals leave the
+phase: the D136 governor's `/dispatch → /clear → rehydrate` **cycle is still unexercised** (the banner never fired —
+the context law kept the window too lean to trip it), and `/update` has never run against a real install.
+**Phase 7 — machine-move / portability hardening (D140)** then opened from a real loss: a PC rebuild stranded a
+live project's whole runtime tree, and the audit found no repair path exists for any per-machine artifact. That is
+now the critical path — it gates `/update` on `idea testing`. Beyond these, everything is `[stageable]`/`[later]`.

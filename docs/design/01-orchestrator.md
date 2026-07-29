@@ -129,7 +129,7 @@ Driving model: `CLAUDE.md` is **advisory context, not enforced configuration** �
 model-on-rails while the **hard gates are deterministic hooks**. Layout is per-mode (greenfield launch-root +
 `project/`; brownfield a marked block in the existing root `CLAUDE.md`) — see `commands/start.md` + `05`.
 
-## Bootstrap motion **[DECIDED + BUILT 2026-07-21 — D131/D134; re-drive pending, `11`]**
+## Bootstrap motion **[DECIDED + BUILT 2026-07-21 — D131/D134; RE-DRIVEN 2026-07-27 — D138, `11`]**
 `/start` is **one enforced, resumable motion** that ends only at the first human gate — brownfield
 `/start → ingest → checkpoint:reconcile` (parked), greenfield `/start → discuss` — never at the scaffold commit
 (the first lived onboarding stopped there and split into two chats). "Initialised" means **bootstrap-complete,

@@ -265,8 +265,9 @@ fires it.
 ## config.json  · written once by `/start`, read on demand · *rewrite-in-place · static after init (committed)*
 - `project_root` — `./project` (greenfield) | `.` (brownfield); makes code-touching skills path-agnostic
 - `workflow_version` — the installed package version, copied by `/start` step 7 from the plugin's
-  `plugin.json`; the migration key the future `/update` skill diffs against (an install that cannot say which
-  snapshot it holds cannot be migrated)
+  `.claude-plugin/plugin.json` and restamped by every `/update`; the migration key `/update` diffs against
+  (an install that cannot say which snapshot it holds cannot be migrated). Equal old/new ⇒ a **no-op**
+  update; **absent** ⇒ unknown-old ⇒ full reconcile + stamp, with removals disabled (see `install-set.json`)
 - `run` — per-project run config (model/effort routing, wave caps — fields grow as those land)
 - `context` — the interactive context-governor knob, **read by the shipped statusline** (the one
   surface the running token count reaches — hooks and the model receive none): `warn_pct` (the
@@ -394,6 +395,40 @@ the one place the loop keeps a secret.
   sit at a fixed, known spot on the repo mount.
 - A pointer naming a **missing** root is a hard error, never a fallback to the repo mount: falling back silently
   would land the capability token and the inbox on the very filesystem the relocation exists to avoid.
+
+## install-set.json  · written by `/start` step 7 and rewritten by every `/update`, read by `/update` · *`.workflow/install-set.json`; **committed** (its paths are repo-relative and machine-independent, unlike `runtime.json`); atomic write; produced only by `update_reconcile.py record|apply` — never hand-authored*
+The **install ledger**: what this package wrote into this project, and the hash it wrote.
+- `{ plugin, workflow_version, files: { "<repo-relative dest>": "<sha256>" } }` — one entry per file the
+  install actually landed (manifest `install[]` directory entries expanded **file-by-file**, so a retired
+  file *inside* an installed directory is detectable too), plus the pseudo-entry **`CLAUDE.md#brief`**
+  holding the hash of the orchestrator brief's managed-block **body**.
+- **It exists to make two questions answerable that are otherwise unanswerable at update time:**
+  *is this file ours?* (recorded ⇒ ours; unrecorded ⇒ the human's, never touched) and *is it pristine?*
+  (hash matches ⇒ safe to overwrite; differs ⇒ hand-edited, surfaced — and for the two human-facing files
+  it **blocks** the overwrite until confirmed). A **proven orphan** is `recorded-old − new-manifest`, which is
+  the only removal `/update` may make.
+- **Absent ⇒ unknown-old install** (predates the ledger; an absent `config.workflow_version` says the same).
+  Then nothing is provable: everything is still refreshed, nothing is ever removed, and the confirm-required
+  files need explicit confirmation. The update writes the ledger, so the *next* one is precise.
+- Rewritten whole on every `apply` — it describes the install as it is **now**, never a history. Version
+  history is git's job.
+
+## orchestrator-brief managed block  · written by `/start` step 4 (both modes), replaced by `/update` · *inside the target's root `CLAUDE.md`*
+The orchestrator brief is delimited by two **byte-stable** markers:
+```
+<!-- dev-autonomous-workflow:brief:begin -->
+<!-- managed block: /update replaces everything between these markers. Put project notes OUTSIDE them. -->
+…the filled orchestrator-CLAUDE.md template…
+<!-- dev-autonomous-workflow:brief:end -->
+```
+- **Both modes wrap.** Greenfield writes a fresh `CLAUDE.md` and still wraps: the file accumulates the
+  human's own notes over the project's life exactly as a brownfield one does, and the markers are what let a
+  later `/update` refresh the brief while leaving those notes untouched. One shape, both modes, so `/update`
+  has exactly one thing to find.
+- **These strings are a cross-version compatibility contract** — an install stamped by *any* version must be
+  findable by *every* later one. Changing them orphans every existing install's brief, so they never change.
+- **No block found ⇒ flag only.** An install predating the markers is reported, never guessed at: `/update`
+  will not infer where a brief starts and ends inside a file it does not own.
 
 ## statusline.delegate  · written by `/start` when it finds a pre-existing user statusline, read by the shipped statusline every render · *`.workflow/statusline.delegate`; RUNTIME, gitignored, plain text; lives on the repo mount (no atomicity/mode sensitivity — it is a command string, not a runtime path)*
 A single line: the **shell command of a statusline that already existed** when `/start` ran (the

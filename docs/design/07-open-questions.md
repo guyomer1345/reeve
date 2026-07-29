@@ -25,7 +25,7 @@ Deliberately deferred — known unknowns, to close during build or later.
   JS/TS, Go, Java, C#); C++/Rust/PHP stay on the tier-0 floor by design. The runtime residual **closed**:
   brownfield `/start` was driven (D130) and then **lived** in a real onboarding (2026-07-20) — correctness held;
   the first-run *experience* did not, opening **Phase 6 (D131–D135, `11`)**: one-motion `/start` · console
-  front-door · bootstrap progress · bootstrap context law — decided + BUILT 2026-07-21; re-drive pending.
+  front-door · bootstrap progress · bootstrap context law — decided + BUILT 2026-07-21; RE-DRIVEN 2026-07-27 (D138).
 - **Commit-message convention** — **CLOSED (D32):** Conventional Commits + `Refs:`/`Closes:` trailers.
   Remaining sliver: whether the workflow's own generated commits carry the `Co-Authored-By` trailer.
 - **Agent roster v1** — **CLOSED in `10`** (names, I/O contracts, skill-vs-agent, topology). Remaining
@@ -283,3 +283,43 @@ Deliberately deferred — known unknowns, to close during build or later.
   (D68)** and the call held: **`ingest` is a thin skill over the existing leaves** (`research` read →
   `document` write), **no new agent** — reserved still, added only if the generic workers prove insufficient in
   a real ingest run. Cousin of the open "engineer agent?" slot (`02`).
+
+## Drive-found, logged not fixed (D138 re-drive, 2026-07-27)
+Two of the four D138 findings were fixed in D139 (the `verify_check.py` bootstrap carve-out; the `xdg-open` WSL
+hang). These two stay open because each is a design change, not a patch:
+- **Mid-flow human questions have no route.** During the bootstrap motion the model asks the human things that
+  are really *decisions* or *reconcile* material, and they land in free conversation — outside the machinery that
+  is supposed to durably hold a question until it is answered. They should route to `decision-engineer` (a real
+  open build decision) or to the reconcile gate (an understanding gap). Open: which of the two is the default,
+  and whether a mid-motion question should be allowed to park at all or must always defer to the reconcile
+  checkpoint. Touches `loop.md` + the orchestrator brief, so it is not a `/start` tweak.
+- **`checks.sh --check` stack-lint scoping over the vendored `.claude/scripts/`.** The stack gates are scoped to
+  `project_root` (D127), but on a brownfield install where `project_root` is `.`, the workflow's own installed
+  `.claude/scripts/` sits *inside* that scope — so a repo-wide linter lints the package we vendored in. Related
+  to, but not the same as, the greenfield leak D127 already fixed. Open: exclude the workflow's own paths in
+  `checks.env` generation, or teach `checks.sh` a standing exclusion (a fixed-runner change, so it needs the
+  D127 care).
+
+## Machine-move remediation — the Phase-7 design questions (D140, opened 2026-07-29)
+The audit is done and captured (D140); the remediation is **not designed**. What must be settled before building:
+- **What re-binds a per-machine artifact, and when?** A dedicated `/rebind` command (a third sibling of
+  `/start`/`/update`), a new `/start` §0 arm (a fourth completeness state: installed + bootstrapped + *unbound*),
+  or daemon self-heal (it already detects the dead pointer and exits — it could offer to re-create the root).
+  The trade is discoverability against yet another command; the `/start` arm reuses a guard the human already
+  knows but overloads a command whose contract is "bootstrap once".
+- **Is re-binding recovery or re-creation?** A new machine has no old runtime tree to move — so re-binding
+  *creates* an empty one and the question becomes what must be **reconstructed into it** (position from
+  `handoff.md` + `git log` already works) versus what is **genuinely lost** (parked records, outbox, secrets)
+  and must be surfaced as loss rather than silently started fresh.
+- **Should `handoff.parked[]` become a machine-written block?** `drain.py` owns its fenced block in the same
+  file precisely because the *set* was too easy for a model to drop. The parked mirror has the identical
+  property and the identical failure (measured absent on the real install). Open: same pattern, or is a parked
+  ticket's record better made *committed* outright — and if so, how does that square with `parked/` being
+  runtime-and-gitignored for filesystem-mode reasons?
+- **Where does the git `pre-commit` hook get re-asserted?** Git never clones `.git/hooks/`, so today a clone
+  silently drops the mechanical-gate backstop. A `SessionStart` hook could re-assert it every session (cheap,
+  idempotent) — but that puts a shipped hook in the business of installing another hook, which needs the same
+  fail-closed scrutiny as F3.
+- **Do secrets get a re-elicit path?** Today a moved project reads a credential that is not there. The `setup`
+  checkpoint already knows how to ask a human for one; open is what *detects* the absence and re-raises it,
+  versus failing at the point of use.
