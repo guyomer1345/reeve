@@ -11,3 +11,10 @@ Thumbs.db
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Machine-local Claude Code settings. `settings.local.json` is per-machine by
+# convention (Claude Code merges it OVER settings.json and nothing ever writes it),
+# which is the same reason /update tells a target to put personalizations there —
+# so it must not be committed. Any SHARED setting for this repo belongs in a
+# tracked .claude/settings.json instead.
+.claude/settings.local.json
