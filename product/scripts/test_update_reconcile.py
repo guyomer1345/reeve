@@ -338,5 +338,57 @@ def test_uninitialised_project_is_refused(tmp_path):
     assert ur.main(["plan", "--plugin-root", str(plugin), "--project-root", str(bare)]) == 1
 
 
+# ------------------------------------------------- _atomic_write on hostile filesystems
+# A repo checkout can sit on a filesystem that does not honour file modes: a WSL /mnt/c
+# DrvFs mount without metadata, a CIFS/SMB share, some container bind mounts. There
+# `os.chmod` raises EPERM even though the write itself succeeds. An unconditional chmod
+# aborted the whole apply -- stranding exactly the checkouts that most need updating --
+# and left a `<name>.tmp.update` file behind as unexplained debris.
+
+def test_chmod_failure_does_not_abort_the_write(tmp_path, monkeypatch, capsys):
+    """EPERM from chmod must not fail the write: the mode is cosmetic for this package
+    (every installed script runs via its interpreter, so no exec bit is load-bearing)."""
+    def _boom(*_a, **_k):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(ur.os, "chmod", _boom)
+    monkeypatch.setattr(ur, "_chmod_unsupported_warned", False)
+    target = tmp_path / "sub" / "guard.sh"
+
+    ur._atomic_write(str(target), "#!/bin/sh\necho hi\n", 0o755)
+
+    assert target.read_text() == "#!/bin/sh\necho hi\n"        # content is correct
+    assert "chmod is unsupported" in capsys.readouterr().err    # and it said so
+
+
+def test_chmod_failure_warns_only_once(tmp_path, monkeypatch, capsys):
+    """One note per run, not one per file -- an apply writes ~20 files."""
+    def _boom(*_a, **_k):
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(ur.os, "chmod", _boom)
+    monkeypatch.setattr(ur, "_chmod_unsupported_warned", False)
+    for i in range(3):
+        ur._atomic_write(str(tmp_path / ("f%d" % i)), "x", 0o755)
+
+    assert capsys.readouterr().err.count("chmod is unsupported") == 1
+
+
+def test_write_failure_leaves_no_tmp_debris(tmp_path, monkeypatch):
+    """A raise mid-write must clean up its temp file rather than leaving it beside the
+    real one, where it reads as mysterious debris on the next inspection."""
+    def _boom(*_a, **_k):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(ur.os, "replace", _boom)
+    target = tmp_path / "guard.sh"
+
+    with pytest.raises(OSError):
+        ur._atomic_write(str(target), "data", 0o644)
+
+    assert list(tmp_path.glob("*.tmp.update")) == []
+    assert not target.exists()
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

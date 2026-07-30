@@ -103,17 +103,50 @@ def _read_json(path, default=None):
         return default
 
 
+_chmod_unsupported_warned = False
+
+
 def _atomic_write(path, data, mode=None):
-    """Temp + rename, so a killed update never leaves a half-written package file."""
+    """Temp + rename, so a killed update never leaves a half-written package file.
+
+    `chmod` is BEST-EFFORT. A repo checkout can live on a filesystem that does not honour
+    file modes -- a WSL `/mnt/c` DrvFs mount without metadata, a CIFS/SMB share, some
+    container bind mounts -- where `os.chmod` raises EPERM even though the write itself
+    succeeds. The mode is cosmetic for this package in any case: every installed hook and
+    script is invoked through its interpreter (`bash .claude/hooks/guard.sh`,
+    `python3 .claude/scripts/bus.py`), never executed directly, so no exec bit is load-
+    bearing. Aborting the whole update over an unenforceable permission bit would strand
+    exactly the checkouts that most need updating, so warn once and carry on.
+
+    The temp file is cleaned up on ANY failure -- a raise here used to leave a
+    `<name>.tmp.update` beside the real file, which then reads as mysterious debris.
+    """
+    global _chmod_unsupported_warned
     parent = os.path.dirname(path) or "."
     os.makedirs(parent, exist_ok=True)
     tmp = path + ".tmp.update"
     flags = "wb" if isinstance(data, bytes) else "w"
-    with open(tmp, flags) as fh:
-        fh.write(data)
-    if mode is not None:
-        os.chmod(tmp, mode)
-    os.replace(tmp, path)
+    try:
+        with open(tmp, flags) as fh:
+            fh.write(data)
+        if mode is not None:
+            try:
+                os.chmod(tmp, mode)
+            except OSError as exc:
+                if not _chmod_unsupported_warned:
+                    _chmod_unsupported_warned = True
+                    sys.stderr.write(
+                        "NOTE: chmod is unsupported on this filesystem (%s); installed file "
+                        "modes left as-is. Harmless -- every script is run via its interpreter, "
+                        "so no exec bit is required.\n" % exc.strerror
+                    )
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # ---------------------------------------------------------------- expected set
