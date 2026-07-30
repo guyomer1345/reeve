@@ -81,8 +81,12 @@ duplicate. A bare start is invisible to the runner (the one operator residual).
 **Enforced by hooks (you cannot cross these):**
 - No commit until `verify` passes for the item.
 - No commit if the staged diff trips the secret scan.
-- **Never push a protected branch** — `main`/`master`, plus anything `config.json`'s `guard.protected_branches`
-  adds. Push a feature branch; a **human** moves `main`. A hard block, not a prompt: there is no approve-and-proceed.
+- **Never push a protected branch** — by default `main`/`master`, plus anything `config.json`'s
+  `guard.protected_branches` adds. Push a feature branch; a **human** moves `main`. A hard block, not a prompt:
+  there is no approve-and-proceed *for a branch in the set*. The **set itself** is a project decision —
+  `guard.allow_protected_push: true` drops the `main`/`master` floor (added names still apply), which is the
+  right setting for a solo repo where the owner is the only pusher. Default OFF, so unless this project's
+  `config.json` says otherwise, assume `main` is protected.
 - No push whose outgoing commit range trips the secret scan.
 
 **Gated by the outbox (defer — never block, never wait):**

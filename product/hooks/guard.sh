@@ -5,7 +5,9 @@
 # to perform, so there is no approve-and-proceed path:
 #   - secret-scan          : never commit a secret staged in the diff
 #   - verify-before-commit : never commit an item whose verify-verdict is a fail
-#   - protected-branch push: the loop never moves main/master (a human does)
+#   - protected-branch push: the loop never moves a protected branch (main/master by
+#                            default, + config's protected_branches; the main/master
+#                            floor is lowerable per-project via guard.allow_protected_push)
 #   - push secret-scan     : never send a secret in the outgoing commit range
 #   - obscured outward act : an outward action hidden in a chain/subshell is forced
 #                            to run directly, so this guard can parse it
@@ -102,26 +104,60 @@ if is_git push; then
   # The refspec cannot be read out of a raw JSON payload — refuse rather than guess.
   [ -n "$cmd" ] || block "cannot parse the push refspec (python3 unavailable); the protected-branch floor fails closed."
 
-  # main/master are always protected and cannot be removed; config may only ADD to the set.
-  protected="main master"
-  extra="$(python3 - <<'PY' 2>/dev/null || true
+  # main/master are the DEFAULT floor. `guard.allow_protected_push: true` lowers it —
+  # an explicit, committed, per-project opt-out for a solo repo where the human IS the
+  # only pusher and the feature-branch dance buys nothing. Config may always ADD names,
+  # and an added name is honoured even when the floor is lowered (so a project can opt
+  # out of the main/master floor while still protecting, say, `release`).
+  #
+  # Fail-CLOSED: both values come from ONE python read, which prints the flag on line 1
+  # and the extras on line 2. If that read fails for ANY reason (no python3, missing or
+  # malformed config.json), line 1 is empty → the flag reads false → the floor STAYS.
+  # Silence can only ever be more conservative, never less.
+  cfgout="$(python3 - <<'PY' 2>/dev/null || true
 import json
+allow, names = False, []
 try:
-    cfg = json.load(open(".workflow/config.json"))
-    names = cfg.get("guard", {}).get("protected_branches", []) or []
-    print(" ".join(str(n) for n in names))
+    guard = (json.load(open(".workflow/config.json")).get("guard") or {})
+    allow = guard.get("allow_protected_push") is True   # strict: only real JSON `true`
+    names = guard.get("protected_branches") or []
 except Exception:
-    pass
+    allow, names = False, []                            # unreadable -> keep the floor
+print("true" if allow else "")
+print(" ".join(str(n) for n in names))
 PY
 )"
+  allow_protected="$(printf '%s\n' "$cfgout" | sed -n '1p')"
+  extra="$(printf '%s\n' "$cfgout" | sed -n '2p')"
+
+  if [ "$allow_protected" = "true" ]; then
+    protected=""
+    echo "disciplined-builder guard: protected-branch floor lowered by .workflow/config.json (guard.allow_protected_push=true)" >&2
+  else
+    protected="main master"
+  fi
   [ -n "$extra" ] && protected="$protected $extra"
 
-  # --all / --mirror move every branch, protected ones included.
-  if printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])--(all|mirror)([[:space:]]|$)'; then
+  # Floor lowered AND no added names -> nothing to protect; skip the branch check
+  # entirely rather than letting the empty-`protected` loop read as a silent pass.
+  if [ -z "$protected" ]; then
+    skip_branch_check=1
+  else
+    skip_branch_check=0
+  fi
+
+  # --all / --mirror move every branch, protected ones included. Only a concern while
+  # something is actually protected; with the floor lowered and no added names there is
+  # no protected branch for them to sweep.
+  if [ "$skip_branch_check" -eq 0 ] \
+     && printf '%s' "$cmd" | grep -Eq '(^|[[:space:]])--(all|mirror)([[:space:]]|$)'; then
     block "git push --all/--mirror would move a protected branch ($protected). Push an explicit feature branch instead."
   fi
 
   # Resolve target branch(es): explicit refspecs win, else the upstream / current branch.
+  # Skipped wholesale when nothing is protected — with an empty set there is no branch
+  # decision to make, so "cannot resolve the target" has nothing left to fail closed on.
+  if [ "$skip_branch_check" -eq 0 ]; then
   targets="$(python3 - "$cmd" <<'PY' 2>/dev/null || true
 import shlex, subprocess, sys
 try:
@@ -175,6 +211,7 @@ PY
   done <<EOF
 $targets
 EOF
+  fi   # end skip_branch_check
 
   # Secret-scan the OUTGOING range: a commit can reach the branch by a path the
   # commit gate never saw (wrapper/IDE commit), so re-check what is actually leaving.

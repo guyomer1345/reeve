@@ -360,11 +360,24 @@ fires it.
     its host to Socket A's Host-allowlist — a proxy that forwards the original Host would otherwise have all its
     traffic rejected. Absent → the pairing link and the forwarded-Host allowlist are both unavailable (surfaced in
     `status`); only loopback-Host proxy traffic (Host-rewriting proxies) still reaches A.
-- `guard` — the Layer-1 floor's only knob: `protected_branches` (**add-only**). `main` and `master` are **always**
-  protected and cannot be removed; this list *adds* to them (e.g. `release`, `prod`). The floor itself is
-  non-overridable — the loop never pushes a protected branch and never pushes a secret in the outgoing range,
-  regardless of `outward`. Absent → `{main, master}`. (Un-protecting a branch is deliberately not a config toggle:
-  disabling a safety floor should cost an edit to `guard.sh` itself, which is a visible, owner-level act.)
+- `guard` — the Layer-1 floor's two knobs:
+  - `protected_branches` (**add-only**) — *adds* names to the protected set (e.g. `release`, `prod`).
+  - `allow_protected_push` (`true` lowers the default floor) — drops `main`/`master` from the set for **this
+    project only**. Names in `protected_branches` are still honoured, so a project can opt out of the
+    `main`/`master` floor while keeping `release` protected. Strict read: only real JSON `true` counts (the
+    string `"true"` does not), and the guard **fails closed** — an unreadable/malformed `config.json`, or no
+    `python3`, keeps the floor. When it does lower the floor the guard says so on stderr, so a permitted push
+    to `main` is never silent.
+  - Absent → `{main, master}`.
+  - **Still non-overridable by any config:** the outgoing-range secret scan. No push ships a secret, regardless
+    of `outward` or `allow_protected_push`.
+  - **Why this became a toggle.** It deliberately was not one: the rule used to be that disabling a safety floor
+    should cost an edit to `guard.sh` itself, as a visible owner-level act. That reasoning assumed a team, where
+    "a human moves `main`" names a *different* human than the loop. On a **solo repo the owner is the only
+    pusher**, so the floor bought no separation of duties — it just forced a feature-branch detour, or an
+    out-of-band `git push` that bypassed the outgoing-range secret scan entirely. Making it an explicit,
+    committed, default-OFF config key is strictly safer than the workaround it was producing. The floor still
+    defaults ON, so a fresh `/start` is unchanged.
 
 ## secret store  · written by the orchestrator when a `setup` verdict returns a `sensitive` value, read when the loop needs that credential · *`.workflow/secrets/`; RUNTIME, gitignored, kept on a native filesystem; each entry created `0600` (restricted ACL on Windows) with an atomic write*
 The home for the **live credentials** a human hands over at a `setup` checkpoint (an API key, a webhook secret) —
