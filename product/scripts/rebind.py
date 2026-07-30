@@ -47,6 +47,7 @@ import os
 import re
 import shutil
 import socket
+import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -66,6 +67,175 @@ RUNTIME_DIRS = ("parked", "inbox", "outbox", "secrets")
 HOME_PREFIX_RE = re.compile(r"^(/home/[^/]+|/Users/[^/]+|/root)(/.*)?$")
 
 BACKLOG_SECTION = "## Rebind losses (machine move)"
+
+# The bindability probe's ceiling. Generous — it is running the project's real test
+# suite — but bounded, because a hung gate must not hang the repair.
+CHECKS_TIMEOUT = 900
+# How much of the gate's output to show the human. Enough to see the first failure,
+# far short of a whole test log.
+CHECKS_TAIL = 40
+
+
+# --- the declared secret set -------------------------------------------------
+def required_secrets(workflow):
+    """`config.json`'s `secrets_required[]` — the KEY NAMES this project needs.
+
+    Absence of a credential is undetectable by inspection: an empty `secrets/` is
+    indistinguishable from a project that needs none, so a machine move could only ever
+    report "the secret store is gone, work out yourself what was in it". A declared set
+    turns that into an itemized list. Names only, never values — the manifest is
+    committed, and a value in it would be the exact leak the store exists to prevent.
+    """
+    cfg = os.path.join(workflow, "config.json")
+    try:
+        with open(cfg) as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return []
+    names = data.get("secrets_required") if isinstance(data, dict) else None
+    if not isinstance(names, list):
+        return []
+    return sorted({n for n in names if isinstance(n, str) and n.strip()})
+
+
+def present_secrets(secrets_dir):
+    """The key NAMES the store currently holds.
+
+    Entries are named by the `message_id` that carried them, not by the credential, so
+    the names live inside the payloads and this has to look. It reads the bodies and
+    returns only dict KEYS — no value is ever returned, printed, or filed, and the
+    `sensitive` marker is dropped because it is a flag, not a credential name.
+
+    Deliberately generous about shape (`returns` is an open payload): a name is present
+    if it appears as a key anywhere in the record. Being wrong in the OTHER direction is
+    what matters — a missed match reports a secret as lost, which is noise a human
+    corrects, whereas a false match would report a lost credential as present, which is
+    silence. This is early warning; `schemas.md`'s point-of-use fail-closed is the floor.
+    """
+    found = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if isinstance(k, str) and k != "sensitive":
+                    found.add(k)
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    try:
+        names = os.listdir(secrets_dir)
+    except OSError:
+        return found
+    for n in names:
+        if not n.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(secrets_dir, n)) as fh:
+                walk(json.load(fh))
+        except (OSError, ValueError):
+            continue
+    return found
+
+
+def secret_loss(workflow, secrets_dir, host):
+    """`required − present`, as an itemized loss. None when nothing is declared missing.
+
+    Returns None when the project declares no set at all — that is "we cannot tell",
+    not "nothing is missing", and the generic store-lost entry still covers it.
+    """
+    required = required_secrets(workflow)
+    if not required:
+        return None
+    missing = [n for n in required if n not in present_secrets(secrets_dir)]
+    if not missing:
+        return None
+    return {
+        "title": "rebind: %d declared secret(s) missing after a machine move" % len(missing),
+        "kind": "bug", "severity": "high",
+        "description":
+            "config.json declares secrets_required = [%s]; the secret store on %s does "
+            "not hold: %s. These are live credentials a human handed over at a setup "
+            "checkpoint — re-elicit each one through a setup checkpoint, never by "
+            "pasting it into a file the loop reads. (Key names only; no value is "
+            "recorded here or anywhere committed.)"
+            % (", ".join(required), host, ", ".join(missing)),
+    }
+
+
+# --- the bindability probe --------------------------------------------------
+def probe_bindability(project_root):
+    """Can this machine run the mechanical commit gate AT ALL?
+
+    The portability audit that opened this work concluded the durable half is portable —
+    committed, no absolute paths — and that is true of the FILES and false of their
+    EXECUTABILITY. `checks.env`
+    is committed and names the stack's commands; the toolchain those commands need
+    (`node_modules`, a venv, a Docker image, a language runtime) is machine-local and
+    gitignored, correctly. Because the mechanical gate is the loop's floor, a correctly
+    re-bound project can be unable to make a single commit — measured on the real
+    machine move, where the answer arrived at the first commit rather than up front.
+
+    The probe is deliberately NOT "is the toolchain installed?". That question cannot be
+    answered without knowing which side of a WSL/Windows boundary each command belongs
+    to, and getting that wrong is precisely what went wrong during the drive. So it asks
+    the only question with an unambiguous answer: run the gate the way the pre-commit
+    hook runs it — same command, same cwd, same shell — and report whether it exits
+    clean.
+
+    It reports an OBSERVABLE and does not classify the cause. A non-zero exit means "you
+    cannot commit right now"; whether that is a missing toolchain or a genuinely failing
+    test is for the reader, and the tail is included so they can see. Inventing that
+    distinction here would be the heuristic this design rejected.
+    """
+    runner = os.path.join(project_root, ".workflow", "checks.sh")
+    if not os.path.isfile(runner):
+        return {"ran": False, "clean": None,
+                "why": "no .workflow/checks.sh — nothing to probe"}
+    cmd = ["bash", ".workflow/checks.sh", "--check"]
+    try:
+        proc = subprocess.run(cmd, cwd=project_root, capture_output=True, text=True,
+                              timeout=CHECKS_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return {"ran": True, "clean": False, "exit_code": None, "timed_out": True,
+                "command": " ".join(cmd),
+                "why": "the gate did not finish within %ds" % CHECKS_TIMEOUT,
+                "tail": ""}
+    except OSError as exc:
+        return {"ran": False, "clean": None,
+                "why": "could not execute the gate (%s)" % exc}
+    out = ((proc.stdout or "") + (proc.stderr or "")).strip().splitlines()
+    return {"ran": True, "clean": proc.returncode == 0, "exit_code": proc.returncode,
+            "timed_out": False, "command": " ".join(cmd),
+            "tail": "\n".join(out[-CHECKS_TAIL:])}
+
+
+def bindability_loss(probe, host):
+    """The probe's durable record — deliberately WITHOUT the gate's output.
+
+    The tail goes to stdout, where the human reading the repair can see it. It does not
+    go here, because this entry lands in `backlog.md`, which is COMMITTED: the gate's
+    output is arbitrary subprocess text, and the one control that would catch a secret
+    in it is the staged-diff scan in the very gate that just failed to run.
+    """
+    if not probe.get("ran") or probe.get("clean") is not False:
+        return None
+    detail = ("timed out after %ds" % CHECKS_TIMEOUT if probe.get("timed_out")
+              else "exited %s" % probe.get("exit_code"))
+    return {
+        "title": "rebind: the mechanical commit gate does not pass on this machine",
+        "kind": "bug", "severity": "high",
+        "description":
+            "`%s` %s on %s, so the loop cannot commit: the pre-commit hook runs that "
+            "exact command and blocks on a non-zero exit. This probe reports the "
+            "OBSERVABLE and does not diagnose it — the cause may be a toolchain that "
+            "did not travel (`node_modules`, a venv, a runtime; all correctly "
+            "gitignored, none of them committed) or a genuinely failing check. Re-run "
+            "it and read the output. If the commands cannot RUN, install the stack "
+            "named in `.workflow/checks.env` on the side of the machine that owns them."
+            % (probe.get("command"), detail, host),
+    }
 
 
 # --- probing ----------------------------------------------------------------
@@ -154,8 +324,21 @@ def plan(project_root, fresh=False):
                           "exists": os.path.isdir(old)}
 
     if old:
-        return _plan_with_pointer(out, project_root, workflow, old, canonical, fresh)
-    return _plan_without_pointer(out, project_root, workflow, canonical, fresh)
+        out = _plan_with_pointer(out, project_root, workflow, old, canonical, fresh)
+    else:
+        out = _plan_without_pointer(out, project_root, workflow, canonical, fresh)
+
+    # The declared-secret check is PURE READS, so unlike the bindability probe it runs
+    # in the dry run too — `check` can report an itemized credential loss without
+    # touching anything. Skipped on BIND (a project on its first minute has declared
+    # nothing and lost nothing). On HEALTHY it reports but `apply` still writes nothing,
+    # which keeps a healthy install a fixed point; the human is told either way.
+    if out["classification"] != "BIND" and out["target"]:
+        missing = secret_loss(workflow, os.path.join(out["target"], "secrets"),
+                              out["host"])
+        if missing:
+            out["losses"].append(missing)
+    return out
 
 
 def _plan_with_pointer(out, project_root, workflow, old, canonical, fresh):
@@ -280,8 +463,11 @@ def _plan_recreate(out, project_root, workflow, canonical, relocated, fresh):
                 "parked/<id>.json did not survive the move to %s. Every open "
                 "checkpoint's body is gone — its question, its deadline, and any "
                 "credential or payload a human had already returned. handoff.md's "
-                "prose Parked section is the only surviving trace; re-open each "
-                "checkpoint it names from that prose." % out["host"],
+                "`parked` block is the only surviving trace (an older install has "
+                "hand-written prose instead), and it carries the id, kind, summary and "
+                "opened-at BY DESIGN — a body is exactly what must not be committed. "
+                "Re-open each checkpoint it names with `bus.py park`, using a fresh "
+                "token." % out["host"],
         },
         {
             "title": "rebind: outbox lost in a machine move",
@@ -312,11 +498,12 @@ def _plan_recreate(out, project_root, workflow, canonical, relocated, fresh):
 
 
 # --- applying ---------------------------------------------------------------
-def apply(project_root, fresh=False):
+def apply(project_root, fresh=False, probe=True):
     """Act on the plan. A no-op on a healthy install, and never an overwrite."""
     p = plan(project_root, fresh=fresh)
     cls = p["classification"]
     p["applied"] = []
+    p["bindability"] = None
     if cls == "NOT-STARTED":
         return p, 2
     if cls == "HEALTHY":
@@ -398,6 +585,18 @@ def apply(project_root, fresh=False):
         p["applied"].append("removed the stale pointer %s (the runtime tree is "
                             "in-place)" % pointer)
 
+    # The binding is now correct. Whether the project can actually WORK on this machine
+    # is a separate question, and it is asked here — after the repair, before the human
+    # is told they are done. Skipped on BIND: at /start step 3 the stack is not wired
+    # yet, so the gate would be answering a question nobody asked. Skipped on HEALTHY
+    # too, by the early return above — `apply` is a fixed point there, and running a
+    # project's whole test suite is not a no-op.
+    if probe and cls != "BIND":
+        p["bindability"] = probe_bindability(p["project_root"])
+        blocked = bindability_loss(p["bindability"], p["host"])
+        if blocked:
+            p["losses"].append(blocked)
+
     filed = file_losses(p)
     p["applied"].extend(filed)
     return p, 0
@@ -473,7 +672,37 @@ def render(p, mode):
     for loss in p["losses"]:
         L.append("  LOST [%s/%s] %s\n           %s"
                  % (loss["kind"], loss["severity"], loss["title"], loss["description"]))
+    L.extend(render_bindability(p, mode))
     return "\n".join(L)
+
+
+def render_bindability(p, mode):
+    """The probe's report — including the output tail, which the backlog entry omits.
+
+    This is where the diagnosis belongs: on the human's screen, in the moment they are
+    deciding what to do, rather than in a committed file that would carry arbitrary
+    subprocess output forever.
+    """
+    probe = p.get("bindability")
+    if probe is None:
+        if mode == "check" and p["classification"] not in ("NOT-STARTED", "HEALTHY"):
+            return ["  bindable: NOT PROBED — `check` is a dry run and the gate runs the "
+                    "project's tests. `apply` probes."]
+        return []
+    if not probe.get("ran"):
+        return ["  bindable: not probed — %s" % probe.get("why")]
+    if probe.get("clean"):
+        return ["  bindable: YES — `%s` exits clean, so this machine can commit."
+                % probe.get("command")]
+    L = ["  bindable: NO — `%s` %s. The pre-commit hook runs that exact command and "
+         "blocks on it, so the loop cannot commit here."
+         % (probe.get("command"),
+            "timed out after %ds" % CHECKS_TIMEOUT if probe.get("timed_out")
+            else "exited %s" % probe.get("exit_code"))]
+    if probe.get("tail"):
+        L.append("  --- last %d lines of the gate ---" % CHECKS_TAIL)
+        L.extend("  | " + ln for ln in probe["tail"].splitlines())
+    return L
 
 
 def main(argv=None):
@@ -483,15 +712,20 @@ def main(argv=None):
     ap.add_argument("--project-root", default=".")
     ap.add_argument("--json", action="store_true",
                     help="emit the plan as JSON instead of prose")
+    ap.add_argument("--no-probe", action="store_true",
+                    help="skip the bindability probe (apply runs the project's real "
+                         "mechanical gate, which can take minutes)")
     args = ap.parse_args(argv)
 
     if args.cmd == "check":
         p, code = plan(args.project_root), 0
         p["applied"] = []
+        p["bindability"] = None
         if p["classification"] == "NOT-STARTED":
             code = 2
     else:
-        p, code = apply(args.project_root, fresh=(args.cmd == "bind"))
+        p, code = apply(args.project_root, fresh=(args.cmd == "bind"),
+                        probe=not args.no_probe)
 
     print(json.dumps(p, indent=2) if args.json
           else render(p, "check" if args.cmd == "check" else "apply"))

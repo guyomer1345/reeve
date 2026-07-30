@@ -16,8 +16,9 @@ You (the orchestrator) do this now, in this turn:
    Capture the live state as it is **right now**:
    - the `bootstrap:` ledger line if the bootstrap motion is still in progress (`installed` /
      `ingesting` / `discussing` / `reconcile-parked` / `complete`) — omit only once the loop drives;
-   - `current_item`, `loop_position` (which `loop.md` node you are at), and `parked[]` (mirror
-     every open parked ticket);
+   - `current_item` and `loop_position` (which `loop.md` node you are at). **Not `parked[]`** — the
+     `<!-- parked:begin -->` block is machine-owned (`bus.py park`) and already mirrors every open
+     ticket; hand-writing a second copy is how the two disagree;
    - `base_sha` = the current `HEAD` (`git rev-parse HEAD`) — the commit the resume reads
      `git log <base_sha>..HEAD` against;
    - in prose: what is **committed** vs what is **uncommitted in the working tree** right now
@@ -27,9 +28,11 @@ You (the orchestrator) do this now, in this turn:
 2. **Write it with the `Write`/`Edit` tools — never a `Bash` `>`/`tee` redirect.** The tools
    publish atomically (temp + rename); a shell redirect truncates in place and can tear the file
    on a kill.
-3. **Do not touch the machine block** — the fenced `<!-- drain:begin -->` … `<!-- drain:end -->`
-   region is `drain.py`'s (the inbox consumed-set + watermark). Leave it exactly as it is; if the
-   file has none yet, do not fabricate one. Rewrite only the prose around it.
+3. **Do not touch either machine block** — the fenced `<!-- drain:begin -->` … `<!-- drain:end -->`
+   region is `drain.py`'s (the inbox consumed-set + watermark) and `<!-- parked:begin -->` …
+   `<!-- parked:end -->` is `bus.py park`'s (the open-checkpoint mirror). Leave both exactly as they
+   are; if the file has neither yet, do not fabricate one. Rewrite only the prose around them.
+   "Rewrite the file whole" means the **prose** whole — preserve both regions byte for byte.
 4. **Do not commit and do not run `verify`/`document`** — `/dispatch` is a mid-session context
    snapshot, not an item-close. If you happen to be at a clean item boundary you may follow the
    normal tail, but `/dispatch` itself only writes the anchor.

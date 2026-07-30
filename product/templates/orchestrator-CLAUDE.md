@@ -32,7 +32,11 @@ don't carry the graph in your head.
    **Apply each one — that part is yours**, by kind:
    - `control` (reprioritize / pause / resume) — honored here only, never mid-item.
    - `verdict` — resume the parked ticket whose `token` matches. An unknown or already-closed
-     token → **dead-letter it and surface it**, never a silent resume.
+     token → **dead-letter it and surface it**, never a silent resume. Once you have routed the
+     verdict, **close the ticket with `python3 .claude/scripts/bus.py unpark --id <ticket_id>`** —
+     removing the record is what closes the token (so a re-applied verdict no-ops) *and* what drops
+     the entry from `handoff.md`'s parked block. Skip it and the loop reports a checkpoint that is
+     already answered as still open, forever.
    - `intake` — promote into `backlog.md` through triage, stamping the message's id into the new
      item's `source`. If an item already carries that id, it's already promoted: skip it.
    - `release` — fire each named `outbox/` entry (skip any already `executed`).

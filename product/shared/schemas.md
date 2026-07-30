@@ -143,15 +143,30 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   A **timeout never auto-proceeds** — it re-surfaces + reminds (a missing credential can't be skipped). A rejection is
   not always a defect — hence routing by kind, not a universal `debug` sink.
 
-## parked-ticket  · written by the orchestrator when a ticket parks on a checkpoint · *`.workflow/parked/<id>.json`; RUNTIME, gitignored, kept on a native filesystem; every entry mirrored in `handoff.parked[]` for cold-start rebuild*
-- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request, demo_id?}, predicted_outcome, deadline }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them. **`checkpoint.demo_id`** is present only for `kind: demo` — the id of the served bundle under `demos/`, so the console builds the `/demo/<id>/` iframe (validated to the served-id shape before it is rendered). The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
+## parked-ticket  · composed by the orchestrator, **written by `bus.py park`** · *`.workflow/parked/<id>.json`; RUNTIME, gitignored, kept on a native filesystem; projected onto `handoff.md`'s **`parked` machine block** for cold-start rebuild*
+- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request, demo_id?}, predicted_outcome, deadline, opened_at, summary }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them. **`checkpoint.demo_id`** is present only for `kind: demo` — the id of the served bundle under `demos/`, so the console builds the `/demo/<id>/` iframe (validated to the served-id shape before it is rendered). The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
+- **`bus.py park` is the writer, and the split is the usual one.** The orchestrator composes the **judgment**
+  (`token`, `checkpoint.request`, `predicted_outcome`, `loop_position`) and pipes the record in on **stdin**; the
+  runner does the **arithmetic** — resolves the runtime root through `Paths`, stamps `deadline` + `opened_at`,
+  writes atomically at `0600`, and re-projects the mirror. It **refuses** a record that cannot do its job (no
+  `ticket_id`, no `token`, an unknown `kind`, an empty `request`) and writes nothing on refusal. Before this the
+  skill hand-wrote the JSON *and* resolved the runtime root itself — a second owner for a rule `Paths` already
+  owns, and the reason the mirror could never become a mechanism.
 - `deadline` — an **absolute** timestamp stamped at park time as *now + `config.checkpoint.deadline_hours`*
   (default 24h). Absolute, not a duration, because the process that *acts* on it is the console daemon, which
   compares against wall-clock and was not present when the ticket parked. Past it → the daemon **escalates**
-  (never auto-proceeds).
+  (never auto-proceeds). Stamped at **microsecond** precision: it is the alert-dedup key, and second-resolution
+  let two machine-speed re-parks of one ticket collide into "already alerted" — i.e. silence.
+- `opened_at` + `summary` — stamped by the runner, and they exist **for the mirror**: they are the two fields the
+  projection needs that are not already on the record. `summary` is a one-line label (capped, backticks
+  neutralized so it cannot break out of the block's JSON fence), defaulting to `checkpoint.request.what`.
 - **This record is the alert trigger.** Writing it *is* the signal: the daemon watches `parked/`, raises the alert
   on a new open checkpoint, re-alerts every `config.checkpoint.reminder_hours`, and escalates once overdue. The
   parking skill sends nothing itself.
+- **`bus.py unpark --id <ticket_id>` closes it**, at the drain that applies the verdict: it removes the record —
+  which is what makes the "already-closed token" anchor real — and re-projects the mirror. Idempotent, so a
+  re-applied verdict no-ops. Not optional: without it the mirror only ever **grows**, and a machine block that
+  reads as authoritative would report answered checkpoints as open forever.
 
 ## inbox-message  · appended to the inbox by the bus when the console POSTs · *`.workflow/inbox/<ts>-<uuid>-<pid>.json`; append-only, durable (atomic write+rename), at-least-once; RUNTIME, kept on a native filesystem*
 Every console→orchestrator message is **typed** — `kind: verdict|intake|control|release` — one uniform durable
@@ -292,6 +307,13 @@ fires it.
   parked record as *now + this*; once passed, the daemon escalates — a **deadline never auto-proceeds**, it only
   raises the alarm) + `reminder_hours` (how often the daemon re-alerts while the checkpoint is open and not yet
   overdue). Absent → shipped defaults (`deadline_hours` 24, `reminder_hours` 4).
+- `secrets_required` — the **key NAMES** (never values) of the live credentials this project needs, appended by
+  the `setup` checkpoint at elicitation and idempotent on the name. It exists because absence is otherwise
+  **undetectable by inspection**: an empty `secrets/` is indistinguishable from a project that needs none, so a
+  machine move could only report "the store is gone" and never *which* keys. `/rebind` diffs this against the store
+  and files `required − present` as an itemized loss. **Early warning, not a gate** — point-of-use fail-closed
+  stays the floor, because a manifest can only say what *should* be there. Absent → no itemization, and the generic
+  store-lost entry still covers the move. Committed, which is exactly why it holds names only.
 - `notify` — the away-channel, **read by the console daemon**: `webhook` `{ url, kind: generic|slack }` +
   `desktop` (bool). The **webhook is the real away channel** — it reaches a phone and works from a detached
   daemon; a desktop toast is **best-effort only** (Linux `notify-send`, and it needs a notification daemon to own
@@ -576,15 +598,25 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
   Written at each phase boundary: step 7 writes `installed`; §2/§3 advance it; the session that consumes the
   reconcile verdict (brownfield) or lands the spec (greenfield) writes `complete`. Absent = an older install —
   treated as bootstrap-incomplete, resume the motion.
-- `current_item`, `loop_position`, `parked[]`, `base_sha` — the commit it was written against; a cold start
+- `current_item`, `loop_position`, `base_sha` — the commit it was written against; a cold start
   reads this + `git log <base_sha>..HEAD` (bounded to one session's delta) and rebuilds position. **Prose, written
   by the orchestrator.**
-- **The machine block** — a fenced, delimited region (`<!-- drain:begin -->` … `<!-- drain:end -->`) holding
-  `consumed[]`, `consumed_through` and `dead_letters[]`. **Two authors, one file:** `drain.py` rewrites only the
-  block, the orchestrator rewrites only the prose around it, and neither touches the other's half. The orchestrator
-  **never hand-writes or deletes the block** (a session that rewrites the file wholesale and drops it loses the
-  *set* — recoverable only in the sense that each kind's effect anchor then catches the re-application; the block
-  structure itself is rebuilt).
+- **Two machine blocks** — fenced, delimited regions a SCRIPT owns, each rewritten independently of the prose and
+  of each other. **Three authors, one file:** each writer rewrites only its own region, and none touches another's.
+  The orchestrator **never hand-writes or deletes either block**.
+  - `<!-- drain:begin -->` … `<!-- drain:end -->` (**`drain.py`**) — `consumed[]`, `consumed_through`,
+    `dead_letters[]`. A session that rewrites the file wholesale and drops it loses the *set* — recoverable only in
+    the sense that each kind's effect anchor then catches the re-application; the block structure itself is rebuilt.
+  - `<!-- parked:begin -->` … `<!-- parked:end -->` (**`bus.py park`/`unpark`**) — `parked[]` as
+    `{ ticket_id, kind, summary, opened_at }` plus `projected_at`, capped at 50 with the overflow reported as
+    `not_mirrored`. This replaces the prose `parked[]` a session used to write by hand. It is a **PROJECTION of
+    `parked/`, re-derived on every mutation**, never patched: prose was accidentally self-correcting (the whole file
+    was rewritten each handoff, so a resolved checkpoint simply stopped being written) and a persisted block is
+    not. It carries **ids + kind + summary + opened-at ONLY — never a `request` body and never the `token`**,
+    because a `setup` checkpoint's body is exactly where a credential appears and this file is **committed**. The
+    record does not *move* to the committed half, it *projects* onto it. (Which is also why `parked/` itself stays
+    uncommitted: committing it would put that body in git, and the runtime tree exists for `rename`/`0600` reasons
+    committing does not satisfy.)
 - `consumed[]` + `consumed_through` — the inbox **consumed-set** (bus-assigned `message_id`s already applied) and
   its low-watermark. Lives here because this is the durable anchor a cold start rebuilds from — exactly the moment
   the set is load-bearing (it makes the post-restart inbox re-read a no-op). Ids only, never message bodies, so it

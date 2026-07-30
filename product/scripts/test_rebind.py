@@ -391,6 +391,238 @@ class LossIsFiled(Fixture):
         self.assertTrue(any("NOT filed" in a for a in p["applied"]))
 
 
+# --- the declared secret set ---------------------------------------------------
+class DeclaredSecrets(Fixture):
+    """An empty `secrets/` is indistinguishable from a project that needs none, so a
+    machine move could only ever say "the store is gone, work out what was in it".
+    `secrets_required[]` turns that into a list."""
+
+    def _config(self, **kw):
+        self._write(os.path.join(self.workflow, "config.json"), json.dumps(kw))
+
+    def _store(self, root, payloads):
+        for i, payload in enumerate(payloads):
+            self._write(os.path.join(root, "secrets", "m%d.json" % i),
+                        json.dumps(payload))
+
+    def _entries(self):
+        return [ln for ln in self._backlog().splitlines()
+                if ln.startswith("- [ ] **rebind:")]
+
+    def test_a_recreate_itemizes_every_declared_key(self):
+        self._config(secrets_required=["POLAR_WEBHOOK_SECRET", "CLERK_SECRET_KEY"])
+        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        p, _ = rebind.apply(self.project, probe=False)
+        text = self._backlog()
+        self.assertIn("POLAR_WEBHOOK_SECRET", text)
+        self.assertIn("CLERK_SECRET_KEY", text)
+        self.assertEqual(len(self._entries()), 4)  # 3 generic + the itemized one
+
+    def test_no_declaration_means_no_itemization_not_no_loss(self):
+        """Absent is "we cannot tell", not "nothing is missing" — the generic
+        store-lost entry still has to cover the move."""
+        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        rebind.apply(self.project, probe=False)
+        self.assertEqual(len(self._entries()), 3)
+        self.assertIn("secret store", self._backlog())
+
+    def test_a_surviving_store_reports_nothing_missing(self):
+        surviving = self._tree(os.path.join(
+            self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
+        self._store(surviving, [{"returns": {"POLAR_WEBHOOK_SECRET": "whsec_x",
+                                             "sensitive": True}}])
+        self._config(secrets_required=["POLAR_WEBHOOK_SECRET"])
+        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        p, _ = rebind.apply(self.project, probe=False)
+        self.assertEqual(p["classification"], "RE-POINT")
+        self.assertEqual(self._backlog(), BACKLOG)
+
+    def test_a_partial_survival_names_only_what_is_gone(self):
+        surviving = self._tree(os.path.join(
+            self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
+        self._store(surviving, [{"returns": {"KEPT_KEY": "v", "sensitive": True}}])
+        self._config(secrets_required=["KEPT_KEY", "GONE_KEY"])
+        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        rebind.apply(self.project, probe=False)
+        text = self._backlog()
+        self.assertIn("GONE_KEY", text.split("does not hold:")[1])
+        self.assertNotIn("KEPT_KEY", text.split("does not hold:")[1])
+
+    def test_no_secret_VALUE_ever_reaches_the_committed_backlog(self):
+        """config.json and backlog.md are both committed. Names only, always."""
+        surviving = self._tree(os.path.join(
+            self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
+        self._store(surviving, [{"returns": {"A_KEY": "sk_live_NEVERCOMMITTHIS",
+                                             "sensitive": True}}])
+        self._config(secrets_required=["A_KEY", "MISSING_KEY"])
+        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        p, _ = rebind.apply(self.project, probe=False)
+        self.assertNotIn("sk_live_NEVERCOMMITTHIS", self._backlog())
+        self.assertNotIn("sk_live_NEVERCOMMITTHIS", rebind.render(p, "apply"))
+        self.assertNotIn("sk_live_NEVERCOMMITTHIS", json.dumps(p))
+
+    def test_the_dry_run_reports_it_without_touching_anything(self):
+        """Pure reads, so unlike the bindability probe this one belongs in `check`."""
+        self._config(secrets_required=["SOME_KEY"])
+        self._pointer(os.path.join(self.root, "gone"))
+        text = _capture(["check", "--project-root", self.project])[0]
+        self.assertIn("SOME_KEY", text)
+        self.assertEqual(self._backlog(), BACKLOG)
+
+    def test_a_malformed_declaration_is_ignored_not_fatal(self):
+        for bad in ("not-a-list", {"a": 1}, [1, 2, None], []):
+            self._config(secrets_required=bad)
+            self.assertEqual(rebind.required_secrets(self.workflow), [])
+
+    def test_the_sensitive_marker_is_not_mistaken_for_a_key_name(self):
+        store = os.path.join(self.root, "s")
+        self._store(store, [{"returns": {"sensitive": True, "REAL": "v"}}])
+        found = rebind.present_secrets(os.path.join(store, "secrets"))
+        self.assertIn("REAL", found)
+        self.assertNotIn("sensitive", found)
+
+    def test_an_unreadable_store_entry_is_skipped_not_fatal(self):
+        store = os.path.join(self.root, "s")
+        self._store(store, [{"returns": {"GOOD": "v"}}])
+        self._write(os.path.join(store, "secrets", "junk.json"), "{not json")
+        self.assertIn("GOOD", rebind.present_secrets(os.path.join(store, "secrets")))
+
+    def test_a_first_bind_declares_nothing_and_loses_nothing(self):
+        self._config(secrets_required=["SOME_KEY"])
+        p, _ = rebind.apply(self.project, fresh=True, probe=False)
+        self.assertEqual(p["losses"], [])
+        self.assertEqual(self._backlog(), BACKLOG)
+
+
+# --- the bindability probe ---------------------------------------------------
+class Bindability(Fixture):
+    """A correctly re-bound project can still be unable to make a single commit: the
+    committed `checks.env` names a toolchain that is machine-local and gitignored. The
+    probe runs the real gate the real way rather than guessing at a toolchain — so
+    these drive a real `checks.sh` and a real subprocess."""
+
+    def setUp(self):
+        super(Bindability, self).setUp()
+        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+
+    def _checks(self, body):
+        path = os.path.join(self.workflow, "checks.sh")
+        self._write(path, "#!/usr/bin/env bash\n" + body + "\n")
+        os.chmod(path, 0o755)
+        return path
+
+    def _entries(self):
+        return [ln for ln in self._backlog().splitlines()
+                if ln.startswith("- [ ] **rebind:")]
+
+    def test_a_project_with_no_checks_runner_is_simply_not_probed(self):
+        p, _ = rebind.apply(self.project)
+        self.assertFalse(p["bindability"]["ran"])
+        self.assertEqual(len(self._entries()), 3)  # the three real losses, no fourth
+
+    def test_a_clean_gate_reports_bindable_and_files_nothing(self):
+        self._checks("exit 0")
+        p, _ = rebind.apply(self.project)
+        self.assertTrue(p["bindability"]["clean"])
+        self.assertEqual(len(self._entries()), 3)
+
+    def test_a_failing_gate_is_filed_as_a_typed_loss(self):
+        """127 is what a missing toolchain actually exits — but the probe files it
+        without claiming to know that, which is the whole point."""
+        self._checks("echo 'sh: npm: not found' >&2; exit 127")
+        p, _ = rebind.apply(self.project)
+        self.assertFalse(p["bindability"]["clean"])
+        self.assertEqual(p["bindability"]["exit_code"], 127)
+        entries = self._entries()
+        self.assertEqual(len(entries), 4)
+        gate = [e for e in entries if "mechanical commit gate" in e][0]
+        self.assertIn("`kind=bug`", gate)
+        self.assertIn("`severity=high`", gate)
+        self.assertIn("`source=rebind:", gate)
+        self.assertNotIn("github_ref", gate)
+
+    def test_the_gate_output_reaches_the_human_but_never_the_committed_file(self):
+        """backlog.md is COMMITTED and the gate's output is arbitrary subprocess text.
+        The one control that would catch a secret in it is the staged-diff scan in the
+        very gate that just failed to run, so the tail goes to stdout only."""
+        self._checks("echo 'FAILED: token=sk_live_HAHAHAHAHAHAHAHA'; exit 1")
+        p, _ = rebind.apply(self.project)
+        self.assertNotIn("sk_live_HAHAHA", self._backlog())
+        self.assertIn("sk_live_HAHAHA", rebind.render(p, "apply"))
+
+    def test_it_runs_the_gate_the_way_the_pre_commit_hook_runs_it(self):
+        """Same command, same cwd — that identity is what makes the answer mean
+        anything. A probe run from somewhere else answers a different question."""
+        self._checks("pwd > '%s/where'; exit 0" % self.root)
+        rebind.apply(self.project)
+        with open(os.path.join(self.root, "where")) as fh:
+            self.assertEqual(os.path.realpath(fh.read().strip()),
+                             os.path.realpath(self.project))
+
+    def test_check_is_a_dry_run_and_does_not_run_the_gate(self):
+        """`check`'s verified contract is that it writes nothing, and the gate runs the
+        project's tests — which write caches and build artifacts."""
+        self._checks("touch '%s/ran'; exit 0" % self.root)
+        text = _capture(["check", "--project-root", self.project])[0]
+        self.assertFalse(os.path.exists(os.path.join(self.root, "ran")))
+        self.assertIn("NOT PROBED", text)
+
+    def test_no_probe_skips_it(self):
+        self._checks("touch '%s/ran'; exit 1" % self.root)
+        out, code = _capture(["apply", "--project-root", self.project, "--no-probe"])
+        self.assertEqual(code, 0)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "ran")))
+        self.assertEqual(len(self._entries()), 3)
+
+    def test_a_first_bind_is_not_probed(self):
+        """At /start step 3 the stack is not wired yet, so the gate would be answering
+        a question nobody asked."""
+        self._checks("touch '%s/ran'; exit 1" % self.root)
+        p, _ = rebind.apply(self.project, fresh=True)
+        self.assertIsNone(p["bindability"])
+        self.assertFalse(os.path.exists(os.path.join(self.root, "ran")))
+
+    def test_a_healthy_install_is_not_probed(self):
+        """`apply` is a fixed point on a healthy install, and running a project's whole
+        test suite is not a no-op."""
+        old = self._tree(os.path.join(self.root, "live"))
+        self._pointer(old)
+        self._checks("touch '%s/ran'; exit 1" % self.root)
+        p, _ = rebind.apply(self.project)
+        self.assertEqual(p["classification"], "HEALTHY")
+        self.assertIsNone(p["bindability"])
+        self.assertFalse(os.path.exists(os.path.join(self.root, "ran")))
+
+    def test_a_hung_gate_does_not_hang_the_repair(self):
+        self._checks("sleep 30")
+        real = rebind.CHECKS_TIMEOUT
+        rebind.CHECKS_TIMEOUT = 1
+        self.addCleanup(setattr, rebind, "CHECKS_TIMEOUT", real)
+        p, code = rebind.apply(self.project)
+        self.assertEqual(code, 0)
+        self.assertTrue(p["bindability"]["timed_out"])
+        self.assertFalse(p["bindability"]["clean"])
+        self.assertEqual(len(self._entries()), 4)
+
+    def test_the_report_does_not_diagnose_the_cause(self):
+        """It reports an OBSERVABLE. Classifying "missing toolchain" vs "failing test"
+        would need to know which side of a WSL/Windows boundary a command belongs to —
+        exactly the guess that went wrong on the real machine move."""
+        self._checks("exit 1")
+        rebind.apply(self.project)
+        self.assertIn("does not diagnose", self._backlog())
+
+    def test_a_failing_gate_entry_is_not_duplicated_on_a_re_run(self):
+        self._checks("exit 1")
+        rebind.apply(self.project)
+        os.unlink(os.path.join(self.workflow, "runtime.json"))
+        shutil.rmtree(bus.runtime_root_for(self.project))
+        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        rebind.apply(self.project)
+        self.assertEqual(
+            self._backlog().count("**rebind: the mechanical commit gate"), 1)
+
+
 # --- the $HOME re-prefix rule ------------------------------------------------
 class Rehome(unittest.TestCase):
     def setUp(self):

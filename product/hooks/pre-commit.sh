@@ -41,7 +41,16 @@ vmsg="$(python3 .claude/hooks/verify_check.py 2>&1)"; vrc=$?
 # --- mechanical check runner in CHECK-ONLY mode (never rewrites the tree here) ---
 runner=".workflow/checks.sh"
 if [ -f "$runner" ]; then
-  bash "$runner" --check || block "mechanical checks failed. Run the commit skill (auto-fixes) or 'bash $runner --fix', then re-stage."
+  # The second clause is a ROUTE, not a diagnosis. A gate that fails because its
+  # commands cannot RUN looks identical here to one that fails because a test is red,
+  # and this hook has no business guessing which — that guess is exactly what went
+  # wrong on the real machine move. It names the other possibility and the cure, and
+  # lets the reader decide. This is the standing half of the bindability check:
+  # `/rebind` probes once at the transition, and this catches a toolchain that rots
+  # later, at the moment it actually matters, and visibly to `claude -p`.
+  bash "$runner" --check || block "mechanical checks failed. Run the commit skill (auto-fixes) or 'bash $runner --fix', then re-stage.
+  If the check COMMANDS themselves could not run (not found / no such module), this machine never got the toolchain that
+  '.workflow/checks.env' names — it is gitignored and does not travel between machines. Install it, or run /rebind."
 fi
 
 exit 0

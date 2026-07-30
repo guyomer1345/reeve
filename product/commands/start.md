@@ -182,9 +182,13 @@ loop's normal `state.json` takes over when the motion ends.
      boundary, when a terminal prompt would reach nobody; every other outward command — deploy / publish / cloud /
      network — stays `ask`). The template also wires the **interactive context governor**: a `statusLine`
      (`.claude/scripts/statusline.py`) that shows a persistent banner once context passes `config.context.warn_pct`
-     telling the human to run `/dispatch` then `/clear`; a `SessionStart`(matcher `clear`) hook that
-     re-injects `.workflow/handoff.md` so a cleared session **auto-rehydrates**; and a `PreCompact` backstop that
-     preserves the handoff through an auto-compaction. `/dispatch` (a shipped command) writes a complete handoff on
+     telling the human to run `/dispatch` then `/clear`; a `SessionStart` hook that re-injects
+     `.workflow/handoff.md` on matcher `clear` so a cleared session **auto-rehydrates**; and a `PreCompact` backstop
+     that preserves the handoff through an auto-compaction. That same `SessionStart` hook is wired on `startup` and
+     `resume` as well, where it does a *different* job: it re-asserts `.git/hooks/pre-commit`, because
+     `.git/hooks/` is not part of the repository and so a **clone** of an already-bootstrapped project arrives with
+     the mechanical gate silently missing — and a clone runs neither `/start` nor `/rebind`. It installs when
+     absent, is silent when identical, and **never clobbers a foreign hook**. `/dispatch` (a shipped command) writes a complete handoff on
      demand so the `/clear` is always safe.
    - **Install the shipped scripts + hooks — from the manifest, not enumerated here.** Read
      **`${CLAUDE_PLUGIN_ROOT}/MANIFEST.json`**; for every `{src, dest}` in its **`install`** array, copy

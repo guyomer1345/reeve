@@ -300,10 +300,12 @@ hang). These two stay open because each is a design change, not a patch:
   `checks.env` generation, or teach `checks.sh` a standing exclusion (a fixed-runner change, so it needs the
   D127 care).
 
-## Machine-move remediation (D140 audit) — **the five design questions are CLOSED by D141**
+## Machine-move remediation (D140 audit) — **the five design questions are CLOSED by D141, and all of 7b is now BUILT (D144)**
 All five retired: the re-bind capability is a `/rebind` command with four routing arms (detectors route, none
 heals); re-binding is neither recovery nor re-creation but a **three-case probe** the runner classifies;
-`handoff.parked[]` becomes a machine block only by giving parking a code writer (`bus.py park`); the git hook is
+`handoff.parked[]` becomes a machine block only by giving parking a code writer (`bus.py park` — **and, the build
+found, an `unpark` sibling: prose was accidentally self-correcting because the whole file was rewritten each
+handoff, so a persisted block with no remover would report answered checkpoints as open forever**); the git hook is
 re-asserted from `SessionStart`, non-clobbering (and `07`'s "same scrutiny as F3" is corrected there — the gate is
 already disarmed on every clone, so re-asserting can only arm it); secrets get a declared `config.json`
 `secrets_required[]`, with point-of-use fail-closed kept as the floor. The build items live in `11` (Phase 7a/7b).
@@ -318,22 +320,30 @@ already disarmed on every clone, so re-asserting can only arm it); secrets get a
   step 1 named only two rules and the issue rule was `github_ref`-only. The owner and the skill disagreed, and the
   skill is what the model reads. Extended to *any entry `commit` flipped done*, naming local issues explicitly.
 
-**The D143 drive then opened the class the audit never enumerated — the ENVIRONMENT, not the files.**
-- **A rebound project can be unable to make a single commit.** D140 concluded the durable half is portable
-  ("committed, no absolute paths") — true of the files, false of their *executability*. `checks.env` is committed
-  and names the stack commands; the toolchain they need (`node_modules`, venvs, Docker images, language runtimes)
-  is machine-local and gitignored, correctly. Because the mechanical gate is the loop's floor, a correctly-bound
-  project can be wedged. **Decided in D143, pending build in 7b:** the probe is *not* "is the toolchain
-  installed?" — that would need to know which side of the WSL/Windows boundary each command belongs to, which is
-  exactly what went wrong during the drive. It is **run `checks.sh --check` the way the pre-commit hook runs it
-  and report whether it exits clean.** Still open: *where* it reports from — a `rebind.py check` line, or a
-  standing `SessionStart` probe that catches a stale toolchain at any time, not only at a rebind.
-- **`git` credentials are a second instance, and one limitation explains a family.** The HTTPS credential helper
-  died with the machine; SSH was the fix, and `git remote set-url` itself failed — because **DrvFs cannot
-  `chmod`**, which is also why a `0600` create comes back `0777` (the reason the relocation exists at all) and why
-  `npm install` fails on package bins. Consequence worth stating plainly: **on this mount a WSL-side agent cannot
-  install the toolchain, so there is a blockage class the loop provably cannot clear itself.** Open: whether the
-  package should *detect and route* that (the `/rebind` shape) or stay silent about the host's limits.
+**The D143 drive then opened the class the audit never enumerated — the ENVIRONMENT, not the files. Both questions
+are CLOSED by the D144 build.**
+- ~~**Where the bindability probe reports from.**~~ **Closed: `rebind.py apply`, plus one routing clause on the
+  pre-commit hook.** The mechanism was never in doubt (run `checks.sh --check` the way the hook runs it — same
+  command, cwd and shell — and report whether it exits clean; never a toolchain-detection heuristic, which would
+  need to know which side of the WSL/Windows boundary each command belongs to). The *placement* was, and the
+  standing `SessionStart` probe lost on its own merits: it runs the project's whole test suite before a session can
+  begin, which is **the master rule inverted**; a harness timeout kills a slow suite and a killed probe is
+  indistinguishable from a failing one; it is invisible to `claude -p`; and making it cheap requires a
+  cache-invalidation rule that is a toolchain heuristic wearing a different hat. `check` was ruled out too — its
+  contract is "writes nothing", and a `TEST` command writes caches. The machine transition is the one moment the
+  answer changed and nobody has committed yet; **a toolchain that rots later is caught by the hook, which already
+  ran the gate and simply never named the other possible cause.**
+- ~~**Whether the package should detect and route the host's limits.**~~ **Closed: detect and route — the
+  `/rebind` shape, as suspected.** One limitation explains a family (**DrvFs cannot `chmod`**: a `0600` create
+  comes back `0777`, `git remote set-url` fails on its lockfile, `npm install` fails on package bins), and the
+  consequence stands — **on such a mount a WSL-side agent cannot install the toolchain, so there is a blockage
+  class the loop provably cannot clear itself.** The package now says so rather than staying silent: the probe
+  reports it, the loss is filed as a typed backlog issue, and `commands/rebind.md` instructs the judgment half to
+  **name it as unfixable-from-here** when it is. Two rules the build fixed in place: the probe **reports an
+  observable and does not diagnose** (missing toolchain vs. genuinely-red test is the reader's call — inventing
+  that distinction is the rejected heuristic), and the gate's **output tail never enters the committed loss**,
+  because `backlog.md` is committed and the one control that would catch a secret in arbitrary subprocess output
+  is the staged-diff scan in the very gate that just failed to run.
 
 **One residual OPENS from the D142 build** (noted, not fixed — deliberately):
 - **`hooks/verify_check.py` carries its own copy of the runtime resolver** and degrades to the workflow dir on a

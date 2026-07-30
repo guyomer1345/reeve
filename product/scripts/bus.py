@@ -74,7 +74,7 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 # --- tunables ---------------------------------------------------------------
@@ -540,11 +540,76 @@ def probe_mode(root):
 #
 # It is parsed HERE rather than in drain.py because both sides read it: the bus needs
 # the watermark to GC its own partition. drain.py is the only writer.
-HANDOFF_BEGIN = "<!-- drain:begin — machine-owned (drain.py). Do not hand-edit. -->"
-HANDOFF_END = "<!-- drain:end -->"
-HANDOFF_BLOCK_RE = re.compile(
-    re.escape(HANDOFF_BEGIN) + r".*?" + re.escape(HANDOFF_END), re.DOTALL)
+# --- machine-owned blocks on handoff.md -------------------------------------
+# handoff.md has more than one author. The orchestrator owns the PROSE; a fenced,
+# delimited region is owned by a SCRIPT, which rewrites only its own block and never
+# touches a byte outside it. That idiom is what lets one committed, human-readable
+# resume anchor also carry machine state without the two halves overwriting each other.
+#
+# There are two such blocks. They exist for the same reason at different moments:
+#   drain   — the inbox consumed-set + watermark            (drain.py)
+#   parked  — the open-checkpoint mirror, a PROJECTION of parked/  (bus.py park)
+#
+# The markers are generated from ONE function so a third block cannot invent a third
+# spelling of the same idiom. The two names are load-bearing literals: a handoff.md
+# already in the field carries `drain:begin` exactly, so the generated string must
+# reproduce it byte for byte.
+def block_markers(name, owner):
+    return ("<!-- %s:begin — machine-owned (%s). Do not hand-edit. -->" % (name, owner),
+            "<!-- %s:end -->" % name)
+
+
+def _block_re(begin, end):
+    return re.compile(re.escape(begin) + r".*?" + re.escape(end), re.DOTALL)
+
+
+HANDOFF_BEGIN, HANDOFF_END = block_markers("drain", "drain.py")
+HANDOFF_BLOCK_RE = _block_re(HANDOFF_BEGIN, HANDOFF_END)
+PARKED_BEGIN, PARKED_END = block_markers("parked", "bus.py park")
+PARKED_BLOCK_RE = _block_re(PARKED_BEGIN, PARKED_END)
 _FENCE_RE = re.compile(r"```json\s*(.*?)\s*```", re.DOTALL)
+
+
+def _read_fenced(path, block_re):
+    """The raw object inside a machine block, or None when there is not one.
+
+    EVERY failure — no file, no block, no fence, bad JSON, not an object — returns None
+    instead of raising, because each caller's safe default is different and only the
+    caller knows it. The drain's is "no watermark, so GC nothing"; the parked mirror's
+    is "no mirror", which is harmless because the mirror is re-derived rather than read.
+    """
+    text = read_text(path)
+    if not text:
+        return None
+    m = block_re.search(text)
+    if not m:
+        return None
+    fence = _FENCE_RE.search(m.group(0))
+    if not fence:
+        return None
+    try:
+        block = json.loads(fence.group(1))
+    except ValueError:
+        return None
+    return block if isinstance(block, dict) else None
+
+
+def _render_fenced(begin, end, block):
+    return "%s\n```json\n%s\n```\n%s" % (
+        begin, json.dumps(block, indent=2, sort_keys=True), end)
+
+
+def _upsert_fenced(text, begin, end, block_re, block):
+    """`text` with this one block set, every other byte — prose and any OTHER machine
+    block — left alone. Appends when absent, which covers a first run and a session
+    that rewrote handoff.md wholesale and dropped the block."""
+    rendered = _render_fenced(begin, end, block)
+    if text is None:
+        return ("# Handoff — resume anchor\n\n"
+                "_No prose anchor written yet._\n\n" + rendered + "\n")
+    if block_re.search(text):
+        return block_re.sub(lambda _: rendered, text, count=1)
+    return text.rstrip("\n") + "\n\n" + rendered + "\n"
 
 
 def empty_block():
@@ -552,29 +617,16 @@ def empty_block():
 
 
 def read_handoff_block(path):
-    """Return the machine block, or an empty one if handoff.md has none.
+    """Return the drain's machine block, or an empty one if handoff.md has none.
 
     A missing or unparseable block degrades to empty rather than raising: on the bus
     side that means "no watermark, so GC nothing", which is the safe direction — a
     torn read can make collection lag, never over-collect.
     """
-    text = read_text(path)
-    if not text:
-        return empty_block()
-    m = HANDOFF_BLOCK_RE.search(text)
-    if not m:
-        return empty_block()
-    fence = _FENCE_RE.search(m.group(0))
-    if not fence:
-        return empty_block()
-    try:
-        block = json.loads(fence.group(1))
-    except ValueError:
-        return empty_block()
-    if not isinstance(block, dict):
-        return empty_block()
+    block = _read_fenced(path, HANDOFF_BLOCK_RE)
     out = empty_block()
-    out.update({k: v for k, v in block.items() if k in out})
+    if block:
+        out.update({k: v for k, v in block.items() if k in out})
     if not isinstance(out["consumed"], list):
         out["consumed"] = []
     if not isinstance(out["dead_letters"], list):
@@ -583,29 +635,252 @@ def read_handoff_block(path):
 
 
 def render_handoff_block(block):
-    return "%s\n```json\n%s\n```\n%s" % (
-        HANDOFF_BEGIN, json.dumps(block, indent=2, sort_keys=True), HANDOFF_END)
+    return _render_fenced(HANDOFF_BEGIN, HANDOFF_END, block)
 
 
 def upsert_handoff_block(text, block):
-    """Return `text` with the machine block set to `block`, prose untouched.
+    """Return `text` with the drain block set to `block`, prose untouched.
 
-    Appends the block if it is absent — which covers both a first run and a session
-    that rewrote handoff.md wholesale and dropped it. The dropped case cannot recover
-    the SET (it is gone), only the structure; that is survivable precisely because
-    every kind carries an effect anchor of its own, so a re-applied message is caught
-    on its second layer rather than double-applied.
+    The dropped-block case cannot recover the SET (it is gone), only the structure;
+    that is survivable precisely because every kind carries an effect anchor of its
+    own, so a re-applied message is caught on its second layer rather than
+    double-applied.
 
     The format lives here, beside its parser, so the two cannot drift apart. drain.py
     owns deciding what goes in it and writing the file.
     """
-    rendered = render_handoff_block(block)
+    return _upsert_fenced(text, HANDOFF_BEGIN, HANDOFF_END, HANDOFF_BLOCK_RE, block)
+
+
+# --- parking a checkpoint ---------------------------------------------------
+# `parked/<id>.json` is the alert trigger AND the loop's durable record that a ticket is
+# waiting on a person. Until now it had no code writer at all: checkpoint/SKILL.md told
+# the model to hand-write the JSON *and* to resolve the runtime root itself. Two things
+# followed from that, both measured on a real machine move rather than reasoned:
+#
+#   Path resolution gained a second owner. `Paths` owns "where does the runtime tree
+#   live", and a prose copy of that rule in a skill is a copy that drifts — the same
+#   class of bug as the model-chosen runtime root that made two projects cross-bind.
+#
+#   The mirror could not become a mechanism. `handoff.parked[]` was PROSE, so when a
+#   machine rebuild destroyed the runtime tree the open checkpoint survived only because
+#   a human had written it into the prose by hand and another human read it back.
+#   Durability that depends on somebody remembering is not durability.
+#
+# So parking gets a writer, and the mirror becomes a machine block — drain.py's proven
+# two-authors-one-file idiom, unchanged.
+#
+# The mirror carries ids + kind + summary + opened_at and NOTHING else. Never the
+# request body: a `setup` checkpoint's body is exactly where a credential appears, and
+# handoff.md is COMMITTED. The record does not MOVE to the committed half, it PROJECTS
+# onto it — which is what keeps the projection small, bounded, and safe to read back.
+DEFAULT_DEADLINE_HOURS = 24
+PARK_KINDS = ("demo", "qa", "setup", "reconcile")
+# A ticket id becomes a FILENAME, so this is a path-safety check before it is a format
+# check: one component, no separator, and it cannot be `.`/`..` because it must open on
+# an alphanumeric.
+TICKET_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+# handoff.md is read whole by every cold start, so the mirror is bounded like every
+# other surface on it. A summary is a one-line label; a body is what it must never be.
+MAX_SUMMARY = 200
+# More open checkpoints than this is not a state the loop reaches by working — it parks
+# one ticket and yields. It is a state it reaches by LEAKING, so the projection caps and
+# reports the overflow instead of growing the anchor without bound.
+MAX_MIRRORED = 50
+
+
+def deadline_seconds(cfg):
+    """config.checkpoint.deadline_hours → seconds (float, so a test can use ~0s)."""
+    cp = cfg.get("checkpoint") if isinstance(cfg.get("checkpoint"), dict) else {}
+    try:
+        hours = float(cp.get("deadline_hours", DEFAULT_DEADLINE_HOURS))
+    except (TypeError, ValueError):
+        hours = DEFAULT_DEADLINE_HOURS
+    return max(0.0, hours) * 3600.0
+
+
+def stamp_deadline(paths, given=None):
+    """The absolute deadline. Supplied wins; otherwise now + the configured hours.
+
+    Deriving it here is not convenience — it is arithmetic that was being done by hand.
+    `schemas.md` states the rule (now + `config.checkpoint.deadline_hours`) and every
+    park was re-implementing it in a model's head, where a wrong answer is invisible:
+    the daemon compares this value against wall-clock and simply never escalates.
+    """
+    if isinstance(given, str) and given.strip():
+        return given.strip()
+    dt = datetime.now(timezone.utc) + timedelta(seconds=deadline_seconds(paths.load_config()))
+    # MICROSECONDS, not seconds — and that is the alert-dedup key, not cosmetics.
+    # `alert_key` is (ticket_id + deadline), and its docstring accepted a same-second
+    # collision on the reasoning that "a re-park almost always yields a later deadline".
+    # That reasoning was sound while a MODEL hand-stamped the deadline at human speed.
+    # Deriving it here makes two parks of one ticket inside a single second reachable at
+    # machine speed (a retried /rebind re-opening the same checkpoint is the real path),
+    # and the failure is the daemon reading the re-park as already-alerted and going
+    # SILENT. Sub-second precision costs nothing and removes the collision.
+    return dt.isoformat(timespec="microseconds")
+
+
+def park_summary(rec, given=None):
+    """The mirror's one-line label, sanitized hard — for two unrelated reasons.
+
+    It is rendered inside a ```json fence that a cold start parses, so a backtick run in
+    it could terminate the fence early and silently truncate the block (json.dumps
+    escapes control characters, but it emits a backtick verbatim). And it lands in a
+    COMMITTED file, so it is length-capped: a summary is a label, never a body.
+    """
+    text = given
     if text is None:
-        return ("# Handoff — resume anchor\n\n"
-                "_No prose anchor written yet._\n\n" + rendered + "\n")
-    if HANDOFF_BLOCK_RE.search(text):
-        return HANDOFF_BLOCK_RE.sub(lambda _: rendered, text, count=1)
-    return text.rstrip("\n") + "\n\n" + rendered + "\n"
+        req = (rec.get("checkpoint") or {}).get("request")
+        text = req.get("what") if isinstance(req, dict) else None
+    if not isinstance(text, str):
+        text = ""
+    text = " ".join(text.split()).replace("`", "'")
+    if len(text) > MAX_SUMMARY:
+        text = text[:MAX_SUMMARY - 1].rstrip() + "…"
+    return text or "(no summary)"
+
+
+def validate_park(rec):
+    """The parked-ticket record's CHECKABLE half (`schemas.md § parked-ticket`).
+
+    Judgment stays with the caller: `request`, `predicted_outcome`, `loop_position` and
+    `worktree`/`branch` are the orchestrator's to compose, and this never invents one.
+    What it refuses is a record that cannot do its job —
+      no id     → nothing to name the file or key the mirror on;
+      no token  → the drain matches a verdict to its ticket ON the token, so a tokenless
+                  park is a checkpoint that can be answered but never resumed;
+      bad kind  → the router has four arms and no default;
+      no request→ the human is being asked nothing.
+    """
+    if not isinstance(rec, dict):
+        raise Invalid("the parked-ticket record must be a JSON object")
+    tid = rec.get("ticket_id")
+    if not isinstance(tid, str) or not TICKET_ID_RE.match(tid):
+        raise Invalid("ticket_id %r is not a safe single path component" % (tid,))
+    tok = rec.get("token")
+    if not isinstance(tok, str) or not tok.strip():
+        raise Invalid("a park with no token can never be RESUMED — the drain matches a "
+                      "verdict to its ticket on the token")
+    cp = rec.get("checkpoint")
+    if not isinstance(cp, dict):
+        raise Invalid("checkpoint must be an object {kind, request}")
+    if cp.get("kind") not in PARK_KINDS:
+        raise Invalid("checkpoint.kind %r is not one of %s"
+                      % (cp.get("kind"), ", ".join(PARK_KINDS)))
+    if not cp.get("request"):
+        raise Invalid("checkpoint.request is empty — the human is being asked nothing")
+    return rec
+
+
+def parked_mirror(paths):
+    """The committed mirror of `parked/` — ids + kind + summary + opened_at, no bodies.
+
+    A PROJECTION, recomputed from the directory on every mutation rather than patched
+    incrementally. That is what keeps it honest. Prose `handoff.parked[]` was
+    accidentally self-correcting — the orchestrator rewrote the whole file at each
+    handoff, so a resolved checkpoint simply stopped being written — and a PERSISTED
+    machine block is not: an incrementally-patched one would only ever gain entries, and
+    every resolved checkpoint would stay "open" forever in the one file a cold start
+    trusts. Re-deriving means an entry disappears the moment its record does.
+    """
+    entries = []
+    try:
+        names = sorted(os.listdir(paths.parked))
+    except OSError:
+        names = []
+    for n in names:
+        if not n.endswith(".json"):
+            continue
+        rec = read_json(os.path.join(paths.parked, n))
+        if not isinstance(rec, dict):
+            continue
+        cp = rec.get("checkpoint") if isinstance(rec.get("checkpoint"), dict) else {}
+        entries.append({
+            "ticket_id": rec.get("ticket_id") or n[:-5],
+            "kind": cp.get("kind"),
+            "summary": park_summary(rec, rec.get("summary")),
+            "opened_at": rec.get("opened_at"),
+        })
+    entries.sort(key=lambda e: (e.get("opened_at") or "", str(e.get("ticket_id"))))
+    block = {"parked": entries[:MAX_MIRRORED], "projected_at": now_iso()}
+    if len(entries) > MAX_MIRRORED:
+        block["not_mirrored"] = len(entries) - MAX_MIRRORED
+    return block
+
+
+def publish_parked_mirror(paths):
+    """Rewrite ONLY the parked block on handoff.md, durably.
+
+    Same contract as `drain.publish`: write-temp → fsync → rename → fsync(dir), with the
+    prose and the drain block untouched. That durability is the point of moving this off
+    a text-writing tool — this is the half of the anchor that says a person is being
+    waited on, and a torn copy loses the fact that the loop is BLOCKED, not merely where
+    it had got to.
+    """
+    block = parked_mirror(paths)
+    try:
+        with open(paths.handoff) as fh:
+            text = fh.read()
+    except OSError:
+        text = None
+    atomic_write(paths.handoff,
+                 _upsert_fenced(text, PARKED_BEGIN, PARKED_END, PARKED_BLOCK_RE, block),
+                 mode=0o644)
+    return block
+
+
+def write_park(paths, rec, summary=None, deadline=None):
+    """Park a ticket: the durable record, then the committed projection of it.
+
+    Record first. It is the alert trigger the always-alive daemon watches, so until it
+    exists nobody has been told; the mirror only helps a cold start that has not
+    happened yet. Writing the mirror first would open a window where handoff.md claims a
+    checkpoint that no daemon can see.
+    """
+    validate_park(rec)
+    rec = json.loads(json.dumps(rec))  # never mutate the caller's object
+    rec["summary"] = park_summary(rec, summary)
+    rec["deadline"] = stamp_deadline(paths, deadline or rec.get("deadline"))
+    rec.setdefault("opened_at", now_iso())
+    dest = os.path.join(paths.parked, rec["ticket_id"] + ".json")
+    atomic_write(dest, json.dumps(rec, indent=1, sort_keys=True) + "\n", mode=0o600)
+    # A park can carry a credential-adjacent body, so the mode is checked the way the
+    # token's is: asked-for is not achieved on a mount that ignores modes.
+    warn = verify_mode(dest, 0o600)
+    block = publish_parked_mirror(paths)
+    out = {"ticket_id": rec["ticket_id"], "kind": rec["checkpoint"]["kind"],
+           "record": dest, "deadline": rec["deadline"],
+           "opened_at": rec["opened_at"], "mirrored": len(block["parked"])}
+    if warn:
+        out["warning"] = warn
+    return out
+
+
+def remove_park(paths, ticket_id):
+    """Resolve a park: drop the record, then re-project the mirror.
+
+    The mirror's other half, and not optional. `park` alone would give handoff.md a
+    machine block that only ever GROWS — every resolved checkpoint staying "open"
+    forever in the file a cold start rebuilds position from, which is worse than the
+    prose it replaced, because a machine block reads as authoritative.
+
+    Idempotent: an already-removed record is not an error. A re-applied verdict must
+    no-op on its second pass, the same way every other consumer anchor does.
+    """
+    if not isinstance(ticket_id, str) or not TICKET_ID_RE.match(ticket_id):
+        raise Invalid("ticket_id %r is not a safe single path component" % (ticket_id,))
+    dest = os.path.join(paths.parked, ticket_id + ".json")
+    removed = True
+    try:
+        os.unlink(dest)
+    except FileNotFoundError:
+        removed = False
+    except OSError as exc:
+        raise Invalid("cannot remove %s: %s" % (dest, exc))
+    block = publish_parked_mirror(paths)
+    return {"ticket_id": ticket_id, "removed": removed, "record": dest,
+            "mirrored": len(block["parked"])}
 
 
 # --- the inbox writer -------------------------------------------------------
@@ -886,9 +1161,10 @@ def alert_key(rec):
     ticket_id alone is not enough: a ticket can park, resolve, and re-park on a
     DIFFERENT checkpoint, and keying on the ticket would suppress the second alert.
     The absolute deadline is the discriminator — it has stated semantics and a new
-    park stamps a fresh one. Its one bound: two parks of the same ticket that land the
-    same deadline second collide; accepted, since a re-park almost always yields a
-    later deadline.
+    park stamps a fresh one. `bus.py park` derives it at MICROSECOND precision for
+    exactly this reason, so two machine-speed re-parks of one ticket cannot collide.
+    The residual bound is now narrower and is the caller's own doing: a park that
+    SUPPLIES a deadline identical to the previous one reads as already-alerted.
     """
     return "%s|%s" % (rec.get("ticket_id") or "?", rec.get("deadline"))
 
@@ -2935,13 +3211,46 @@ def stop(paths):
 # --- cli --------------------------------------------------------------------
 def main(argv=None):
     ap = argparse.ArgumentParser(description="the console daemon (local bus)")
-    ap.add_argument("cmd", choices=["ensure", "serve", "stop", "status"])
+    ap.add_argument("cmd", choices=["ensure", "serve", "stop", "status", "park", "unpark"])
     ap.add_argument("--workflow-dir", default=".workflow")
     ap.add_argument("--idle-timeout", type=int, default=DEFAULT_IDLE_TIMEOUT,
                     help="seconds with no request AND no open checkpoint before self-shutdown")
+    # park/unpark only. The record itself arrives on STDIN as JSON rather than as a wall
+    # of flags: `request` is a nested, judgment-rich object the orchestrator composes, and
+    # flattening it into argv would both mangle it and put a checkpoint body in a process
+    # listing. What stays a flag is what this script decides rather than carries.
+    ap.add_argument("--id", help="park/unpark: the ticket id (park: only if the record omits it)")
+    ap.add_argument("--summary", help="park: the one-line mirror label "
+                                      "(default: derived from checkpoint.request.what)")
+    ap.add_argument("--deadline", help="park: absolute ISO deadline "
+                                       "(default: now + config.checkpoint.deadline_hours)")
     args = ap.parse_args(argv)
 
     paths = Paths(args.workflow_dir)
+    # Neither park nor unpark touches the daemon: writing the record IS the signal, and
+    # the daemon discovers it on its own next scan.
+    if args.cmd == "park":
+        try:
+            rec = json.load(sys.stdin)
+        except ValueError as exc:
+            raise SystemExit("park reads the parked-ticket record from stdin as JSON: %s" % exc)
+        if isinstance(rec, dict) and args.id and not rec.get("ticket_id"):
+            rec["ticket_id"] = args.id
+        try:
+            res = write_park(paths, rec, args.summary, args.deadline)
+        except Invalid as exc:
+            raise SystemExit("park refused: %s" % exc)
+        print(json.dumps(res, indent=1))
+        return 0
+    if args.cmd == "unpark":
+        if not args.id:
+            raise SystemExit("unpark needs --id <ticket_id>")
+        try:
+            res = remove_park(paths, args.id)
+        except Invalid as exc:
+            raise SystemExit("unpark refused: %s" % exc)
+        print(json.dumps(res, indent=1))
+        return 0
     if args.cmd == "serve":
         Daemon(paths, args.idle_timeout).serve()
         return 0

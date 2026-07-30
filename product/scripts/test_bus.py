@@ -1065,6 +1065,278 @@ class InboxOrdering(Tmp):
                            "would delete this message before it was ever drained")
 
 
+# --- parking ----------------------------------------------------------------
+PROSE = ("# Handoff — resume anchor\n\n"
+         "- current_item: item-1\n- loop_position: execute\n")
+
+
+def a_park(tid="item-1", kind="qa", **kw):
+    rec = {"ticket_id": tid, "token": "tok-" + tid, "loop_position": "checkpoint",
+           "predicted_outcome": "approve",
+           "checkpoint": {"kind": kind,
+                          "request": {"what": "click the thing", "expected": "it works",
+                                      "blocking": True}}}
+    rec.update(kw)
+    return rec
+
+
+class Parking(Tmp):
+    """Parking had no code writer at all: the skill hand-wrote the JSON *and* resolved
+    the runtime root itself, so path resolution had a second owner and the handoff
+    mirror could not become a mechanism. Both halves are checked here."""
+
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        with open(os.path.join(self.w, "handoff.md"), "w") as fh:
+            fh.write(PROSE)
+        self.paths = bus.Paths(self.w)
+
+    def mirror(self):
+        return bus._read_fenced(self.paths.handoff, bus.PARKED_BLOCK_RE)
+
+    def test_the_record_lands_at_the_runtime_root_not_under_workflow(self):
+        """The prose the skill carried said "never assume .workflow/parked/" and then
+        made the model do the resolving. Paths owns this; park inherits it for free."""
+        native = os.path.join(self.root, "native")
+        os.makedirs(native)
+        with open(os.path.join(self.w, "runtime.json"), "w") as fh:
+            json.dump({"runtime_root": native}, fh)
+        res = bus.write_park(bus.Paths(self.w), a_park())
+        self.assertEqual(os.path.dirname(res["record"]),
+                         os.path.join(native, "parked"))
+        self.assertFalse(os.path.exists(os.path.join(self.w, "parked", "item-1.json")))
+
+    def test_the_record_is_written_0600(self):
+        res = bus.write_park(self.paths, a_park(kind="setup"))
+        if bus.mount_honours_modes(self.paths.parked) is not False:
+            self.assertEqual(os.stat(res["record"]).st_mode & 0o777, 0o600)
+
+    def test_the_mirror_appears_and_the_prose_survives(self):
+        bus.write_park(self.paths, a_park())
+        text = open(self.paths.handoff).read()
+        self.assertIn("- current_item: item-1", text)
+        self.assertIn(bus.PARKED_BEGIN, text)
+        self.assertEqual([e["ticket_id"] for e in self.mirror()["parked"]], ["item-1"])
+
+    def test_the_mirror_carries_no_body_ever(self):
+        """D141's whole reason for projecting instead of committing parked/: a setup
+        checkpoint's body is exactly where a credential appears, and handoff.md is
+        committed. ids + kind + summary + opened_at, nothing else."""
+        bus.write_park(self.paths, a_park(
+            kind="setup",
+            checkpoint={"kind": "setup",
+                        "request": {"what": "add the API key", "blocking": True,
+                                    "how": "paste sk_live_DEADBEEFDEADBEEF0000"}}))
+        text = open(self.paths.handoff).read()
+        self.assertNotIn("sk_live_DEADBEEF", text)
+        self.assertNotIn("tok-item-1", text)  # the correlation token is not mirrored
+        entry = self.mirror()["parked"][0]
+        self.assertEqual(sorted(entry), ["kind", "opened_at", "summary", "ticket_id"])
+
+    def test_the_two_machine_blocks_do_not_overwrite_each_other(self):
+        """Three authors on one file now. The drain block, the parked block, and the
+        prose each have to survive a write by either of the other two."""
+        drain_block = {"consumed": ["20260101T000000.000001Z-aaaaaaaa-1"],
+                       "consumed_through": None, "dead_letters": []}
+        with open(self.paths.handoff, "w") as fh:
+            fh.write(PROSE + "\n" + bus.render_handoff_block(drain_block) + "\n")
+        bus.write_park(self.paths, a_park())
+        self.assertEqual(bus.read_handoff_block(self.paths.handoff)["consumed"],
+                         drain_block["consumed"])
+        # …and the drain writing back does not eat the parked block.
+        import drain
+        drain.publish(self.paths, drain_block)
+        text = open(self.paths.handoff).read()
+        self.assertIn(bus.PARKED_BEGIN, text)
+        self.assertIn("- current_item: item-1", text)
+        self.assertEqual([e["ticket_id"] for e in self.mirror()["parked"]], ["item-1"])
+
+    def test_unpark_removes_the_entry_from_the_mirror(self):
+        """Without this the block only ever GROWS, and every resolved checkpoint stays
+        "open" forever in the file a cold start trusts — worse than the prose it
+        replaced, because a machine block reads as authoritative."""
+        bus.write_park(self.paths, a_park("item-1"))
+        bus.write_park(self.paths, a_park("item-2"))
+        self.assertEqual(len(self.mirror()["parked"]), 2)
+        res = bus.remove_park(self.paths, "item-1")
+        self.assertTrue(res["removed"])
+        self.assertEqual([e["ticket_id"] for e in self.mirror()["parked"]], ["item-2"])
+        self.assertFalse(os.path.exists(os.path.join(self.paths.parked, "item-1.json")))
+
+    def test_unpark_is_idempotent(self):
+        """A re-applied verdict must no-op on its second pass, like every other
+        consumer anchor."""
+        bus.write_park(self.paths, a_park())
+        bus.remove_park(self.paths, "item-1")
+        res = bus.remove_park(self.paths, "item-1")
+        self.assertFalse(res["removed"])
+        self.assertEqual(self.mirror()["parked"], [])
+
+    def test_the_mirror_is_a_projection_not_an_append_log(self):
+        """A record removed out of band (a rebind, a crash, a human) must vanish from
+        the mirror on the next mutation rather than linger."""
+        bus.write_park(self.paths, a_park("item-1"))
+        bus.write_park(self.paths, a_park("item-2"))
+        os.unlink(os.path.join(self.paths.parked, "item-1.json"))
+        bus.publish_parked_mirror(self.paths)
+        self.assertEqual([e["ticket_id"] for e in self.mirror()["parked"]], ["item-2"])
+
+    def test_an_unreadable_record_is_skipped_not_fatal(self):
+        bus.write_park(self.paths, a_park("item-1"))
+        with open(os.path.join(self.paths.parked, "junk.json"), "w") as fh:
+            fh.write("{not json")
+        self.assertEqual([e["ticket_id"] for e in
+                          bus.parked_mirror(self.paths)["parked"]], ["item-1"])
+
+    def test_the_projection_is_capped_and_reports_the_overflow(self):
+        for i in range(bus.MAX_MIRRORED + 3):
+            bus.write_park(self.paths, a_park("item-%03d" % i))
+        block = self.mirror()
+        self.assertEqual(len(block["parked"]), bus.MAX_MIRRORED)
+        self.assertEqual(block["not_mirrored"], 3)
+
+    def test_the_deadline_is_derived_from_config_when_absent(self):
+        with open(os.path.join(self.w, "config.json"), "w") as fh:
+            json.dump({"checkpoint": {"deadline_hours": 0}}, fh)
+        res = bus.write_park(bus.Paths(self.w), a_park())
+        self.assertLessEqual(bus.parse_deadline(res["deadline"]), time.time() + 1)
+
+    def test_a_supplied_deadline_wins(self):
+        res = bus.write_park(self.paths, a_park(), deadline="2099-01-01T00:00:00+00:00")
+        self.assertEqual(res["deadline"], "2099-01-01T00:00:00+00:00")
+
+    def test_the_deadline_is_absolute_and_parseable_by_the_daemon(self):
+        """The daemon compares this against wall-clock and was not present when the
+        ticket parked, so an unparseable stamp means it never escalates — silently."""
+        res = bus.write_park(self.paths, a_park())
+        self.assertIsNotNone(bus.parse_deadline(res["deadline"]))
+
+    def test_the_summary_is_derived_from_the_request_when_absent(self):
+        bus.write_park(self.paths, a_park())
+        self.assertEqual(self.mirror()["parked"][0]["summary"], "click the thing")
+
+    def test_a_summary_cannot_break_out_of_the_json_fence(self):
+        """It is rendered inside a ```json fence a cold start parses; a backtick run
+        would terminate the block early and silently truncate the mirror."""
+        bus.write_park(self.paths, a_park(), summary="see ``` then\nmore")
+        text = open(self.paths.handoff).read()
+        self.assertIsNotNone(self.mirror(), "the fence did not survive the summary")
+        self.assertEqual(self.mirror()["parked"][0]["summary"], "see ''' then more")
+        self.assertEqual(text.count("```"), 2)
+
+    def test_a_long_summary_is_capped(self):
+        bus.write_park(self.paths, a_park(), summary="x" * 5000)
+        self.assertLessEqual(len(self.mirror()["parked"][0]["summary"]), bus.MAX_SUMMARY)
+
+    def test_a_park_with_no_token_is_refused(self):
+        """It could be answered and never resumed — the drain matches on the token."""
+        rec = a_park()
+        del rec["token"]
+        with self.assertRaises(bus.Invalid) as cm:
+            bus.write_park(self.paths, rec)
+        self.assertIn("token", str(cm.exception))
+
+    def test_an_unknown_kind_is_refused(self):
+        with self.assertRaises(bus.Invalid):
+            bus.write_park(self.paths, a_park(kind="vibes"))
+
+    def test_an_empty_request_is_refused(self):
+        with self.assertRaises(bus.Invalid) as cm:
+            bus.write_park(self.paths, a_park(
+                checkpoint={"kind": "qa", "request": {}}))
+        self.assertIn("asked nothing", str(cm.exception))
+
+    def test_a_traversing_ticket_id_cannot_escape_the_parked_dir(self):
+        for bad in ("../../etc/passwd", "a/b", "", ".", "..", None, 7):
+            rec = a_park()
+            rec["ticket_id"] = bad
+            with self.assertRaises(bus.Invalid):
+                bus.write_park(self.paths, rec)
+            with self.assertRaises(bus.Invalid):
+                bus.remove_park(self.paths, bad)
+
+    def test_nothing_is_written_when_the_record_is_refused(self):
+        with self.assertRaises(bus.Invalid):
+            bus.write_park(self.paths, a_park(kind="vibes"))
+        self.assertEqual(os.listdir(self.paths.parked), [])
+        self.assertNotIn(bus.PARKED_BEGIN, open(self.paths.handoff).read())
+
+    def test_a_re_park_stamps_a_fresh_deadline_for_alert_dedup(self):
+        """schemas.md: (ticket_id + deadline) is the daemon's alert-dedup key, so a
+        ticket that parks, resolves and re-parks must not read as already-seen."""
+        first = bus.write_park(self.paths, a_park())
+        bus.remove_park(self.paths, "item-1")
+        second = bus.write_park(self.paths, a_park())
+        self.assertNotEqual(bus.alert_key({"ticket_id": "item-1",
+                                           "deadline": first["deadline"]}),
+                            bus.alert_key({"ticket_id": "item-1",
+                                           "deadline": second["deadline"]}))
+
+    def test_the_daemon_and_the_console_read_what_park_wrote(self):
+        """The writer is only correct if the two existing READERS agree with it — the
+        alert trigger (ParkedWatchJob) and the console's read model."""
+        bus.write_park(self.paths, a_park(kind="demo", checkpoint={
+            "kind": "demo", "demo_id": "item-1",
+            "request": {"what": "approve the sandbox", "blocking": True}}))
+        d = bus.Daemon(self.paths, idle_timeout=3600)
+        job = bus.ParkedWatchJob()
+        self.assertFalse(job.is_idle(d), "the daemon cannot see the park it must alert on")
+        row = bus.ReadModel(self.paths).parked()[0]
+        self.assertEqual((row["ticket_id"], row["kind"], row["token"], row["demo_id"]),
+                         ("item-1", "demo", "tok-item-1", "item-1"))
+        self.assertFalse(row["overdue"])
+
+
+class ParkingCLI(Tmp):
+    """The skill calls this over the CLI, so the CLI is the contract."""
+
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+
+    def run_bus(self, *argv, stdin=""):
+        return subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(os.path.abspath(bus.__file__)),
+                                          "bus.py"), *argv,
+             "--workflow-dir", self.w],
+            input=stdin, capture_output=True, text=True)
+
+    def test_park_then_unpark_over_the_cli(self):
+        p = self.run_bus("park", stdin=json.dumps(a_park()))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["ticket_id"], "item-1")
+        self.assertTrue(os.path.exists(os.path.join(self.w, "parked", "item-1.json")))
+        u = self.run_bus("unpark", "--id", "item-1")
+        self.assertEqual(u.returncode, 0, u.stderr)
+        self.assertTrue(json.loads(u.stdout)["removed"])
+        self.assertEqual(
+            bus._read_fenced(os.path.join(self.w, "handoff.md"),
+                             bus.PARKED_BLOCK_RE)["parked"], [])
+
+    def test_the_id_may_come_from_the_flag_when_the_record_omits_it(self):
+        rec = a_park()
+        del rec["ticket_id"]
+        p = self.run_bus("park", "--id", "item-9", stdin=json.dumps(rec))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["ticket_id"], "item-9")
+
+    def test_a_refused_park_exits_nonzero_and_says_why(self):
+        p = self.run_bus("park", stdin=json.dumps(a_park(kind="vibes")))
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("park refused", p.stderr)
+
+    def test_malformed_stdin_exits_nonzero(self):
+        p = self.run_bus("park", stdin="{not json")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("stdin", p.stderr)
+
+    def test_unpark_without_an_id_exits_nonzero(self):
+        p = self.run_bus("unpark")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("--id", p.stderr)
+
+
 # --- inbox GC ---------------------------------------------------------------
 class InboxGC(Tmp):
     def setUp(self):

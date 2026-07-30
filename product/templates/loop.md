@@ -53,7 +53,9 @@ appears nowhere in the table above. Order within one boundary:
 
 What each kind does at the boundary, and the anchor that makes a repeat a no-op:
 - **verdict** — resumes the parked ticket whose `token` matches; an unknown or already-closed token → dead-letter
-  and surface it. *Anchor:* the token itself (already closed → no-op).
+  and surface it. The ticket is then closed with `bus.py unpark --id <ticket_id>`, which removes the record and
+  re-projects `handoff.md`'s parked block. *Anchor:* the token itself (already closed → no-op) — and "closed" means
+  the record is gone, which is why `unpark` is the step that makes the anchor real.
 - **intake** — promoted into `backlog.md` through triage, stamped with the source message id. *Anchor:* that stamp
   (an item already carrying the id is already promoted → skip).
 - **control** — reprioritize / pause, honored here only (non-preemptive; never mid-item). *Anchor:* none possible,

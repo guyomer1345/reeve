@@ -27,7 +27,7 @@ Core principle: produce the plan others execute against; raise any real build de
    cannot name a mechanical discharge, the criterion is **not artifact-checkable → tag it `human-qa`** (the
    classification is mechanical — *can you name a check?* — not a guess about perceptibility). Prefer *authoring
    a discharging test* to keep a criterion `artifact`: that keeps the loop autonomous. `human-qa` (→ qa
-   `checkpoint`, or `handoff.parked[]` when unattended) is the fallback for the genuinely perceptual/runtime,
+   `checkpoint`, which parks and mirrors onto `handoff.md` when unattended) is the fallback for the genuinely perceptual/runtime,
    and it is what later triggers the checkpoint. Default to `artifact` **with** a real discharge — never a bare
    `artifact` tag.
 4. **Set `risk_class`** (`code-only` · `data-additive` · `data-destructive` · `prod-touching`). When it is

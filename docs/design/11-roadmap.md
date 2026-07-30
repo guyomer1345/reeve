@@ -590,7 +590,7 @@ install turned out to be missing **five** package files outright, including the 
 a `/clear` there had been dropping into an empty session while the docs described resuming from `handoff.md`. The
 interaction-model rework (browser-primary async chat — `07`) is what now sits behind this.
 
-### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design → D142 build → D143 drive) — **7a BUILT + DRIVEN on the real install; 7b is next, and the drive added an item to it**
+### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design → D142 build → D143 drive → D144 build) — **7a BUILT + DRIVEN on the real install; 7b BUILT and awaiting its drive**
 Opened by a real loss, not a hypothesis: a PC rebuild renamed `$HOME`, so `idea testing`'s `runtime.json` names a
 directory that no longer exists and its whole runtime tree is unreachable. The audit (D140, measured against that
 real install) found the durable half **is** portable — committed, no absolute paths, package included — and the
@@ -627,25 +627,31 @@ push that skipped the secret scan (`df5440d`), and `/rebind` pointing at the pro
 - **Per-machine trust closes for free** — `/rebind` is interactive-only, so running it re-grants `~/.claude.json`.
   Nothing to build. **[bind — closed by D141; stated in `commands/rebind.md` (D142)]**
 
-**7b — the durability trio + the environment probe the drive added (D143).**
+**7b — the durability trio + the environment probe the drive added — BUILT (D144), NOT YET DRIVEN.** Every item
+below is landed and unit-tested (507 tests). The phase's remaining exit test is driving it on a real install.
 - **`checks.sh --check` becomes a bindability probe** — a rebound project can be correctly bound and still unable
   to make a single commit, because the committed `checks.env` names a toolchain that is machine-local and
   gitignored. Run the gate *the way the pre-commit hook runs it* and report whether it exits clean — never a
   toolchain-detection heuristic, which would have to know which side of the WSL/Windows boundary each command
-  belongs to. Open: where it reports from (`rebind.py check` vs a standing `SessionStart` probe). **[bind]**
+  belongs to. **[bind — BUILT (D144) in `rebind.py apply`, the maintainer's call on the open *where*. NOT `check` (its verified contract is "writes nothing"; `TEST` writes caches) and NOT a standing `SessionStart` probe (a full test suite before a session can begin inverts the master rule). Skipped on BIND/HEALTHY; `--no-probe` opts out. It reports the observable and does not diagnose; the output tail goes to stdout, never into the committed loss. The standing half is one routing clause in the pre-commit block message — visible to `claude -p`]**
 - **`bus.py park` becomes the writer** of `parked/<id>.json` **and** a fenced `<!-- parked:begin/end -->` block —
   parking has no code writer today, so the mirror cannot become a mechanism without one; it also retires
-  `checkpoint/SKILL.md`'s "resolve the runtime root yourself". **[dur]**
+  `checkpoint/SKILL.md`'s "resolve the runtime root yourself". **[dur — BUILT (D144) + 28 tests. Three calls the code forced: the record arrives on STDIN (four flags cannot make a schema-valid record — no `token`, no `request`); **`unpark` had to be built too**, because prose was accidentally self-correcting and a persisted block only ever GROWS; and the deadline is stamped at microsecond precision, closing an accepted `alert_key` collision that a derived stamp made reachable at machine speed]**
 - **`SessionStart` re-asserts `.git/hooks/pre-commit`, non-clobbering** — absent ⇒ install · identical ⇒ silent ·
-  different ⇒ warn, never clobber. Proportionate: the git hook backstops *out-of-loop* commits only. Residual: the
-  warning is invisible to `claude -p`. **[dur]**
+  different ⇒ warn, never clobber. Proportionate: the git hook backstops *out-of-loop* commits only. **[dur — BUILT (D144); the matcher broadened to `startup`/`resume` (the rehydrate stays `clear`-only) because the motivating case is a CLONE, which runs neither `/start` nor `/rebind`. "Warn once" is keyed by the foreign hook's sha256 in `.git/hooks/`, so a different foreign hook warns again. `/rebind` calls the same code path via `--assert-hook`. Residual STANDS: the warning is invisible to `claude -p`]**
 - **`config.json` `secrets_required[]`** — key names only, written by the `setup` checkpoint at elicitation; absence
-  becomes provable; point-of-use fail-closed stays as the floor. `outbox/` loss is reported, not recovered. **[dur]**
+  becomes provable; point-of-use fail-closed stays as the floor. `outbox/` loss is reported, not recovered. **[dur — BUILT (D144); "present" is derived by walking store payloads for key NAMES (entries are keyed by `message_id`, not by credential), deliberately generous because a missed match is noise and a false match is silence. Pure reads, so it runs in `check` too; an absent declaration is "we cannot tell", not "nothing is missing"]**
 
 **The drive that gated all of this is DONE (D143):** force-reinstall the plugin at HEAD → **`/rebind`** on
 `idea testing` (which did stamp the missing `bootstrap: complete` — that install predates D131) → **`/update`**, the
-run owed since Phase 6. That project is now bound, updated, and pushed. **What is left in Phase 7 is 7b**, and it is
-now designed against real evidence rather than a hypothesis, which was the whole point of splitting the phase.
+run owed since Phase 6. That project is now bound, updated, and pushed. 7b was then **built against that real
+evidence rather than a hypothesis (D144)**, which was the whole point of splitting the phase — and it paid: three of
+its calls could only be made with the code in front of it, the largest being that `park` needed an **`unpark`**
+sibling nobody had asked for, because turning a self-correcting prose mirror into a persisted machine block turns a
+missing remover from a non-issue into a block that reports answered checkpoints as open forever.
+**What is left in Phase 7 is the 7b DRIVE** — none of the four items has run against a real install. The natural
+exit test is the same shape as 7a's: exercise a park→verdict→unpark cycle and a `/rebind` on a project whose
+toolchain did not travel, and see what the mirror, the probe, and the declared-secret diff actually say.
 
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
@@ -681,6 +687,9 @@ held, `/update` followed on the same project, and the drive shipped **three pack
 the secret scan, and `/rebind` pointing at the project's own copy of its runner. It also opened the class D140
 never enumerated: **the environment**, not the files — a correctly-bound project whose committed `checks.env` names
 a toolchain that did not travel cannot make a single commit, and on a mount that cannot `chmod`, a WSL-side agent
-cannot install it. **7b (the durability trio + that environment probe)** is what remains, now designed against real
-evidence rather than a hypothesis — the reason the phase was split. Beyond these, everything is
-`[stageable]`/`[later]`.
+cannot install it. **7b — the durability trio + that environment probe — is now BUILT (D144)** against that real
+evidence rather than a hypothesis, the reason the phase was split: parking gained a code writer and the handoff
+mirror became a re-derived **projection** (with the `unpark` sibling the design had not asked for), the bindability
+probe landed **at the machine transition rather than on a timer**, the pre-commit backstop is re-asserted
+non-clobbering for the clone that runs neither sibling command, and secrets gained a declared set that makes absence
+provable. **What Phase 7 still owes is the 7b drive.** Beyond these, everything is `[stageable]`/`[later]`.
