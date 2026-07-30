@@ -1288,6 +1288,73 @@ class Parking(Tmp):
         self.assertFalse(row["overdue"])
 
 
+class ParkedMirrorBackfill(Tmp):
+    """The block otherwise comes into existence only at the next park/unpark. An install
+    that parked BEFORE this writer existed has a live record and no block — and
+    /dispatch has stopped hand-writing the prose parked[] because "the block covers it",
+    so that project would publish an anchor naming NO open checkpoint while one is open.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        with open(os.path.join(self.w, "handoff.md"), "w") as fh:
+            fh.write(PROSE)
+        self.paths = bus.Paths(self.w)
+
+    def mirror(self):
+        return bus._read_fenced(self.paths.handoff, bus.PARKED_BLOCK_RE)
+
+    def _legacy(self, tid="old-1"):
+        """A record in the shape a session hand-wrote before `park` existed: no
+        `summary`, no `opened_at`."""
+        with open(os.path.join(self.paths.parked, tid + ".json"), "w") as fh:
+            json.dump({"ticket_id": tid, "token": "tok", "loop_position": "checkpoint",
+                       "checkpoint": {"kind": "setup",
+                                      "request": {"what": "add the webhook"}}}, fh)
+
+    def test_it_backfills_a_block_for_a_record_that_predates_the_writer(self):
+        self._legacy()
+        self.assertIsNone(self.mirror(), "fixture assumes no block yet")
+        bus.publish_parked_mirror(self.paths)
+        entry = self.mirror()["parked"][0]
+        self.assertEqual(entry["ticket_id"], "old-1")
+        self.assertEqual(entry["kind"], "setup")
+        self.assertEqual(entry["summary"], "add the webhook")  # derived, not stored
+        self.assertIsNone(entry["opened_at"])                  # honestly unknown
+
+    def test_an_empty_parked_dir_yields_an_EMPTY_block_not_no_block(self):
+        """"Nothing is parked" has to be a positive statement. An absent block and an
+        empty one read the same to a human and differently to a cold start."""
+        bus.publish_parked_mirror(self.paths)
+        self.assertEqual(self.mirror()["parked"], [])
+
+    def test_it_is_idempotent_apart_from_the_timestamp(self):
+        self._legacy()
+        bus.publish_parked_mirror(self.paths)
+        first = self.mirror()
+        bus.publish_parked_mirror(self.paths)
+        self.assertEqual(self.mirror()["parked"], first["parked"])
+
+    def test_it_leaves_the_prose_and_the_drain_block_alone(self):
+        drain_block = {"consumed": ["20260101T000000.000001Z-aaaaaaaa-1"],
+                       "consumed_through": None, "dead_letters": []}
+        with open(self.paths.handoff, "w") as fh:
+            fh.write(PROSE + "\n" + bus.render_handoff_block(drain_block) + "\n")
+        self._legacy()
+        bus.publish_parked_mirror(self.paths)
+        self.assertEqual(bus.read_handoff_block(self.paths.handoff)["consumed"],
+                         drain_block["consumed"])
+        self.assertIn("- current_item: item-1", open(self.paths.handoff).read())
+
+    def test_it_mutates_nothing_in_parked(self):
+        self._legacy()
+        before = open(os.path.join(self.paths.parked, "old-1.json")).read()
+        bus.publish_parked_mirror(self.paths)
+        self.assertEqual(open(os.path.join(self.paths.parked, "old-1.json")).read(),
+                         before)
+
+
 class ParkingCLI(Tmp):
     """The skill calls this over the CLI, so the CLI is the contract."""
 
@@ -1335,6 +1402,18 @@ class ParkingCLI(Tmp):
         p = self.run_bus("unpark")
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("--id", p.stderr)
+
+    def test_mirror_backfills_over_the_cli(self):
+        """The verb /dispatch calls before it writes the anchor."""
+        with open(os.path.join(self.w, "parked", "old-1.json"), "w") as fh:
+            json.dump({"ticket_id": "old-1", "token": "t",
+                       "checkpoint": {"kind": "qa", "request": {"what": "check it"}}}, fh)
+        m = self.run_bus("mirror")
+        self.assertEqual(m.returncode, 0, m.stderr)
+        self.assertEqual(json.loads(m.stdout)["mirrored"], 1)
+        block = bus._read_fenced(os.path.join(self.w, "handoff.md"),
+                                 bus.PARKED_BLOCK_RE)
+        self.assertEqual(block["parked"][0]["ticket_id"], "old-1")
 
 
 # --- inbox GC ---------------------------------------------------------------

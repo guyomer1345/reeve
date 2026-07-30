@@ -17,8 +17,15 @@ You (the orchestrator) do this now, in this turn:
    - the `bootstrap:` ledger line if the bootstrap motion is still in progress (`installed` /
      `ingesting` / `discussing` / `reconcile-parked` / `complete`) — omit only once the loop drives;
    - `current_item` and `loop_position` (which `loop.md` node you are at). **Not `parked[]`** — the
-     `<!-- parked:begin -->` block is machine-owned (`bus.py park`) and already mirrors every open
-     ticket; hand-writing a second copy is how the two disagree;
+     `<!-- parked:begin -->` block is machine-owned and already mirrors every open ticket;
+     hand-writing a second copy is how the two disagree. **First run
+     `python3 .claude/scripts/bus.py mirror --workflow-dir .workflow`**, which re-projects that
+     block from `parked/`. It is idempotent, and it is what makes the block *exist* on a project
+     that parked a checkpoint before the block did — otherwise you would publish an anchor naming
+     no open checkpoint while one is genuinely open. **If it fails**, the runtime half is
+     unreachable (that is what `parked/` lives on): say so plainly in the prose, name the open
+     work you can still see, and route the human to `/rebind` — do not paper over it by
+     hand-writing a `parked[]` you cannot verify;
    - `base_sha` = the current `HEAD` (`git rev-parse HEAD`) — the commit the resume reads
      `git log <base_sha>..HEAD` against;
    - in prose: what is **committed** vs what is **uncommitted in the working tree** right now

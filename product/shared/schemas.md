@@ -607,7 +607,7 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
   - `<!-- drain:begin -->` … `<!-- drain:end -->` (**`drain.py`**) — `consumed[]`, `consumed_through`,
     `dead_letters[]`. A session that rewrites the file wholesale and drops it loses the *set* — recoverable only in
     the sense that each kind's effect anchor then catches the re-application; the block structure itself is rebuilt.
-  - `<!-- parked:begin -->` … `<!-- parked:end -->` (**`bus.py park`/`unpark`**) — `parked[]` as
+  - `<!-- parked:begin -->` … `<!-- parked:end -->` (**`bus.py park`/`unpark`/`mirror`**) — `parked[]` as
     `{ ticket_id, kind, summary, opened_at }` plus `projected_at`, capped at 50 with the overflow reported as
     `not_mirrored`. This replaces the prose `parked[]` a session used to write by hand. It is a **PROJECTION of
     `parked/`, re-derived on every mutation**, never patched: prose was accidentally self-correcting (the whole file
@@ -616,7 +616,10 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
     because a `setup` checkpoint's body is exactly where a credential appears and this file is **committed**. The
     record does not *move* to the committed half, it *projects* onto it. (Which is also why `parked/` itself stays
     uncommitted: committing it would put that body in git, and the runtime tree exists for `rename`/`0600` reasons
-    committing does not satisfy.)
+    committing does not satisfy.) **`bus.py mirror` re-projects on demand** — `/dispatch` runs it before writing
+    the anchor, which is what makes the block *exist* on an install that parked a checkpoint before the block did.
+    An **empty** block is a positive statement ("nothing is parked"); an **absent** one means only that nothing has
+    projected yet, which is why `/dispatch` projects rather than assuming.
 - `consumed[]` + `consumed_through` — the inbox **consumed-set** (bus-assigned `message_id`s already applied) and
   its low-watermark. Lives here because this is the durable anchor a cold start rebuilds from — exactly the moment
   the set is load-bearing (it makes the post-restart inbox re-read a no-op). Ids only, never message bodies, so it

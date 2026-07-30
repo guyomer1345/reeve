@@ -810,7 +810,18 @@ def parked_mirror(paths):
 
 
 def publish_parked_mirror(paths):
-    """Rewrite ONLY the parked block on handoff.md, durably.
+    """Rewrite ONLY the parked block on handoff.md, durably. Also the `mirror` verb.
+
+    Exposed on its own, and not merely as `park`/`unpark`'s tail, because the block
+    otherwise comes into existence ONLY at the next mutation. An install that parked a
+    checkpoint before this writer existed therefore has a live `parked/<id>.json` and no
+    block at all — and `/dispatch` has stopped hand-writing the prose `parked[]` on the
+    grounds that the block covers it, so such a project would publish a resume anchor
+    naming NO open checkpoint while one is genuinely open. Silent, and exactly the
+    failure class this mirror was built to end. Re-projecting is idempotent and cheap,
+    so `/dispatch` simply runs it before writing the anchor and the block becomes
+    self-healing on any install that predates it.
+
 
     Same contract as `drain.publish`: write-temp → fsync → rename → fsync(dir), with the
     prose and the drain block untouched. That durability is the point of moving this off
@@ -3211,7 +3222,8 @@ def stop(paths):
 # --- cli --------------------------------------------------------------------
 def main(argv=None):
     ap = argparse.ArgumentParser(description="the console daemon (local bus)")
-    ap.add_argument("cmd", choices=["ensure", "serve", "stop", "status", "park", "unpark"])
+    ap.add_argument("cmd", choices=["ensure", "serve", "stop", "status",
+                                    "park", "unpark", "mirror"])
     ap.add_argument("--workflow-dir", default=".workflow")
     ap.add_argument("--idle-timeout", type=int, default=DEFAULT_IDLE_TIMEOUT,
                     help="seconds with no request AND no open checkpoint before self-shutdown")
@@ -3250,6 +3262,14 @@ def main(argv=None):
         except Invalid as exc:
             raise SystemExit("unpark refused: %s" % exc)
         print(json.dumps(res, indent=1))
+        return 0
+    if args.cmd == "mirror":
+        # Re-project without mutating anything in parked/. Idempotent, and the way an
+        # install that parked before this writer existed grows its block.
+        block = publish_parked_mirror(paths)
+        print(json.dumps({"mirrored": len(block["parked"]),
+                          "not_mirrored": block.get("not_mirrored", 0),
+                          "handoff": paths.handoff}, indent=1))
         return 0
     if args.cmd == "serve":
         Daemon(paths, args.idle_timeout).serve()

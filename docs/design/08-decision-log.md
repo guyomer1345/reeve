@@ -3314,3 +3314,42 @@ The run order was D141's: force-reinstall the plugin at HEAD (`gitCommitSha` ver
 **The leak gate earned its keep on a real leak.** `check-no-spec-refs.sh` blocked the commit over a `D140` reference written into `rebind.py`'s new docstring — the construction record citing itself inside the shipped package. Caught mechanically, not by reading.
 
 *Evidence:* 507 tests (445 at `e551837`, +62 here: 28 parking, 12 bindability, 11 declared-secrets, 11 pre-commit assert) + five meta-gates green; the drain's durability path re-run green across the block-machinery refactor before any new code was written; the release boundary unchanged at 54 shipped files / 18 install entries. → `11` (7b tags; Phase 7's remaining exit test is the drive), `07` (the environment class's *where* question closes; the host-limits question closes as **detect and route**), `product/scripts/{bus.py,rebind.py}`, `product/hooks/{session_start.py,pre-commit.sh}`, `product/skills/{checkpoint,planner}/SKILL.md`, `product/commands/{rebind.md,dispatch.md,start.md}`, `product/templates/{settings.json,loop.md,orchestrator-CLAUDE.md}`, `product/shared/schemas.md`.
+
+## D145 — D144's parked mirror shipped with a migration hole, and it was the exact failure the mirror exists to end: a project that parked BEFORE the writer would publish a resume anchor naming no open checkpoint while one was open **[FIXED 2026-07-30 — found by sweeping D144's own blast radius minutes after `079e6da`; `bus.py mirror` + the `/dispatch` call; 513 tests + five meta-gates green]**
+D144 gave `handoff.md` a machine-owned parked block written by `park`/`unpark`, and simultaneously told `/dispatch`
+to **stop hand-writing the prose `parked[]`** on the grounds that the block covers it. Both halves are right. Their
+**intersection** was not: the block is written only at a *mutation*, so an install whose checkpoint was parked
+before the writer existed has a live `parked/<id>.json` and **no block at all** — and a `/dispatch` there would then
+publish an anchor carrying neither. A cold start reads "nothing is parked" while a human is genuinely being waited
+on. Silent, and precisely the class the mirror was built to end. `idea testing` is such an install (its setup
+checkpoint was re-opened by hand during the D143 rebind, so its record predates the writer).
+
+**Call: expose the projection as its own verb, `bus.py mirror`, and have `/dispatch` run it before writing the
+anchor.** The block becomes self-healing on any install that predates it: the projection already reads a legacy
+hand-written record correctly (id from the record or the filename, `summary` **derived** from
+`checkpoint.request.what` when unstored, `opened_at` honestly `null`), so nothing needed migrating — only
+*projecting*. Idempotent, mutates nothing in `parked/`, and leaves the prose and the drain block untouched.
+**An EMPTY block is a positive statement ("nothing is parked"); an ABSENT one only means nothing has projected
+yet** — which is exactly why `/dispatch` projects rather than assuming, and why `mirror` writes an empty block
+rather than skipping.
+**And the failure path routes rather than papering over.** If `mirror` fails, the runtime half is unreachable (that
+is what `parked/` lives on), so `/dispatch` is told to say so plainly, name the open work it can still see, and send
+the human to `/rebind` — *not* to hand-write a `parked[]` it cannot verify. Detectors route; none heals.
+
+*Rejected — leaving it to the next `park`/`unpark`:* the hole is open for exactly as long as no checkpoint changes
+state, which on a project blocked ON a checkpoint is unbounded — the worst possible correlation. *Rejected —
+having `/dispatch` fall back to hand-writing the prose when no block exists:* that restores the second copy D144
+deleted and re-opens the drift, and it asks a model to decide which of two sources is authoritative at the one
+moment it has least context.
+
+**The process note is the point.** This was caught by running D144's own blast-radius sweep *after* the commit, not
+by the tests — every unit test passed, because each half is individually correct and nothing exercised a legacy
+record against the new `/dispatch` prose. It is the same shape as the failures this phase keeps finding: **a
+documented flow whose mechanism is not present reads exactly like a working one.** The mirror's own reason for
+existing, turned on the mirror.
+
+*Evidence:* `publish_parked_mirror` confirmed to have exactly two callers before this change (`write_park`,
+`remove_park`) and none on a read path; the legacy-record projection driven in five new tests (backfill, empty
+block, idempotence, prose/drain-block untouched, `parked/` unmutated) plus a CLI case; 513 tests + five meta-gates
+green. → `11` (the 7b park tag records the amendment), `product/scripts/{bus.py,test_bus.py}`,
+`product/commands/dispatch.md`, `product/shared/schemas.md`.
