@@ -318,7 +318,24 @@ already disarmed on every clone, so re-asserting can only arm it); secrets get a
   step 1 named only two rules and the issue rule was `github_ref`-only. The owner and the skill disagreed, and the
   skill is what the model reads. Extended to *any entry `commit` flipped done*, naming local issues explicitly.
 
-**One residual OPENS from the build** (noted, not fixed — deliberately):
+**The D143 drive then opened the class the audit never enumerated — the ENVIRONMENT, not the files.**
+- **A rebound project can be unable to make a single commit.** D140 concluded the durable half is portable
+  ("committed, no absolute paths") — true of the files, false of their *executability*. `checks.env` is committed
+  and names the stack commands; the toolchain they need (`node_modules`, venvs, Docker images, language runtimes)
+  is machine-local and gitignored, correctly. Because the mechanical gate is the loop's floor, a correctly-bound
+  project can be wedged. **Decided in D143, pending build in 7b:** the probe is *not* "is the toolchain
+  installed?" — that would need to know which side of the WSL/Windows boundary each command belongs to, which is
+  exactly what went wrong during the drive. It is **run `checks.sh --check` the way the pre-commit hook runs it
+  and report whether it exits clean.** Still open: *where* it reports from — a `rebind.py check` line, or a
+  standing `SessionStart` probe that catches a stale toolchain at any time, not only at a rebind.
+- **`git` credentials are a second instance, and one limitation explains a family.** The HTTPS credential helper
+  died with the machine; SSH was the fix, and `git remote set-url` itself failed — because **DrvFs cannot
+  `chmod`**, which is also why a `0600` create comes back `0777` (the reason the relocation exists at all) and why
+  `npm install` fails on package bins. Consequence worth stating plainly: **on this mount a WSL-side agent cannot
+  install the toolchain, so there is a blockage class the loop provably cannot clear itself.** Open: whether the
+  package should *detect and route* that (the `/rebind` shape) or stay silent about the host's limits.
+
+**One residual OPENS from the D142 build** (noted, not fixed — deliberately):
 - **`hooks/verify_check.py` carries its own copy of the runtime resolver** and degrades to the workflow dir on a
   dead pointer, so it neither routes to `/rebind` nor sees the weak-mount rule. It is not one of D141's four arms
   and it fails **closed** on the gate it guards regardless — but it is now a second, diverging resolver. Either it

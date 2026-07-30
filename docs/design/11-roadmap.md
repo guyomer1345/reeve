@@ -580,17 +580,17 @@ lifecycle.
   never blocks); `config.context.warn_pct` + `statusline.delegate` own their `schemas.md`; 20 governor tests + full
   321-test suite + 5 meta-gates green. **[ctx — BUILT (D136); installed + rendering, but the /dispatch→/clear→rehydrate CYCLE stays UNEXERCISED — the banner never fired in the D138 re-drive because the context law kept the window lean]**
 
-**Sequence (set 2026-07-26) — DONE except its last step.** Build the governor (D136) **[BUILT 2026-07-26]** →
-forced-reinstall the plugin to HEAD (a version-pinned `update` is a no-op — verify `gitCommitSha` == HEAD) →
-**one clean re-drive on a pristine p5-brownfield** **[DRIVEN 2026-07-27 — D138]** → design + build `/update`
-**[D137 designed · D139 BUILT]** → **`/update` the real `idea testing` install onto HEAD** — **STILL PENDING**, and
-now gated on Phase 7: that install's runtime half was stranded by a machine rebuild (D140), so it needs *rebinding*
-before an update is meaningful. **The gate is now lifted on the build side — 7a is BUILT (D142) and its dry run
-against that exact install is verified** — so what remains is the interactive run itself, in this order:
-force-reinstall at HEAD → `/rebind` → `/update`. The interaction-model rework (browser-primary async chat — `07`)
-waits behind both.
+**Sequence (set 2026-07-26) — COMPLETE.** Build the governor (D136) **[BUILT 2026-07-26]** → forced-reinstall the
+plugin to HEAD (a version-pinned `update` is a no-op — verify `gitCommitSha` == HEAD) → **one clean re-drive on a
+pristine p5-brownfield** **[DRIVEN 2026-07-27 — D138]** → design + build `/update` **[D137 designed · D139 BUILT]**
+→ **`/update` the real `idea testing` install onto HEAD** — **DONE 2026-07-30 (D143)**. That last step had been
+gated on Phase 7 (a machine rebuild stranded that install's runtime half, D140), so it ran *behind* `/rebind` on
+the same project, in the order D141 set: force-reinstall at HEAD → `/rebind` → `/update`. It paid for itself — the
+install turned out to be missing **five** package files outright, including the `SessionStart(clear)` rehydrate, so
+a `/clear` there had been dropping into an empty session while the docs described resuming from `handoff.md`. The
+interaction-model rework (browser-primary async chat — `07`) is what now sits behind this.
 
-### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design → D142 build) — **7a BUILT + dry-run verified; the interactive drive on `idea testing` is OWED; 7b follows it**
+### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design → D142 build → D143 drive) — **7a BUILT + DRIVEN on the real install; 7b is next, and the drive added an item to it**
 Opened by a real loss, not a hypothesis: a PC rebuild renamed `$HOME`, so `idea testing`'s `runtime.json` names a
 directory that no longer exists and its whole runtime tree is unreachable. The audit (D140, measured against that
 real install) found the durable half **is** portable — committed, no absolute paths, package included — and the
@@ -599,8 +599,13 @@ remediation** (all five `07` questions + two findings the audit missed) and spli
 what `/update` on `idea testing` is gated on; nothing in 7b blocks it. Tags: **[bind]** re-binding a per-machine
 artifact · **[dur]** durability of state that should have survived.
 
-**7a — the bind capability — BUILT (D142). Every item below is landed and unit-tested; what is still owed is the
-interactive drive, which Claude cannot run (`/rebind` and `/update` are interactive sessions in another project).**
+**7a — the bind capability — BUILT (D142) + DRIVEN (D143).** Every item below is landed, unit-tested, and has now
+run against the real stranded install: `/rebind` classified `RE-CREATE`, the judgment half did all four of its jobs
+(rejected the placeholder position and rebuilt it from `handoff.md`, re-opened the parked checkpoint with a fresh
+token, wrote `bootstrap: complete`, filed the losses), and `/update` followed on the same project. **Three package
+fixes came out of the drive** — `/update` crashing on `chmod` (`38065aa`), the push floor generating an out-of-band
+push that skipped the secret scan (`df5440d`), and `/rebind` pointing at the project copy of its own runner
+(`b48fdc0`).
 - **`/rebind` + `scripts/rebind.py`** — a third sibling on a third axis (*this machine is not the machine that
   installed*), the runner fixed + unit-tested (`check` = dry-run, `apply` = no-op when healthy), the command owning
   the judgment. `apply` classifies **RE-POINT** (literal old path → old path with `$HOME` re-prefixed → canonical
@@ -622,7 +627,12 @@ interactive drive, which Claude cannot run (`/rebind` and `/update` are interact
 - **Per-machine trust closes for free** — `/rebind` is interactive-only, so running it re-grants `~/.claude.json`.
   Nothing to build. **[bind — closed by D141; stated in `commands/rebind.md` (D142)]**
 
-**7b — the durability trio (after the `idea testing` drive).**
+**7b — the durability trio + the environment probe the drive added (D143).**
+- **`checks.sh --check` becomes a bindability probe** — a rebound project can be correctly bound and still unable
+  to make a single commit, because the committed `checks.env` names a toolchain that is machine-local and
+  gitignored. Run the gate *the way the pre-commit hook runs it* and report whether it exits clean — never a
+  toolchain-detection heuristic, which would have to know which side of the WSL/Windows boundary each command
+  belongs to. Open: where it reports from (`rebind.py check` vs a standing `SessionStart` probe). **[bind]**
 - **`bus.py park` becomes the writer** of `parked/<id>.json` **and** a fenced `<!-- parked:begin/end -->` block —
   parking has no code writer today, so the mirror cannot become a mechanism without one; it also retires
   `checkpoint/SKILL.md`'s "resolve the runtime root yourself". **[dur]**
@@ -632,8 +642,10 @@ interactive drive, which Claude cannot run (`/rebind` and `/update` are interact
 - **`config.json` `secrets_required[]`** — key names only, written by the `setup` checkpoint at elicitation; absence
   becomes provable; point-of-use fail-closed stays as the floor. `outbox/` loss is reported, not recovered. **[dur]**
 
-**Then:** force-reinstall the plugin at HEAD → **`/rebind`** on `idea testing` (stamping `bootstrap: complete` —
-that install predates D131 and carries no `bootstrap:` line) → **`/update`**, the run still owed from Phase 6.
+**The drive that gated all of this is DONE (D143):** force-reinstall the plugin at HEAD → **`/rebind`** on
+`idea testing` (which did stamp the missing `bootstrap: complete` — that install predates D131) → **`/update`**, the
+run owed since Phase 6. That project is now bound, updated, and pushed. **What is left in Phase 7 is 7b**, and it is
+now designed against real evidence rather than a hypothesis, which was the whole point of splitting the phase.
 
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
@@ -663,7 +675,12 @@ remediation was **designed** (D141) then **built** (D142): a `/rebind` command t
 **route and never heal**, and a runtime root that finally has a code-owned *derivation* and a verifiable
 *identity* — plus the half the audit missed, the **silent** mis-bind on a mount with no pointer, which ships
 **fail-closed** because the mount probe measures behaviour rather than guessing a filesystem type. **7a (bind) is
-BUILT and dry-run verified** against the real stranded install (`RE-CREATE`, read-only, nothing written); what is
-owed is the **interactive drive** — force-reinstall at HEAD → `/rebind` → `/update` on `idea testing` — which only
-a human can run. **7b (the durability trio)** waits behind that drive by design, so it is built from real
-evidence. Beyond these, everything is `[stageable]`/`[later]`.
+BUILT and now DRIVEN (D143)** on the real stranded install: `/rebind` classified `RE-CREATE` and its judgment half
+held, `/update` followed on the same project, and the drive shipped **three package fixes** — `/update` crashing on
+`chmod` (the mount it most needed to work on), a push floor that was producing an out-of-band push which skipped
+the secret scan, and `/rebind` pointing at the project's own copy of its runner. It also opened the class D140
+never enumerated: **the environment**, not the files — a correctly-bound project whose committed `checks.env` names
+a toolchain that did not travel cannot make a single commit, and on a mount that cannot `chmod`, a WSL-side agent
+cannot install it. **7b (the durability trio + that environment probe)** is what remains, now designed against real
+evidence rather than a hypothesis — the reason the phase was split. Beyond these, everything is
+`[stageable]`/`[later]`.
