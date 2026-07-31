@@ -18,6 +18,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bus  # noqa: E402
 import drain  # noqa: E402
+import rebind  # noqa: E402
 
 ID_A = "20260716T100000.000001Z-aaaaaaaa-9001"
 ID_B = "20260716T100500.000001Z-bbbbbbbb-9002"
@@ -286,12 +287,15 @@ class Drain(unittest.TestCase):
     def test_secret_moves_the_value_out_and_unlinks_without_printing_it(self):
         self.msg(ID_A, "verdict", token="item-1:setup:x",
                  verdict={"outcome": "approve",
-                          "returns": {"sensitive": True, "value": "canary-value-must-never-be-printed"}})
+                          "returns": {"A_KEY": {
+                              "sensitive": True,
+                              "value": "canary-value-must-never-be-printed"}}})
         out = drain.cmd_secret(self.paths, _Args(id=ID_A))
         self.assertFalse(os.path.exists(os.path.join(self.w, "inbox", ID_A + ".json")),
                          "the credential is still sitting on the durable inbox")
         stored = json.load(open(out["stored"]))
-        self.assertEqual(stored["returns"]["value"], "canary-value-must-never-be-printed")
+        self.assertEqual(stored["returns"]["A_KEY"]["value"],
+                         "canary-value-must-never-be-printed")
         self.assertNotIn("canary-value-must-never-be-printed", json.dumps(out),
                          "the secret was echoed back to the caller's context")
         self.assertEqual(self.block()["consumed_through"], ID_A)
@@ -299,18 +303,39 @@ class Drain(unittest.TestCase):
     def test_secret_store_entry_is_0600(self):
         self.msg(ID_A, "verdict", token="t",
                  verdict={"outcome": "approve",
-                          "returns": {"sensitive": True, "value": "k"}})
+                          "returns": {"A_KEY": {"sensitive": True, "value": "k"}}})
         out = drain.cmd_secret(self.paths, _Args(id=ID_A))
         self.assertIsNone(bus.verify_mode(out["stored"], 0o600), out.get("warning"))
 
     def test_list_redacts_a_sensitive_value(self):
         self.msg(ID_A, "verdict", token="t",
                  verdict={"outcome": "approve",
-                          "returns": {"sensitive": True, "value": "canary-value-must-never-be-printed"}})
+                          "returns": {"A_KEY": {
+                              "sensitive": True,
+                              "value": "canary-value-must-never-be-printed"}}})
         out = drain.cmd_list(self.paths, None)
         self.assertTrue(out["pending"][0]["sensitive"])
         self.assertNotIn("canary-value-must-never-be-printed", json.dumps(out),
                          "the drain printed a credential into the caller's context")
+
+    def test_the_store_it_writes_is_readable_by_the_declared_secret_diff(self):
+        """THE regression, driven across the whole chain rather than at one end.
+
+        Every link here passed its own unit test while the chain was broken: the drain
+        stored `returns` verbatim, the diff read credential names out of it, and the two
+        never agreed on what `returns` was — so a machine that lost nothing reported
+        every declared secret lost, forever. This asserts the two ends against each
+        other, which is the only place that failure was ever visible.
+        """
+        self.msg(ID_A, "verdict", token="item-1:setup:x", verdict={"tasks": [
+            {"id": "runpod-credentials", "outcome": "approve", "returns": {
+                "IVRIT_RUNPOD_API_KEY": {"value": "sk_live_x", "sensitive": True}}}]})
+        out = drain.cmd_secret(self.paths, _Args(id=ID_A))
+        found, unreadable = rebind.present_secrets(os.path.dirname(out["stored"]))
+        self.assertIn("IVRIT_RUNPOD_API_KEY", found)
+        self.assertEqual(unreadable, 0)
+        # The task id is the one thing that must NOT be read as a credential name.
+        self.assertNotIn("runpod-credentials", found)
 
     def test_a_non_sensitive_message_is_not_shreddable(self):
         self.msg(ID_A, "verdict", token="t", verdict={"outcome": "approve"})

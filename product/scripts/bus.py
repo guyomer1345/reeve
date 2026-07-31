@@ -927,6 +927,17 @@ _STEM_TS_RE = re.compile(r"^(\d{8}T\d{6}\.\d{6}Z)-")
 MESSAGE_ID_RE = re.compile(r"\d{8}T\d{6}\.\d{6}Z-[0-9a-f]{8}-\d+")
 
 VERDICT_OUTCOMES = ("approve", "changes", "reject")
+
+# `returns` is a NAME-KEYED MAP — {"<KEY_NAME>": {value, sensitive?}} — and this regex
+# guards the key, because the key IS the credential's name and is what the declared-set
+# diff matches on. The shape is declared rather than open on purpose: it used to be an
+# arbitrary payload, and a consumer deriving "which credentials are present" from an
+# undeclared payload is not a matcher with a tuning problem, it is a coin toss. Task
+# identity lives at tasks[].id, so nothing here needs a second identifier to confuse it
+# with. Rejecting at the boundary is the point — a payload that cannot be matched must
+# fail loudly on POST rather than reach the store and read later as total credential loss.
+RETURNS_KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+RETURNS_ENTRY_KEYS = ("value", "sensitive")
 # A CLOSED set, and that is load-bearing rather than tidy: a control op leaves no
 # durable artifact to anchor on, so the ONLY thing making a redelivered control
 # message safe is that re-applying it is a no-op by construction. Adding a
@@ -963,12 +974,54 @@ def _req_str(body, field, maxlen=8192):
     return v
 
 
+def check_returns(returns, where):
+    """Enforce the declared `returns` shape: {"<KEY_NAME>": {value, sensitive?}}.
+
+    Absent is fine — most verdicts are a bare opinion. Anything present must conform,
+    and the error names the offending key so a human can act on it without guessing.
+
+    Strict about UNKNOWN entry keys on purpose. Everything this schema fixes came from
+    a payload nobody had declared, so quietly accepting an extra field is how the next
+    undeclared shape gets in; an additive field is a schema change, not a surprise on
+    the wire. Values are matched against the declared set by KEY, so a mis-keyed entry
+    is indistinguishable from a missing credential later — which is exactly the silence
+    this boundary exists to convert into a loud, immediate 400.
+    """
+    if returns is None:
+        return
+    if not isinstance(returns, dict):
+        raise Invalid("%s must be an object keyed by credential name "
+                      "({\"KEY_NAME\": {\"value\": ...}})" % where)
+    # NOT ONE OF THESE MESSAGES ECHOES A KEY OR A VALUE, and that is deliberate rather
+    # than terse. The reply crosses the same edge the credential boundary exists to
+    # protect, and a mis-shaped payload is most often one where the VALUE was pasted
+    # into the key position — where it would sail past the name regex (`sk_live_abc123`
+    # is a legal-looking name) and get quoted straight back out through any proxy log
+    # in between. An ordinal is enough for a human with the payload in front of them.
+    for i, (name, entry) in enumerate(returns.items(), 1):
+        at = "%s entry %d" % (where, i)
+        if not (isinstance(name, str) and RETURNS_KEY_RE.match(name)):
+            raise Invalid("%s has a key that is not a usable credential name "
+                          "(letters, digits, dot, dash, underscore)" % at)
+        if not isinstance(entry, dict):
+            raise Invalid("%s must be an object {value, sensitive?}" % at)
+        if not isinstance(entry.get("value"), str):
+            raise Invalid("%s needs a string \"value\"" % at)
+        if "sensitive" in entry and not isinstance(entry["sensitive"], bool):
+            raise Invalid("%s has a non-boolean \"sensitive\"" % at)
+        extra = set(entry) - set(RETURNS_ENTRY_KEYS)
+        if extra:
+            raise Invalid("%s carries %d field(s) that are not value/sensitive"
+                          % (at, len(extra)))
+
+
 def _is_sensitive(returns):
     """Does this verdict hand back a credential?
 
-    Deliberately shallow and permissive: `returns` is an open payload, and the cost of
-    a false positive is a tighter mode plus an unlink the orchestrator would do anyway,
-    while the cost of a false negative is a live key left lying on the inbox.
+    Deliberately shallow and permissive: the shape is declared and validated above, but
+    this stays the belt to that braces — the cost of a false positive is a tighter mode
+    plus an unlink the orchestrator would do anyway, while the cost of a false negative
+    is a live key left lying on the inbox.
     """
     if isinstance(returns, dict):
         if returns.get("sensitive"):
@@ -990,6 +1043,7 @@ def validate(kind, body):
         if not isinstance(v, dict):
             raise Invalid("verdict must be an object")
         tasks = v.get("tasks")
+        check_returns(v.get("returns"), "verdict.returns")
         if tasks is None:
             if v.get("outcome") not in VERDICT_OUTCOMES:
                 raise Invalid("verdict.outcome must be one of %s"
@@ -1004,6 +1058,8 @@ def validate(kind, body):
                 if not isinstance(t, dict) or t.get("outcome") not in VERDICT_OUTCOMES:
                     raise Invalid("every verdict.tasks[] entry needs an outcome in %s"
                                   % ", ".join(VERDICT_OUTCOMES))
+                check_returns(t.get("returns"),
+                              "verdict.tasks[%s].returns" % (t.get("id") or "?"))
         clean = {"token": token, "verdict": v}
         return clean, _is_sensitive(v.get("returns")) or any(
             _is_sensitive(t.get("returns")) for t in (tasks or []) if isinstance(t, dict))
@@ -1983,6 +2039,13 @@ INDEX_HTML = """<!doctype html>
      rides the pairing fragment, never the served surface it gates); the mode drives
      which sections app.js shows. -->
 <meta name="bus-mode" content="__BUS_MODE__">
+<!-- yes | no — may THIS socket accept a credential-bearing setup verdict? Separate from
+     the mode because it is a different fact: a remote socket over an end-to-end-encrypted
+     transport may, a plaintext one may not, and both read as "remote". It exists so the
+     page does not invite a human to type a live key that the socket will 403 anyway.
+     It is UX, never the boundary — the 403 in the POST handler stays the enforcement,
+     because a served page is the one thing that must never decide its own limits. -->
+<meta name="bus-credentials" content="__BUS_CREDENTIALS__">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -2053,7 +2116,13 @@ INDEX_HTML = """<!doctype html>
       <iframe class="demo-frame" sandbox="allow-scripts allow-forms" title="demo sandbox"></iframe>
       <a class="demo-open" target="_blank" rel="noopener noreferrer">open the demo full-screen ↗</a>
     </div>
+    <ol class="steps" hidden></ol>
+    <p class="how-text" hidden></p>
     <div class="row"><span class="deadline"></span></div>
+    <div class="tasks" hidden></div>
+    <p class="no-creds hint" hidden>This checkpoint hands back a credential, which this
+      connection is not allowed to carry. Answer it from the local console, or over an
+      end-to-end-encrypted transport.</p>
     <div class="verdict">
       <select class="outcome">
         <option value="approve">approve</option>
@@ -2065,6 +2134,31 @@ INDEX_HTML = """<!doctype html>
       <span class="msg"></span>
     </div>
   </article>
+</template>
+
+<!-- One row per setup task: its own outcome (a mixed reply routes each item on its own)
+     and one labelled input per credential the task declared. -->
+<template id="task-tpl">
+  <div class="task">
+    <div class="row">
+      <strong class="tid mono"></strong>
+      <select class="toutcome">
+        <option value="approve">approve</option>
+        <option value="changes">changes</option>
+        <option value="reject">reject</option>
+      </select>
+    </div>
+    <p class="twhat"></p>
+    <div class="tsecrets"></div>
+  </div>
+</template>
+
+<template id="secret-tpl">
+  <label class="secret">
+    <span class="sname mono"></span>
+    <input class="svalue" type="password" autocomplete="off" spellcheck="false"
+           autocapitalize="off" placeholder="paste the value">
+  </label>
 </template>
 
 <template id="ob-tpl">
@@ -2098,6 +2192,10 @@ const $ = (s) => document.querySelector(s);
 const META = (n) => (document.querySelector('meta[name="' + n + '"]') || {}).content || "";
 const MODE = META("bus-mode") || "loopback";
 const REMOTE = MODE === "remote";
+// May THIS socket carry a credential? Drives whether the setup form renders its inputs
+// at all, so a human is never invited to type a live key the server will refuse. The
+// server's 403 remains the actual boundary — this only decides what we ask for.
+const CREDS_OK = META("bus-credentials") === "yes";
 const TOKEN_KEY = "bus.token";
 
 // Token bootstrap. The loopback page carries its token in the meta tag. The REMOTE page
@@ -2205,12 +2303,117 @@ function flash(el, text, ok) {
   setTimeout(() => { el.textContent = ""; }, 6000);
 }
 
+// Render the setup-guide's steps: a numbered list with the verified deep-link and the
+// still-findable breadcrumb beside it. A guide that predates the structured shape is a
+// plain string and is shown as text rather than dropped.
+function renderSteps(node, how) {
+  if (Array.isArray(how) && how.length) {
+    const ol = node.querySelector(".steps");
+    for (const s of how) {
+      const li = document.createElement("li");
+      li.textContent = (s && s.step) || String(s ?? "");
+      const url = s && typeof s.url === "string" ? s.url : "";
+      // ONLY http(s) becomes a link. These strings are loop-authored, and a
+      // javascript:/data: href would run in the console's own origin — the one place
+      // the token lives. An unusable scheme degrades to the breadcrumb, which is what
+      // the fallback is for.
+      if (/^https?:\/\//i.test(url)) {
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = "open ↗";
+        li.append(" ", a);
+      }
+      const trail = (s && (s.breadcrumb || s.query)) || "";
+      if (trail) {
+        const span = document.createElement("span");
+        span.className = "crumb";
+        span.textContent = trail;
+        li.append(" ", span);
+      }
+      ol.append(li);
+    }
+    ol.hidden = false;
+  } else if (typeof how === "string" && how.trim()) {
+    const p = node.querySelector(".how-text");
+    p.textContent = how;
+    p.hidden = false;
+  }
+}
+
+// The setup form: one row per task (its own outcome, so a mixed reply routes each item
+// on its own) and one labelled input per credential the task declared. This is the ONLY
+// shipped producer of a `returns` payload — everything downstream of it (the store, the
+// declared-set diff, the credential socket boundary) exists to serve what is typed here.
+function renderTasks(node, cp) {
+  const req = cp.request;
+  const tasks = req && Array.isArray(req.tasks) ? req.tasks : [];
+  if (cp.kind !== "setup" || !tasks.length) return;
+  const wrap = node.querySelector(".tasks");
+  let wantsSecret = false;
+  for (const t of tasks) {
+    const row = $("#task-tpl").content.cloneNode(true);
+    row.querySelector(".task").dataset.tid = (t && t.id) || "";
+    row.querySelector(".tid").textContent = (t && t.id) || "task";
+    row.querySelector(".twhat").textContent = (t && t.what) || "";
+    const box = row.querySelector(".tsecrets");
+    for (const name of (t && Array.isArray(t.secrets) ? t.secrets : [])) {
+      if (typeof name !== "string" || !name) continue;
+      wantsSecret = true;
+      if (!CREDS_OK) continue;
+      const sec = $("#secret-tpl").content.cloneNode(true);
+      sec.querySelector(".sname").textContent = name;
+      sec.querySelector(".svalue").dataset.name = name;
+      box.append(sec);
+    }
+    wrap.append(row);
+  }
+  wrap.hidden = false;
+  node.querySelector(".outcome").hidden = true;  // the per-task selects replace it
+  // Never silently drop the inputs: a socket that cannot carry a credential says so.
+  if (wantsSecret && !CREDS_OK) node.querySelector(".no-creds").hidden = false;
+}
+
+function collectVerdict(card, notes) {
+  const rows = [...card.querySelectorAll(".task")];
+  if (!rows.length) return { outcome: card.querySelector(".outcome").value, notes };
+  return {
+    notes,
+    tasks: rows.map((r) => {
+      const t = { id: r.dataset.tid, outcome: r.querySelector(".toutcome").value };
+      // The declared shape: keyed by credential NAME, value + sensitive, nothing else.
+      // The name comes from the request, never from anything the human typed.
+      const returns = {};
+      let any = false;
+      for (const inp of r.querySelectorAll(".svalue")) {
+        if (!inp.value) continue;
+        returns[inp.dataset.name] = { value: inp.value, sensitive: true };
+        any = true;
+      }
+      if (any) t.returns = returns;
+      return t;
+    }),
+  };
+}
+
 function renderCheckpoints(items) {
+  // The poll repaints this list wholesale, which would wipe a half-typed credential (or
+  // note) out from under the human — pasting a long API key takes longer than one poll
+  // interval. Editing wins: skip the repaint while the list holds focus or an unsent
+  // value, and let the next tick take it.
+  const live = $("#cp-list");
+  if (live.contains(document.activeElement) ||
+      [...live.querySelectorAll(".svalue, .notes")].some((i) => i.value)) return;
   renderList(items, "#cp-list", "#cp-count", "#cp-tpl", (node, cp) => {
     node.querySelector(".kind").textContent = cp.kind || "checkpoint";
     node.querySelector(".ticket").textContent = cp.ticket_id || "";
+    const req = cp.request;
     node.querySelector(".request").textContent =
-      typeof cp.request === "string" ? cp.request : JSON.stringify(cp.request ?? "");
+      typeof req === "string" ? req : ((req && (req.what || req.expected)) ||
+                                       JSON.stringify(req ?? ""));
+    renderSteps(node, req && req.how);
+    renderTasks(node, cp);
     // A demo checkpoint shows its sandbox inline (look), with the verdict form below it
     // (approve → lock · changes → refine · reject → discuss). The demo id is validated
     // server-side to the served-id shape; encodeURIComponent guards the URL we build.
@@ -2228,12 +2431,20 @@ function renderCheckpoints(items) {
     const btn = node.querySelector(".send");
     btn.addEventListener("click", async () => {
       btn.disabled = true;
+      const card = btn.closest(".card");
       try {
-        const outcome = node2(btn, ".outcome").value;
-        const notes = node2(btn, ".notes").value;
-        const r = await send("verdict", { token: cp.token, verdict: { outcome, notes } });
+        const verdict = collectVerdict(card, node2(btn, ".notes").value);
+        const r = await send("verdict", { token: cp.token, verdict });
+        // The value crosses once, over the POST, and is gone: cleared from the DOM here
+        // and never written to localStorage. `remember` records the OUTCOME only — the
+        // "my requests" history is durable browser state, and a credential has no
+        // business in it.
+        for (const inp of card.querySelectorAll(".svalue")) inp.value = "";
+        const shown = verdict.tasks
+          ? verdict.tasks.map((t) => t.id + ":" + t.outcome).join(", ")
+          : verdict.outcome;
         remember(r.ticket, "verdict", (cp.kind || "checkpoint") + " " +
-                 (cp.ticket_id || "") + " → " + outcome);
+                 (cp.ticket_id || "") + " → " + shown);
         flash(msg, "sent — the loop applies it at its next boundary", true);
       } catch (e) {
         flash(msg, String(e.message || e), false);
@@ -2443,6 +2654,16 @@ dd { margin:0; }
 .verdict { display:flex; gap:.4rem; align-items:center; margin-top:.5rem;
   padding-top:.5rem; border-top:1px solid var(--line); flex-wrap:wrap; }
 .verdict .notes { flex:1; min-width:12rem; }
+.steps { margin:.35rem 0 .5rem 1.1rem; padding:0; font-size:.9rem; }
+.steps li { margin:.2rem 0; }
+.crumb { color:var(--dim); font-size:.85em; }
+.how-text { margin:.35rem 0; font-size:.9rem; }
+.task { border-top:1px dashed var(--line); margin-top:.45rem; padding-top:.45rem; }
+.twhat { margin:.2rem 0; font-size:.9rem; }
+.tsecrets { display:grid; gap:.35rem; margin-top:.35rem; }
+.secret { display:flex; gap:.5rem; align-items:center; }
+.secret .svalue { flex:1; min-width:10rem; }
+.no-creds { color:var(--bad); }
 input, select, textarea, button { font:inherit; color:var(--fg); background:transparent;
   border:1px solid var(--line); border-radius:5px; padding:.3rem .5rem; }
 textarea { width:100%; resize:vertical; }
@@ -2971,8 +3192,10 @@ def make_handler(daemon):
                 remote = self.server.policy.remote
                 tok = "" if remote else (daemon.token or "")
                 mode = "remote" if remote else "loopback"
+                creds = "yes" if self.server.policy.allow_credentials else "no"
                 page = (INDEX_HTML.replace("__BUS_TOKEN__", html.escape(tok))
-                                  .replace("__BUS_MODE__", mode))
+                                  .replace("__BUS_MODE__", mode)
+                                  .replace("__BUS_CREDENTIALS__", creds))
                 return self._send(200, page.encode(), "text/html; charset=utf-8")
             if path == "/app.js":
                 if not self._guard(need_token=False):

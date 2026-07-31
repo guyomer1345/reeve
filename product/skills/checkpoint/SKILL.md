@@ -21,6 +21,11 @@ Two boundary types. **Judgment** — the human gives an opinion:
 
 ## Inputs
 A `checkpoint.request` `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
+**A `setup` `tasks[]` entry is `{ id, what, secrets?[] }`** — `secrets[]` naming the credential **key names** that
+task will hand back (`POLAR_WEBHOOK_SECRET`), never values. Fill it whenever the task returns a credential: it is
+what makes the console render a labelled input per key instead of asking a human to hand-compose a payload, and it
+is where `config.json`'s `secrets_required[]` gets its names. A task you leave un-named still works — the human just
+gets a generic entry — but the declared-loss report can then only say "the store is gone", never *which* keys.
 
 ## Workflow
 1. Assemble the `request` + its correlation `token`.
@@ -50,8 +55,11 @@ A `checkpoint.request` `{ kind: demo|qa|setup|reconcile, what, expected, how?(�
    skipped).
 
 ## Output
-A **parked ticket** (this turn). The `checkpoint.verdict` `{ outcome, notes, returns? }` (`pass` ≡ approve; setup
-carries a per-task outcome) is what the drain later matches to the token and routes below.
+A **parked ticket** (this turn). The `checkpoint.verdict` `{ outcome, notes, returns? }` (`pass` ≡ approve; a setup
+reply carries `tasks[] {id, outcome, returns?}` instead of the single `outcome`) is what the drain later matches to
+the token and routes below. **`returns` is a name-keyed map — `{ "<KEY_NAME>": { value, sensitive?: true } }`** —
+the key *is* the credential name, task identity already lives at `tasks[].id`, and the bus `400`s any other shape.
+You never compose a verdict yourself: the human answers it in the console, and it arrives on the bus.
 
 ## Route
 Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so `debug` is not the universal sink):
@@ -68,8 +76,10 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
   is then **unlinked immediately** — the single case where the loop deletes an inbox file, so a credential's
   lifetime on disk outside the store is as short as possible. These are **live credentials, not memory**: the
   retention/`audit` prune never sweeps them.
-  **Declare the key name at elicitation.** When a setup task asks for a credential, add its **name** to
-  `config.json`'s `secrets_required[]` (idempotent — never a duplicate). **Names only, never values**: `config.json`
+  **Declare the key name at elicitation.** When a setup task asks for a credential, name it in that task's
+  `secrets[]` **and** add it to `config.json`'s `secrets_required[]` (idempotent — never a duplicate) — the task's
+  `secrets[]` is the source, `secrets_required[]` the project-wide running projection of every such ask, and the
+  console's labelled input is keyed off the former. **Names only, never values**: `config.json`
   is committed, and a value there is the exact leak the store exists to prevent. This is what makes absence
   *provable* — an empty `secrets/` is otherwise indistinguishable from a project that needs no credentials, so a
   machine move could only report "the store is gone, work out what was in it". `/rebind` diffs the declared set

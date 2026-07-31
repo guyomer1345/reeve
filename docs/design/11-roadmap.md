@@ -79,15 +79,25 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   2. **Reads + the cockpit page** — **BUILT 2026-07-16 (D116)**: the synthesized ETag'd snapshot over
      `state.json`/`parked/`/`outbox/`/`backlog.md` + `git log`, and the zero-build vanilla page (embedded in the
      daemon; `<meta>`-tag token bootstrap, strict `script-src 'self'`, chained-`setTimeout` poll). *(The old "C1".)*
-     **Residual: nobody has rendered the page in a browser** — correctness is driven, legibility is not.
+     *(The browser-render residual this once carried was CLOSED by D120 — headless Chrome, read as legible.)*
   3. **POST → inbox + the orchestrator drain** — **BUILT 2026-07-16 (D117/D118/D119)**: `POST
      /api/{verdict,intake,control,release}` → validate → atomic append → `202` + a `Location` ticket that **is** the
      `message_id`; the console's forms + a "my requests" surface that resolves off the per-kind effect anchors (so it
      still answers after GC); inbox GC on the watermark; and the drain **split** — its bookkeeping is `scripts/drain.py`
      (`list` → apply → `record`/`secret`), its apply stays the brief. *The verdict job lands here — the first
      increment to meet an MVP goal* (D93 protocol + the D108 consume model) (*the old "C2"*).
-     **Residual (carried from increment 2, now twice): nobody has rendered the page in a browser** — the forms were
-     added to an unreviewed surface; correctness is driven, legibility is not.
+     **3b — the setup verdict form — BUILT 2026-07-31 (D147).** Increment 3 shipped a form carrying `{outcome,
+     notes}` only, against a D99 spec that named `returns` / plural `tasks[]` / steps + verified deep-links +
+     breadcrumbs — so **no client could produce a `returns` payload at all**, and D122's Tailscale credential arm
+     guarded a payload nothing could emit. Now: per-task rows (own outcome), one labelled input per credential named
+     from `request.tasks[].secrets[]`, the `how` steps rendered, a `bus-credentials` page fact so the inputs appear
+     only where the socket may carry a key (the `403` stays the boundary), and `returns` **declared** as a
+     name-keyed map the bus validates. *The increment-3 tag was BUILT against a spec it did not meet, and the stated
+     residual named legibility — which is how a capability gap read as polish.*
+     **Residual: the setup FORM has never been rendered in a browser** — the cockpit was (D120, headless Chrome),
+     but that render predates this form by six increments, and an interactive credential form fails in ways a
+     read-only card does not. The form's *logic* is driven (the shipped `collectVerdict` run through node, its
+     output fed to the real validator); its *rendering* is not.
   4. **The notifier** — **BUILT 2026-07-18 (D120)**: the daemon watches `parked/` → alerts on a new open checkpoint
      → re-alerts every `config.checkpoint.reminder_hours` → escalates once past the absolute `deadline` (never
      auto-proceeding), as a **term on the existing `parked` job**. Alert state lives in a fourth daemon-owned path
@@ -644,7 +654,7 @@ discharged.
 - **`SessionStart` re-asserts `.git/hooks/pre-commit`, non-clobbering** — absent ⇒ install · identical ⇒ silent ·
   different ⇒ warn, never clobber. Proportionate: the git hook backstops *out-of-loop* commits only. **[dur — BUILT (D144); the matcher broadened to `startup`/`resume` (the rehydrate stays `clear`-only) because the motivating case is a CLONE, which runs neither `/start` nor `/rebind`. "Warn once" is keyed by the foreign hook's sha256 in `.git/hooks/`, so a different foreign hook warns again. `/rebind` calls the same code path via `--assert-hook`. **DRIVEN (D146):** both broadened matcher strings fire against harness 2.1.220 — proven by a `.git/hooks/pre-commit` that is sha256-identical to the source, not by a context window — and the foreign arm leaves the hook byte-for-byte untouched. **The stated residual was RETRACTED, not discharged: it was never real.** A headless `claude -p` session is handed the warning and quotes it back verbatim in its rendered form; three-state discrimination (warn / silent on the marker / re-warn on a different hook) rules out both the model reading the source and guessing]**
 - **`config.json` `secrets_required[]`** — key names only, written by the `setup` checkpoint at elicitation; absence
-  becomes provable; point-of-use fail-closed stays as the floor. `outbox/` loss is reported, not recovered. **[dur — BUILT (D144); "present" is derived by walking store payloads for key NAMES (entries are keyed by `message_id`, not by credential), deliberately generous because a missed match is noise and a false match is silence. Pure reads, so it runs in `check` too; an absent declaration is "we cannot tell", not "nothing is missing". **DRIVEN (D146) — and this is the one item the drive did NOT clear.** The itemized loss, the names-only entry and the never-printed value all held, but "present" is derived from dict KEYS, and `drain.py secret` stores `returns` verbatim from the console, whose natural shape (`[{id, sensitive, value}]`) carries the TASK id, never the credential name. Driven both ways: in the shape the code actually writes **nothing ever matches**, so every declared secret reports lost on every rebind of a machine that lost nothing. Nothing defines `returns`' shape, so this working is currently luck. Left open for a design call → `07`]**
+  becomes provable; point-of-use fail-closed stays as the floor. `outbox/` loss is reported, not recovered. **[dur — BUILT (D144); "present" is derived by walking store payloads for key NAMES (entries are keyed by `message_id`, not by credential), deliberately generous because a missed match is noise and a false match is silence. Pure reads, so it runs in `check` too; an absent declaration is "we cannot tell", not "nothing is missing". **DRIVEN (D146) — and this is the one item the drive did NOT clear.** The itemized loss, the names-only entry and the never-printed value all held, but "present" is derived from dict KEYS, and `drain.py secret` stores `returns` verbatim from the console, whose natural shape (`[{id, sensitive, value}]`) carries the TASK id, never the credential name. Driven both ways: in the shape the code actually writes **nothing ever matches**, so every declared secret reports lost on every rebind of a machine that lost nothing. Nothing defines `returns`' shape, so this working is currently luck. Left open for a design call → `07`. **CLEARED (D147):** `returns` is now a declared **name-keyed map** the bus `400`s on violation, and the question sat downstream of a bigger one — nothing in the package could *produce* a `returns` at all, so the console gained the setup form D99 specified (increment 3b). The matcher flips with the declaration: "present" now reads `returns` nodes ONLY (collecting every key would let a project declaring a secret called `token` match falsely — a lost key reported present, i.e. silence), and a record that predates the shape is counted as **unreadable** and stated separately rather than folded into the loss]**
 
 **The drive that gated all of this is DONE (D143):** force-reinstall the plugin at HEAD → **`/rebind`** on
 `idea testing` (which did stamp the missing `bootstrap: complete` — that install predates D131) → **`/update`**, the
@@ -702,4 +712,8 @@ matcher fires (by file identity, not by a context window) and the bindability pr
 found and fixed the slice's one high-severity bug (**a machine block could be terminated by its own payload**,
 taking the drain's watermark to `null` from a console-reachable field), retracted a D144 residual that was never
 real, and left one open finding — the declared-secret diff depends on an undefined `returns` shape and is inert in
-the shape the code actually produces (`07`). Beyond these, everything is `[stageable]`/`[later]`.
+the shape the code actually produces. **That finding is CLOSED by D147**, which found it sat downstream of a bigger
+one: `returns` had **no producer** — the console's verdict form posted `{outcome, notes}` only, against a D99 spec
+that named `returns`/`tasks[]`/steps/deep-links, so D122's Tailscale credential arm had been guarding a payload
+nothing could emit. `returns` is now a declared name-keyed map, the console gained the setup form (increment 3b),
+and the matcher went exact. Beyond these, everything is `[stageable]`/`[later]`.

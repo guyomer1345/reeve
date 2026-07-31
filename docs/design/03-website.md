@@ -130,7 +130,9 @@ checkpoint verdict + status away from the terminal).
 - **Contact-orchestrator UX** (B3 — the D93 principle made concrete) **[BUILT — D117/D118/D119]** = POST forms + a
   feedback surface: a
   **verdict** form (D97 `{outcome, notes, returns?}` / plural `tasks[]`; renders the D98 steps + verified deep-links +
-  breadcrumbs for `setup`), an **intake** form (the D70 node→ticket click is a pre-filled intake), a **release** form
+  breadcrumbs for `setup`) — **BUILT as `{outcome, notes}` only and completed by D147** (increment 3b: the `setup`
+  half of this bullet — `returns`, per-task rows, the rendered steps — was specified here and never built, so no
+  client could produce a `returns` payload at all; `returns` is now a declared **name-keyed map**) —, an **intake** form (the D70 node→ticket click is a pre-filled intake), a **release** form
   (D105 — the pending-outbox panel: the queued outward actions, batch-approved by explicit `action_ids` → a
   `kind: release` POST), and the **"my requests" view** — each POST returns `202` + a `Location` ticket saved to
   `localStorage`; the view is the polled state *filtered* by those ticket ids, so `pending→consumed→resolved` is

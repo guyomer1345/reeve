@@ -30,4 +30,8 @@ A `checkpoint` (kind=setup) needs precise third-party steps.
 - You guide only — you don't perform the action or record the verdict.
 
 ## Output
-Step-by-step setup guidance (exact steps + verified deep-links + breadcrumbs) for the `checkpoint` to surface.
+Step-by-step setup guidance for the `checkpoint` to surface, as the `request.how` array — **`[{ step, url?,
+breadcrumb?, query? }]`**, one action per entry, `url` the verified deep-link and `breadcrumb` + `query` the
+still-findable fallback when it rots. Structured because the **console renders it** beside the verdict form: a
+human answering from a phone follows these entries as a numbered list with live links, so prose that buries the
+target in a paragraph costs them the one thing this agent exists to give.

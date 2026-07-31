@@ -300,7 +300,7 @@ hang). These two stay open because each is a design change, not a patch:
   `checks.env` generation, or teach `checks.sh` a standing exclusion (a fixed-runner change, so it needs the
   D127 care).
 
-## Machine-move remediation (D140 audit) — **the five design questions are CLOSED by D141; all of 7b is BUILT (D144) and now DRIVEN (D146), which opened one new question below**
+## Machine-move remediation (D140 audit) — **the five design questions are CLOSED by D141; all of 7b is BUILT (D144), DRIVEN (D146), and the one question that drive opened is CLOSED by D147**
 All five retired: the re-bind capability is a `/rebind` command with four routing arms (detectors route, none
 heals); re-binding is neither recovery nor re-creation but a **three-case probe** the runner classifies;
 `handoff.parked[]` becomes a machine block only by giving parking a code writer (`bus.py park` — **and, the build
@@ -310,19 +310,17 @@ re-asserted from `SessionStart`, non-clobbering (and `07`'s "same scrutiny as F3
 already disarmed on every clone, so re-asserting can only arm it); secrets get a declared `config.json`
 `secrets_required[]`, with point-of-use fail-closed kept as the floor. The build items live in `11` (Phase 7a/7b).
 
-**OPEN — what shape is a `setup` verdict's `returns`?** Opened by the 7b drive (D146). The declared-secret diff
-derives "present" by collecting dict **keys** from a store payload, but `drain.py secret` stores `returns` verbatim
-from the console, and in its natural shape (`[{id, sensitive, value}]`) the `id` is the **task** id
-(`runpod-credentials`), never the credential name (`IVRIT_RUNPOD_API_KEY`) that the checkpoint skill writes into
-`secrets_required[]`. Driven both ways: keyed by credential name it matches exactly; in the shape the code actually
-writes **nothing ever matches**, so every declared secret is reported lost on every rebind of a machine that lost
-nothing. D144's generosity argument (a missed match is noise, a false match is silence) still holds *directionally*,
-but this is a total miss rather than a tuning one, and permanent false "lost" noise trains the human to ignore the
-one entry meant to be an early warning. **The question is not how to loosen the matcher — it is that `returns` has
-no declared shape at all**, so whether the feature works is luck. Deciding it touches `schemas.md`, the checkpoint
-skill and the console, which is why the drive left it rather than fixing it. *Candidate:* give a `sensitive`
-`returns` entry a `name` field carrying the credential's key name and match on that field's value (narrow enough
-not to reintroduce false matches from arbitrary strings) — not adopted, the maintainer's call.
+~~**OPEN — what shape is a `setup` verdict's `returns`?**~~ **CLOSED by D147 — a name-keyed map, and the question
+turned out to sit downstream of a bigger one: `returns` had no PRODUCER.** Nothing in the package could emit one —
+the console's verdict form posted `{outcome, notes}` and nothing else, there was no CLI verb, and no document
+described the POST — so the shape was re-invented per invocation by whoever hand-wrote the request, which is the
+real reason "whether the feature works is luck". D99 had *specified* the form to carry `returns`/`tasks[]` plus the
+setup steps and deep-links; increment 3 shipped a strict subset and was tagged BUILT, the component COMPLETE, with
+only a *legibility* residual stated — so a capability gap read as polish. The candidate `name` field was **rejected**:
+task identity already lives at `tasks[].id`, so a second identifier on the same entry is a silent-failure generator,
+and the driven `[{id, …}]` shape was the wrong *slot* rather than a mis-keyed field. The declaration also flips the
+matcher — generosity was only a virtue while the shape was undeclared. Full call, and the three things the build
+forced, in D147.
 **Both residuals are DISCHARGED by the D142 build** — and one of them fired:
 - ~~**What counts as a "weak mount", portably.**~~ **Closed: it is measured, not classified.** `bus.probe_mode()`
   already did the only correct thing — a `0600` create then a `stat`, which asks the question directly instead of

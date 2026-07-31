@@ -99,44 +99,72 @@ def required_secrets(workflow):
 
 
 def present_secrets(secrets_dir):
-    """The key NAMES the store currently holds.
+    """(names the store holds, count of entries whose shape could not be read).
 
     Entries are named by the `message_id` that carried them, not by the credential, so
     the names live inside the payloads and this has to look. It reads the bodies and
-    returns only dict KEYS — no value is ever returned, printed, or filed, and the
-    `sensitive` marker is dropped because it is a flag, not a credential name.
+    returns only KEYS — no value is ever returned, printed, or filed.
 
-    Deliberately generous about shape (`returns` is an open payload): a name is present
-    if it appears as a key anywhere in the record. Being wrong in the OTHER direction is
-    what matters — a missed match reports a secret as lost, which is noise a human
-    corrects, whereas a false match would report a lost credential as present, which is
-    silence. This is early warning; `schemas.md`'s point-of-use fail-closed is the floor.
+    EXACT, not generous, and the difference is the whole point. `returns` is a declared
+    name-keyed map, so the names are read from `returns` nodes ONLY. Collecting every key
+    in the record instead would sweep in the envelope's own field names (`token`,
+    `value`, `id`, `stored_at`), and a project declaring a credential called `token` would
+    then match falsely — a false match reports a LOST credential as present, which is
+    silence, and silence is the one outcome this report exists to prevent. The other
+    direction is now covered by the boundary rather than by tolerance: a payload that
+    cannot be matched is refused at `POST /api/verdict`, so it never reaches the store.
+
+    A record that predates the declaration is counted, not guessed at. "I cannot read
+    this" and "this is gone" are different facts, and only one of them is an emergency.
     """
     found = set()
+    unreadable = 0
+
+    def harvest(returns):
+        """True when this node is a conforming name-keyed map."""
+        if not isinstance(returns, dict) or not returns:
+            return False
+        if not all(isinstance(k, str) and isinstance(v, dict)
+                   for k, v in returns.items()):
+            return False
+        found.update(returns)
+        return True
 
     def walk(node):
+        """Find `returns` nodes anywhere in the record; report any that do not conform.
+
+        It descends rather than reading two fixed paths because one record holds both
+        `returns` and `tasks[].returns`, and a reader pinned to today's envelope would
+        go quietly blind the day the envelope gains a level.
+        """
+        ok = True
         if isinstance(node, dict):
             for k, v in node.items():
-                if isinstance(k, str) and k != "sensitive":
-                    found.add(k)
-                walk(v)
+                if k == "returns" and v is not None:
+                    ok = harvest(v) and ok
+                else:
+                    ok = walk(v) and ok
         elif isinstance(node, list):
             for v in node:
-                walk(v)
+                ok = walk(v) and ok
+        return ok
 
     try:
         names = os.listdir(secrets_dir)
     except OSError:
-        return found
+        return found, unreadable
     for n in names:
         if not n.endswith(".json"):
             continue
         try:
             with open(os.path.join(secrets_dir, n)) as fh:
-                walk(json.load(fh))
+                body = json.load(fh)
         except (OSError, ValueError):
+            unreadable += 1
             continue
-    return found
+        if not walk(body):
+            unreadable += 1
+    return found, unreadable
 
 
 def secret_loss(workflow, secrets_dir, host):
@@ -148,9 +176,20 @@ def secret_loss(workflow, secrets_dir, host):
     required = required_secrets(workflow)
     if not required:
         return None
-    missing = [n for n in required if n not in present_secrets(secrets_dir)]
+    present, unreadable = present_secrets(secrets_dir)
+    missing = [n for n in required if n not in present]
     if not missing:
         return None
+    # An unreadable entry is stated separately and never folded into the loss. A store
+    # written before `returns` had a declared shape holds real credentials this cannot
+    # name, and reporting those as lost would send a human to re-elicit keys they still
+    # have — the false-alarm habit that trains someone to ignore this entry entirely.
+    caveat = ""
+    if unreadable:
+        caveat = (" %d store entr%s could not be read for credential names (an "
+                  "unrecognised payload shape, most likely written before the shape was "
+                  "declared); those may still hold live keys, so confirm before "
+                  "re-eliciting." % (unreadable, "y" if unreadable == 1 else "ies"))
     return {
         "title": "rebind: %d declared secret(s) missing after a machine move" % len(missing),
         "kind": "bug", "severity": "high",
@@ -159,8 +198,8 @@ def secret_loss(workflow, secrets_dir, host):
             "not hold: %s. These are live credentials a human handed over at a setup "
             "checkpoint — re-elicit each one through a setup checkpoint, never by "
             "pasting it into a file the loop reads. (Key names only; no value is "
-            "recorded here or anywhere committed.)"
-            % (", ".join(required), host, ", ".join(missing)),
+            "recorded here or anywhere committed.)%s"
+            % (", ".join(required), host, ", ".join(missing), caveat),
     }
 
 

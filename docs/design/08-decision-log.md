@@ -3437,3 +3437,85 @@ meta-gates green; release boundary unchanged at 54 shipped files / 18 install en
 working tree and runtime tree verified untouched throughout. → `11` (7b tags → DRIVEN; Phase 7's exit test is
 discharged), `07` (the `returns`-shape question opens), `product/scripts/{bus.py,test_bus.py,test_drain.py}`,
 `product/hooks/session_start.py`.
+
+## D147 — `returns` gets a declared shape (a **name-keyed map**), and the drive's question turned out to sit downstream of a bigger one: it had **no producer** — the console never had a setup form, so the whole credential path served a payload nothing could emit **[BUILT 2026-07-31 — the shape + the form + the exact matcher; 539 tests (515 at `7f99fd3`, +24) + five meta-gates green; the form's LOGIC is driven through node against the real validator, its RENDERING has still never been in a browser]**
+D146 left one question: what shape is a `setup` verdict's `returns`? Answering it meant asking who writes one — and
+**nothing did.** The console's verdict form posted `{outcome, notes}` and nothing else (no `returns`, no `tasks[]`,
+no per-task outcome); `bus.py`'s verbs are `ensure|serve|stop|status|park|unpark|mirror`; `drain.py`'s three are all
+consumers; and `curl`/`/api/verdict` appear in **zero** of `checkpoint/SKILL.md`, `schemas.md`,
+`orchestrator-CLAUDE.md`, `commands/`. The only `returns` that has ever existed was hand-POSTed by the 7b drive,
+which is precisely why it had to invent `[{id, sensitive, value}]` — **the shape was re-invented per invocation by
+whoever wrote the request.** That, not matcher tolerance, is where "whether the feature works is luck" came from.
+
+**And it was an unfulfilled promise, not an omission.** D99 specified the form as carrying `{outcome, notes,
+returns?}` / plural `tasks[]` **and** rendering D98's steps + verified deep-links + breadcrumbs for `setup`. What
+shipped carries none of the five; `cp.request` was `JSON.stringify`'d into a `<p>`. Increment 3 was tagged BUILT
+with "the console's forms", the component **COMPLETE**, and the one stated residual was *legibility* ("nobody has
+rendered the page in a browser") — so a **capability** gap read as polish. The sharpest consequence: D122 built a
+second socket, a persisted second-factor token, and the structural `remote_carries_payload` boundary specifically so
+credential-bearing setup verdicts could arrive from a phone over Tailscale — **guarding a payload no client could
+produce.** An away human, the entire premise of the away channel, could not answer a setup checkpoint at all. Same
+shape as every other finding this phase: *a documented flow whose mechanism is absent reads exactly like a working one.*
+
+**Call 1 — the shape is a NAME-KEYED MAP: `returns: { "<KEY_NAME>": { value, sensitive?: true } }`,** at
+`verdict.returns` and `verdict.tasks[].returns`. **Rejected — the candidate `name` field** on a
+`[{id, sensitive, value}]` entry: task identity already lives at `tasks[].id`, so the driven shape was the wrong
+*slot*, not a mis-keyed field, and bolting `name` beside `id` ratifies the collapse — two same-typed identifiers on
+one entry that a composer has even odds of swapping, silent either way, which is the failure class D146 had just
+fixed twice. The map has **one identifier per level**, makes multiple credentials from one task fall out as more
+keys, expresses a non-credential artifact as the same entry minus the marker, and needed **zero** matcher change —
+it is the shape D146 drove and found "matches exactly". *Also rejected — the orchestrator eliciting at the terminal
+and writing the store directly:* it puts a live key through a context window, which `cmd_secret`'s own contract
+forbids, and kills the away path outright.
+
+**Call 2 — build the form (console increment 3b), because the alternative strands a built increment.** Per-task
+rows (own outcome, so a mixed reply still routes each item on its own) with one **labelled** input per credential,
+named from the request's new `tasks[].secrets[]` — never free text, so the human never hand-composes a payload and
+the key can never be something they typed. Plus D99's promised `how` steps, now `[{step, url?, breadcrumb?, query?}]`,
+rendered as a numbered list with live links. *Rejected — documenting the POST instead:* cheaper and honest, but it
+leaves D122's credential arm permanently unreachable, and this project's standard is that a documented-but-absent
+mechanism is worse than an absent one.
+
+**Call 3 — declaring the shape FLIPS the matcher, and generosity becomes the bug.** D144's "generous because a
+missed match is noise, a false match is silence" was correct *while the shape was undeclared*. `present_secrets` now
+reads **`returns` nodes only** (descending, so it finds `tasks[].returns` too, rather than pinning two paths that go
+blind when the envelope gains a level). Collecting every key — the old behaviour — swept in `token`/`value`/`id`/
+`stored_at`, so a project declaring a credential called `token` would have **matched falsely**: a lost key reported
+present, i.e. silence. The other direction is covered by the boundary instead of by tolerance — **the bus `400`s a
+non-conforming `returns`**, so it never reaches the store. And **non-conformance is a separate observable, never
+folded into the loss**: a store predating the declaration holds real credentials this cannot name, and reporting
+those as "lost" would send a human to re-elicit keys they still have — the false-alarm habit that trains someone to
+ignore the one entry meant to be an early warning. "I cannot read this" and "this is gone" are different facts.
+
+**Three things only the code could have said.**
+- **No validation error may echo a key or a value.** The commonest malformation is the *value* pasted into the key
+  position — where `sk_live_abc123` sails past any credential-name regex — and the `400` body crosses the very
+  plaintext edge `remote_carries_payload` exists to protect, into whatever proxy log sits between. Messages carry an
+  **ordinal** (`verdict.returns entry 2`) and nothing else; a test asserts a canary never appears in any of them.
+- **The poll would have wiped a half-typed credential.** `renderCheckpoints` repaints the list wholesale on every
+  tick, and pasting an API key takes longer than one poll interval. **Editing wins:** the repaint is skipped while
+  the list holds focus or an unsent value. This was also a pre-existing latent bug on the `notes` field that nobody
+  had hit because nobody has used the page.
+- **The page needed a third fact, `bus-credentials`.** The mode is binary (`loopback|remote`), but a Tailscale
+  socket *may* carry a credential and reads as `remote` — so mode alone would have hidden the inputs on exactly the
+  socket D122 built for. It gates only what the form **asks for**; the `403` stays the enforcement, because a served
+  page must never be the thing that decides its own limits. When the socket cannot carry one, the form says so
+  rather than silently omitting the inputs. (Relatedly: only `http(s)` `how` links become anchors — a
+  `javascript:`/`data:` href from a loop-authored guide would run in the console's own origin, where the token lives.)
+
+*Evidence:* the missing producer established by exhaustion (console POST body, the CLI verb list, and a zero-hit grep
+for `curl`/`/api/verdict` across skills, schemas, template and commands) rather than by inference; 539 tests
+(+24: 9 shape-validation, 9 console-form, 2 socket-credential meta, 3 exact-matcher, 1 full-chain) + five meta-gates
+green; release boundary unchanged at 54 shipped files / 18 install entries. **The seam that broke is now tested as a
+seam** — the shipped `collectVerdict` is sliced out of `APP_JS`, run through node over a DOM shim, and its output fed
+to the real `bus.validate`, so producer and schema cannot silently diverge again; and a second test drives
+console→`drain.py secret`→store→`present_secrets` end to end, which is the only place D146's failure was ever
+visible (every link passed its own unit test while the chain was broken). `node --check` now guards `APP_JS`, since a
+syntax error there ships a console that renders nothing and says nothing. **Residual, stated precisely: the SETUP
+FORM has never been rendered in a browser.** The cockpit itself was (D120, headless Chrome, closing the
+twice-carried residual) — but that render predates this form by six increments, and an interactive credential form
+fails in ways a read-only card does not. *The sweep also caught `11` still carrying the browser-render residual on
+increments 2 and 3, stale against D120's closure since it was written; repointed.* → `07` (the `returns`-shape question
+closes), `11` (console increment 3b; the declared-secrets item's DRIVEN caveat discharges),
+`product/shared/schemas.md`, `product/skills/checkpoint/SKILL.md`, `product/agents/setup-guide.md`,
+`product/commands/rebind.md`, `product/scripts/{bus.py,rebind.py,test_bus.py,test_drain.py,test_rebind.py}`.

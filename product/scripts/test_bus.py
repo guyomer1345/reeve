@@ -1864,18 +1864,233 @@ class RemotePayloadBoundary(unittest.TestCase):
 
     def test_any_returns_key_is_a_payload(self):
         self.assertTrue(bus.remote_carries_payload(
-            {"verdict": {"outcome": "approve", "returns": {"api_key": "sk-live-x"}}}))
+            {"verdict": {"outcome": "approve",
+                         "returns": {"API_KEY": {"value": "sk-live-x",
+                                                 "sensitive": True}}}}))
 
     def test_even_a_returns_that_is_not_flagged_sensitive_is_a_payload(self):
-        # _is_sensitive would MISS this (no `sensitive` marker); the structural gate
-        # does not — presence of the key is enough.
-        body = {"verdict": {"outcome": "approve", "returns": {"value": "not-marked"}}}
+        # A non-credential artifact (a project id) is the declared shape minus the
+        # marker. _is_sensitive MISSES it; the structural gate does not — presence of
+        # the key is enough, which is exactly why the boundary is not that heuristic.
+        body = {"verdict": {"outcome": "approve",
+                            "returns": {"PROJECT_ID": {"value": "not-marked"}}}}
         self.assertFalse(bus._is_sensitive(body["verdict"]["returns"]))
         self.assertTrue(bus.remote_carries_payload(body))
 
     def test_the_setup_tasks_shape_is_a_payload(self):
         self.assertTrue(bus.remote_carries_payload(
             {"verdict": {"tasks": [{"outcome": "approve"}]}}))
+
+
+class DeclaredReturnsShape(unittest.TestCase):
+    """`returns` is a name-keyed map — {"<KEY_NAME>": {value, sensitive?}} — and the bus
+    refuses anything else. The shape used to be an open payload, which meant the
+    declared-secret diff downstream was matching on a structure nobody had defined: in
+    the shape that was actually produced, NOTHING ever matched, so a machine that lost
+    nothing reported every credential lost. Refusing at the boundary is what turns that
+    silence into a 400 the sender can act on."""
+
+    def _v(self, verdict):
+        return bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
+
+    def test_the_declared_shape_is_accepted_and_marked_sensitive(self):
+        clean, sensitive = self._v({"outcome": "approve", "returns": {
+            "POLAR_WEBHOOK_SECRET": {"value": "whsec_x", "sensitive": True}}})
+        self.assertTrue(sensitive)
+        self.assertEqual(clean["verdict"]["returns"]["POLAR_WEBHOOK_SECRET"]["value"],
+                         "whsec_x")
+
+    def test_a_bare_opinion_verdict_still_needs_no_returns(self):
+        _, sensitive = self._v({"outcome": "approve", "notes": "looks right"})
+        self.assertFalse(sensitive)
+
+    def test_a_non_credential_artifact_needs_no_sensitive_marker(self):
+        _, sensitive = self._v({"outcome": "approve",
+                                "returns": {"PROJECT_ID": {"value": "proj_42"}}})
+        self.assertFalse(sensitive)
+
+    def test_multiple_credentials_from_one_task_are_just_more_keys(self):
+        clean, _ = self._v({"tasks": [{"id": "runpod", "outcome": "approve", "returns": {
+            "IVRIT_RUNPOD_API_KEY": {"value": "a", "sensitive": True},
+            "IVRIT_RUNPOD_ENDPOINT": {"value": "b"}}}]})
+        self.assertEqual(sorted(clean["verdict"]["tasks"][0]["returns"]),
+                         ["IVRIT_RUNPOD_API_KEY", "IVRIT_RUNPOD_ENDPOINT"])
+
+    def test_the_shape_that_used_to_be_written_is_now_refused(self):
+        """The regression this whole schema exists for: a list of {id, sensitive, value}
+        whose `id` is the TASK id, never the credential name."""
+        with self.assertRaises(bus.Invalid):
+            self._v({"outcome": "approve", "returns": [
+                {"id": "runpod-credentials", "sensitive": True, "value": "sk_live_x"}]})
+
+    def test_a_bare_string_value_is_refused(self):
+        with self.assertRaises(bus.Invalid):
+            self._v({"outcome": "approve", "returns": {"A_KEY": "sk_live_x"}})
+
+    def test_an_unknown_entry_field_is_refused(self):
+        with self.assertRaises(bus.Invalid):
+            self._v({"outcome": "approve",
+                     "returns": {"A_KEY": {"value": "v", "note": "extra"}}})
+
+    def test_a_per_task_returns_is_validated_too(self):
+        with self.assertRaises(bus.Invalid):
+            self._v({"tasks": [{"id": "polar", "outcome": "approve",
+                                "returns": {"A_KEY": "not-an-object"}}]})
+
+    def test_no_error_message_ever_echoes_a_key_or_a_value(self):
+        """The reply crosses the same edge the credential boundary protects, and the
+        commonest malformation is the VALUE pasted into the key position — where it
+        passes the name regex and would be quoted straight back out."""
+        leak = "sk_live_SHOULDNEVERAPPEAR"
+        for verdict in (
+            {"outcome": "approve", "returns": {leak: {"bad": 1}}},
+            {"outcome": "approve", "returns": {leak: "flat"}},
+            {"outcome": "approve", "returns": {"A_KEY": {"value": leak, "x": 1}}},
+            {"outcome": "approve", "returns": {"A_KEY": {"value": leak,
+                                                         "sensitive": "yes"}}},
+        ):
+            with self.assertRaises(bus.Invalid) as caught:
+                self._v(verdict)
+            self.assertNotIn(leak, str(caught.exception))
+
+
+def _js_function(name):
+    """Slice one function out of APP_JS by brace-matching.
+
+    The console is embedded JS, so its logic is otherwise unreachable from a Python
+    test. A rename breaks this loudly, which is the correct failure — the point is to
+    run the REAL shipped source, never a copy of it that can drift.
+    """
+    src = bus.APP_JS
+    start = src.index("function %s(" % name)
+    depth, i = 0, src.index("{", start)
+    while True:
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return src[start:i + 1]
+        i += 1
+
+
+def _node():
+    return shutil.which("node")
+
+
+class ConsoleSetupForm(unittest.TestCase):
+    """The console's setup form is the ONLY shipped producer of a `returns` payload.
+
+    Everything downstream — the secret store, the declared-set diff, the credential
+    socket boundary — was built to serve a payload that no client could actually
+    produce, so the form's output shape is the seam that matters. These drive the real
+    shipped JS through node and feed what it emits to the real validator: if the form
+    and the schema ever disagree again, this fails rather than the field discovering it.
+    """
+
+    def _emit(self, tasks, notes="ok"):
+        """Run the shipped collectVerdict() over a minimal DOM shim; return its output."""
+        node = _node()
+        if not node:
+            self.skipTest("node is not installed")
+        harness = """
+%s
+const TASKS = %s.map((t) => ({
+  dataset: { tid: t.id },
+  _inputs: t.secrets.map((s) => ({ value: s.value, dataset: { name: s.name } })),
+  querySelector() { return { value: t.outcome }; },
+  querySelectorAll() { return this._inputs; },
+}));
+const card = {
+  querySelectorAll: (sel) => (sel === ".task" ? TASKS : []),
+  querySelector: () => ({ value: "approve" }),
+};
+console.log(JSON.stringify(collectVerdict(card, %s)));
+""" % (_js_function("collectVerdict"), json.dumps(tasks), json.dumps(notes))
+        out = subprocess.run([node, "-e", harness], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return json.loads(out.stdout)
+
+    def test_the_shipped_js_parses(self):
+        """A syntax error here ships a console that renders nothing and says nothing."""
+        node = _node()
+        if not node:
+            self.skipTest("node is not installed")
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as fh:
+            fh.write(bus.APP_JS)
+            path = fh.name
+        try:
+            out = subprocess.run([node, "--check", path], capture_output=True, text=True)
+            self.assertEqual(out.returncode, 0, out.stderr)
+        finally:
+            os.unlink(path)
+
+    def test_what_the_form_emits_is_what_the_bus_accepts(self):
+        """The seam, driven end to end: the producer's output through the validator."""
+        verdict = self._emit([{"id": "runpod", "outcome": "approve", "secrets": [
+            {"name": "IVRIT_RUNPOD_API_KEY", "value": "sk_live_x"},
+            {"name": "IVRIT_RUNPOD_ENDPOINT", "value": "ep_1"}]}])
+        clean, sensitive = bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
+        self.assertTrue(sensitive)
+        got = clean["verdict"]["tasks"][0]["returns"]
+        self.assertEqual(sorted(got), ["IVRIT_RUNPOD_API_KEY", "IVRIT_RUNPOD_ENDPOINT"])
+        self.assertEqual(got["IVRIT_RUNPOD_API_KEY"],
+                         {"value": "sk_live_x", "sensitive": True})
+
+    def test_the_credential_name_comes_from_the_request_not_the_task_id(self):
+        """The whole bug in one assertion: the task id must never become the key."""
+        verdict = self._emit([{"id": "runpod-credentials", "outcome": "approve",
+                               "secrets": [{"name": "IVRIT_RUNPOD_API_KEY",
+                                            "value": "sk_live_x"}]}])
+        returns = verdict["tasks"][0]["returns"]
+        self.assertIn("IVRIT_RUNPOD_API_KEY", returns)
+        self.assertNotIn("runpod-credentials", returns)
+        self.assertEqual(verdict["tasks"][0]["id"], "runpod-credentials")
+
+    def test_a_mixed_reply_routes_each_task_on_its_own(self):
+        verdict = self._emit([
+            {"id": "polar", "outcome": "approve",
+             "secrets": [{"name": "POLAR_WEBHOOK_SECRET", "value": "whsec_x"}]},
+            {"id": "clerk", "outcome": "reject", "secrets": []}])
+        bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
+        self.assertEqual([t["outcome"] for t in verdict["tasks"]], ["approve", "reject"])
+        self.assertNotIn("returns", verdict["tasks"][1])
+
+    def test_an_unfilled_credential_yields_no_returns_at_all(self):
+        """A task the human could not complete must not post an empty credential."""
+        verdict = self._emit([{"id": "polar", "outcome": "changes",
+                               "secrets": [{"name": "POLAR_WEBHOOK_SECRET",
+                                            "value": ""}]}])
+        bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
+        self.assertNotIn("returns", verdict["tasks"][0])
+
+    def test_a_non_setup_checkpoint_still_posts_a_bare_opinion(self):
+        verdict = self._emit([], notes="looks right")
+        self.assertEqual(verdict, {"outcome": "approve", "notes": "looks right"})
+        _, sensitive = bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
+        self.assertFalse(sensitive)
+
+    # -- what the page must never do with a credential --
+    def test_the_credential_input_is_masked_and_never_autofilled(self):
+        self.assertIn('class="svalue" type="password"', bus.INDEX_HTML)
+        self.assertIn('autocomplete="off"', bus.INDEX_HTML)
+
+    def test_the_form_clears_the_value_and_remembers_only_the_outcome(self):
+        """`remember` writes to localStorage, which is durable browser state."""
+        js = bus.APP_JS
+        self.assertIn('for (const inp of card.querySelectorAll(".svalue")) inp.value = ""',
+                      js)
+        send = js[js.index("btn.addEventListener"):]
+        remembered = send[send.index("remember("):send.index("flash(msg")]
+        self.assertIn("shown", remembered)
+        self.assertNotIn("value", remembered)
+
+    def test_the_poll_never_repaints_over_a_half_typed_credential(self):
+        """Pasting a long API key takes longer than one poll interval; a wholesale
+        re-render would wipe it out from under the human."""
+        js = _js_function("renderCheckpoints")
+        self.assertIn("document.activeElement", js)
+        self.assertIn(".svalue, .notes", js)
 
 
 class RemoteHelpers(Tmp):
@@ -1964,6 +2179,16 @@ class RemoteSocket(Tmp):
         self.assertIn(b"loopback-token-B", body)
         self.assertIn(b'name="bus-mode" content="loopback"', body)
 
+    def test_the_page_declares_whether_ITS_socket_may_carry_a_credential(self):
+        """A separate fact from the mode: a remote socket over an encrypted transport
+        may, a plaintext one may not, and both read as "remote". It only decides whether
+        the setup form ASKS for a key — the 403 stays the boundary."""
+        self.assertIn(b'name="bus-credentials" content="yes"',
+                      self.req(self.bport, "/")[1])
+        expected = b"yes" if self.TRANSPORT == "tailscale" else b"no"
+        self.assertIn(b'name="bus-credentials" content="' + expected + b'"',
+                      self.req(self.rport, "/")[1])
+
     def test_each_socket_only_accepts_its_own_token(self):
         # A read on A needs the remote token; the loopback token is refused there.
         self.assertEqual(self.req(self.rport, "/api/state", token="remote-token-A")[0], 200)
@@ -2007,8 +2232,10 @@ class RemoteSocket(Tmp):
     def test_a_returns_bearing_verdict_is_refused_on_access(self):
         code, _, _ = self.req(self.rport, "/api/verdict", method="POST",
                               token="remote-token-A",
-                              body={"token": "cp1", "verdict": {"outcome": "approve",
-                                    "returns": {"api_key": "sk-live-x"}}})
+                              body={"token": "cp1", "verdict": {
+                                  "outcome": "approve",
+                                  "returns": {"API_KEY": {"value": "sk-live-x",
+                                                          "sensitive": True}}}})
         self.assertEqual(code, 403, "a credential must not ride a plaintext-edge proxy")
 
     def test_a_setup_shaped_verdict_is_refused_on_access(self):
@@ -2077,8 +2304,10 @@ class RemoteSocketTailscale(RemoteSocket):
         # Overridden: on Tailscale the credential IS allowed to ride A.
         code, body, _ = self.req(self.rport, "/api/verdict", method="POST",
                                  token="remote-token-A",
-                                 body={"token": "cp1", "verdict": {"outcome": "approve",
-                                       "returns": {"api_key": "sk-live-x"}}})
+                                 body={"token": "cp1", "verdict": {
+                                     "outcome": "approve",
+                                     "returns": {"API_KEY": {"value": "sk-live-x",
+                                                             "sensitive": True}}}})
         self.assertEqual(code, 202, body)
 
     def test_a_setup_shaped_verdict_is_refused_on_access(self):

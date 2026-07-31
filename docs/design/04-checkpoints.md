@@ -65,12 +65,20 @@ Declared upstream wherever the intent lives, with setup's one exception:
 ## Verdict + the setup lifecycle (the data model) **[DECIDED — D97]**
 - **Verdict is a verb-enum, not a boolean:** `{ outcome: approve|changes|reject, notes, returns? }` (`pass` ≡
   approve). Routing keys off `outcome` per kind (see `shared/schemas.md` / `skills/checkpoint`).
+  **`returns` is a declared name-keyed map — `{ "<KEY_NAME>": { value, sensitive?: true } }` (D147)**, the key
+  being the credential's own name so a returned secret is matchable against the declared set without a second
+  identifier to get wrong; task identity lives at `tasks[].id`. The bus `400`s any other shape. *It was an open
+  payload until D147, which meant the declared-secret diff downstream was matching against a structure nobody had
+  defined — and in the shape actually produced, never matching at all.*
 - **Setup is machine-verified on resume** — "done" unblocks the agent to *probe the key/webhook actually works*
   before proceeding; a failed probe re-guides. Setup is the one kind whose human verdict is an input to a `verify`,
   not the terminal signal.
 - **Setup is plural + coalesced:** `request.tasks[]` (a lone setup is a one-element set), per-task outcomes;
   foreseeable setups are bundled **within-plan at first-setup-contact** (not front-loaded). Cross-ticket coalescing
-  is deferred (the schema already fits it — additive, not a refactor).
+  is deferred (the schema already fits it — additive, not a refactor). **A task entry is `{ id, what, secrets?[] }`
+  (D147)** — `secrets[]` naming the credential key names it will hand back, which is what lets the console render a
+  labelled input per key instead of asking a human to hand-compose a payload, and is the source `config.json`'s
+  `secrets_required[]` accumulates from.
 - **A returned secret rides the inbox, sensitive + shred** — written to the gitignored **secret store**, now
   located and owned (D111): **`.workflow/secrets/`**, native-FS-pinned, atomic `0600`/ACL create **whose achieved
   mode is verified, not assumed** (D115 — a 0600 create silently returns 0777 on the WSL repo mount), orchestrator

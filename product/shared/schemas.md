@@ -130,15 +130,39 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   *set* of setup items a `kind=setup` checkpoint carries (a lone setup is a one-element set); the orchestrator
   coalesces a plan's foreseeable setups (spec `integrations[]`) into one checkpoint **at first-setup-contact** (not
   front-loaded at intake) — an unforeseen setup is raised by `execute` on hitting the wall.
+  - **`tasks[]` entry — `{ id, what, secrets?[] }`.** `id` is the **task** id (`polar-webhook`), stable across the
+    reply so a per-task outcome routes back; `what` is the one-line ask the console shows. **`secrets[]` names the
+    credential **KEY NAMES** this task will hand back** (`POLAR_WEBHOOK_SECRET`) — never values. It is what lets the
+    console render a *labelled* input per credential instead of asking a human to hand-compose a payload, and it is
+    the **source** `config.json`'s `secrets_required[]` accumulates from (that key is the running projection of every
+    task's `secrets[]`, not a second declaration of the same fact).
+  - **`how` — `[{ step, url?, breadcrumb?, query? }]`**, the `setup-guide` return: one action per `step`, each with
+    the verified deep-link and the still-findable fallback. Structured because the console **renders** it beside the
+    form; a plain string is accepted and shown as text, so a guide written before this shape still displays.
 - `verdict` — `{ outcome: approve|changes|reject, notes, returns? }` (`pass` ≡ `outcome=approve`); a `kind=setup`
-  verdict carries a **per-task** outcome, so a mixed reply routes each item on its own. **Routing keys off `outcome`,
-  per kind:**
+  verdict replaces the single `outcome` with **`tasks[]` — `{ id, outcome, returns? }` per task**, so a mixed reply
+  routes each item on its own (`id` matches the `request.tasks[]` id).
+- **`returns` is a NAME-KEYED MAP — `{ "<KEY_NAME>": { value, sensitive?: true } }`** — and this shape is
+  **declared, not open**. The key **is** the credential's name, which is what makes a returned secret matchable
+  against the declared set without a second identifier to get wrong; task identity already lives at `tasks[].id`, so
+  `returns` never carries one. Multiple credentials from one task are simply more keys. A non-credential artifact (a
+  webhook URL, a project id) is the same entry without `sensitive`. **The bus rejects any other shape at
+  `POST /api/verdict` with a `400`** — a payload that cannot be matched must fail loudly at the boundary rather than
+  reach the store and read later as total credential loss.
+  **Routing keys off `outcome`, per kind:**
   - **demo** — approve → lock the spec state · changes → `create-demo` (refine) · reject → `discuss`.
   - **qa** — approve → `document`/`commit` · reject → `debug` (`changes` ≡ reject here).
   - **setup** — approve|changes → the orchestrator **verifies the external precondition actually works** (probe the
     key/webhook) *before* proceeding; reject → replan or hard-stop. A `returns` value marked `sensitive` is written to
     the gitignored **secret store** (`.workflow/secrets/`, below), **never logged**, and its inbox record **unlinked
     immediately after that write**.
+    **The console's setup form is the producer** — the per-task rows (outcome + one labelled input per
+    `request.tasks[].secrets[]` name) are what emit a conforming `returns`, and they are the *only* shipped way to
+    deliver one. The credential is typed into the page, POSTed once, and never stored browser-side: no
+    `localStorage`, inputs cleared on send, and the "my requests" memory records the **outcome only**. It renders
+    **only where the socket may accept a credential** (loopback, or a remote socket over an end-to-end-encrypted
+    transport) — but that is UX, not the boundary: the `403` at the socket stays the enforcement, because a page is
+    never allowed to be the thing that decides.
   - **reconcile** — approve → `prioritize` · else → `ingest`/`discuss`.
   A **timeout never auto-proceeds** — it re-surfaces + reminds (a missing credential can't be skipped). A rejection is
   not always a defect — hence routing by kind, not a universal `debug` sink.
@@ -209,7 +233,8 @@ safety). Neither alone is sufficient.
 consumed; the **bus** GCs inbox files ≤ that watermark (staying the sole writer of its own partition), and the
 consumed-set is pruned to ids above it — bounding both the inbox and the set. Volume is human-interaction-paced
 (the autonomous loop never writes the inbox), so this is hygiene, not a hot path.
-- **`kind: verdict`** — `{ token, verdict: {outcome, notes, returns?} }` — resumes a parked ticket; `token` matches a
+- **`kind: verdict`** — `{ token, verdict: {outcome, notes, returns?} }` (a `setup` reply carries `tasks[]` instead
+  of the single `outcome`; `returns` is the **name-keyed map** declared above and is validated on the way in) — resumes a parked ticket; `token` matches a
   `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume). **Anchor:** the parked
   `token` — a re-applied verdict finds the ticket already resumed (token closed) → dead-letter/no-op. A `returns`
   value marked `sensitive` (a setup credential) is written to the gitignored secret store and this inbox record is
@@ -308,7 +333,8 @@ fires it.
   raises the alarm) + `reminder_hours` (how often the daemon re-alerts while the checkpoint is open and not yet
   overdue). Absent → shipped defaults (`deadline_hours` 24, `reminder_hours` 4).
 - `secrets_required` — the **key NAMES** (never values) of the live credentials this project needs, appended by
-  the `setup` checkpoint at elicitation and idempotent on the name. It exists because absence is otherwise
+  the `setup` checkpoint at elicitation (from that checkpoint's `request.tasks[].secrets[]`, which is the fact's
+  source) and idempotent on the name. It exists because absence is otherwise
   **undetectable by inspection**: an empty `secrets/` is indistinguishable from a project that needs none, so a
   machine move could only report "the store is gone" and never *which* keys. `/rebind` diffs this against the store
   and files `required − present` as an itemized loss. **Early warning, not a gate** — point-of-use fail-closed
@@ -411,6 +437,13 @@ the one place the loop keeps a secret.
 - **These are credentials, not memory — the retention/`audit` prune never sweeps them.** Retention bounds the
   append-only *memory* tier; a cap deleting a live key would break a working setup. Removal is **explicit**
   (rotation / teardown), never automatic.
+- **An entry is named by the `message_id` that carried it, so which credentials it holds is read from the
+  `returns` maps inside it — EXACTLY, never by guessing.** `/rebind` collects the **keys of `returns` nodes only**
+  (never every key in the record, which would sweep in `token`/`value`/`id` and let a project that declares a secret
+  named `token` match falsely — a false match reports a *lost* credential as present, which is silence). Values are
+  read into memory and never returned, printed, or filed. A record whose `returns` does not conform is **not**
+  folded into the loss: it is reported separately as an unreadable-shape entry, because "I cannot read this" and
+  "this is gone" are different facts and only one of them is an emergency.
 - Same atomic-`0600`-create discipline as the bus token (create *with* the mode, never write-then-`chmod`) **and the
   same verification**: the achieved mode is `stat`'d, because the create-with-mode discipline is a no-op on a mount
   that ignores mode — the WSL repo mount returns `0777` for a `0600` create, silently. That is not a Windows-only

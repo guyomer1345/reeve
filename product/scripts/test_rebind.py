@@ -429,8 +429,8 @@ class DeclaredSecrets(Fixture):
     def test_a_surviving_store_reports_nothing_missing(self):
         surviving = self._tree(os.path.join(
             self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
-        self._store(surviving, [{"returns": {"POLAR_WEBHOOK_SECRET": "whsec_x",
-                                             "sensitive": True}}])
+        self._store(surviving, [{"returns": {"POLAR_WEBHOOK_SECRET": {"value": "whsec_x",
+                                                       "sensitive": True}}}])
         self._config(secrets_required=["POLAR_WEBHOOK_SECRET"])
         self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
         p, _ = rebind.apply(self.project, probe=False)
@@ -440,7 +440,7 @@ class DeclaredSecrets(Fixture):
     def test_a_partial_survival_names_only_what_is_gone(self):
         surviving = self._tree(os.path.join(
             self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
-        self._store(surviving, [{"returns": {"KEPT_KEY": "v", "sensitive": True}}])
+        self._store(surviving, [{"returns": {"KEPT_KEY": {"value": "v", "sensitive": True}}}])
         self._config(secrets_required=["KEPT_KEY", "GONE_KEY"])
         self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
         rebind.apply(self.project, probe=False)
@@ -452,8 +452,8 @@ class DeclaredSecrets(Fixture):
         """config.json and backlog.md are both committed. Names only, always."""
         surviving = self._tree(os.path.join(
             self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
-        self._store(surviving, [{"returns": {"A_KEY": "sk_live_NEVERCOMMITTHIS",
-                                             "sensitive": True}}])
+        self._store(surviving, [{"returns": {"A_KEY": {"value": "sk_live_NEVERCOMMITTHIS",
+                                                       "sensitive": True}}}])
         self._config(secrets_required=["A_KEY", "MISSING_KEY"])
         self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
         p, _ = rebind.apply(self.project, probe=False)
@@ -474,18 +474,58 @@ class DeclaredSecrets(Fixture):
             self._config(secrets_required=bad)
             self.assertEqual(rebind.required_secrets(self.workflow), [])
 
-    def test_the_sensitive_marker_is_not_mistaken_for_a_key_name(self):
+    def test_names_come_from_returns_nodes_only_never_the_envelope(self):
+        """The envelope's own field names are not credential names. Collecting every
+        key in the record would let a project declaring a secret called `token` match
+        falsely — a false match reports a LOST credential as present, i.e. silence."""
         store = os.path.join(self.root, "s")
-        self._store(store, [{"returns": {"sensitive": True, "REAL": "v"}}])
-        found = rebind.present_secrets(os.path.join(store, "secrets"))
-        self.assertIn("REAL", found)
-        self.assertNotIn("sensitive", found)
+        self._store(store, [{"token": "t:1:u", "message_id": "m", "stored_at": "now",
+                             "returns": {"REAL": {"value": "v", "sensitive": True}}}])
+        found, bad = rebind.present_secrets(os.path.join(store, "secrets"))
+        self.assertEqual(found, {"REAL"})
+        self.assertEqual(bad, 0)
+        for envelope_key in ("token", "message_id", "stored_at", "value", "sensitive"):
+            self.assertNotIn(envelope_key, found)
 
-    def test_an_unreadable_store_entry_is_skipped_not_fatal(self):
+    def test_a_per_task_returns_is_found_too(self):
+        """One record holds both `returns` and `tasks[].returns`."""
         store = os.path.join(self.root, "s")
-        self._store(store, [{"returns": {"GOOD": "v"}}])
+        self._store(store, [{"returns": None, "tasks": [
+            {"id": "polar", "returns": {"A": {"value": "1", "sensitive": True}}},
+            {"id": "clerk", "returns": {"B": {"value": "2", "sensitive": True}}}]}])
+        found, bad = rebind.present_secrets(os.path.join(store, "secrets"))
+        self.assertEqual(found, {"A", "B"})
+        self.assertEqual(bad, 0)
+
+    def test_a_legacy_shape_is_counted_unreadable_not_read_as_lost(self):
+        """A store written before the shape was declared holds real credentials this
+        cannot name. "I cannot read this" and "this is gone" are different facts."""
+        store = os.path.join(self.root, "s")
+        self._store(store, [{"returns": [{"id": "runpod", "sensitive": True,
+                                          "value": "sk_live_x"}]}])
+        found, bad = rebind.present_secrets(os.path.join(store, "secrets"))
+        self.assertEqual(found, set())
+        self.assertEqual(bad, 1)
+
+    def test_the_unreadable_count_is_stated_in_the_loss_not_folded_into_it(self):
+        surviving = self._tree(os.path.join(
+            self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
+        self._store(surviving, [{"returns": [{"id": "runpod", "value": "sk_live_x"}]}])
+        self._config(secrets_required=["GONE_KEY"])
+        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        rebind.apply(self.project, probe=False)
+        text = self._backlog()
+        self.assertIn("GONE_KEY", text)
+        self.assertIn("could not be read for credential names", text)
+        self.assertNotIn("sk_live_x", text)
+
+    def test_an_unreadable_store_entry_is_counted_not_fatal(self):
+        store = os.path.join(self.root, "s")
+        self._store(store, [{"returns": {"GOOD": {"value": "v"}}}])
         self._write(os.path.join(store, "secrets", "junk.json"), "{not json")
-        self.assertIn("GOOD", rebind.present_secrets(os.path.join(store, "secrets")))
+        found, bad = rebind.present_secrets(os.path.join(store, "secrets"))
+        self.assertIn("GOOD", found)
+        self.assertEqual(bad, 1)
 
     def test_a_first_bind_declares_nothing_and_loses_nothing(self):
         self._config(secrets_required=["SOME_KEY"])

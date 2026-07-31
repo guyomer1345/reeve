@@ -85,6 +85,9 @@ The runner does the arithmetic. What the loss *means* needs a conversation.
    the item history for setup checkpoints that handed over a credential, and **add the names to
    `secrets_required[]` as you go** so the next move is itemized. Point-of-use failure is the only other signal,
    and it fires at the worst moment.
+   If the filed loss also reports entries that **could not be read for credential names**, do not treat those as
+   gone: the store predates the declared `returns` shape and may still hold live keys. Confirm at point of use
+   before re-eliciting — sending a human to replace a credential they already have is how this report gets ignored.
 4. **Say what will never fire.** Anything that was queued in `outbox/` (a push, a `gh issue create`) is gone.
    Nothing ran twice; the queue simply emptied. Name what the backlog still expects.
 5. **Check the bootstrap ledger.** If `.workflow/handoff.md` has no `bootstrap:` line at all, this install
