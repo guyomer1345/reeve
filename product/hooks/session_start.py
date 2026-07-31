@@ -28,8 +28,12 @@
                           our own is exactly the kind of unasked-for, hard-to-notice
                           side effect this project refuses to ship.
 
-     KNOWN RESIDUAL: the warning rides `additionalContext`, so a headless `claude -p`
-     clone stays quietly uncovered. Stated, not papered over.
+     The warning rides `additionalContext`, and that was ASSUMED to leave a headless
+     `claude -p` clone quietly uncovered. Driven on the live harness, it does not: a
+     `-p` session is handed the warning and can quote it back verbatim in its rendered
+     form. The assumed residual was never real, and a residual nobody rechecks is the
+     more expensive kind of wrong — it invites a second mechanism to close a hole that
+     is already shut.
 
 Emits the SessionStart JSON contract (`hookSpecificOutput.additionalContext`) and always
 exits 0 — SessionStart cannot block a session anyway, and a hook that could would be a

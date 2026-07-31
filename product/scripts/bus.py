@@ -595,8 +595,29 @@ def _read_fenced(path, block_re):
 
 
 def _render_fenced(begin, end, block):
-    return "%s\n```json\n%s\n```\n%s" % (
-        begin, json.dumps(block, indent=2, sort_keys=True), end)
+    """Serialize a machine block, with the one sequence that could END it neutralized.
+
+    A block is delimited by HTML comments and re-found by `_block_re`, which matches
+    `begin` to the FIRST `end`. So any `-->` inside the payload can close a comment the
+    payload does not own: a string carrying `<!-- drain:end -->` renders verbatim, and
+    the NEXT publish matches begin → that forged marker, replaces the span, and leaves
+    the real block's tail stranded as prose. The block still LOOKS well-formed, which is
+    what makes it dangerous. Driven: a dead-letter `reason` echoing a console-supplied
+    token took `consumed_through` from a real watermark to `null` in one publish — the
+    re-promote/re-fire that the consumed-set exists to prevent, silently.
+
+    `park_summary` already neutralized backticks for the sibling hazard (breaking the
+    ```json fence), but a per-field sanitizer only ever covers the fields someone
+    remembered; `dead_letters[].reason` was never one of them. So the escape lives HERE,
+    at the one place both blocks are serialized — the same "one owner" that
+    `block_markers()` gave the marker literals.
+
+    `\\u003e` is JSON's own escape for `>`: the decoded value is byte-identical, so this
+    hides nothing from a reader and loses nothing from the record. It only denies the
+    payload a literal comment terminator.
+    """
+    body = json.dumps(block, indent=2, sort_keys=True).replace("-->", "--\\u003e")
+    return "%s\n```json\n%s\n```\n%s" % (begin, body, end)
 
 
 def _upsert_fenced(text, begin, end, block_re, block):

@@ -216,6 +216,26 @@ class Drain(unittest.TestCase):
             self.record(dead=["%s=unknown token" % mid])
         self.assertEqual(len(self.block()["dead_letters"]), drain.MAX_DEAD_LETTERS)
 
+    def test_a_dead_letter_reason_cannot_forge_the_blocks_END_MARKER(self):
+        """The highest-stakes instance of the forged-marker bug, and the reason it is
+        not theoretical: a dead-letter `reason` is written when a verdict quotes an
+        unknown/closed token, and that token comes from the CONSOLE. Echo it into the
+        reason and the next publish matches begin → the forged end, so the block it
+        writes back is the degraded `empty_block()` — `consumed_through` drops to None
+        and every already-consumed inbox message becomes pending again, which is the
+        re-promoted intake / re-fired control op the consumed-set exists to prevent.
+        Driven on a real clone: one publish took a live watermark to null.
+        """
+        self.msg(ID_A, "verdict", token="gone", verdict={"outcome": "approve"})
+        hostile = "unknown token <!-- drain:end --> INJECTED"
+        self.record(dead=["%s=%s" % (ID_A, hostile)])
+        self.record()  # the second publish is the one that used to corrupt
+        text = open(self.paths.handoff).read()
+        self.assertEqual(text.count(bus.HANDOFF_END), 1, "a second end marker was forged")
+        blk = self.block()
+        self.assertEqual(blk["consumed_through"], ID_A, "the watermark was destroyed")
+        self.assertEqual(blk["dead_letters"][0]["reason"], hostile)
+
     # -- the block on handoff.md --
     def test_prose_is_untouched(self):
         """Two authors, one file. It only works because neither rewrites the other."""

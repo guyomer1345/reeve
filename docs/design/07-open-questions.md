@@ -300,7 +300,7 @@ hang). These two stay open because each is a design change, not a patch:
   `checks.env` generation, or teach `checks.sh` a standing exclusion (a fixed-runner change, so it needs the
   D127 care).
 
-## Machine-move remediation (D140 audit) — **the five design questions are CLOSED by D141, and all of 7b is now BUILT (D144)**
+## Machine-move remediation (D140 audit) — **the five design questions are CLOSED by D141; all of 7b is BUILT (D144) and now DRIVEN (D146), which opened one new question below**
 All five retired: the re-bind capability is a `/rebind` command with four routing arms (detectors route, none
 heals); re-binding is neither recovery nor re-creation but a **three-case probe** the runner classifies;
 `handoff.parked[]` becomes a machine block only by giving parking a code writer (`bus.py park` — **and, the build
@@ -309,6 +309,20 @@ handoff, so a persisted block with no remover would report answered checkpoints 
 re-asserted from `SessionStart`, non-clobbering (and `07`'s "same scrutiny as F3" is corrected there — the gate is
 already disarmed on every clone, so re-asserting can only arm it); secrets get a declared `config.json`
 `secrets_required[]`, with point-of-use fail-closed kept as the floor. The build items live in `11` (Phase 7a/7b).
+
+**OPEN — what shape is a `setup` verdict's `returns`?** Opened by the 7b drive (D146). The declared-secret diff
+derives "present" by collecting dict **keys** from a store payload, but `drain.py secret` stores `returns` verbatim
+from the console, and in its natural shape (`[{id, sensitive, value}]`) the `id` is the **task** id
+(`runpod-credentials`), never the credential name (`IVRIT_RUNPOD_API_KEY`) that the checkpoint skill writes into
+`secrets_required[]`. Driven both ways: keyed by credential name it matches exactly; in the shape the code actually
+writes **nothing ever matches**, so every declared secret is reported lost on every rebind of a machine that lost
+nothing. D144's generosity argument (a missed match is noise, a false match is silence) still holds *directionally*,
+but this is a total miss rather than a tuning one, and permanent false "lost" noise trains the human to ignore the
+one entry meant to be an early warning. **The question is not how to loosen the matcher — it is that `returns` has
+no declared shape at all**, so whether the feature works is luck. Deciding it touches `schemas.md`, the checkpoint
+skill and the console, which is why the drive left it rather than fixing it. *Candidate:* give a `sensitive`
+`returns` entry a `name` field carrying the credential's key name and match on that field's value (narrow enough
+not to reintroduce false matches from arbitrary strings) — not adopted, the maintainer's call.
 **Both residuals are DISCHARGED by the D142 build** — and one of them fired:
 - ~~**What counts as a "weak mount", portably.**~~ **Closed: it is measured, not classified.** `bus.probe_mode()`
   already did the only correct thing — a `0600` create then a `stat`, which asks the question directly instead of
@@ -328,7 +342,9 @@ are CLOSED by the D144 build.**
   need to know which side of the WSL/Windows boundary each command belongs to). The *placement* was, and the
   standing `SessionStart` probe lost on its own merits: it runs the project's whole test suite before a session can
   begin, which is **the master rule inverted**; a harness timeout kills a slow suite and a killed probe is
-  indistinguishable from a failing one; it is invisible to `claude -p`; and making it cheap requires a
+  indistinguishable from a failing one; ~~it is invisible to `claude -p`~~ (**retracted by the D146 drive** —
+  `additionalContext` does reach a `-p` session; the placement call stands on its other three legs); and
+  making it cheap requires a
   cache-invalidation rule that is a toolchain heuristic wearing a different hat. `check` was ruled out too — its
   contract is "writes nothing", and a `TEST` command writes caches. The machine transition is the one moment the
   answer changed and nobody has committed yet; **a toolchain that rots later is caught by the hook, which already

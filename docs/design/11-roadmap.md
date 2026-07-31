@@ -590,7 +590,7 @@ install turned out to be missing **five** package files outright, including the 
 a `/clear` there had been dropping into an empty session while the docs described resuming from `handoff.md`. The
 interaction-model rework (browser-primary async chat — `07`) is what now sits behind this.
 
-### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design → D142 build → D143 drive → D144 build) — **7a BUILT + DRIVEN on the real install; 7b BUILT and awaiting its drive**
+### Phase 7 — Machine-move / portability hardening (D140 audit → D141 design → D142 build → D143 drive → D144 build → D146 drive) — **COMPLETE: 7a and 7b both BUILT + DRIVEN on the real install**
 Opened by a real loss, not a hypothesis: a PC rebuild renamed `$HOME`, so `idea testing`'s `runtime.json` names a
 directory that no longer exists and its whole runtime tree is unreachable. The audit (D140, measured against that
 real install) found the durable half **is** portable — committed, no absolute paths, package included — and the
@@ -627,20 +627,24 @@ push that skipped the secret scan (`df5440d`), and `/rebind` pointing at the pro
 - **Per-machine trust closes for free** — `/rebind` is interactive-only, so running it re-grants `~/.claude.json`.
   Nothing to build. **[bind — closed by D141; stated in `commands/rebind.md` (D142)]**
 
-**7b — the durability trio + the environment probe the drive added — BUILT (D144), NOT YET DRIVEN.** Every item
-below is landed and unit-tested (507 tests). The phase's remaining exit test is driving it on a real install.
+**7b — the durability trio + the environment probe the drive added — BUILT (D144) + DRIVEN (D146).** Every item
+below is landed, unit-tested (515 tests) and has now run against a real clone of `idea testing` and the live
+harness. The drive shipped **one high-severity fix** (a machine block could be terminated by its own payload —
+`_render_fenced`), **retracted one residual that was never real** (the `claude -p` invisibility below), and left
+**one finding open for a design call** (the declared-secret diff's undefined payload shape). Phase 7's exit test is
+discharged.
 - **`checks.sh --check` becomes a bindability probe** — a rebound project can be correctly bound and still unable
   to make a single commit, because the committed `checks.env` names a toolchain that is machine-local and
   gitignored. Run the gate *the way the pre-commit hook runs it* and report whether it exits clean — never a
   toolchain-detection heuristic, which would have to know which side of the WSL/Windows boundary each command
-  belongs to. **[bind — BUILT (D144) in `rebind.py apply`, the maintainer's call on the open *where*. NOT `check` (its verified contract is "writes nothing"; `TEST` writes caches) and NOT a standing `SessionStart` probe (a full test suite before a session can begin inverts the master rule). Skipped on BIND/HEALTHY; `--no-probe` opts out. It reports the observable and does not diagnose; the output tail goes to stdout, never into the committed loss. The standing half is one routing clause in the pre-commit block message — visible to `claude -p`]**
+  belongs to. **[bind — BUILT (D144) in `rebind.py apply`, the maintainer's call on the open *where*. NOT `check` (its verified contract is "writes nothing"; `TEST` writes caches) and NOT a standing `SessionStart` probe (a full test suite before a session can begin inverts the master rule). Skipped on BIND/HEALTHY; `--no-probe` opts out. It reports the observable and does not diagnose; the output tail goes to stdout, never into the committed loss. The standing half is one routing clause in the pre-commit block message — visible to `claude -p`. **DRIVEN (D146)** on a real clone: `RE-CREATE` then `bindable: NO` with `tsc: not found`, the loss filed as a typed issue, the tail provably absent from the committed `backlog.md`, idempotence-on-title real, `check` reporting `NOT PROBED` and `--no-probe` skipping in 0.15s. The `HEALTHY` skip is genuinely silent — what covers it is the pre-commit block message, also driven: the commit is refused and the message names the did-not-travel toolchain and routes to `/rebind`, on git's own output stream, which is what actually makes it headless-visible]**
 - **`bus.py park` becomes the writer** of `parked/<id>.json` **and** a fenced `<!-- parked:begin/end -->` block —
   parking has no code writer today, so the mirror cannot become a mechanism without one; it also retires
-  `checkpoint/SKILL.md`'s "resolve the runtime root yourself". **[dur — BUILT (D144) + 28 tests. Three calls the code forced: the record arrives on STDIN (four flags cannot make a schema-valid record — no `token`, no `request`); **`unpark` had to be built too**, because prose was accidentally self-correcting and a persisted block only ever GROWS; and the deadline is stamped at microsecond precision, closing an accepted `alert_key` collision that a derived stamp made reachable at machine speed. **AMENDED (D145):** the block is written only at a mutation, so an install that parked *before* the writer had a live record and no block — and `/dispatch` had already stopped hand-writing the prose. Fixed with a `bus.py mirror` verb `/dispatch` runs before writing the anchor; caught by the blast-radius sweep, not by the tests]**
+  `checkpoint/SKILL.md`'s "resolve the runtime root yourself". **[dur — BUILT (D144) + 28 tests. Three calls the code forced: the record arrives on STDIN (four flags cannot make a schema-valid record — no `token`, no `request`); **`unpark` had to be built too**, because prose was accidentally self-correcting and a persisted block only ever GROWS; and the deadline is stamped at microsecond precision, closing an accepted `alert_key` collision that a derived stamp made reachable at machine speed. **AMENDED (D145):** the block is written only at a mutation, so an install that parked *before* the writer had a live record and no block — and `/dispatch` had already stopped hand-writing the prose. Fixed with a `bus.py mirror` verb `/dispatch` runs before writing the anchor; caught by the blast-radius sweep, not by the tests. **DRIVEN (D146):** the skill's literal instructions do produce a record `park` accepts — a shell-hostile body arrived byte-exact through the quoted heredoc, the full park→daemon→verdict→drain→`unpark` cycle ran, the mirror carried no body/token/credential, all six refusal paths failed closed, and `mirror` backfilled from the real legacy record. The drive also found the slice's one high-severity bug: **a payload string could forge the block's own end marker**, corrupting the mirror and, in the drain block, taking `consumed_through` from a live watermark to `null` — fixed at `_render_fenced`, the one place both blocks serialize]**
 - **`SessionStart` re-asserts `.git/hooks/pre-commit`, non-clobbering** — absent ⇒ install · identical ⇒ silent ·
-  different ⇒ warn, never clobber. Proportionate: the git hook backstops *out-of-loop* commits only. **[dur — BUILT (D144); the matcher broadened to `startup`/`resume` (the rehydrate stays `clear`-only) because the motivating case is a CLONE, which runs neither `/start` nor `/rebind`. "Warn once" is keyed by the foreign hook's sha256 in `.git/hooks/`, so a different foreign hook warns again. `/rebind` calls the same code path via `--assert-hook`. Residual STANDS: the warning is invisible to `claude -p`]**
+  different ⇒ warn, never clobber. Proportionate: the git hook backstops *out-of-loop* commits only. **[dur — BUILT (D144); the matcher broadened to `startup`/`resume` (the rehydrate stays `clear`-only) because the motivating case is a CLONE, which runs neither `/start` nor `/rebind`. "Warn once" is keyed by the foreign hook's sha256 in `.git/hooks/`, so a different foreign hook warns again. `/rebind` calls the same code path via `--assert-hook`. **DRIVEN (D146):** both broadened matcher strings fire against harness 2.1.220 — proven by a `.git/hooks/pre-commit` that is sha256-identical to the source, not by a context window — and the foreign arm leaves the hook byte-for-byte untouched. **The stated residual was RETRACTED, not discharged: it was never real.** A headless `claude -p` session is handed the warning and quotes it back verbatim in its rendered form; three-state discrimination (warn / silent on the marker / re-warn on a different hook) rules out both the model reading the source and guessing]**
 - **`config.json` `secrets_required[]`** — key names only, written by the `setup` checkpoint at elicitation; absence
-  becomes provable; point-of-use fail-closed stays as the floor. `outbox/` loss is reported, not recovered. **[dur — BUILT (D144); "present" is derived by walking store payloads for key NAMES (entries are keyed by `message_id`, not by credential), deliberately generous because a missed match is noise and a false match is silence. Pure reads, so it runs in `check` too; an absent declaration is "we cannot tell", not "nothing is missing"]**
+  becomes provable; point-of-use fail-closed stays as the floor. `outbox/` loss is reported, not recovered. **[dur — BUILT (D144); "present" is derived by walking store payloads for key NAMES (entries are keyed by `message_id`, not by credential), deliberately generous because a missed match is noise and a false match is silence. Pure reads, so it runs in `check` too; an absent declaration is "we cannot tell", not "nothing is missing". **DRIVEN (D146) — and this is the one item the drive did NOT clear.** The itemized loss, the names-only entry and the never-printed value all held, but "present" is derived from dict KEYS, and `drain.py secret` stores `returns` verbatim from the console, whose natural shape (`[{id, sensitive, value}]`) carries the TASK id, never the credential name. Driven both ways: in the shape the code actually writes **nothing ever matches**, so every declared secret reports lost on every rebind of a machine that lost nothing. Nothing defines `returns`' shape, so this working is currently luck. Left open for a design call → `07`]**
 
 **The drive that gated all of this is DONE (D143):** force-reinstall the plugin at HEAD → **`/rebind`** on
 `idea testing` (which did stamp the missing `bootstrap: complete` — that install predates D131) → **`/update`**, the
@@ -649,9 +653,10 @@ evidence rather than a hypothesis (D144)**, which was the whole point of splitti
 its calls could only be made with the code in front of it, the largest being that `park` needed an **`unpark`**
 sibling nobody had asked for, because turning a self-correcting prose mirror into a persisted machine block turns a
 missing remover from a non-issue into a block that reports answered checkpoints as open forever.
-**What is left in Phase 7 is the 7b DRIVE** — none of the four items has run against a real install. The natural
-exit test is the same shape as 7a's: exercise a park→verdict→unpark cycle and a `/rebind` on a project whose
-toolchain did not travel, and see what the mirror, the probe, and the declared-secret diff actually say.
+**The 7b DRIVE is DONE (D146), and Phase 7 is COMPLETE.** All four items ran, in the shape the exit test named:
+a park→verdict→unpark cycle and a `/rebind` on a real clone whose toolchain did not travel. The mirror and the
+probe did exactly what they were designed to do; the declared-secret diff did not, and its finding is open in `07`.
+One high-severity bug came out of it (the forged end marker) and one stated residual was retracted as never real.
 
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
@@ -692,4 +697,9 @@ evidence rather than a hypothesis, the reason the phase was split: parking gaine
 mirror became a re-derived **projection** (with the `unpark` sibling the design had not asked for), the bindability
 probe landed **at the machine transition rather than on a timer**, the pre-commit backstop is re-asserted
 non-clobbering for the clone that runs neither sibling command, and secrets gained a declared set that makes absence
-provable. **What Phase 7 still owes is the 7b drive.** Beyond these, everything is `[stageable]`/`[later]`.
+provable. **7b is now DRIVEN (D146) and Phase 7 is COMPLETE** — the drive proved the broadened `SessionStart`
+matcher fires (by file identity, not by a context window) and the bindability probe reports the exact D143 symptom,
+found and fixed the slice's one high-severity bug (**a machine block could be terminated by its own payload**,
+taking the drain's watermark to `null` from a console-reachable field), retracted a D144 residual that was never
+real, and left one open finding — the declared-secret diff depends on an undefined `returns` shape and is inert in
+the shape the code actually produces (`07`). Beyond these, everything is `[stageable]`/`[later]`.

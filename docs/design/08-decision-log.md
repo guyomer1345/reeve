@@ -3353,3 +3353,87 @@ existing, turned on the mirror.
 block, idempotence, prose/drain-block untouched, `parked/` unmutated) plus a CLI case; 513 tests + five meta-gates
 green. → `11` (the 7b park tag records the amendment), `product/scripts/{bus.py,test_bus.py}`,
 `product/commands/dispatch.md`, `product/shared/schemas.md`.
+
+## D146 — Phase 7b DRIVEN: the matcher fires and the probe reports exactly as designed, but the machine blocks could be **terminated by their own payload** — and D144's stated `claude -p` residual turned out never to have been real **[DRIVEN 2026-07-30/31 — all four 7b items exercised on a real clone of `idea testing` + the live harness; one high-severity fix (`_render_fenced`), one false residual retracted, one finding left open for a design call; 515 tests + five meta-gates green]**
+7b was built (D144/D145) and had never run. The drive was ordered cheapest-first on purpose: if the broadened
+`SessionStart` matcher was wrong, item 3 never runs and **every test still passes** — the precise failure this phase
+exists to eliminate, sitting inside the phase.
+
+**1. The matcher fires, and the proof is a file rather than a context window.** D144 broadened `SessionStart` to
+`startup`/`resume` against no evidence but the corroborating spellings of the existing `clear` and `PreCompact`
+matchers. Driven on a scratch bootstrapped repo with `.git/hooks/pre-commit` deliberately absent: after one trivial
+`claude -p`, the hook exists and is **sha256-identical** to `.claude/hooks/pre-commit.sh` (`b039658a…`); after
+`claude -c -p`, likewise. The foreign arm was left byte-for-byte untouched, with the warn-once marker written keyed
+to the foreign hash. Both broadened strings are real against harness 2.1.220. `--assert-hook` was driven standalone
+for the first time and installs correctly.
+
+**2. The bindability probe reported the exact D143 symptom it was built for.** On a fresh clone under `/mnt/c`
+(arriving with no `runtime.json`, no runtime tree, no `node_modules`, no git hook): `RE-CREATE`, then
+`bindable: NO — bash .workflow/checks.sh --check exited 1`, tail showing `tsc: not found`. The three controls all
+held: the loss filed as a typed backlog issue, the **output tail on stdout and provably absent from the committed
+`backlog.md`**, and idempotence-on-title real — the three pre-existing D143 loss entries were not re-filed.
+`check` reports `NOT PROBED`; `--no-probe` skips the gate in 0.15s.
+
+**3. The park→verdict→unpark seam works, and the skill's literal instructions produce a record `park` accepts.**
+Driven end-to-end: a `setup` record composed per `checkpoint/SKILL.md`, piped through the quoted heredoc with a
+deliberately shell-hostile body (`$`, backticks, quotes, `$(…)`) that arrived **byte-exact**; record at `0600` with
+a microsecond deadline; daemon; `POST /api/verdict` → `202`; `drain.py list` **redacting** the sensitive value and
+routing it to `drain.py secret`; store at `0600` with the inbox carrier unlinked; `unpark` emptying the block and
+no-opping on the second call. All six refusal paths fail closed and write nothing; a dead runtime root fails closed
+on both `park` and `mirror`. D145's `bus.py mirror` backfilled a block where none existed from the real legacy
+record — `summary` derived, `opened_at` honestly `null`, `parked/` unmutated.
+
+**THE FIX — a machine block could be terminated by its own payload, and the drain half is reachable from the
+console.** `_block_re` matches `begin` → the **first** `end`, and `_render_fenced` emitted payload text verbatim. So
+any string containing `-->` closes a comment it does not own: the *next* publish matches begin → the forged marker,
+replaces that span, and strands the real block's tail as prose. The block still **looks** well-formed. Driven on
+both blocks. On the parked mirror it corrupts the committed anchor with orphaned fragments that read like a live
+entry. On the **drain block it is worse**: one publish took `consumed_through` from a live watermark to `null` and
+destroyed the dead-letter record — every already-consumed inbox message becomes pending again, which is the
+re-promoted intake / re-fired control op the consumed-set exists to prevent. **Not theoretical:** a dead-letter
+`reason` is written when a verdict quotes an unknown/closed token, and **that token comes from the console**.
+**Call: escape at `_render_fenced`, not per field.** `park_summary` already neutralized backticks for the sibling
+hazard (breaking the ```` ```json ```` fence) — but a per-field sanitizer only ever covers the fields someone
+remembered, and `dead_letters[].reason` was never one of them. The escape goes at the one place both blocks
+serialize, the same **one owner** `block_markers()` gave the marker literals. `-->` becomes JSON's own `--\u003e` escape:
+the decoded value is byte-identical, so nothing is hidden from a reader and nothing is lost from the record — the
+payload is merely denied a literal comment terminator. *Reachable by reading?* **Yes** — `_block_re`'s `.*?` sits
+three lines below `block_markers()`, and `park_summary`'s docstring enumerates one hazard and stops. It was
+*found* by driving a hostile body through, and the high-stakes half only by following a free-text field.
+
+**D144's `claude -p` residual was never real, and a false residual is the expensive kind of wrong.** D144 and D143
+both state that the foreign-hook warning "rides `additionalContext`, so a headless `claude -p` clone stays quietly
+uncovered". Driven, with three-state discrimination: foreign hook + no marker → the session **quotes the warning
+verbatim in its rendered form** (paths substituted — a form that exists only at runtime, so it cannot have come
+from reading the source); marker present → silent; a *different* foreign hook → warns again, marker re-keyed.
+`additionalContext` reaches `-p` sessions. The retraction is in `session_start.py` itself, because a stated-but-false
+residual invites someone to build a second mechanism for a hole that is already shut. This also drove the
+warn-once-keyed-by-foreign-sha machinery end-to-end, which D144 shipped untested against a live harness.
+**The standing half of the probe's coverage is confirmed too.** `apply` skips the probe on `HEALTHY` by design, so a
+bound-but-unbuildable project gets nothing from `/rebind` — driven, and it is genuinely silent. What covers it is
+the pre-commit block message, driven on the unbuildable clone: the commit is refused (exit 1, nothing lands) and the
+message names the did-not-travel toolchain and routes to `/rebind`. It rides **git's own output stream**, which is
+what actually makes it headless-visible — the claim D144 made and never measured.
+
+**FOUND, NOT FIXED — the declared-secret diff silently depends on an undefined payload shape, and is inert in the
+shape the code actually produces.** `present_secrets` derives "present" by collecting dict **keys** anywhere in a
+store payload. But `drain.py secret` stores `returns` verbatim from the console verdict, and in its natural shape
+(`[{id, sensitive, value}]`) the `id` is the **task** id (`runpod-credentials`), never the credential name
+(`IVRIT_RUNPOD_API_KEY`) — which the skill writes into `secrets_required[]`. Driven both ways: with the shape
+`drain.py secret` actually writes, **nothing ever matches** and every declared secret is reported lost on every
+rebind of a machine that lost nothing; with `returns` as a dict keyed by credential name, it matches exactly.
+Nothing in `schemas.md`, `checkpoint/SKILL.md`, or the console defines which shape `returns` is, so whether this
+feature works is currently **luck**. D144's generosity argument still holds directionally (a missed match is noise,
+a false match is silence) — but this is not a tuning miss, it is a total one, and permanent false "lost" noise
+trains the human to ignore the one entry meant to be an early warning. **Left open deliberately:** the fix is to
+*define* `returns`' shape, which touches `schemas.md`, the checkpoint skill and the console, and that is a design
+call, not a drive fix. → `07`.
+
+*Evidence:* three checks driven on a real clone of `idea testing` under the real `/mnt/c` mount plus the live
+harness (2.1.220); the hook proven by sha256 file identity, never by a context window; the forged-marker bug
+reproduced on both blocks, fixed, and **re-driven on the same clone** (one marker each, both blocks parse, watermark
+intact, hostile string round-tripping byte-identical); 515 tests (513 at `f834901`, +2: one per block) + five
+meta-gates green; release boundary unchanged at 54 shipped files / 18 install entries; the real `idea testing`
+working tree and runtime tree verified untouched throughout. → `11` (7b tags → DRIVEN; Phase 7's exit test is
+discharged), `07` (the `returns`-shape question opens), `product/scripts/{bus.py,test_bus.py,test_drain.py}`,
+`product/hooks/session_start.py`.

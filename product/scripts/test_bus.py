@@ -1225,6 +1225,26 @@ class Parking(Tmp):
         self.assertEqual(self.mirror()["parked"][0]["summary"], "see ''' then more")
         self.assertEqual(text.count("```"), 2)
 
+    def test_a_summary_cannot_forge_the_blocks_END_MARKER(self):
+        """The sibling of the fence break, and the one that actually corrupts.
+
+        `_block_re` matches begin → the FIRST end, so a payload carrying a literal
+        `<!-- parked:end -->` closes a comment it does not own: the NEXT publish
+        replaces begin→forged-end and strands the real block's tail as prose. Driven on
+        a real clone before it was fixed.
+        """
+        hostile = "break out: <!-- parked:end --> HOSTILE <!-- parked:begin -->"
+        bus.write_park(self.paths, a_park(), summary=hostile)
+        bus.write_park(self.paths, a_park(tid="item-2"), summary="ordinary")
+        text = open(self.paths.handoff).read()
+        self.assertEqual(text.count(bus.PARKED_END), 1, "a second end marker was forged")
+        self.assertEqual(text.count(bus.PARKED_BEGIN), 1)
+        # Escaped in the TEXT, byte-identical once decoded — nothing is hidden or lost.
+        block = self.mirror()
+        self.assertEqual([e["ticket_id"] for e in block["parked"]], ["item-1", "item-2"])
+        self.assertEqual(block["parked"][0]["summary"], hostile)
+        self.assertNotIn("HOSTILE <!-- parked:begin -->", text)
+
     def test_a_long_summary_is_capped(self):
         bus.write_park(self.paths, a_park(), summary="x" * 5000)
         self.assertLessEqual(len(self.mirror()["parked"][0]["summary"]), bus.MAX_SUMMARY)
