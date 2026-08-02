@@ -1178,7 +1178,58 @@ class InboxWriter:
             return []
 
 
-def mark_parked_answered(paths, token, when=None):
+def pending_verdicts_for(paths, token, exclude=None):
+    """message_ids of UNDRAINED verdicts on the inbox quoting this token.
+
+    The token is read and compared, never published: the caller turns this into a
+    boolean on the snapshot. Everything else in these records is a credential.
+    """
+    out = []
+    try:
+        names = sorted(os.listdir(paths.inbox))
+    except OSError:
+        return out
+    for n in names:
+        if not n.endswith(".json") or n[:-5] == exclude:
+            continue
+        rec = read_json(os.path.join(paths.inbox, n))
+        if (isinstance(rec, dict) and rec.get("kind") == "verdict"
+                and rec.get("token") == token):
+            out.append(n[:-5])
+    return out
+
+
+def supersede_pending_verdict(paths, token, keep):
+    """Replace an answer that has not been drained yet — the honest half of "override".
+
+    A human who mistypes a credential has to be able to correct it, but a second
+    verdict does NOT overwrite the first: both land on the inbox, the drain applies
+    whichever it reaches first, and the other dead-letters against a closed token. A
+    "re-answer" button on top of that would be a false promise in the worst place —
+    the human believes the corrected key is live while the typo is what reaches the
+    store.
+
+    So replacement is real, and it is bounded by the only window in which it CAN be
+    real: while the earlier verdict is still sitting undrained. Once the orchestrator
+    has consumed it the answer is applied and this finds nothing to replace, which is
+    exactly why the page asks first whether replacing is still possible.
+
+    Ordering is deliberate: the new record is already durable before anything is
+    removed, so a failure here leaves TWO answers (recoverable, and the pre-existing
+    behaviour) rather than none. Unlinking the superseded record is also its shred —
+    it may hold a live credential, and it must not linger on the inbox.
+    """
+    dropped = []
+    for mid in pending_verdicts_for(paths, token, exclude=keep):
+        try:
+            os.unlink(os.path.join(paths.inbox, mid + ".json"))
+            dropped.append(mid)
+        except OSError:
+            pass
+    return dropped
+
+
+def mark_parked_answered(paths, token, when=None, restamp=False, message_id=None):
     """Stamp `answered_at` on the parked record whose token this verdict quotes.
 
     Driving this form in a real browser turned up the gap: the console gave a
@@ -1213,8 +1264,18 @@ def mark_parked_answered(paths, token, when=None):
         rec = read_json(path)
         if not isinstance(rec, dict) or rec.get("token") != token:
             continue
-        if rec.get("answered_at"):
-            return rec["answered_at"]  # first answer wins; a re-send is not a new event
+        # An already-drained answer is settled: a later verdict cannot replace it (it
+        # dead-letters against the closed token), so the stamp must NOT move and claim
+        # otherwise. A REPLACED answer is different — the human just re-answered and
+        # the new reply is the live one, so the time they see is the time they gave it.
+        # The id of the answer currently on the inbox. The console's "can this still be
+        # replaced?" is an existence check on exactly this file, so it is stamped even
+        # when the timestamp does not move.
+        if message_id is not None:
+            rec["answer_message_id"] = message_id
+        if rec.get("answered_at") and not restamp:
+            atomic_write(path, json.dumps(rec, indent=1, sort_keys=True) + "\n", mode=0o600)
+            return rec["answered_at"]
         rec["answered_at"] = when or now_iso()
         # Written exactly as `park` writes it — same mode, same key order — so the
         # stamp is a field change and not a reformat of the whole record.
@@ -1959,9 +2020,26 @@ class ReadModel:
                 # stays listed (only the orchestrator's drain unparks it) but renders
                 # as answered, so a human cannot be fooled into answering twice.
                 "answered_at": rec.get("answered_at"),
+                # Can that answer still be REPLACED? True only while it sits undrained.
+                # The page shows "answer again" on this and nothing else, so it never
+                # offers an override the drain has already made impossible.
+                #
+                # An EXISTENCE CHECK on the id stamped at POST time, deliberately —
+                # this runs on every poll, and the alternative (scanning the inbox and
+                # comparing tokens) would parse credential-bearing bodies every couple
+                # of seconds to answer a question that is really "is that one file
+                # still there". The thorough token scan belongs on the POST path, which
+                # happens once per answer.
+                "answer_pending": self._still_pending(rec.get("answer_message_id")),
                 "demo_id": demo_id,
             })
         return out
+
+    def _still_pending(self, message_id):
+        """Is the stamped answer still sitting undrained on the inbox?"""
+        if not isinstance(message_id, str) or not message_id:
+            return False
+        return os.path.exists(os.path.join(self.paths.inbox, message_id + ".json"))
 
     @staticmethod
     def _overdue(deadline):
@@ -2176,6 +2254,13 @@ INDEX_HTML = """<!doctype html>
     <!-- Shown once a verdict quoting this token has landed. The card is still listed
          because only the orchestrator's drain unparks it — this says why. -->
     <p class="answered" hidden></p>
+    <!-- Offered ONLY while the sent answer is still undrained, because that is the
+         only window in which re-answering genuinely replaces it. -->
+    <div class="reanswer" hidden>
+      <button class="reanswer-btn" type="button">Answer again</button>
+      <span class="hint">replaces the answer already sent, including any credential
+        values — possible only until the loop picks it up</span>
+    </div>
     <div class="verdict">
       <select class="outcome">
         <option value="approve">approve</option>
@@ -2504,6 +2589,35 @@ function renderCheckpoints(items) {
       for (const el of node.querySelectorAll(".svalue, .notes, .toutcome, .outcome, .send")) {
         el.disabled = true;
       }
+      // Disabling the controls is not enough on its own: a card whose inputs merely
+      // stop responding looks IDENTICAL to a live one, so a human reads "nothing
+      // happens when I click" as a broken page rather than as a settled question.
+      // The class dims the answered body and leaves the banner at full strength, so
+      // the state is legible before anything is clicked.
+      const card = node.querySelector(".card");
+      card.classList.add("is-answered");
+      // Re-answering is offered only while the reply is still undrained, because only
+      // then does a new verdict REPLACE it — the bus supersedes the pending record.
+      // Once drained the answer is applied and a second one would dead-letter, so
+      // offering the button there would promise an override that cannot happen.
+      if (cp.answer_pending) {
+        const wrap = node.querySelector(".reanswer");
+        wrap.hidden = false;
+        // Walk up from the button rather than closing over nodes taken before
+        // insertion — the same reason node2() exists for the send handler.
+        wrap.querySelector(".reanswer-btn").addEventListener("click", (ev) => {
+          const live = ev.target.closest(".card");
+          live.classList.remove("is-answered");
+          for (const sel of [".answered", ".reanswer"]) {
+            live.querySelector(sel).hidden = true;
+          }
+          live.querySelector(".verdict").hidden = false;
+          for (const el of live.querySelectorAll(
+                 ".svalue, .notes, .toutcome, .outcome, .send")) {
+            el.disabled = false;
+          }
+        });
+      }
       return;
     }
     btn.addEventListener("click", async () => {
@@ -2719,6 +2833,13 @@ dl { display:grid; grid-template-columns:auto 1fr; gap:.25rem 1rem; margin:0; }
 dt { color:var(--dim); }
 dd { margin:0; }
 .card { border:1px solid var(--line); border-radius:6px; padding:.6rem .75rem; margin-bottom:.5rem; }
+/* `hidden` is an ATTRIBUTE whose default styling is only `display:none` — any class
+   rule setting `display` outranks it, so an element the JS hid stays on screen and
+   nothing in the DOM says otherwise. That is not hypothetical: `.verdict` is
+   `display:flex`, so the answered card kept showing its notes field and Send button
+   after the form had been closed. Restated as a hard rule once, here, rather than
+   fixed per-selector — every `hidden` toggle on the page depends on it. */
+[hidden] { display:none !important; }
 .row { display:flex; gap:.5rem; align-items:baseline; justify-content:space-between; }
 .request { margin:.35rem 0; }
 .mono, .sha { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.85em; color:var(--dim); }
@@ -2742,6 +2863,17 @@ dd { margin:0; }
 .secret .svalue { flex:1; min-width:10rem; }
 .no-creds { color:var(--bad); }
 .answered { color:var(--ok); font-weight:600; margin:.5rem 0 .25rem; }
+/* An answered card must READ as answered before it is touched. Everything above the
+   banner dims and stops taking the pointer; the banner itself stays full strength,
+   so the eye lands on the one line that explains the state. */
+.card.is-answered { border-color:var(--ok); background:color-mix(in srgb, var(--ok) 4%, transparent); }
+/* The banner AND the re-answer control stay live — dimming the control would make the
+   one action still available on this card unclickable (pointer-events), which is the
+   same "looks broken" failure the dimming exists to fix. */
+.card.is-answered > *:not(.answered):not(.reanswer) { opacity:.45; pointer-events:none; }
+.card.is-answered .answered, .card.is-answered .reanswer { opacity:1; }
+.reanswer { display:flex; gap:.5rem; align-items:center; margin-top:.25rem; }
+.reanswer .hint { margin:0; }
 input, select, textarea, button { font:inherit; color:var(--fg); background:transparent;
   border:1px solid var(--line); border-radius:5px; padding:.3rem .5rem; }
 textarea { width:100%; resize:vertical; }
@@ -3417,7 +3549,16 @@ def make_handler(daemon):
                 # the dead-letter path already owns "this answers no open question".
                 if kind == "verdict":
                     try:
-                        mark_parked_answered(daemon.paths, clean.get("token"))
+                        # Replace an undrained earlier answer rather than queueing a
+                        # second one beside it. Runs AFTER the append, so the new reply
+                        # is durable before the old is removed.
+                        gone = supersede_pending_verdict(
+                            daemon.paths, clean.get("token"), message_id)
+                        if gone:
+                            log("verdict %s superseded %d undrained answer(s) for the "
+                                "same ticket" % (message_id, len(gone)))
+                        mark_parked_answered(daemon.paths, clean.get("token"),
+                                             restamp=bool(gone), message_id=message_id)
                     except OSError as exc:
                         log("could not stamp answered_at for %s: %s" % (message_id, exc))
                 return self._send(202, json.dumps(

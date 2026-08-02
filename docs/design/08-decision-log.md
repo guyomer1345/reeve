@@ -3610,9 +3610,66 @@ silence pointing the other way — `write_park` rewrites the record wholesale, s
 Five meta-gates green, release boundary unchanged at 54 shipped files / 18 install entries. *One method correction worth recording:*
 the first whole-tree canary sweep used a `grep` that honours `.gitignore` and silently skipped `.workflow/` — the
 `find`-based re-run is the sound evidence, and a sweep that cannot see the directory it is auditing proves nothing.
-**Residual: the two fixes have not themselves been re-driven in a browser by a human** — the render, the disabled
-form and the stamp are verified (screenshot + DOM + tests), but *that Chrome no longer offers to save the key* is a
-negative only a human can confirm. **Deadline/timestamp rendering stays raw ISO with microseconds** (`OVERDUE —
+~~**Residual: the two fixes have not themselves been re-driven in a browser by a human**~~ — **CLOSED by D149**
+(2026-08-02, at the keyboard: *"no chrome didnt offer to save the password"*). The render, the disabled form and the
+stamp were verified here (screenshot + DOM + tests), but *that Chrome no longer offers to save the key* was a
+negative only a human could confirm, and it now is. **That same re-drive found the answered card was still not
+legible and that `hidden` was not hiding — see D149.** **Deadline/timestamp rendering stays raw ISO with microseconds** (`OVERDUE —
 2026-08-01T19:09:35.930246+00:00`), which a human flagged unprompted as machine-facing; left open deliberately rather
 than bundled. → `11` (increment 3b DRIVEN; the browser residual discharges), `07` (two new open questions),
+`product/scripts/{bus.py,test_bus.py}`.
+
+## D149 — the re-drive of D148's own fixes: the unmask is confirmed at the keyboard, and two more defects only a human saw — an answered card that was inert but not *legible*, and `hidden` that did not hide **[BUILT 2026-08-02 — D148's residual closes; +3 fixes incl. an "override" that had to be made REAL before it could be offered; 560 tests + five meta-gates green]**
+D148 closed with one thing only a human could settle — *does Chrome still offer to save the key?* — and two
+predictions I had no way to test. The answer came back **no prompt**, which closes the residual and confirms the
+`type="text"` call. The same session found three more things, and the pattern is now unmistakable: **every defect
+this increment has produced lives in the interaction shell, and every one of them needed hands.**
+
+**Call 1 — "answer again" REPLACES the pending answer; the bus supersedes it.** The maintainer asked for a refill
+button warning that it "will override the previous values". **It would have been a lie in the most dangerous place.**
+Driven first: a second verdict for the same token returns `202` and leaves **two** pending records on the inbox —
+nothing overrides. `schemas.md` is explicit that a re-applied verdict finds the token closed and dead-letters, so the
+**first** answer is the one that wins. A human correcting a mistyped credential would have retyped it, believed it
+fixed, and left the **typo** live all the way to the store. So the mechanism was built to match the promise rather
+than the promise softened: a verdict now **unlinks an undrained earlier verdict for the same token**, and that unlink
+**is its shred** (the superseded record may hold the live key the human just replaced). Bounded by the only window
+in which replacement can be honest — once the orchestrator drains it the answer is applied, so the page stops
+offering it. *Rejected — an additive refill that warns "the loop applies whichever it drains first":* cheap, and it
+exposes a race to a human instead of resolving it. *Rejected — no refill at all (correction via a fresh checkpoint
+when the key fails at point of use):* no new mechanism, but it strands a human who KNOWS the answer is wrong with no
+way to say so. Ordering is deliberate: the new record is durable **before** the old is removed, so a failure mid-way
+leaves two answers, never none.
+
+**Call 2 — "still replaceable" is an EXISTENCE CHECK on a stamped id, not an inbox scan.** The first cut answered
+"can this be replaced?" by scanning the inbox and comparing tokens — which parses **credential-bearing bodies every
+2.5 seconds** to answer what is really "is that one file still there". The POST now stamps `answer_message_id` on the
+parked record and the poll does `os.path.exists`. The thorough token scan stays on the **write** path, which runs
+once per answer. *The split is the point:* cheap and body-free on the hot read path, exhaustive where cost does not
+matter. The id is stamped even when the timestamp does not move, because the console's check reads the id.
+
+**Call 3 — an answered card must be legible before it is touched, not merely inert.** Reported in exactly those
+terms: *"it looks exactly the same… i cant do anything on the card"*. Disabling the controls made the card **behave**
+answered while **looking** live, so the state read as a broken page rather than a settled question. The answered card
+now dims its body, keeps a green border, and leaves the banner — and the one control still available — at full
+strength. *The dimming had to exempt the re-answer control:* `pointer-events:none` on the whole card would have made
+the only remaining action unclickable, which is the same "looks broken" failure pointing the other way.
+
+**The one that would have gone on hiding: `hidden` was not hiding.** `.verdict` is `display:flex`, and **any** class
+rule setting `display` outranks the `hidden` attribute's UA `display:none` — so the answered card went on showing its
+notes field and Send button with the attribute correctly set. **My own DOM check had asserted `hidden` was present
+and passed**, which is precisely the trap: the attribute *was* there, and the page ignored it. Only the render
+showed it. Fixed once and globally (`[hidden] { display:none !important; }`) rather than per-selector, because every
+`hidden` toggle on the page rode on the same assumption — the pairing section, the demo wrapper, the task block, the
+steps list.
+
+*Evidence:* the supersede driven end to end against the bed — first answer `TYPO`, replacement `RIGHT`, and after it
+the inbox holds **one** record, the corrected value is what survives, `answered_at` and `answer_message_id` both move
+to the new reply, and the typo'd key is on disk in **zero** files; then a simulated drain flips `answer_pending` to
+false and the button withdraws. 560 tests (551 at `4ca6170`, **+9**), five meta-gates green, release boundary
+unchanged at 54 shipped files / 18 install entries. *A method note worth keeping:* two of the four defects in this
+entry and D148 were invisible to a DOM assertion that passed — **"the attribute is set" and "the page obeys it" are
+different facts**, the same shape as this project's standing lesson that a documented mechanism is not a working one.
+**Residual: the re-answer button itself has not been clicked by a human** — the supersede beneath it is driven over
+the real socket and the gating is unit-tested, but the click path (re-enable → retype → send) is once again the part
+only hands can close. → `08` (D148's residual marked closed), `11` (increment 3b), `product/shared/schemas.md`,
 `product/scripts/{bus.py,test_bus.py}`.

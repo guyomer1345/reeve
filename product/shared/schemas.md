@@ -196,6 +196,14 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   nowhere), it is written *after* the message is durable so a display fact can never cost an answer, and the first
   answer wins so a re-send is not a new event. Server-side deliberately, so the state survives a reload and holds on
   a second device — a verdict sent from a paired phone reads as answered on the laptop.
+- **A verdict SUPERSEDES an undrained earlier verdict for the same token**, and the console offers "answer again" on
+  exactly that condition. Without it, two verdicts for one ticket both sat on the inbox and the drain applied
+  **whichever it reached first** — so a human correcting a mistyped credential would leave the *typo* live and
+  believe it fixed. Replacement is bounded by the only window in which it can be honest: once the orchestrator has
+  consumed the answer it is applied, a later verdict dead-letters against the closed token, and the page stops
+  offering to replace it. The superseded inbox record is **unlinked, which is also its shred** (it may hold a live
+  credential the human has just replaced), and the new record is durable *before* the old is removed — a failure
+  mid-way leaves two answers, never none.
 - **This record is the alert trigger.** Writing it *is* the signal: the daemon watches `parked/`, raises the alert
   on a new open checkpoint, re-alerts every `config.checkpoint.reminder_hours`, and escalates once overdue. The
   parking skill sends nothing itself.

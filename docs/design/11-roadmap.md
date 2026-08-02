@@ -86,7 +86,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      still answers after GC); inbox GC on the watermark; and the drain **split** — its bookkeeping is `scripts/drain.py`
      (`list` → apply → `record`/`secret`), its apply stays the brief. *The verdict job lands here — the first
      increment to meet an MVP goal* (D93 protocol + the D108 consume model) (*the old "C2"*).
-     **3b — the setup verdict form — BUILT 2026-07-31 (D147), DRIVEN 2026-08-02 (D148).** Increment 3 shipped a form carrying `{outcome,
+     **3b — the setup verdict form — BUILT 2026-07-31 (D147), DRIVEN 2026-08-02 (D148 + D149).** Increment 3 shipped a form carrying `{outcome,
      notes}` only, against a D99 spec that named `returns` / plural `tasks[]` / steps + verified deep-links +
      breadcrumbs — so **no client could produce a `returns` payload at all**, and D122's Tailscale credential arm
      guarded a payload nothing could emit. Now: per-task rows (own outcome), one labelled input per credential named
@@ -101,8 +101,17 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      `type="password"` both hid whether a paste landed AND let Chrome offer to save the key to its password manager
      (`autocomplete="off"` cannot suppress that), and a sent verdict left **no evidence it had been sent**, re-arming
      a pristine form that invited a second live credential onto the wire. Both fixed: the input is `type="text"`, and
-     `answered_at` is now stamped server-side on the parked record. *The lesson the tag records: six increments of
-     headless rendering could not have caught either — both needed a real browser and real hands.*
+     `answered_at` is now stamped server-side on the parked record. **Re-driven once more (D149)**, which confirmed
+     the unmask at the keyboard (no save-password prompt) and found three more shell defects: the answered card was
+     inert but not *legible* (it now dims, keeping the banner and the one live control at full strength); `hidden`
+     was **not hiding** (`.verdict` is `display:flex`, which outranks the attribute — fixed globally, since every
+     `hidden` toggle on the page rode on it); and the requested "override" **did not exist** — two verdicts for one
+     token both sat on the inbox and the FIRST won, so a corrected credential would have lost to the typo. A verdict
+     now supersedes an undrained one (the unlink is its shred) and the button appears only while that is possible.
+     *The lesson the tag records: six increments of headless rendering could not have caught any of them — every
+     defect this increment produced lives in the interaction shell, and every one needed hands. Twice, a DOM
+     assertion passed while the page disobeyed it.* **Residual: the re-answer click path has not been exercised by a
+     human.**
   4. **The notifier** — **BUILT 2026-07-18 (D120)**: the daemon watches `parked/` → alerts on a new open checkpoint
      → re-alerts every `config.checkpoint.reminder_hours` → escalates once past the absolute `deadline` (never
      auto-proceeding), as a **term on the existing `parked` job**. Alert state lives in a fourth daemon-owned path

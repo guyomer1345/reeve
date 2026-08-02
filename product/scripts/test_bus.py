@@ -1413,6 +1413,101 @@ class AnsweredStamp(Tmp):
         self.assertIn('.verdict").hidden = true', js)
         self.assertIn('<p class="answered" hidden></p>', bus.INDEX_HTML)
 
+    def test_an_answered_card_is_visibly_answered_not_merely_inert(self):
+        """Disabling the controls is not enough. A card whose inputs simply stop
+        responding looks identical to a live one, so the state reads as a broken page
+        rather than a settled question — reported from the browser in exactly those
+        words. The class is what dims it."""
+        self.assertIn('classList.add("is-answered")', _js_function("renderCheckpoints"))
+        self.assertIn(".card.is-answered", bus.STYLE_CSS)
+
+    # -- replacing an answer that has not been drained yet --
+    def _verdict(self, token, note, value):
+        return {"token": token, "kind": "verdict", "verdict": {
+            "notes": note, "tasks": [{"id": "t", "outcome": "approve", "returns": {
+                "K": {"value": value, "sensitive": True}}}]}}
+
+    def _put(self, mid, token, note, value):
+        p = os.path.join(self.paths.inbox, mid + ".json")
+        with open(p, "w") as fh:
+            json.dump(dict(self._verdict(token, note, value), message_id=mid), fh)
+        return mid
+
+    def test_a_second_answer_REPLACES_an_undrained_one(self):
+        """The point of the whole mechanism: "override" has to be true, or the button
+        offering it is a lie. Two verdicts for one token used to both sit on the inbox,
+        the drain applying whichever it reached first — so a human correcting a typo'd
+        key could leave the TYPO live and believe it fixed."""
+        self._put("m1", "tok-item-1", "first", "TYPO")
+        dropped = bus.supersede_pending_verdict(self.paths, "tok-item-1", keep="m2")
+        self.assertEqual(dropped, ["m1"])
+        self.assertFalse(os.path.exists(os.path.join(self.paths.inbox, "m1.json")))
+
+    def test_the_replaced_answer_is_SHREDDED_not_merely_dropped(self):
+        """The superseded record may hold a live credential; leaving it on the inbox
+        would keep a key the human believes they have replaced."""
+        self._put("m1", "tok-item-1", "first", "TYPO_SECRET")
+        bus.supersede_pending_verdict(self.paths, "tok-item-1", keep="m2")
+        leaked = [n for n in os.listdir(self.paths.inbox)
+                  if "TYPO_SECRET" in open(os.path.join(self.paths.inbox, n)).read()]
+        self.assertEqual(leaked, [])
+
+    def test_it_replaces_only_the_SAME_ticket_and_only_verdicts(self):
+        """A shared inbox: superseding by token must not touch another checkpoint's
+        pending answer, and must not eat an intake that happens to sit beside it."""
+        self._put("m1", "tok-OTHER", "other ticket", "keep me")
+        with open(os.path.join(self.paths.inbox, "m2.json"), "w") as fh:
+            json.dump({"kind": "intake", "ask": "unrelated", "message_id": "m2"}, fh)
+        bus.supersede_pending_verdict(self.paths, "tok-item-1", keep="m3")
+        self.assertEqual(sorted(os.listdir(self.paths.inbox)), ["m1.json", "m2.json"])
+
+    def test_replacing_moves_the_answered_time_but_a_settled_answer_does_not(self):
+        first = bus.mark_parked_answered(self.paths, "tok-item-1", when="2026-01-01T00:00:00+00:00")
+        # no replacement happened -> the settled answer's time must not drift
+        self.assertEqual(bus.mark_parked_answered(self.paths, "tok-item-1"), first)
+        # a real replacement -> the time the human actually re-answered
+        moved = bus.mark_parked_answered(self.paths, "tok-item-1",
+                                         when="2026-02-02T00:00:00+00:00", restamp=True)
+        self.assertEqual(moved, "2026-02-02T00:00:00+00:00")
+        self.assertEqual(self.rec()["answered_at"], moved)
+
+    def test_the_card_only_offers_re_answer_while_it_is_still_replaceable(self):
+        """Once the drain has taken the answer it is applied and a second verdict
+        dead-letters, so offering the button there would promise the impossible.
+
+        "Still replaceable" is an existence check on the stamped answer, NOT an inbox
+        scan: this runs on every poll, and scanning would parse credential-bearing
+        bodies every couple of seconds to answer "is that file still there".
+        """
+        row = lambda: bus.ReadModel(self.paths).parked()[0]
+        self._put("m1", "tok-item-1", "sent", "V")
+        bus.mark_parked_answered(self.paths, "tok-item-1", message_id="m1")
+        self.assertTrue(row()["answer_pending"])
+        # the orchestrator drains it -> the answer is applied and can no longer be replaced
+        os.unlink(os.path.join(self.paths.inbox, "m1.json"))
+        self.assertFalse(row()["answer_pending"], "drained, yet it still offers replace")
+
+    def test_the_stamped_answer_id_is_recorded_even_when_the_time_does_not_move(self):
+        """The timestamp holds still for a settled answer, but the console's
+        replaceability check reads the ID — so the ID must track the live record
+        regardless, or a re-answer would look impossible the moment it was sent."""
+        bus.mark_parked_answered(self.paths, "tok-item-1", message_id="m1")
+        bus.mark_parked_answered(self.paths, "tok-item-1", message_id="m2")
+        self.assertEqual(self.rec()["answer_message_id"], "m2")
+
+    def test_the_page_gates_the_button_on_that_fact(self):
+        js = _js_function("renderCheckpoints")
+        self.assertIn("cp.answer_pending", js)
+        self.assertIn('class="reanswer"', bus.INDEX_HTML)
+
+    def test_the_hidden_attribute_actually_hides(self):
+        """`hidden` only carries `display:none` at the UA level, so ANY class rule
+        setting `display` outranks it. `.verdict` is `display:flex` — so the answered
+        card went on showing its notes field and Send button with the attribute set and
+        nothing in the DOM to show for it. Asserted once, globally, because every
+        `hidden` toggle on this page rides on it."""
+        self.assertIn("[hidden] { display:none !important; }", bus.STYLE_CSS)
+
 
 class ParkedMirrorBackfill(Tmp):
     """The block otherwise comes into existence only at the next park/unpark. An install
