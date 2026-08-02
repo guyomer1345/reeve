@@ -1500,6 +1500,16 @@ class AnsweredStamp(Tmp):
         self.assertIn("cp.answer_pending", js)
         self.assertIn('class="reanswer"', bus.INDEX_HTML)
 
+    def test_the_validator_never_describes_itself_as_naming_the_key(self):
+        """The docstring is part of the contract, and this one used to contradict it —
+        it promised the error "names the offending key" directly above the code that
+        deliberately emits an ordinal and nothing else. A future editor tidying the
+        terse messages to match that prose would re-open the plaintext echo the
+        ordinals exist to prevent, on the very path a proxy log sits on."""
+        doc = bus.check_returns.__doc__
+        self.assertNotIn("names the offending key", doc)
+        self.assertIn("ORDINAL", doc)
+
     def test_the_hidden_attribute_actually_hides(self):
         """`hidden` only carries `display:none` at the UA level, so ANY class rule
         setting `display` outranks it. `.verdict` is `display:flex` — so the answered

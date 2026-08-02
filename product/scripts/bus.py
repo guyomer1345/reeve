@@ -978,7 +978,10 @@ def check_returns(returns, where):
     """Enforce the declared `returns` shape: {"<KEY_NAME>": {value, sensitive?}}.
 
     Absent is fine — most verdicts are a bare opinion. Anything present must conform,
-    and the error names the offending key so a human can act on it without guessing.
+    and the error locates the offending entry BY ORDINAL — never by key, never by value.
+    That is not terseness to be tidied up later: see the note in the loop below. (This
+    line once promised the opposite, which would have talked a future reader into
+    re-opening the exact leak the ordinals exist to prevent.)
 
     Strict about UNKNOWN entry keys on purpose. Everything this schema fixes came from
     a payload nobody had declared, so quietly accepting an extra field is how the next

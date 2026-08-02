@@ -703,7 +703,12 @@ fixes were decided + built, then its exit test **ran** — the re-drive (D138) c
 pristine brownfield fixture and found one high-severity integration bug (a D133↔D129 collision that blocked every
 brownfield bootstrap commit), and `/update` was designed (D137) then **built** (D139). Two residuals leave the
 phase: the D136 governor's `/dispatch → /clear → rehydrate` **cycle is still unexercised** (the banner never fired —
-the context law kept the window too lean to trip it), and `/update` has never run against a real install.
+the context law kept the window too lean to trip it), and ~~`/update` has never run against a real install~~ —
+**that second one is DISCHARGED by D143**, which ran it on `idea testing`, the real machine-move casualty, and shipped
+three package fixes out of it (`idea testing@8e03d1e`). *It sat here stale for six decisions: the residual was written
+into the OWNER of what's-left, discharged elsewhere, and never repointed — the exact drift D80 exists to stop. The
+coherence gate does not catch it, because it checks roster counts, `D1–DN` ranges and `**[…]**` tags, not prose
+residuals. **A discharged residual is a status fact and needs the same blast-radius sweep as any other.***
 **Phase 7 — machine-move / portability hardening** then opened from a real loss: a PC rebuild stranded a live
 project's whole runtime tree, and the audit (D140) found no repair path exists for any per-machine artifact. The
 remediation was **designed** (D141) then **built** (D142): a `/rebind` command that **binds**, detectors that
