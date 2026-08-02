@@ -177,6 +177,21 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **Engineering-feasibility pass** — the spike that de-risks the technical unknowns the demo deliberately
   skips (`09`). **[stageable]**
 - **Automated testing · test-from-anywhere · paid device/QA platform** — designed-for, not built. **[later]**
+- **`artifacts` has no shipped producer (D152 residual).** The non-credential half of the `returns` split is
+  declared, validated and pruned-from-nothing — but nothing in the package can emit it. The console's setup form
+  renders one input per declared `request.tasks[].secrets[]` name, and `secrets[]` *means* credential, so the form
+  emits `returns` only. Stated plainly in `schemas.md` rather than left to be discovered (a field specified as if it
+  works while nothing can emit it is the D147 defect), so this is a known gap, not a lie. Closing it is a small
+  build — a request-side `tasks[].artifacts[]` declaration plus form rendering — but it **touches the setup form**,
+  the surface that broke twice in D148/D149, so it wants a browser drive rather than a mechanical pass.
+  **[fix-later — bundle with the `align` pass]**
+- **Specs locked BEFORE the D154 floor may be missing what was approved.** The refine ledger stops the drift going
+  forward; nothing checks backwards. Any project whose history contains an approved demo can hold a spec that never
+  learned a decision made in a refine round — and the evidence is gone, because the terminal `approve` deleted the
+  bundle. Detection is the honest limit here: there is no artifact left to diff against, so this is a **read the
+  spec against the item's history** job, not a mechanical one — precisely the shape `align` exists for (spec vs
+  decisions vs promises vs the actual code). The one measured instance was repaired by hand during the D154 drive.
+  **[fix-later — bundle with the `align` pass; `align` is the natural detector, not a new gate]**
 
 ### Space 5 — Shared state & bus
 - **Read/write ownership per file + the request/response protocol** — **DECIDED (D93):** a single-writer partition

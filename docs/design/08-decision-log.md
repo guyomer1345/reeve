@@ -3785,7 +3785,11 @@ whole `request` is handed to the console on every poll, and nothing on the reque
 hard-fails is a checkpoint that never opens** — the machine's own way of asking for help — which is a worse failure
 than an extra field. The asymmetry is principled, not lazy: the reply crosses a trust boundary from a human or a
 browser; the request is composed by the loop itself. That trust simply does not extend to fields belonging to the
-other side of the exchange. → `07` (both entries closed), `product/shared/schemas.md`,
+other side of the exchange.
+**Residual — `artifacts` has no shipped producer**, stated in `schemas.md` rather than left to be discovered.
+Deferred deliberately: closing it touches the setup form, the surface that broke twice in D148/D149, so it wants a
+browser drive and not a mechanical pass. Queued in `11` (Space 4) to bundle with the next `align` findings.
+→ `07` (both entries closed), `11`, `product/shared/schemas.md`,
 `product/scripts/{bus.py,drain.py,test_bus.py,test_drain.py}`.
 
 ## D153 — the console's last two human-facing defects: an override that was offered but never wired, and machine timestamps aimed at a human **[BUILT 2026-08-02 — D149's residual CLOSED by the maintainer's own click; the regression test was checked against the unfixed source before being trusted]**
@@ -3854,5 +3858,10 @@ same class of gap D147 was about.
 *Evidence:* 11 new lint tests including the exact defect (a round that did not move the spec), the superseded-revision
 case, the cap with a configured and a defaulted value, and junk config falling back rather than crashing. The
 approved icon decision was folded into the drive bed's real adopted spec before the lock, which is what the recovery
-looks like when this fires. → `04`, `11`, `product/shared/schemas.md`,
+looks like when this fires.
+**Residual — the floor is forward-only.** Nothing checks specs locked *before* it existed, and nothing can: the
+terminal `approve` already deleted the bundle, so there is no artifact left to diff a locked spec against. That
+makes detection a judgment pass over the spec and the item's history rather than a gate — which is what `align`
+already is. Queued in `11` (Space 4) to bundle with the next `align` findings, deliberately **not** as a new gate.
+→ `04`, `11`, `product/shared/schemas.md`,
 `product/skills/{create-demo,checkpoint}/SKILL.md`, `product/scripts/{check_demo_bundle.py,test_check_demo_bundle.py}`.
