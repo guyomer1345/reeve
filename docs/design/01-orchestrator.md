@@ -91,8 +91,9 @@ The full spine (`prioritize → discuss/create-demo → planner → execute → 
 the orchestrator drives it via the control algorithm in *The orchestrator `CLAUDE.md`* above. Checkpoint =
 `04`; reset = the handoff/resume model in Session lifecycle.
 - **Intake stage is now specced in `09`** (task types + contracts, the demo skill + sandbox gate, the
-  commitment model; inception + steering covered there). The remaining execute → test → document → audit
-  → next phases are still open here.
+  commitment model; inception + steering covered there). The execute → test → document → audit → next phases
+  are **no longer open here** — the spine closed into `10` + `.workflow/loop.md` (D47), each node's contract
+  into its own skill file; `07` records the closure.
 
 ## The orchestrator `CLAUDE.md` — the driver **[DECIDED]**
 The package shipped **no driver** until this: the target project's **root `CLAUDE.md`** is the orchestrator's

@@ -168,9 +168,9 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   - **demo** — approve → lock the spec state · changes → `create-demo` (refine) · reject → `discuss`.
   - **qa** — approve → `document`/`commit` · reject → `debug` (`changes` ≡ reject here).
   - **setup** — approve|changes → the orchestrator **verifies the external precondition actually works** (probe the
-    key/webhook) *before* proceeding; reject → replan or hard-stop. A `returns` value marked `sensitive` is written to
+    key/webhook) *before* proceeding; reject → replan or hard-stop. Every `returns` value is written to
     the gitignored **secret store** (`.workflow/secrets/`, below), **never logged**, and its inbox record **unlinked
-    immediately after that write**.
+    immediately after that write** — the field is what triggers this, not a marker on the entry.
     **The console's setup form is the producer** — the per-task rows (outcome + one labelled input per
     `request.tasks[].secrets[]` name) are what emit a conforming `returns`, and they are the *only* shipped way to
     deliver one. The credential is typed into the page, POSTed once, and never stored browser-side: no
@@ -271,8 +271,8 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
 - **`kind: verdict`** — `{ token, verdict: {outcome, notes, returns?} }` (a `setup` reply carries `tasks[]` instead
   of the single `outcome`; `returns` is the **name-keyed map** declared above and is validated on the way in) — resumes a parked ticket; `token` matches a
   `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume). **Anchor:** the parked
-  `token` — a re-applied verdict finds the ticket already resumed (token closed) → dead-letter/no-op. A `returns`
-  value marked `sensitive` (a setup credential) is written to the gitignored secret store and this inbox record is
+  `token` — a re-applied verdict finds the ticket already resumed (token closed) → dead-letter/no-op. A non-empty
+  `returns` (a setup credential — the field *is* the marker) is written to the gitignored secret store and this inbox record is
   **shredded immediately after consume** — a secret is never retained on the durable inbox or echoed to
   `state.json`/logs. This shred is the **one exception** to *consume = record, never delete*: the orchestrator may
   `unlink` a single consumed record **that carried a sensitive payload**, right after extracting it to the store, so
@@ -477,10 +477,10 @@ fires it.
     committed, default-OFF config key is strictly safer than the workaround it was producing. The floor still
     defaults ON, so a fresh `/start` is unchanged.
 
-## secret store  · written by the orchestrator when a `setup` verdict returns a `sensitive` value, read when the loop needs that credential · *`.workflow/secrets/`; RUNTIME, gitignored, kept on a native filesystem; each entry created `0600` (restricted ACL on Windows) with an atomic write*
+## secret store  · written by the orchestrator when a `setup` verdict carries a `returns` value, read when the loop needs that credential · *`.workflow/secrets/`; RUNTIME, gitignored, kept on a native filesystem; each entry created `0600` (restricted ACL on Windows) with an atomic write*
 The home for the **live credentials** a human hands over at a `setup` checkpoint (an API key, a webhook secret) —
 the one place the loop keeps a secret.
-- **Owner:** the orchestrator **writes** it (on consuming a `sensitive` `returns`) and **reads** it (the setup
+- **Owner:** the orchestrator **writes** it (on consuming any non-empty `returns`) and **reads** it (the setup
   verify-probe). Nothing else writes it.
 - **Never** logged, never echoed to `state.json`/`handoff.md`, never committed. The inbox record that carried the
   value is **unlinked immediately** after the write (the one consumer-delete carve-out).

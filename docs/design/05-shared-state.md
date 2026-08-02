@@ -174,7 +174,9 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     loop.md         # routing graph + diagram (fixed topology)      (committed) · bus:none
     checks.sh       # mechanical-gate runner — installed FIXED from templates/ (--fix / --check), D127  (committed) · bus:none
     checks.env      # per-stack commands checks.sh reads — data /start writes (empty ⇒ skip), D127  (committed) · bus:none
-    codemap.sh      # code-map generator (generated per-stack; writes docs/knowledge/graph.json)  (committed) · bus:none
+    codemap.sh      # code-map runner — a thin STACK-INDEPENDENT wrapper /start generates: one auto-dispatching call into the shipped engine, which writes docs/knowledge/graph.json (D72/D74 — not per-stack the way checks.sh is)  (committed) · bus:none
+    install-set.json # what this install wrote + the hash it wrote — /update's ledger, rewritten whole on every apply — D139  (committed) · bus:none
+    statusline.delegate # RUNTIME — the pre-existing statusline command /start captured so the shipped one composes rather than clobbers; machine-specific, so never committed — D136, gitignored · bus:none · no-pin (a command string, not a runtime path — no atomicity/mode sensitivity)
     state.json      # live position (item/phase/wave) — RUNTIME (atomic-publish, D93), gitignored · bus:read · pin
     handoff.md      # durable resume anchor: the orchestrator's PROSE + a drain.py-owned machine block (consumed[]/consumed_through/dead_letters[]) — two authors, neither rewriting the other's half — D108/D117  (committed) · bus:read (the consumed_through watermark — the bus GCs the inbox on it; and dead_letters[]/consumed[] — the console's "my requests" surface resolves a ticket off them)
     backlog.md      # live OPEN queue: issues + roadmap (closed leave) (committed) · bus:read

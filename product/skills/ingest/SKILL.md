@@ -14,7 +14,8 @@ code alone.
 
 ## Inputs
 - the existing codebase + any existing `CLAUDE.md` / `docs/` / README — the only source of behavioural intent.
-- the `/start`-generated per-stack code-map extractor (`.workflow/codemap.sh`).
+- the `/start`-generated code-map runner (`.workflow/codemap.sh`) — a thin stack-independent wrapper that
+  auto-dispatches every file to its language arm; there is nothing per-stack to detect before running it.
 
 ## Workflow
 **Signal every stage.** This build runs for tens of minutes on a real repo; a silent build reads as a hang. At

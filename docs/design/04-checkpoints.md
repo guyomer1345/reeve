@@ -111,5 +111,6 @@ request→verdict round-trip is MVP.
   (unreliable + a credential/irreversibility trust gate). The human stays the actor.
 
 ## Out of scope (designed-for, not built) **[DEFERRED]**
-Automated testing; test-from-anywhere (run-while-away → test env → Cloudflare tunnel → phone ping);
+Automated testing; test-from-anywhere (run-while-away → test env → reach it remotely → phone ping — the *remote*
+half now rides the console's identity-gated remote surface (D112), **not** the retired unauthed tunnel);
 the paid device/QA platform.

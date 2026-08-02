@@ -1,8 +1,8 @@
 # 09 — Intake & Task Lifecycle (the front of the spine)
 
-Extends `01`. Covers how a human request becomes an autonomous-ready unit of work. The rest of the
-macro-loop (execute → test → document → audit → next) is still **[OPEN]** in `01`; this doc closes only
-the **intake** stage.
+Extends `01`. Covers how a human request becomes an autonomous-ready unit of work — the **intake** stage.
+The rest of the macro-loop (execute → test → document → audit → next) is **CLOSED**: the spine lives in `10`
+and renders as `.workflow/loop.md` (D47).
 
 ## Core framing: one spine, variable-depth intake **[DECIDED — D16]**
 The "two loops" (existing project / new project) converge. Both end in the same place: a defined,
@@ -168,7 +168,6 @@ Failures that are bugs regardless of what the spec says: **crash, data loss or c
 hole, core flow broken.** These bound the "unspecified → undefined behaviour" rule above.
 
 ## Still open (this doc)
-- The rest of the macro-loop (execute → test → document → audit → next) — `01`.
 - **Engineering-feasibility pass** — the spike that de-risks the technical unknowns the demo skips.
   **[DESIGNED — D69: the proportional-rigor decision gate; implementation deferred to `11`.]**
 - **Backlog / prioritization + interrupt model** — e.g. a bug found mid-feature: queue vs interrupt; how

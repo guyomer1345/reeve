@@ -42,5 +42,6 @@ The **`docs/design/` spec folder is the source of truth.** Don't duplicate what 
 
 ## Where we are
 **Status is single-source — read the current phase + what's left from `docs/design/11-roadmap.md` (its _Recommended
-sequence_).** This section stays deliberately thin so it can't drift: the 4-phase order is close foundations →
-define website + demo → build website → build demo; *where inside that we are* lives in `docs/design/11-roadmap.md`, not here.
+sequence_).** This section carries **no copy of the phase list and no phase count** — an earlier version restated
+a four-phase order while the roadmap had grown to seven, which is the drift D80 exists to stop. *Where* we are, and
+*how many* phases there are, live in `docs/design/11-roadmap.md` alone.

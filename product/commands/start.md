@@ -70,7 +70,7 @@ loop's normal `state.json` takes over when the motion ends.
      loop.md           # routing graph + diagram        (committed)
      checks.sh         # mechanical-gate runner — installed FIXED from templates/ (--fix / --check) (committed)
      checks.env        # per-stack commands checks.sh reads — data /start writes (committed)
-     codemap.sh        # code-map generator (generated per-stack; writes docs/knowledge/graph.json) (committed)
+     codemap.sh        # code-map runner — a thin stack-independent wrapper (one auto-dispatching call into the shipped engine; writes docs/knowledge/graph.json) (committed)
      state.json        # live position — RUNTIME, add to .gitignore
      orchestrator.lock # single-orchestrator liveness marker (runner's precondition) — RUNTIME, add to .gitignore
      install-set.json  # what this install wrote + the hashes — /update's ledger (committed)

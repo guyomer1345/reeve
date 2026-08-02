@@ -5,9 +5,11 @@ new-project loop end-to-end (session 2026-06-29). Each capability's full contrac
 file; artifact formats live in `shared/schemas.md`. **This doc is the map** — roster, loop order,
 call-graph, open items.
 
-## Package layout **[DECIDED — D25]**
-Claude-Code-native plugin source at the repo root:
-- `commands/<name>.md` — human-invoked entry points (e.g. `/start`)
+## Package layout **[DECIDED — D25; rooted under `product/` by D125]**
+Claude-Code-native plugin source under **`product/`** (the plugin root — D125 moved it off the repo root so the
+construction record and the shipped package stop sharing a namespace). Paths below are relative to it, and
+**`product/MANIFEST.json` is the authoritative ship boundary** — this list is orientation, never the source:
+- `commands/<name>.md` — human-invoked entry points (`/start`, `/update`, `/rebind`, `/dispatch`)
 - `skills/<name>/SKILL.md` — procedure capabilities (model-invoked)
 - `agents/<name>.md` — leaf worker capabilities
 - `shared/schemas.md` — inter-capability artifact schemas
@@ -15,12 +17,17 @@ Claude-Code-native plugin source at the repo root:
 - `shared/memory-model.md` — the three-tier rule for what the loop may rewrite/change/never-touch (D38)
 - `rules/<topic>.md` — thin baseline engineering rules, specialized per project by `/start` (D40)
 - `templates/` — files `/start` installs into a target: `orchestrator-CLAUDE.md`, `loop.md`,
-  `settings.json` (loop permission rules: `allow` local / `ask` outward) (D52/D57/D58)
-- `hooks/guard.sh` — PreToolUse gate (secret-scan + verify-before-commit); installed to `.claude/hooks/` (D58)
+  `settings.json` (loop permission rules: `allow` local / outward via the outbox), and the fixed
+  `checks.sh` mechanical-gate runner (D52/D57/D58; `checks.sh` D127)
+- `hooks/` — the enforced gates installed to `.claude/hooks/`: `guard.sh` (secret-scan + verify-before-commit +
+  the push floor), `pre-commit.sh`, the shared `verify_check.py`, `session_start.py`, `precompact.py` (D58/D110/D129/D136/D144)
+- `scripts/` — the shipped helpers `/start` copies to `.claude/scripts/` per the manifest `install[]` map
+  (the daemon, drain, retention, code-map engine, coverage gates, reconcile + rebind runners, statusline)
 
 **Driver added (D46/D47):** the orchestrator **`CLAUDE.md`** (root brief) + **`.workflow/loop.md`** (routing
-graph + diagram) + **`hooks/`** (the enforced gates). (Later: `.claude-plugin/plugin.json`.) The repo is now
-**both** the spec (`00`–`10`) and the package source.
+graph + diagram) + **`hooks/`** (the enforced gates), plus `product/.claude-plugin/plugin.json` and the repo's
+own `.claude-plugin/marketplace.json` (D125). The repo is **both** the construction record
+(`docs/design/00`–`11`) and the package source (`product/`).
 
 ## Skill vs agent **[DECIDED — D24, D27, D84]**
 - **skill** = a procedure / controller — run by the orchestrator; defines *how*; **may dispatch agents**.
@@ -110,12 +117,15 @@ research                  (service, callable from anywhere)
   (happy + fail/decision) end-to-end; MVP install = loose `.claude/` files (D57). Findings → D53–D57.
 
 ## `init` / `/start`  **[BUILT v1 — D29 → `commands/start.md`]**
-The bootstrap command (D10/D28). **greenfield** = repo-setup → scaffold → (stub) console → hand to
+The bootstrap command (D10/D28). **greenfield** = repo-setup → scaffold → **console up as the bootstrap front
+door** (step 5 — the daemon is BUILT, D115/D116, and surfaced there by D132, no longer a stub) → hand to
 `discuss`; **fully supported now.** **brownfield/integrate** = the shared scaffold plus the Space-6
 **`ingest` skill** + reconciliation checkpoint; ingest **mechanics decided (D68)**, the **`ingest` skill
 authored**, and the **shared code-map engine built + wired into `/start` step 4** (five precise arms + a
 tier-0 floor — arm build thread CLOSED, D77/D79) — brownfield ingests any recognized language (owner: `11` Space 6). Orchestrator `CLAUDE.md` driver now
-specced (D46–D49). Stubbed sub-steps to expand: console launch (`03`), full disk layout (`05`).
+specced (D46–D49). *(The two sub-steps this once listed as stubbed are both closed: console launch is `/start`
+step 5 against the built daemon — D115/D116/D132 — and the disk layout is `05`'s tree, which D114 made the
+owner of each path's commit-class / `bus:` / `pin` markers.)*
 
 ## Adoption deltas — workflow-kit + GSD (D36–D45, +D40/D65/D67)
 Skill bodies **authored** (session 2026-07-01); each delta maps to its landed home:

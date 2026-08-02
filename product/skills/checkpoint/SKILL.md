@@ -81,7 +81,7 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
 - **qa** — approve → `document`/`commit` · reject → `debug` (behaviour ≠ intent) → `refine` (`changes` ≡ reject here).
 - **setup** — approve|changes → **verify the external precondition actually works** (probe the key/webhook) before
   proceeding; a failed probe re-guides via `setup-guide` (an external step can't be `debug`ged); reject → replan or
-  escalate to the human. A `sensitive` `returns` value is written to **`.workflow/secrets/`** (gitignored, `0600` /
+  escalate to the human. Every `returns` value is written to **`.workflow/secrets/`** (gitignored, `0600` /
   restricted ACL, atomic write), **never logged and never echoed to `state.json`**; the inbox record that carried it
   is then **unlinked immediately** — the single case where the loop deletes an inbox file, so a credential's
   lifetime on disk outside the store is as short as possible. These are **live credentials, not memory**: the

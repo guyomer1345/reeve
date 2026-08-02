@@ -148,8 +148,9 @@ checkpoint verdict + status away from the terminal).
   can answer nobody) → atomic append → `202` + `Location: /api/requests/<message_id>`. **The ticket IS the
   `message_id`** (D119) — no second id — and "my requests" resolves off the **per-kind effect anchors D108 already
   required**, so it still answers after the message is GC'd and the set pruned (an intake reads *became item-9*, a
-  dead-letter reads its reason). `control` is a closed enum; a `sensitive` verdict is redacted from the drain's
-  output and moved by `drain.py secret` (D119).
+  dead-letter reads its reason). `control` is a closed enum; a credential-bearing verdict — one carrying a
+  non-empty `returns`, which is the structural test since D152 retired the composer-supplied marker — is redacted
+  from the drain's output and moved by `drain.py secret` (D119).
 - **Pending outward actions (D105)** ride the cockpit as a **pull** surface (a count + the release form), **not** a
   notification (D101 excluded outward-gate pings) — an outward action doesn't block the loop, so it doesn't interrupt.
 - **The console is the bootstrap's front door [DECIDED + BUILT 2026-07-21 — D132/D133; RE-DRIVEN 2026-07-27 — D138, `11`].** The first lived

@@ -22,6 +22,7 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `planner:plan-one` | plan ready, no per-item demo | `execute` |
 | `decision-engineer` | needs evidence | `research` → back to `decision-engineer` |
 | `create-demo` | demo approved (per-item checkpoint pass) | `execute` |
+| `create-demo` | refine cap hit (`config.demo.max_refine_rounds`) — never auto-proceed | escalate → `discuss` (live realignment, carrying the refine history) |
 | `execute` | changelog | `verify` |
 | `execute` | structural divergence (the plan is wrong) | `planner:plan-one` (re-plan) |
 | `verify` | **pass** | `checkpoint:qa?` |
@@ -115,6 +116,7 @@ flowchart TD
   discuss --> demo{sandbox gate?}
   demo -->|visible surface| create-demo --> dec[planner:decompose]
   demo -->|no| dec
+  create-demo -.refine cap hit.-> discuss
   dec --> prioritize
   prioritize -->|next wave| plan[planner:plan-one]
   prioritize -->|maintenance due| maint[document:audit / align] --> commit

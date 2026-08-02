@@ -398,7 +398,11 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   credential-bearing setup verdicts join release, because D90's verdict-as-authoritative-prompt makes *any* forged
   verdict agent control).
 
-**Recommended next slice — Phase 5: pre-test hardening (D126).** Phase 4 is **build-complete** (the demo D124 +
+**Phase 5 — pre-test hardening (D126). COMPLETE** (as are Phases 6 and 7 below); this paragraph is the
+historical framing of *why it opened*, not a live "next slice" pointer — it read as one for four phases after
+Phase 5 closed. **What comes after Phase 7 is not yet declared here**; the only candidate named anywhere is the
+interaction-model rework (browser-primary async chat, `07`), which the Phase-6 sequence line parks behind a
+re-drive. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
 the release surface D125), but "release-ready" was a *build-completeness* claim: the whole **install → `/start` →
 loop** runtime has **never been driven end-to-end once** (every Phase-3 increment was driven in isolation; the only
 prior loop run — D52 — was a pre-D66 throwaway that *simulated* dispatch). A pre-first-run audit (two independent

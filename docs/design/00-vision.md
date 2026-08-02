@@ -2,9 +2,10 @@
 
 ## The product
 An autonomous but **disciplined** dev workflow that builds like a professional engineer, delivered as
-a **pure Claude-Code-native config package** (skills + subagents + hooks + slash commands + MCP +
+a **pure Claude-Code-native config package** (skills + subagents + hooks + slash commands + scripts +
 CLAUDE.md) the developer installs into their OWN Claude Code and runs locally on their OWN
-subscription. **[DECIDED]**
+subscription. **[DECIDED]** *(No MCP component: the in-session blocking MCP tool was rejected as the
+runtime foundation — D90 — and nothing MCP ships; the local channel is the bus daemon.)*
 
 It is NOT a program/website/SDK that drives Claude. It is content the user runs in their own Claude Code.
 
