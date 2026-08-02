@@ -3519,3 +3519,100 @@ increments 2 and 3, stale against D120's closure since it was written; repointed
 closes), `11` (console increment 3b; the declared-secrets item's DRIVEN caveat discharges),
 `product/shared/schemas.md`, `product/skills/checkpoint/SKILL.md`, `product/agents/setup-guide.md`,
 `product/commands/rebind.md`, `product/scripts/{bus.py,rebind.py,test_bus.py,test_drain.py,test_rebind.py}`.
+
+## D148 — increment 3b DRIVEN: the credential path held everywhere, and the **interaction shell** around it failed twice — `type="password"` handed the key to Chrome's password manager, and a sent verdict left no evidence it had been sent **[DRIVEN 2026-08-02 — every mechanical phase green in a real browser; two human-only defects found and fixed; 551 tests + five meta-gates green]**
+D147 shipped the setup form and stated its residual precisely: *the form has never been rendered in a browser.* The
+cockpit had been (D120), but that render predated this form by six increments, and **an interactive credential form
+fails in ways a read-only card does not.** This is that drive.
+
+**The probe that sized it.** There is no Chrome in WSL, but Windows `chrome.exe --headless --screenshot` reaches a
+WSL-bound loopback port and writes a PNG that is directly readable. That carried the whole legibility half except
+genuine typing — so the bed, the records, the byte-trail and every negative path were driven mechanically, and only
+interaction went to a human. *Rejected — building a CDP driver:* Chrome binds its debug port to the Windows
+loopback, which WSL cannot reach, and it would buy assertions the suite already makes.
+
+**The bed, per D146's precedent:** a `git clone` of the real project to the native filesystem, the new package
+installed into it, `/rebind` → RE-CREATE. Never the real install — answering the live parked checkpoint would consume
+its token and unpark it for real. Verified untouched at the end: tree clean, original token, `outcome`s still null.
+
+**What held — the entire credential path, first time, no fixes.** The render is clean (no page errors, no CSP
+violations). Both graceful-degradation paths fall out of the *real* legacy record: no `tasks[].secrets[]` → no inputs,
+a single-line string `how` → a paragraph rather than a numbered list. The structured `how` renders with live links
+and breadcrumbs; a step with no URL degrades to its breadcrumb; **a `javascript:` URL never becomes an anchor.** The
+byte-trail is sound end to end — `202` + `Location` ticket → `0600` inbox → `drain.py list` redacts the whole
+`returns` node → `drain.py secret` → `0600` store + inbox unlinked — with the canary in **exactly one file in the
+entire bed** and nothing staged, in `HEAD`, or in history. **D146's symptom inverted, all three ways:** all keys
+present → HEALTHY and silent; drop exactly one → that one key named; a pre-declaration store → every key reported
+missing **plus** the unreadable caveat stated separately. And the false-match trap D147 built the matcher flip for —
+declaring `secrets_required = [token, value, stored_at, message_id, id]`, all real envelope keys — correctly reports
+**all five missing** rather than matching falsely into silence. Every negative path held: the non-Tailscale socket
+renders the refusal note *instead of* the inputs, a forced conforming POST there still `403`s with no canary in the
+body, and malformed `returns` `400`s with ordinals only.
+
+**What broke — both in the interaction shell, both found only by a human, neither findable headlessly.**
+
+**Call 1 — the credential input becomes `type="text"`. D147's masking was wrong twice over.** Chrome **offered to
+save the key to its password manager**, and `autocomplete="off"` cannot stop it: Chrome ignores that attribute on
+password fields by design, so the prompt is unsuppressable while the field stays `type=password`. That copies a live
+credential into browser-synced storage nobody asked for — the precise class of unrequested persistence the
+`remote_carries_payload` boundary exists to prevent, arriving through the front door instead. The second failure is
+plainer: **a human cannot tell whether a paste landed whole**, so a truncated key becomes a credential that fails at
+point of use, hours later, with no clue why. *Rejected — a reveal toggle:* it fixes verification and leaves the
+manager prompt exactly where it was, because the field is still a password field. Masking was defending a loopback
+(or WireGuard) socket against a shoulder, while costing correctness and duplicating the key.
+
+**Call 2 — "answered" becomes a fact the SERVER publishes (`answered_at` on the parked record).** After sending,
+the console gave **no evidence at all** that the verdict had been sent. The mechanism is exact: `btn.disabled = true`
+fires first, **a disabled element cannot hold focus**, the handler then clears the inputs — so both arms of
+`renderCheckpoints`' repaint guard go false and the 2.5s poll rebuilds the card from its template, destroying the
+"sent" flash well inside its own 6s timeout and re-arming a form that looks untouched. The card is still *listed* for
+a correct reason (only the orchestrator's drain unparks it), but for a setup checkpoint "looks unanswered" invites
+**re-typing a live credential onto the wire for nothing.** *Rejected — localStorage:* a verdict answered from a paired
+phone would still read as open on the laptop, and it makes the page the thing that decides what it already did —
+the same error `bus-credentials` was built to avoid. The parked record is the natural home: it already exists, it is
+already daemon-owned, it is gitignored, and `unpark` deletes it, so the flag cannot outlive its question. **Only a
+timestamp is ever written** — a stamp carrying the reply would put a live key in a second file, which is the whole
+point of the parked/secret split — and it runs *after* the message is durable, so a display hint can never cost an
+answer.
+
+**Four things the drive found that are NOT fixed here, recorded so they are not re-discovered.**
+- **`drain.py list` prints an unmarked `returns` value verbatim** — key *and* value — into the surface the
+  orchestrator reads. The `sensitive` marker is **composer-supplied** and is the sole trigger for all three
+  protections at once: redaction, the shred, and store-routing (`drain.py secret` refuses the record, so it stays on
+  the durable inbox). `check_returns` accepts an unmarked entry as fully conforming *by design* — D147 made it the
+  way to express a non-credential artifact — so the credential/artifact boundary now rests entirely on the composer's
+  assertion. **Unreachable from the shipped form** (`collectVerdict` always sets `sensitive: true`); reachable from
+  any hand-composed POST, which is exactly what the 7b drive was. → `07`.
+- **`check_returns`' own docstring contradicts its contract**, promising the error "names the offending key" six
+  lines above the comment explaining why it must never do that. A future editor "fixing" the terse ordinals to match
+  the prose re-opens the plaintext echo the ordinals exist to prevent.
+- **The request side is entirely unvalidated** — `park` accepted a request task carrying `outcome: null`, a
+  reply-side `returns` map, and an invented field, while the reply side `400`s on a single unknown entry key.
+  Contained three ways (`parked/` is gitignored, the mirror projects four fields, the console ignores unknowns), so
+  it is hygiene rather than a credential-in-git path. → `07`.
+- **`outcome` on a *request* task is noise and should stop being written.** `schemas.md` declares the request entry
+  `{id, what, secrets?[]}` and the *reply* entry `{id, outcome, returns?}`; nothing in the package emits it, and the
+  live record's came from the `/rebind` hand-reconstruction copying the reply shape. It is the unvalidated request
+  side caught in the wild.
+
+*Also confirmed, and worth stating because it bounds a D146 worry:* the parked mirror projects only
+`{ticket_id, kind, summary, opened_at}`, so **D147's new fields never reach `_render_fenced` at all** — the escape is
+not newly exposed. The escape itself was driven directly instead, with a hostile *summary* carrying ` ``` `, `-->`
+and a literal `<!-- parked:end -->`: it came out as `-->` / `'''` with exactly one terminator surviving.
+
+*Evidence:* the five phases driven cheapest-first against a cloned bed on the native filesystem; the real install
+verified untouched (tree clean, token unconsumed, `parked`/`inbox`/`secrets` unchanged); 551 tests
+(539 at `54e9766`, **+12** — eight `answered_at` unit tests plus two end-to-end over the real socket, which run in
+both socket fixtures; and the masking test **inverted** to assert `type="text"` *and* the absence of
+`type="password"`, so a well-meaning revert fails loudly). One of the eight came out of the build rather than the
+drive: a ticket that parks, resolves and re-parks must re-open as **unanswered**, or the fix would produce the same
+silence pointing the other way — `write_park` rewrites the record wholesale, so it does, and that is now pinned.
+Five meta-gates green, release boundary unchanged at 54 shipped files / 18 install entries. *One method correction worth recording:*
+the first whole-tree canary sweep used a `grep` that honours `.gitignore` and silently skipped `.workflow/` — the
+`find`-based re-run is the sound evidence, and a sweep that cannot see the directory it is auditing proves nothing.
+**Residual: the two fixes have not themselves been re-driven in a browser by a human** — the render, the disabled
+form and the stamp are verified (screenshot + DOM + tests), but *that Chrome no longer offers to save the key* is a
+negative only a human can confirm. **Deadline/timestamp rendering stays raw ISO with microseconds** (`OVERDUE —
+2026-08-01T19:09:35.930246+00:00`), which a human flagged unprompted as machine-facing; left open deliberately rather
+than bundled. → `11` (increment 3b DRIVEN; the browser residual discharges), `07` (two new open questions),
+`product/scripts/{bus.py,test_bus.py}`.

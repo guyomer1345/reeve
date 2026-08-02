@@ -1178,6 +1178,52 @@ class InboxWriter:
             return []
 
 
+def mark_parked_answered(paths, token, when=None):
+    """Stamp `answered_at` on the parked record whose token this verdict quotes.
+
+    Driving this form in a real browser turned up the gap: the console gave a
+    human NO evidence they had answered. `btn.disabled = true` drops focus, the inputs
+    clear, so the repaint guard releases and the 2.5s poll rebuilds the card from its
+    template — wiping the "sent" flash well before its own 6s timeout and re-arming a
+    form that looks untouched. The checkpoint legitimately stays parked until the
+    ORCHESTRATOR drains and unparks it, so "still listed" is correct; "looks
+    unanswered" is not. For a setup checkpoint that invites re-typing a live
+    credential, which puts a second key on the wire for nothing.
+
+    The fact belongs on the SERVER, not in localStorage: a verdict answered from a
+    paired phone must show as answered on the laptop, and a page must never be the
+    thing that decides what it already did. The parked record is the natural home —
+    it already exists, it is already daemon-owned, it is gitignored, and `unpark`
+    deletes it, so the flag cannot outlive the question it answers.
+
+    ONLY a timestamp is written. The verdict body never touches this file; the whole
+    point of the parked/secret split is that a credential lives in the store or
+    nowhere. Best-effort by design: the verdict is already durable on the inbox before
+    this runs, so a failure here costs a display hint, never the answer itself.
+    """
+    stamped = None
+    try:
+        names = sorted(os.listdir(paths.parked))
+    except OSError:
+        return None
+    for n in names:
+        if not n.endswith(".json"):
+            continue
+        path = os.path.join(paths.parked, n)
+        rec = read_json(path)
+        if not isinstance(rec, dict) or rec.get("token") != token:
+            continue
+        if rec.get("answered_at"):
+            return rec["answered_at"]  # first answer wins; a re-send is not a new event
+        rec["answered_at"] = when or now_iso()
+        # Written exactly as `park` writes it — same mode, same key order — so the
+        # stamp is a field change and not a reformat of the whole record.
+        atomic_write(path, json.dumps(rec, indent=1, sort_keys=True) + "\n", mode=0o600)
+        stamped = rec["answered_at"]
+        break
+    return stamped
+
+
 # --- the notifier -----------------------------------------------------------
 # The daemon is the only process alive across every state the away-channel exists
 # for — the orchestrator busy on the next ticket, whole-parked, or dead — so it is
@@ -1909,6 +1955,10 @@ class ReadModel:
                 "request": cp.get("request"),
                 "deadline": rec.get("deadline"),
                 "overdue": self._overdue(rec.get("deadline")),
+                # Set once a verdict quoting this token has landed durably. The card
+                # stays listed (only the orchestrator's drain unparks it) but renders
+                # as answered, so a human cannot be fooled into answering twice.
+                "answered_at": rec.get("answered_at"),
                 "demo_id": demo_id,
             })
         return out
@@ -2123,6 +2173,9 @@ INDEX_HTML = """<!doctype html>
     <p class="no-creds hint" hidden>This checkpoint hands back a credential, which this
       connection is not allowed to carry. Answer it from the local console, or over an
       end-to-end-encrypted transport.</p>
+    <!-- Shown once a verdict quoting this token has landed. The card is still listed
+         because only the orchestrator's drain unparks it — this says why. -->
+    <p class="answered" hidden></p>
     <div class="verdict">
       <select class="outcome">
         <option value="approve">approve</option>
@@ -2156,8 +2209,17 @@ INDEX_HTML = """<!doctype html>
 <template id="secret-tpl">
   <label class="secret">
     <span class="sname mono"></span>
-    <input class="svalue" type="password" autocomplete="off" spellcheck="false"
-           autocapitalize="off" placeholder="paste the value">
+    <!-- DELIBERATELY type=text, not type=password. Two reasons, both found by driving
+         the form in a real browser. A human pasting an API key must be able to
+         SEE that the paste landed and landed whole — a masked field turns a mis-paste
+         into a credential that fails at point of use, hours later, with no clue why.
+         And Chrome's save-password prompt keys on type=password: it offered to store
+         the key in the browser's password manager, which `autocomplete="off"` cannot
+         suppress (Chrome ignores it on password fields by design). Masking bought
+         nothing against a network attacker — this socket is loopback or WireGuard —
+         while costing correctness and putting the key somewhere nobody asked for. -->
+    <input class="svalue" type="text" autocomplete="off" spellcheck="false"
+           autocapitalize="off" autocorrect="off" placeholder="paste the value">
   </label>
 </template>
 
@@ -2429,6 +2491,21 @@ function renderCheckpoints(items) {
     if (cp.overdue) d.classList.add("overdue");
     const msg = node.querySelector(".msg");
     const btn = node.querySelector(".send");
+    // Already answered: the verdict is durable, the loop just has not drained it yet.
+    // Say so and close the form, rather than presenting a pristine one that invites a
+    // human to type a live credential a second time. Server-supplied, so it holds
+    // across a reload and across devices — answer on the phone, the laptop agrees.
+    if (cp.answered_at) {
+      const a = node.querySelector(".answered");
+      a.textContent = "answered " + cp.answered_at +
+        " — waiting for the loop to pick it up. Nothing more to do here.";
+      a.hidden = false;
+      node.querySelector(".verdict").hidden = true;
+      for (const el of node.querySelectorAll(".svalue, .notes, .toutcome, .outcome, .send")) {
+        el.disabled = true;
+      }
+      return;
+    }
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       const card = btn.closest(".card");
@@ -2664,6 +2741,7 @@ dd { margin:0; }
 .secret { display:flex; gap:.5rem; align-items:center; }
 .secret .svalue { flex:1; min-width:10rem; }
 .no-creds { color:var(--bad); }
+.answered { color:var(--ok); font-weight:600; margin:.5rem 0 .25rem; }
 input, select, textarea, button { font:inherit; color:var(--fg); background:transparent;
   border:1px solid var(--line); border-radius:5px; padding:.3rem .5rem; }
 textarea { width:100%; resize:vertical; }
@@ -3333,6 +3411,15 @@ def make_handler(daemon):
                     log("accepted %s %s (carries a sensitive value)" % (kind, message_id))
                 else:
                     log("accepted %s %s" % (kind, message_id))
+                # The answered stamp, after the message is durable — a display fact can
+                # never be the reason a verdict is lost, so it runs last and its failure
+                # is a warning, not a status. An unknown token simply stamps nothing:
+                # the dead-letter path already owns "this answers no open question".
+                if kind == "verdict":
+                    try:
+                        mark_parked_answered(daemon.paths, clean.get("token"))
+                    except OSError as exc:
+                        log("could not stamp answered_at for %s: %s" % (message_id, exc))
                 return self._send(202, json.dumps(
                     {"ticket": message_id, "kind": kind}).encode(),
                     extra={"Location": "/api/requests/" + message_id})

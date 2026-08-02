@@ -162,13 +162,17 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
     `localStorage`, inputs cleared on send, and the "my requests" memory records the **outcome only**. It renders
     **only where the socket may accept a credential** (loopback, or a remote socket over an end-to-end-encrypted
     transport) — but that is UX, not the boundary: the `403` at the socket stays the enforcement, because a page is
-    never allowed to be the thing that decides.
+    never allowed to be the thing that decides. **The input is deliberately `type="text"`, not a password field** —
+    driving the form in a real browser showed masking cost a human the ability to confirm a paste landed whole, and
+    made Chrome offer to save the key into its password manager, which `autocomplete="off"` cannot suppress on a
+    password field. Masking defended a loopback (or WireGuard) socket against a shoulder while costing correctness
+    and copying the credential somewhere nobody asked for.
   - **reconcile** — approve → `prioritize` · else → `ingest`/`discuss`.
   A **timeout never auto-proceeds** — it re-surfaces + reminds (a missing credential can't be skipped). A rejection is
   not always a defect — hence routing by kind, not a universal `debug` sink.
 
 ## parked-ticket  · composed by the orchestrator, **written by `bus.py park`** · *`.workflow/parked/<id>.json`; RUNTIME, gitignored, kept on a native filesystem; projected onto `handoff.md`'s **`parked` machine block** for cold-start rebuild*
-- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request, demo_id?}, predicted_outcome, deadline, opened_at, summary }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them. **`checkpoint.demo_id`** is present only for `kind: demo` — the id of the served bundle under `demos/`, so the console builds the `/demo/<id>/` iframe (validated to the served-id shape before it is rendered). The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
+- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request, demo_id?}, predicted_outcome, deadline, opened_at, summary, answered_at? }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them. **`checkpoint.demo_id`** is present only for `kind: demo` — the id of the served bundle under `demos/`, so the console builds the `/demo/<id>/` iframe (validated to the served-id shape before it is rendered). The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
 - **`bus.py park` is the writer, and the split is the usual one.** The orchestrator composes the **judgment**
   (`token`, `checkpoint.request`, `predicted_outcome`, `loop_position`) and pipes the record in on **stdin**; the
   runner does the **arithmetic** — resolves the runtime root through `Paths`, stamps `deadline` + `opened_at`,
@@ -184,6 +188,14 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
 - `opened_at` + `summary` — stamped by the runner, and they exist **for the mirror**: they are the two fields the
   projection needs that are not already on the record. `summary` is a one-line label (capped, backticks
   neutralized so it cannot break out of the block's JSON fence), defaulting to `checkpoint.request.what`.
+- **`answered_at`** — stamped by the **daemon** the moment a verdict quoting this `token` lands durably on the inbox,
+  and published on the console snapshot so the card renders as answered with its form closed. It exists because the
+  ticket stays parked until the *orchestrator* drains and unparks it, so "still listed" is correct while "looks
+  unanswered" is not — and a setup card that looks unanswered invites a human to type a live credential a second
+  time. It is a **timestamp only**: the reply never touches this record (a credential belongs in the secret store or
+  nowhere), it is written *after* the message is durable so a display fact can never cost an answer, and the first
+  answer wins so a re-send is not a new event. Server-side deliberately, so the state survives a reload and holds on
+  a second device — a verdict sent from a paired phone reads as answered on the laptop.
 - **This record is the alert trigger.** Writing it *is* the signal: the daemon watches `parked/`, raises the alert
   on a new open checkpoint, re-alerts every `config.checkpoint.reminder_hours`, and escalates once overdue. The
   parking skill sends nothing itself.

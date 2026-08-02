@@ -321,6 +321,28 @@ task identity already lives at `tasks[].id`, so a second identifier on the same 
 and the driven `[{id, …}]` shape was the wrong *slot* rather than a mis-keyed field. The declaration also flips the
 matcher — generosity was only a virtue while the shape was undeclared. Full call, and the three things the build
 forced, in D147.
+
+**OPEN (D148) — is the composer-supplied `sensitive` marker load-bearing enough to be the only thing protecting a
+returned value?** Driving 3b found that an unmarked `returns` entry — **fully conforming**, because D147 made
+"the same entry minus the marker" the way to express a non-credential artifact — is printed **verbatim, key and
+value**, by `drain.py list` into the surface the orchestrator reads; is refused by `drain.py secret`; and therefore
+is never shredded or moved to the store. One composer-supplied boolean is the sole trigger for all three
+protections at once. The shipped console form cannot produce this (`collectVerdict` always marks `sensitive: true`),
+so it is reachable only from a hand-composed POST — which is exactly what every pre-form `returns` was. The options
+are roughly: treat every `returns` value as sensitive unless explicitly marked *non*-sensitive (inverting the
+default); keep the marker but redact all values regardless and let the marker drive only routing; or declare
+non-credential artifacts a different field entirely, so `returns` means "credential" and nothing else. **Not a
+regression from D147 — a boundary its declaration made reachable, stated before someone rediscovers it with a real
+key.**
+
+**OPEN (D148) — should the REQUEST side of a checkpoint be validated the way the reply side is?** `bus.py park`
+accepted a request task carrying `outcome: null`, a reply-side `returns` map, *and* an invented field, while
+`check_returns` `400`s the reply on a single unknown entry key — on the stated reasoning that "quietly accepting an
+extra field is how the next undeclared shape gets in". The asymmetry is not academic: the live parked record carries
+an undeclared `outcome` on every request task, written by a hand-reconstruction copying the reply shape. **The
+consequences are contained today** (`parked/` is gitignored, the mirror projects four fields, the console ignores
+what it does not name), so this is hygiene, not a leak — the question is whether `park` should be strict, or whether
+one-sided strictness is the right trade for a producer that is always the loop itself.
 **Both residuals are DISCHARGED by the D142 build** — and one of them fired:
 - ~~**What counts as a "weak mount", portably.**~~ **Closed: it is measured, not classified.** `bus.probe_mode()`
   already did the only correct thing — a `0600` create then a `stat`, which asks the question directly instead of

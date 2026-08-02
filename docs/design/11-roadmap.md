@@ -86,7 +86,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      still answers after GC); inbox GC on the watermark; and the drain **split** — its bookkeeping is `scripts/drain.py`
      (`list` → apply → `record`/`secret`), its apply stays the brief. *The verdict job lands here — the first
      increment to meet an MVP goal* (D93 protocol + the D108 consume model) (*the old "C2"*).
-     **3b — the setup verdict form — BUILT 2026-07-31 (D147).** Increment 3 shipped a form carrying `{outcome,
+     **3b — the setup verdict form — BUILT 2026-07-31 (D147), DRIVEN 2026-08-02 (D148).** Increment 3 shipped a form carrying `{outcome,
      notes}` only, against a D99 spec that named `returns` / plural `tasks[]` / steps + verified deep-links +
      breadcrumbs — so **no client could produce a `returns` payload at all**, and D122's Tailscale credential arm
      guarded a payload nothing could emit. Now: per-task rows (own outcome), one labelled input per credential named
@@ -94,10 +94,15 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
      only where the socket may carry a key (the `403` stays the boundary), and `returns` **declared** as a
      name-keyed map the bus validates. *The increment-3 tag was BUILT against a spec it did not meet, and the stated
      residual named legibility — which is how a capability gap read as polish.*
-     **Residual: the setup FORM has never been rendered in a browser** — the cockpit was (D120, headless Chrome),
-     but that render predates this form by six increments, and an interactive credential form fails in ways a
-     read-only card does not. The form's *logic* is driven (the shipped `collectVerdict` run through node, its
-     output fed to the real validator); its *rendering* is not.
+     **The browser residual DISCHARGES (D148)** — driven in Chrome against a cloned bed, every phase: the render,
+     both graceful-degradation paths, the structured `how` + its scheme filter, the whole credential byte-trail
+     (`202` → `0600` inbox → redacted `list` → `0600` store → itemized `rebind`), and every negative path. **The
+     credential path did not fail once; the interaction shell around it failed twice**, and only at a human's hands —
+     `type="password"` both hid whether a paste landed AND let Chrome offer to save the key to its password manager
+     (`autocomplete="off"` cannot suppress that), and a sent verdict left **no evidence it had been sent**, re-arming
+     a pristine form that invited a second live credential onto the wire. Both fixed: the input is `type="text"`, and
+     `answered_at` is now stamped server-side on the parked record. *The lesson the tag records: six increments of
+     headless rendering could not have caught either — both needed a real browser and real hands.*
   4. **The notifier** — **BUILT 2026-07-18 (D120)**: the daemon watches `parked/` → alerts on a new open checkpoint
      → re-alerts every `config.checkpoint.reminder_hours` → escalates once past the absolute `deadline` (never
      auto-proceeding), as a **term on the existing `parked` job**. Alert state lives in a fourth daemon-owned path

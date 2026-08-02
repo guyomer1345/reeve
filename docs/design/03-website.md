@@ -132,7 +132,11 @@ checkpoint verdict + status away from the terminal).
   **verdict** form (D97 `{outcome, notes, returns?}` / plural `tasks[]`; renders the D98 steps + verified deep-links +
   breadcrumbs for `setup`) — **BUILT as `{outcome, notes}` only and completed by D147** (increment 3b: the `setup`
   half of this bullet — `returns`, per-task rows, the rendered steps — was specified here and never built, so no
-  client could produce a `returns` payload at all; `returns` is now a declared **name-keyed map**) —, an **intake** form (the D70 node→ticket click is a pre-filled intake), a **release** form
+  client could produce a `returns` payload at all; `returns` is now a declared **name-keyed map**) **and DRIVEN in a
+  browser by D148**, which is where the two defects a headless render cannot see were found: the credential input is
+  `type="text"`, not `password` (masking hid whether a paste landed *and* let Chrome offer to save the key to its
+  password manager), and an answered checkpoint now says so from a server-stamped `answered_at` rather than
+  presenting a pristine form that invites a second live credential —, an **intake** form (the D70 node→ticket click is a pre-filled intake), a **release** form
   (D105 — the pending-outbox panel: the queued outward actions, batch-approved by explicit `action_ids` → a
   `kind: release` POST), and the **"my requests" view** — each POST returns `202` + a `Location` ticket saved to
   `localStorage`; the view is the polled state *filtered* by those ticket ids, so `pending→consumed→resolved` is

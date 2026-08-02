@@ -816,6 +816,32 @@ class LiveServer(Tmp):
         self.assertEqual(rec["message_id"], ticket)
         self.assertEqual(rec["verdict"]["outcome"], "approve")
 
+    def test_a_verdict_marks_its_parked_checkpoint_answered(self):
+        """End to end over the real socket (D148): the console must be able to tell a
+        human they already answered, and the fact has to come from the server so it
+        survives a reload and holds on a second device."""
+        bus.write_park(self.d.paths, a_park(tid="answer-me", kind="setup"))
+        self.assertIsNone(
+            [p for p in bus.ReadModel(self.d.paths).parked()
+             if p["ticket_id"] == "answer-me"][0]["answered_at"])
+        code, body, _ = self.post("/api/verdict", {
+            "token": "tok-answer-me", "verdict": {"outcome": "approve"}})
+        self.assertEqual(code, 202, body)
+        row = [p for p in bus.ReadModel(self.d.paths).parked()
+               if p["ticket_id"] == "answer-me"][0]
+        self.assertTrue(row["answered_at"], "answered but the card still reads as open")
+
+    def test_a_verdict_for_an_unknown_token_still_lands_and_stamps_nothing(self):
+        """The stamp is a display hint bolted to the side; it must never be able to
+        turn a durable verdict into an error."""
+        bus.write_park(self.d.paths, a_park(tid="untouched", kind="setup"))
+        code, _, _ = self.post("/api/verdict", {
+            "token": "tok-nobody-at-all", "verdict": {"outcome": "approve"}})
+        self.assertEqual(code, 202)
+        row = [p for p in bus.ReadModel(self.d.paths).parked()
+               if p["ticket_id"] == "untouched"][0]
+        self.assertIsNone(row["answered_at"])
+
     def test_every_kind_is_accepted(self):
         for path, payload in (
                 ("/api/verdict", {"token": "t", "verdict": {"outcome": "reject"}}),
@@ -1306,6 +1332,86 @@ class Parking(Tmp):
         self.assertEqual((row["ticket_id"], row["kind"], row["token"], row["demo_id"]),
                          ("item-1", "demo", "tok-item-1", "item-1"))
         self.assertFalse(row["overdue"])
+
+
+class AnsweredStamp(Tmp):
+    """A human must never be unable to tell they already answered (D148).
+
+    Found by driving the form in a browser: `btn.disabled = true` drops focus, the
+    handler clears the inputs, so `renderCheckpoints`' repaint guard releases and the
+    2.5s poll rebuilds the card from its template — killing the "sent" flash well
+    inside its own 6s timeout and re-arming a form that looks untouched. The card is
+    still LISTED for a correct reason (only the orchestrator's drain unparks it), so
+    the fix is to make "answered" a fact the server publishes, not a thing the page
+    remembers. For a setup checkpoint the alternative is a human re-typing a live
+    credential onto the wire for nothing.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        self.paths = bus.Paths(self.w)
+        bus.write_park(self.paths, a_park(tid="item-1", kind="setup"))
+
+    def rec(self):
+        return bus.read_json(os.path.join(self.paths.parked, "item-1.json"))
+
+    def test_it_stamps_the_record_whose_token_the_verdict_quotes(self):
+        at = bus.mark_parked_answered(self.paths, "tok-item-1")
+        self.assertTrue(at)
+        self.assertEqual(self.rec()["answered_at"], at)
+
+    def test_the_console_read_model_publishes_it(self):
+        """The page cannot render what the snapshot does not carry."""
+        self.assertIsNone(bus.ReadModel(self.paths).parked()[0]["answered_at"])
+        bus.mark_parked_answered(self.paths, "tok-item-1")
+        self.assertTrue(bus.ReadModel(self.paths).parked()[0]["answered_at"])
+
+    def test_the_first_answer_wins_so_a_resend_is_not_a_new_event(self):
+        first = bus.mark_parked_answered(self.paths, "tok-item-1")
+        again = bus.mark_parked_answered(self.paths, "tok-item-1")
+        self.assertEqual(first, again)
+        self.assertEqual(self.rec()["answered_at"], first)
+
+    def test_an_unknown_token_stamps_nothing(self):
+        """A verdict for a closed/unknown token is the dead-letter path's job; this
+        must not invent a record or stamp an unrelated one."""
+        self.assertIsNone(bus.mark_parked_answered(self.paths, "tok-nobody"))
+        self.assertNotIn("answered_at", self.rec())
+
+    def test_only_a_timestamp_is_written_never_the_verdict_body(self):
+        """The parked record is not a place a credential may land — the store is. A
+        stamp that carried the reply would put a live key in a second file."""
+        before = self.rec()
+        bus.mark_parked_answered(self.paths, "tok-item-1")
+        after = self.rec()
+        self.assertEqual(set(after) - set(before), {"answered_at"})
+        for k, v in before.items():
+            self.assertEqual(after[k], v, "the stamp rewrote %s" % k)
+
+    def test_the_record_keeps_the_mode_park_gave_it(self):
+        bus.mark_parked_answered(self.paths, "tok-item-1")
+        mode = os.stat(os.path.join(self.paths.parked, "item-1.json")).st_mode & 0o777
+        self.assertEqual(mode, 0o600)
+
+    def test_a_re_park_reopens_the_question_as_UNANSWERED(self):
+        """A ticket that parks, resolves and re-parks is a NEW question with a fresh
+        token. Inheriting the old stamp would show a re-opened checkpoint as already
+        answered — the exact silence this fix exists to remove, pointing the other way.
+        """
+        bus.mark_parked_answered(self.paths, "tok-item-1")
+        self.assertTrue(self.rec()["answered_at"], "fixture assumes it was answered")
+        again = a_park(tid="item-1", kind="setup")
+        again["token"] = "tok-item-1-reopened"
+        bus.write_park(self.paths, again)
+        self.assertIsNone(self.rec().get("answered_at"))
+
+    def test_the_page_closes_the_form_on_an_answered_card(self):
+        """Rendering it is the whole point: a visible, re-armed form is the defect."""
+        js = _js_function("renderCheckpoints")
+        self.assertIn("cp.answered_at", js)
+        self.assertIn('.verdict").hidden = true', js)
+        self.assertIn('<p class="answered" hidden></p>', bus.INDEX_HTML)
 
 
 class ParkedMirrorBackfill(Tmp):
@@ -2071,8 +2177,25 @@ console.log(JSON.stringify(collectVerdict(card, %s)));
         self.assertFalse(sensitive)
 
     # -- what the page must never do with a credential --
-    def test_the_credential_input_is_masked_and_never_autofilled(self):
-        self.assertIn('class="svalue" type="password"', bus.INDEX_HTML)
+    def test_the_credential_input_is_visible_and_is_never_a_password_field(self):
+        """type=text, DELIBERATELY — and this test is the guard on that call (D148).
+
+        D147 shipped `type="password"` on the reasoning that a credential should be
+        masked. Driving the form in a real browser falsified it twice over. A human
+        pasting an API key cannot confirm the paste landed whole, so a mis-paste becomes
+        a credential that fails at point of use with no clue why. And Chrome offered to
+        SAVE the key to its password manager: that prompt keys on `type=password`, and
+        `autocomplete="off"` cannot suppress it — Chrome ignores the attribute on
+        password fields by design. Masking defended against a shoulder over a loopback
+        (or WireGuard) socket while costing correctness and copying the key somewhere
+        nobody asked for.
+
+        The autocomplete assertion stays: it is still the right hint, it is simply not
+        load-bearing. A future edit back to `password` re-opens the manager prompt, so
+        this asserts the absence explicitly rather than only the presence.
+        """
+        self.assertIn('class="svalue" type="text"', bus.INDEX_HTML)
+        self.assertNotIn('type="password"', bus.INDEX_HTML)
         self.assertIn('autocomplete="off"', bus.INDEX_HTML)
 
     def test_the_form_clears_the_value_and_remembers_only_the_outcome(self):
