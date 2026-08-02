@@ -322,8 +322,14 @@ and the driven `[{id, …}]` shape was the wrong *slot* rather than a mis-keyed 
 matcher — generosity was only a virtue while the shape was undeclared. Full call, and the three things the build
 forced, in D147.
 
-**OPEN (D148) — is the composer-supplied `sensitive` marker load-bearing enough to be the only thing protecting a
-returned value?** Driving 3b found that an unmarked `returns` entry — **fully conforming**, because D147 made
+~~**OPEN (D148) — is the composer-supplied `sensitive` marker load-bearing enough to be the only thing protecting a
+returned value?**~~ **CLOSED by D152 — no, and the marker is DELETED rather than defaulted.** `returns` now *means*
+credential (structural `_is_sensitive`, nothing to forget to set) and `artifacts` is the declared non-credential
+half. Inverting the default was rejected: it improves the direction of a mistake but keeps one composer boolean as
+the sole gate, which is the thing being questioned. The leak was reproduced with a canary first, and one nuance the
+statement below did not have — redaction is **all-or-nothing per message**, so an unmarked entry beside a marked one
+was protected by accident; the exposure is a message where *nothing* is marked. Full call in D152. *Original
+statement:* Driving 3b found that an unmarked `returns` entry — **fully conforming**, because D147 made
 "the same entry minus the marker" the way to express a non-credential artifact — is printed **verbatim, key and
 value**, by `drain.py list` into the surface the orchestrator reads; is refused by `drain.py secret`; and therefore
 is never shredded or moved to the store. One composer-supplied boolean is the sole trigger for all three
@@ -335,7 +341,14 @@ non-credential artifacts a different field entirely, so `returns` means "credent
 regression from D147 — a boundary its declaration made reachable, stated before someone rediscovers it with a real
 key.**
 
-**OPEN (D148) — should the REQUEST side of a checkpoint be validated the way the reply side is?** `bus.py park`
+~~**OPEN (D148) — should the REQUEST side of a checkpoint be validated the way the reply side is?**~~ **CLOSED by
+D152 — the reply's FIELDS are refused on a request; nothing else is.** `park` now rejects `outcome` and `returns` on
+a request task and stays permissive otherwise. Full symmetry was rejected on availability grounds: **a park that
+hard-fails is a checkpoint that never opens**, which is a worse failure than an extra field. The asymmetry is
+principled — the reply crosses a trust boundary from a human or a browser, the request is composed by the loop
+itself — but that trust does not extend to fields belonging to the other side. `returns` turned out to be the
+sharper of the two (it carries a VALUE, and the whole `request` reaches the console without ever passing
+`check_returns`). *Original statement:* `bus.py park`
 accepted a request task carrying `outcome: null`, a reply-side `returns` map, *and* an invented field, while
 `check_returns` `400`s the reply on a single unknown entry key — on the stated reasoning that "quietly accepting an
 extra field is how the next undeclared shape gets in". The asymmetry is not academic: the live parked record carries
@@ -387,3 +400,20 @@ are CLOSED by the D144 build.**
   and it fails **closed** on the gate it guards regardless — but it is now a second, diverging resolver. Either it
   earns a shared read-only helper or the duplication gets stated as intended. Touching the verify gate to add a
   warning a `pre-commit` hook cannot usefully display is the trade that kept it out of 7a.
+
+**OPEN (D151) — how does a released install learn it is stale, when the version never moves?** The package ships as
+a Claude Code plugin, and installing **copies** `product/` into `~/.claude/plugins/cache/<plugin>/<version>/` — a
+snapshot, not a live link. `claude plugin update` compares **versions**, and `product/.claude-plugin/plugin.json`
+has been pinned at `0.1.0` since the first install. **The no-op itself is not news** — `11`'s Phase-6 sequence line
+already says "a version-pinned `update` is a no-op — verify `gitCommitSha` == HEAD" and prescribes a force-reinstall.
+What the D151 drive showed is that **the known manual step did not hold**: the install had silently drifted back to
+**12 commits and 17 shipped files behind** HEAD (a pre-D142 `session_start.py`, a `dispatch.md` still instructing a
+hand-written `parked[]`) while `claude plugin update` reported *"already at the latest version (0.1.0)"* — an
+actively misleading message on the one path a user would trust. A manual verification step nobody runs is not a
+control, and this one will bite every user who installs once and then receives fixes.
+The options are roughly: **bump `version` on every release that changes a shipped file** — already meaningful,
+because D135 makes that value `config.json`'s `workflow_version` and `/update` keys on it, so the bump is the same
+lever twice; and/or **a sixth meta-gate** in `build-release.py` that refuses a release whose shipped files moved
+without a bump, which is the only form that cannot be forgotten. The second is the `check-status-coherence` pattern
+applied to the ship boundary. **Not a regression — a release-discipline gap that only became visible once the
+package had a real installed consumer.**

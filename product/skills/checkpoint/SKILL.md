@@ -57,17 +57,27 @@ gets a generic entry — but the declared-loss report can then only say "the sto
 ## Output
 A **parked ticket** (this turn). The `checkpoint.verdict` `{ outcome, notes, returns? }` (`pass` ≡ approve; a setup
 reply carries `tasks[] {id, outcome, returns?}` instead of the single `outcome`) is what the drain later matches to
-the token and routes below. **`returns` is a name-keyed map — `{ "<KEY_NAME>": { value, sensitive?: true } }`** —
-the key *is* the credential name, task identity already lives at `tasks[].id`, and the bus `400`s any other shape.
+the token and routes below. **`returns` is a name-keyed map — `{ "<KEY_NAME>": { value } }`, and `returns` MEANS
+credential** (there is no `sensitive` marker: protection comes from the field, not from a flag a composer must
+remember). A non-credential value the task hands back goes in **`artifacts`** — same shape, never redacted, never
+stored. The key *is* the credential name, task identity already lives at `tasks[].id`, and the bus `400`s any other
+shape.
 You never compose a verdict yourself: the human answers it in the console, and it arrives on the bus.
 
 ## Route
 Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so `debug` is not the universal sink):
-- **demo** — approve → lock the spec state · changes → `create-demo` (refine the sandbox/spec) · reject → `discuss`.
+- **demo** — approve → lock the spec state · changes → `create-demo` (refine the **spec**, then the sandbox from it)
+  · reject → `discuss`.
   On a **terminal** outcome (approve|reject) the sandbox has done its job, so **delete `.workflow/demos/<item-id>/`
   as part of applying the verdict** (the locked *spec* is the durable artifact, not the demo bytes; the retention
   audit is only the straggler backstop for a crash between resolve and delete). On **changes** the loop is still
-  refining, so **keep** the bundle (and its `.refine.json` counter).
+  refining, so **keep** the bundle (and its `.refine.json` ledger).
+  - **Before you delete anything on approve, lock the spec `.refine.json` names.** Read the ledger's last
+    `spec_ref.path` and confirm the spec on disk actually carries what was approved. The delete is what makes this
+    ordering load-bearing: a decision that reached only the bundle dies with it, and the lock then records a spec
+    the human never agreed to. `check_demo_bundle.py` refuses a refine round that did not move the spec, so this
+    should already hold — treat a mismatch here as evidence a round bypassed the lint, and fold the decision in
+    **before** locking rather than approving over it.
 - **qa** — approve → `document`/`commit` · reject → `debug` (behaviour ≠ intent) → `refine` (`changes` ≡ reject here).
 - **setup** — approve|changes → **verify the external precondition actually works** (probe the key/webhook) before
   proceeding; a failed probe re-guides via `setup-guide` (an external step can't be `debug`ged); reject → replan or

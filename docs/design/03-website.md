@@ -103,8 +103,10 @@ in one GET, killing the "a misconfigured Access does not instantly expose it" pr
 only, and an attacker past a misconfigured proxy lands on a token-less dead-end. (2) **The remote coordinates are
 stable, not per-boot** — `remote_token` persisted (`.workflow/remote_token`), `remote_port` config-declared and
 fixed — else the phone pairing and the operator's tunnel break on every WSL restart. (3) **The credential boundary is
-the structural presence of a `returns`/`tasks` payload**, never the shallow `_is_sensitive` heuristic (a false
-negative there is a live key on a plaintext edge). (4) **A's Host-allowlist must add the declared public host**, or a
+the structural presence of a `returns`/`tasks` payload** (a false negative there is a live key on a plaintext edge).
+*`_is_sensitive` was the shallow marker-hunting heuristic this deliberately refused to depend on; D152 made it
+structural too — a non-empty `returns` IS a credential — so the two now answer from the same fact rather than the
+boundary compensating for the weaker one.* (4) **A's Host-allowlist must add the declared public host**, or a
 forwarded-Host proxy is entirely 403'd — so `public_url` is load-bearing for the transport, not only the pairing
 link. Socket A's positive POST allowlist is verdict-only (opinion-shaped); `release`/`control`/`intake`/`/shutdown`/
 `/api/pairing` all `404` on A.

@@ -3673,3 +3673,186 @@ different facts**, the same shape as this project's standing lesson that a docum
 the real socket and the gating is unit-tested, but the click path (re-enable → retype → send) is once again the part
 only hands can close. → `08` (D148's residual marked closed), `11` (increment 3b), `product/shared/schemas.md`,
 `product/scripts/{bus.py,test_bus.py}`.
+
+## D150 — Phase 4 DRIVEN: the demo had never rendered because it structurally *could not* — an opaque origin makes every subresource read as cross-site, and the CSRF gate refused them **[DRIVEN 2026-08-02 — the first runtime validation of the demo since D124 built it; one high-severity fix; the `kind:demo` card's first browser render ever]**
+Phase 4 was tagged **BUILD-COMPLETE (not yet runtime-validated)** and that was literally true: the demo had been
+built (D102–D104 + D124) and never once exercised. Driving it end to end on a clean bed found the reason.
+
+**The defect — every demo bundle with a sibling file rendered SILENTLY BLANK.** `DEMO_CSP`'s `sandbox` directive
+forces an **opaque origin** (that is the whole point of D102 — isolation even at top-level, the deep-link case an
+iframe `sandbox` attribute alone misses). An opaque origin is, by definition, **not same-site with anything**, so a
+real browser labels every **subresource** of that document `Sec-Fetch-Site: cross-site` — which is exactly the value
+`_cross_site()` fails closed on. The document navigation passed (`Sec-Fetch-Site: none`) and then `style.css` and
+`app.js` both 404'd. **MEASURED, not inferred:** a header-logging server driven by the real Chrome showed the
+navigation arriving `none` and both subresources arriving `cross-site`/`no-cors`.
+
+**Call — the demo route drops the site gate (`_guard(need_token=False, site_gated=False)`), and keeps everything
+else.** The gate is a **CSRF** control; CSRF is a **state-change** concern. The demo class is read-only `GET`,
+token-free by construction (a browser cannot header a document navigation), and carries a throwaway low-fi sandbox
+with no credential in it. Crucially the gate is not merely strict here, it is **structurally unsatisfiable**: under
+an opaque origin it can never pass for a legitimate asset, so keeping it means the class is broken rather than
+guarded. The **host gate** and the **realpath guard** — the two that do real work on this path — are untouched, and
+the exemption is scoped to `/demo/*` (tested: `/`, `/api/state`, `/health` still refuse `cross-site`).
+*Rejected — drop `sandbox` from the CSP and rely on the iframe attribute:* defeats D102's entire top-level case.
+*Rejected — require demos to be a single inline `index.html`:* dodges the failure instead of removing it, and a model
+authoring a demo will reach for a sibling file and get a blank page again; `create-demo`'s own format section
+explicitly permits sibling assets.
+
+**Why the test suite missed it, and why that matters more than the bug.** Every pre-existing demo test sent **no
+`Sec-Fetch-Site` header at all**, so the whole class passed while a real browser showed a blank page. This is the
+third instance of the standing lesson from D148/D149 — **a mechanical assertion passing is not the page behaving.**
+The regression test now sends the header a browser actually sends.
+
+*Evidence:* the full lifecycle driven on a fresh clone of `idea testing` at `~/drive-demo` (installed from
+`MANIFEST.json`, `rebind apply --no-probe` → RE-CREATE). `create-demo` bundle → lint clean → park → the **`kind:demo`
+card rendered in a browser for the first time** (iframe, "open full-screen", verdict form; every prior drive — D120,
+D148, D149 — used setup or read-only cards, so `renderCheckpoints`' entire `cp.kind === "demo"` branch was
+unexercised). Isolation **re-verified after the fix rather than assumed**, top-level in Chrome:
+`window.origin=null`, `localStorage` and `document.cookie` both throw `SecurityError`, scripts running, bundle fully
+styled. Routing held: `changes` → non-terminal, bundle survives, checkpoint stays open; `approve` → unpark → mirror
+empties → bundle pruned (backstop `prune_demos` correctly skipped it while parked). Real working tree and real
+runtime root verified untouched. → `11` (Phase 4), `product/scripts/{bus.py,test_bus.py}`.
+
+## D151 — Phase 6's last residual DISCHARGED: the governor cycle fired, and the thing it exists to save is the state that lives *only* in the conversation **[DRIVEN 2026-08-02 — no code change needed; the plugin-staleness finding is the entry's real payload]**
+The D136 governor shipped BUILT but its **cycle** had never run — the banner never fired in the D138 re-drive
+because the bootstrap context law kept the window too lean to trip it. Forced and driven whole.
+
+**It works, and the interesting half is what survived.** The banner fires at `config.context.warn_pct` and is silent
+below it (driven at 40 / 74.9 / 75 / 88 through real statusline stdin). `/dispatch`, driven with a **real `claude -p`
+session** in the bed, rewrote the prose whole (10677 → 5232 chars), wrote `base_sha`/`current_item`/`loop_position`,
+and **preserved both machine blocks byte for byte** — D145's rule holding under a real model rather than under a
+test. `SessionStart(clear)` re-injected 5810 chars of anchor and **both** of its jobs fired, the D144 pre-commit
+assert installing the hook a fresh clone never gets. Then the part that matters: a session given **only that anchor**
+correctly named the in-flight item, its loop node, what blocked it, the next action, the must-nots, **and a deferred
+per-chunk-vs-per-N-chunks decision that had existed nowhere but the pre-clear conversation.** Carrying that across a
+`/clear` is the entire point of the mechanism, and it did.
+
+**The finding — the version-pinned no-op was ALREADY KNOWN, and that is the point.** Phase 6's own sequence line in
+`11` says it outright: *"forced-reinstall the plugin to HEAD (a version-pinned `update` is a no-op — verify
+`gitCommitSha` == HEAD)"*. So nothing about the mechanism is new. What this drive found is that **a known-manual
+step is not a control**: the install silently drifted back to **12 commits and 17 shipped files** behind HEAD
+(pinned at `b48fdc09`) with nobody noticing — a `session_start.py` with no pre-commit assert, a `dispatch.md` still
+instructing the model to hand-write `parked[]`, a `bus.py` with no setup form and no supersede. `claude plugin
+marketplace update` succeeded; `claude plugin update` then reported **"already at the latest version (0.1.0)"** and
+changed nothing. Force-reinstall (`uninstall --keep-data` + `install`) moved it to HEAD, verified by `gitCommitSha`
+and a zero-file diff. **The consequence generalizes past the maintainer's machine:** any user who installs `0.1.0`
+and later receives fixes without a version bump is *told they are current while they are not*. Same shape as D143's
+install missing five package files — silent staleness, here with an actively misleading message on the update path,
+and the same lesson as D129: a documented manual step is not a mechanism.
+**Two levers, left OPEN for a deliberate call** (`07`): bump `version` on every release that changes shipped files —
+which D135 already made meaningful, since that version becomes `config.json`'s `workflow_version` and `/update` keys
+on it — and/or a sixth meta-gate that refuses a release whose shipped files moved without a bump.
+
+*Also noted, minor:* the statusline prints `ctx 75%` at 74.9% with **no** banner and `ctx 75%` at 75.0% **with** one
+— the same displayed number, two behaviours. Cosmetic, but it reads as a bug to a human. *Method note:* `/dispatch`
+also hit a genuinely blocked `bus.py mirror` (the bed workspace was untrusted, so `permissions.allow` was ignored)
+and **degraded exactly as D145 prescribes** — said so plainly in the prose and refused to hand-write a `parked[]` it
+could not verify. A rule holding under a failure it was never tested against. → `11` (Phase 6 residual), `07`.
+
+## D152 — `returns` MEANS credential: the `sensitive` marker is deleted, not defaulted — and the request side stops accepting the reply's fields **[BUILT 2026-08-02 — both D148 open questions CLOSED by the maintainer; the leak reproduced with a canary before anything was changed]**
+D148 left two questions open. Both are answered, and the first is the one with teeth.
+
+**Call 1 — split the field (option C).** One composer-supplied `sensitive` boolean was the **sole trigger for three
+protections at once**: redaction out of the surface the orchestrator reads, eligibility for `drain.py secret` (which
+shreds and stores), and therefore whether the value was ever removed from the inbox. A **fully conforming** entry
+that merely omitted it was printed **verbatim, key and value** — reproduced with a canary before any change, and
+confirmed refused by `secret` and therefore never shredded. One nuance the original write-up did not have:
+redaction is **all-or-nothing per message**, so an unmarked entry riding beside a marked one was protected by
+accident; the exposure is exactly a message where *nothing* is marked. `returns` now **means credential** and the
+marker is **gone**: `_is_sensitive` is structural (a non-empty `returns` is a credential), so no producer can forget
+to protect a value. `artifacts` is the declared non-credential half — same name-keyed shape, validated just as
+strictly, never redacted, never stored. **It has no shipped producer and `schemas.md` says so plainly**, because a
+field specified as if it works while nothing can emit it is the exact defect that made the old shape a coin toss
+(D147). A composer still sending `sensitive` gets a `400` naming the field and pointing at `artifacts` — that names
+a **schema** key, never a credential name or value, so the no-echo discipline the ordinals exist for still holds.
+*Rejected — invert the default (sensitive unless marked `false`):* strictly better failure direction and two lines,
+but it keeps one composer boolean as the sole gate, which is the thing being questioned, and it forces the
+annotation onto the common benign case. *Rejected — redact everything and let the marker drive only routing:* the
+orchestrator legitimately needs benign values to act on, so it would need a verb that prints them — the same
+exposure under another name. **The governing reason is this project's own most-repeated lesson (D129, and again in
+D142/D144/D145/D147 and D150 today): derive the protection from the artifact's shape, never from a signal somebody
+had to remember to send.** A composer-supplied boolean *is* the missing signal restored.
+
+**Call 2 — the request side refuses the reply's fields, and nothing more (option B).** `bus.py park` accepted
+`outcome: null`, a reply-side `returns` **carrying a value**, an invented task field and an invented top-level key,
+all persisted — while `check_returns` `400`s the reply on one unknown entry key. `park` now refuses **`outcome` and
+`returns` on a request task** and stays permissive about everything else. `outcome` was decided in D148 and never
+built; the live record's came from a `/rebind` hand-reconstruction copying the reply half, and it reads to a later
+human as though the question were already answered. **`returns` is the sharper of the two:** it carries a VALUE, the
+whole `request` is handed to the console on every poll, and nothing on the request path ever runs it through
+`check_returns` — so a credential pasted onto a request would reach the browser having passed no boundary at all.
+*Rejected — full symmetry (declare `request`, reject every unknown):* tidiest and defensible, but **a park that
+hard-fails is a checkpoint that never opens** — the machine's own way of asking for help — which is a worse failure
+than an extra field. The asymmetry is principled, not lazy: the reply crosses a trust boundary from a human or a
+browser; the request is composed by the loop itself. That trust simply does not extend to fields belonging to the
+other side of the exchange. → `07` (both entries closed), `product/shared/schemas.md`,
+`product/scripts/{bus.py,drain.py,test_bus.py,test_drain.py}`.
+
+## D153 — the console's last two human-facing defects: an override that was offered but never wired, and machine timestamps aimed at a human **[BUILT 2026-08-02 — D149's residual CLOSED by the maintainer's own click; the regression test was checked against the unfixed source before being trusted]**
+**The defect — "answer again" led nowhere, and only a human could find it.** `renderCheckpoints` attached the
+send-button click handler **after** the `if (cp.answered_at)` branch, and that branch ends in `return`. So an
+answered card **never got one**: "answer again" dutifully un-hid the form and re-enabled every control, then handed
+back a button bound to nothing. Clicking it did nothing, forever; a reload re-read the still-answered server state
+and closed the form again, which reads as *"my answer will not send"*. D149 made the override **real** on the server
+and gated it correctly in the page — the one missing piece was the wire between the button and the POST. The handler
+now attaches before the answered branch, which is safe precisely because that branch immediately **disables** the
+button, so it cannot fire until re-answering is deliberately chosen.
+
+**This is the fourth defect in a row that a passing assertion hid.** D149's tests asserted `disabled === false` after
+the re-answer click and **passed** — because *"the button is enabled"* and *"the button does anything"* are different
+facts, exactly as *"the attribute is set"* and *"the page obeys it"* were. The new test drives the **real shipped
+`renderCheckpoints`** through node over a DOM shim and asks the second question, and it was **verified against
+HEAD's unfixed source, where it reports `sendListeners: 0`** — a regression test that has never failed on the bug it
+names is not evidence.
+
+**Call — deadlines and answer stamps render as a DURATION, with the instant on `title`.** `OVERDUE —
+2026-08-01T19:09:35.930246+00:00` made a human subtract two timestamps in their head to learn the only thing they
+wanted, which is *how late*. Now `overdue by 18h` / `due in 24h` / `answered 6m ago`, with the exact microsecond ISO
+one hover away (verified present in the rendered DOM, not merely set in code). **Computed client-side deliberately:**
+a server-rendered relative string would either change every second and destroy the snapshot's `ETag`/304, or go
+stale between polls. The server keeps ownership of the `overdue` **decision** — only the wording is derived — and a
+skewed client loses to the flag rather than printing a number contradicting the badge beside it.
+
+*Evidence:* the supersede proven by the maintainer's own hands, which is what D149's residual required — click →
+retype → send, then a whole-tree audit (`find -exec grep`, because this shell's `grep` honours `.gitignore` and
+would silently skip `.workflow/`): **exactly one** file in the entire bed carries the new canary, the first canary
+appears in **zero**, the message id moved, and the surviving entry's fields are `['value']` — the D152 shape,
+emitted by the fixed form. → `11`, `product/scripts/{bus.py,test_bus.py}`.
+
+## D154 — "edit the spec, then regenerate" gets a floor: a refine round must MOVE THE SPEC, because approve deletes the only other copy **[BUILT 2026-08-02 — found by driving a real refine round; closes the refine cap's missing enforcement in the same place]**
+Driving a real `changes` → refine → `approve` cycle with a live orchestrator exposed a rule that was prose with
+nothing behind it. `create-demo` says a `changes` verdict **edits the spec first and regenerates the bundle from
+it**. The drive regenerated the bundle and never touched the spec — and the orchestrator itself flagged the gap.
+
+**Why this is severe rather than untidy: the terminal `approve` DELETES the bundle.** A decision that reached only
+the demo bytes is therefore destroyed **at the exact moment it is approved**, leaving a locked spec that never
+learned it. The human said yes to something that no longer exists anywhere, and the durable artifact is confidently
+wrong. Silent, permanent, and precisely the decision the checkpoint existed to capture. (Concretely: the maintainer
+asked for "a unique icon beside every speaker name", approved it, and the spec would have locked with no mention of
+icons.)
+
+**Call — the refine ledger records the spec each round was generated FROM, and `check_demo_bundle.py` enforces it.**
+`.refine.json` grows from `{round: N}` to `{ round, rounds: [{ round, spec_ref: { path, sha256 }, note? }] }`, and
+the lint — which already runs before every park — refuses a round whose `spec_ref` is missing, whose **latest** hash
+does not match the spec on disk, or **whose hash is unchanged from the previous round**. That last one is the actual
+rule: a regeneration that did not move the spec is refused. The hash is chosen precisely because it is **the one
+thing a producer cannot satisfy by remembering to set a flag** — the same reasoning that retired the `sensitive`
+marker in D152. Only the latest round is pinned to current bytes; earlier rounds legitimately describe superseded
+revisions, and requiring all of them to match would make every later edit retroactively invalidate the history.
+`spec_ref.path` is repo-relative because **a brownfield project's adopted spec is not `docs/spec.md`** (the drive bed
+carries `docs/product_specs.md`, per D39/D50/D130's never-clobber rule).
+*Rejected — strengthen the prose:* prose is exactly what failed. *Rejected — a self-reported `spec_updated: true`
+flag:* a boolean the composer sets is the D152 marker wearing a different hat.
+
+**The same change closes a finding surfaced during the D150 drive:** `config.demo.max_refine_rounds` lived in
+`schemas.md` and `create-demo/SKILL.md` and **no code read it**, so the circuit-breaker depended on a model
+remembering to increment a counter and compare it. The lint now refuses a `round` over the cap and names the
+escalation (`discuss`), and an unreadable or malformed ledger **blocks** rather than passing quietly.
+`.refine.json` also gains a `schemas.md` owner — it was a live on-disk artifact with no declared shape, which is the
+same class of gap D147 was about.
+
+*Evidence:* 11 new lint tests including the exact defect (a round that did not move the spec), the superseded-revision
+case, the cap with a configured and a defaulted value, and junk config falling back rather than crashing. The
+approved icon decision was folded into the drive bed's real adopted spec before the lock, which is what the recovery
+looks like when this fires. → `04`, `11`, `product/shared/schemas.md`,
+`product/skills/{create-demo,checkpoint}/SKILL.md`, `product/scripts/{check_demo_bundle.py,test_check_demo_bundle.py}`.

@@ -34,16 +34,26 @@ The visual/behavioural slice of the `spec`.
 3. Surface it via `checkpoint` (kind=demo); the checkpoint record carries the demo path. The bus daemon
    serves the bundle under a **`sandbox`-directive CSP opaque origin** beside the verdict form — **demo = look,
    form = verdict** (the demo is read-only, no POST, no token).
-4. On "change X": edit the **spec**, then **regenerate in place** — never hand-edit the demo (re-run the lint,
-   step 2a). Repeat until approved, **capped at `config.demo.max_refine_rounds` (default 3) regenerations**,
-   **counted plainly** (a circuit-breaker, not a fairness meter). At the cap, **do not auto-proceed** —
-   **escalate to a live `discuss` session**, carrying the refine history.
-   - **The count has a durable home:** `.workflow/demos/<item-id>/.refine.json` (`{ round: N }`) — inside the
-     bundle dir (a dotfile, so the daemon never serves it), read-and-incremented on each regeneration. The refine
-     loop spans park → resume → possibly a fresh relaunched session, and nothing accumulates in the orchestrator's
-     context across those, so the count **cannot** live in memory or the parked record (deleted on resolve): it
-     lives on disk beside the bundle, whose lifetime is exactly the refine loop (pruned only on terminal resolve).
-     Read it back each round; escalate when it would exceed the cap.
+4. On "change X": **edit the `spec` FIRST, then regenerate the bundle FROM it** — never hand-edit the demo, and
+   never regenerate without moving the spec (re-run the lint, step 2a). Repeat until approved, **capped at
+   `config.demo.max_refine_rounds` (default 3) regenerations**, **counted plainly** (a circuit-breaker, not a
+   fairness meter). At the cap, **do not auto-proceed** — **escalate to a live `discuss` session**, carrying the
+   refine history.
+   - **Spec first is not bookkeeping — it is the only durable copy.** A terminal `approve` **deletes the bundle**
+     (step 3 of `checkpoint`'s demo route). A decision that lives only in the demo bytes is therefore destroyed at
+     the exact moment it is approved, leaving a locked spec that never learned it. The human said yes to something
+     that no longer exists anywhere.
+   - **The ledger has a durable home:** `.workflow/demos/<item-id>/.refine.json` — inside the bundle dir (a dotfile,
+     so the daemon never serves it), read-and-incremented on each regeneration. The refine loop spans park → resume
+     → possibly a fresh relaunched session, and nothing accumulates in the orchestrator's context across those, so
+     the count **cannot** live in memory or the parked record (deleted on resolve): it lives on disk beside the
+     bundle, whose lifetime is exactly the refine loop. Its shape is declared in `shared/schemas.md`:
+     `{ round: N, rounds: [{ round, spec_ref: { path, sha256 }, note? }] }` — each round naming the spec file it was
+     regenerated **from** and that file's hash at the time.
+   - **`check_demo_bundle.py` enforces both**, so neither is a promise: it refuses a round whose `spec_ref` is
+     missing, whose latest hash does not match the spec on disk, or **whose hash is unchanged from the previous
+     round** (a regeneration that did not move the spec), and it refuses a `round` over the cap. Run it before every
+     park — the same call as step 2a.
 
 ## Sandbox format
 - **Self-contained, no external hosts, no `eval`** — every asset local; renders identically local and over the

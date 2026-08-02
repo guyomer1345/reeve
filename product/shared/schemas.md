@@ -297,6 +297,21 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
   *message* dedups here; an external side-effect with no natural idempotency — `issue-create` — carries its own
   key on the outbox entry.)
 
+## refine-ledger  · written by `create-demo` on every regeneration, enforced by `check_demo_bundle.py` · *`.workflow/demos/<item-id>/.refine.json`; RUNTIME, gitignored, lives and dies with its bundle; a dotfile so the daemon never serves it*
+- `{ round: N, rounds: [{ round, spec_ref: { path, sha256 }, note? }] }` — `round` is the count of regenerations
+  (the circuit-breaker against `config.demo.max_refine_rounds`), and `rounds[]` holds one entry per round.
+  **`spec_ref` names the spec file that round was regenerated FROM, and its `sha256` at that moment** (`path` is
+  repo-relative — a brownfield project's adopted spec is not `docs/spec.md`). `note` is the human's verdict note
+  that drove the round, kept for the escalation's refine history.
+- **Why the hash and not just a counter.** `create-demo` says a `changes` verdict edits the **spec** first and
+  regenerates from it, and that was prose with nothing behind it. A terminal `approve` **deletes the bundle**, so a
+  decision that reached only the demo bytes is destroyed at the moment it is approved and the locked spec never
+  learns it — silent, permanent, and precisely the decision the checkpoint existed to capture. The hash is what a
+  producer cannot satisfy by remembering to set a flag: `check_demo_bundle.py` refuses a round whose latest
+  `spec_ref.sha256` does not match the file on disk, and one whose hash is **unchanged from the previous round**.
+  Only the latest round is pinned to current bytes — earlier rounds legitimately describe superseded revisions.
+- The lint also refuses `round` over the cap, so the cap stops being a number two documents state and no code reads.
+
 ## outbox / pending-outward-action  · written by the orchestrator when a skill defers an outward action, cleared by the `release` consumer · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, single-writer (orchestrator), kept on a native filesystem; read by the bus to render the console's release panel; the mirror of the bus-owned `inbox/`*
 The **transactional-outbox** queue behind the "never stalls — queue the outward action, one approval releases a
 batch" rule. An outward action (`push`, `issue-create`, `issue-close`, later `deploy` / `send`) is **not** a

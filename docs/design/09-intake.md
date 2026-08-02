@@ -122,8 +122,11 @@ model, and corrected two things below.
   serving class**, token-free, Host-gated; `05`). The **away human** reaches it for free over the **reduced remote
   socket** (D112): a `demo` verdict is an *opinion* (no payload), so submitting it remotely is in-scope. That
   surface needs a **declared identity transport**; with none, the demo is loopback-only like everything else.
-- **Refine cap (D103), with a durable home (D124):** the change-request → regenerate mini-loop is bounded at **N
-  regenerations** (config-overridable `config.demo.max_refine_rounds`, **default 3**), counted plainly. On the cap
+- **Refine cap (D103), with a durable home (D124) and a mechanical floor (D154):** the change-request → regenerate
+  mini-loop is bounded at **N regenerations** (config-overridable `config.demo.max_refine_rounds`, **default 3**),
+  counted plainly — and since D154 `check_demo_bundle.py` **enforces** both the cap and the rule that each round
+  edited the **spec** first (the ledger records the spec's hash per round; an unchanged hash is refused). Before
+  that, the cap was a number two documents stated and no code read. On the cap
   it **never auto-proceeds** (D97) — it **escalates to a live `discuss` session** (a low-bandwidth async channel
   that won't converge *is* the signal the gap needs high-bandwidth conversation — D93), carrying the refine
   history. The count spans park → resume → a possibly-relaunched session and the loop is stateless glue

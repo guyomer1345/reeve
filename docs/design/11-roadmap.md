@@ -162,7 +162,14 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   CSP), and sharpened the design: the `sandbox` CSP enforces *isolation*, not the format discipline (a shipped
   `check_demo_bundle.py` lint does that); the refine count lives at `demos/<id>/.refine.json`; the bundle is pruned
   on terminal resolve by the verdict-apply path with retention's `prune_demos` as the backstop; `os.replace` is
-  content-atomic on 9p (a transient open blip self-heals via a read-retry). (`09`.) **[DONE — built]**
+  content-atomic on 9p (a transient open blip self-heals via a read-retry). (`09`.)
+  **DRIVEN 2026-08-02 (D150)** — the first runtime validation, which found the demo had never rendered at all: the
+  opaque origin makes every subresource `Sec-Fetch-Site: cross-site` and the CSRF gate refused them, so any bundle
+  with a sibling file was silently blank. Fixed; isolation re-verified in a browser; the `kind:demo` card, the
+  refine round and the terminal prune all exercised. **D154** then put a mechanical floor under "edit the spec
+  first, then regenerate" — a refine round that did not move the spec is now refused, because the terminal
+  `approve` deletes the bundle and a decision living only in those bytes dies exactly when it is approved.
+  **[DONE — built + DRIVEN]**
 - **Checkpoint data model + triggers** — **DONE (D96–D98):** the judgment/action taxonomy + trigger rule (setup =
   spec `integrations[]` + execute-discovered; qa=D30, demo=D22 gate, reconcile=ingest), the verb-enum verdict +
   plural machine-verified setup gate, and the MVP help set (contextual steps + verified deep-links + breadcrumbs;
@@ -271,7 +278,8 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   installs · regenerate `[G]`/never clobber `[D]`-or-adopted · additive over a pre-existing `.claude/`); the
   version-stamp half is BUILT and the **design is SETTLED (D137)**; **BUILT (D139)** — a fixed reconcile runner
   (`update_reconcile.py`) owns the arithmetic, `commands/update.md` the judgment, and `install-set.json` makes an
-  orphan provable. **[core — promoted (D135); designed (D137); BUILT (D139) — unexercised on a real target]**
+  orphan provable. **[core — promoted (D135); designed (D137); BUILT (D139); DRIVEN on the real `idea testing`
+  install (D143) — that run shipped three package fixes and is what discharged this]**
 - **Onboarding-experience hardening (D131–D134) — user-lived, decided + BUILT 2026-07-21:** the first real
   brownfield onboarding "performed the task but the process wasn't what it should be" — one-motion `/start` (D131) ·
   console front-door + stated interaction contract (D132) · bootstrap progress signal (D133) · bootstrap context
@@ -361,7 +369,8 @@ The website+demo design decomposes into five clusters; the dependency spine is *
   under a `sandbox`-directive CSP opaque origin + iframe-sandbox (isolated even top-level); demo = look, console =
   verdict form; joins the daemon's static-asset (token-free) serving class; rides the remote surface for free (D112).
   **D2 refine cap (D103):** ≤3 regenerations (`config.demo.max_refine_rounds`), never auto-proceed → escalate to
-  live `discuss`. **D3 on-disk (D104):** `.workflow/demos/<item-id>/`, gitignored runtime, pruned on resolve.
+  live `discuss` — **enforced by `check_demo_bundle.py` since D154**, where a refine round must also be shown to
+  have MOVED THE SPEC. **D3 on-disk (D104):** `.workflow/demos/<item-id>/`, gitignored runtime, pruned on resolve.
 - **E — cross-cutting. CLOSED (D105–D107).** **E2 outward-action permission model (D105):** a **transactional-outbox**
   queue (`.workflow/outbox/`, retiring the D60 `checkpoints/`) — **not** a checkpoint (an outward action never parks
   the ticket); `guard.sh` floor + a coarse `config.outward` allow|ask allowlist; the loop defers + continues, a
@@ -523,7 +532,11 @@ derive from the artifact, never restore the missing signal** that made the defea
 only by re-driving on the real tree (the fix that passes the genuine model-produced commit off the staged diff while
 blocking the drift vectors is not one a re-read would have trusted). **Drive them on the real filesystem, with a real
 model — and fix them fail-closed.**)*
-**Phase 4 — BUILD-COMPLETE (not yet runtime-validated).** The demo (Space 4) is **built (D124)** and the
+**Phase 4 — DRIVEN 2026-08-02 (D150).** The demo's first runtime validation found that it had never rendered
+because it structurally *could not*: the `sandbox`-CSP opaque origin makes every subresource read `cross-site`, and
+the CSRF gate refused them, so any bundle with a sibling file was silently blank. Fixed, isolation re-verified in a
+browser, and the whole lifecycle (card → refine → terminal prune) exercised. **D154** then gave `create-demo`'s
+"edit the spec first" rule a mechanical floor. Historical framing follows. The demo (Space 4) is **built (D124)** and the
 **public-release surface is built (D125)**: one transparent repo, `product/` as the plugin root,
 `product/MANIFEST.json` as the single ship boundary, the construction record reframed into `docs/design/`, a product
 front-door `README.md`, and the skill `description:` user-language pass. But the MVP is **not yet release-ready**: a
@@ -549,7 +562,7 @@ packaging, the state-view, **and the D84 skill→agent reclassification** (`exec
 longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 
-### Phase 6 — Onboarding-experience hardening (D131–D139) — **COMPLETE: D131–D136 BUILT + RE-DRIVEN (D138); `/update` BUILT (D139). Residual: the D136 governor's cycle is still unexercised.**
+### Phase 6 — Onboarding-experience hardening (D131–D139) — **COMPLETE: D131–D136 BUILT + RE-DRIVEN (D138); `/update` BUILT (D139). The governor-cycle residual is DISCHARGED (D151) — no residual remains.**
 Born from the first **lived** onboarding — the maintainer's real brownfield run on `idea testing` (WSL over
 `/mnt/c`, 2026-07-20). The *process* held (D130's correctness stood: full bootstrap → ingest → reconcile → a real
 feature item landed and parked cleanly), but the *experience* failed: the motion split into two chats at the
@@ -602,7 +615,7 @@ lifecycle.
   `scripts/statusline.py` (composes over a `/start`-captured `statusline.delegate`, never clobbers), `commands/dispatch.md`,
   `hooks/session_start.py` (SessionStart `clear` → re-inject `handoff.md`), `hooks/precompact.py` (both `manual`+`auto`,
   never blocks); `config.context.warn_pct` + `statusline.delegate` own their `schemas.md`; 20 governor tests + full
-  321-test suite + 5 meta-gates green. **[ctx — BUILT (D136); installed + rendering, but the /dispatch→/clear→rehydrate CYCLE stays UNEXERCISED — the banner never fired in the D138 re-drive because the context law kept the window lean]**
+  321-test suite + 5 meta-gates green. **[ctx — BUILT (D136); CYCLE DRIVEN 2026-08-02 (D151) — banner → `/dispatch` (a real `claude -p`; both machine blocks preserved byte for byte) → `SessionStart(clear)` rehydrate → a fresh session resumed from the anchor alone and carried a decision that had existed only in the pre-clear conversation]**
 
 **Sequence (set 2026-07-26) — COMPLETE.** Build the governor (D136) **[BUILT 2026-07-26]** → forced-reinstall the
 plugin to HEAD (a version-pinned `update` is a no-op — verify `gitCommitSha` == HEAD) → **one clean re-drive on a
@@ -702,8 +715,9 @@ meta-gate leak, the `architecture.md` case-insensitive clobber, and an `ingest` 
 fixes were decided + built, then its exit test **ran** — the re-drive (D138) confirmed D131–D134 by driving on a
 pristine brownfield fixture and found one high-severity integration bug (a D133↔D129 collision that blocked every
 brownfield bootstrap commit), and `/update` was designed (D137) then **built** (D139). Two residuals leave the
-phase: the D136 governor's `/dispatch → /clear → rehydrate` **cycle is still unexercised** (the banner never fired —
-the context law kept the window too lean to trip it), and ~~`/update` has never run against a real install~~ —
+phase: ~~the D136 governor's `/dispatch → /clear → rehydrate` **cycle is still unexercised**~~ (the banner never
+fired — the context law kept the window too lean to trip it) — **DISCHARGED by D151**, which forced it and drove the
+whole cycle, ending with a cleared session resuming from the anchor alone; and ~~`/update` has never run against a real install~~ —
 **that second one is DISCHARGED by D143**, which ran it on `idea testing`, the real machine-move casualty, and shipped
 three package fixes out of it (`idea testing@8e03d1e`). *It sat here stale for six decisions: the residual was written
 into the OWNER of what's-left, discharged elsewhere, and never repointed — the exact drift D80 exists to stop. The

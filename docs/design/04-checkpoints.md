@@ -65,11 +65,18 @@ Declared upstream wherever the intent lives, with setup's one exception:
 ## Verdict + the setup lifecycle (the data model) **[DECIDED — D97]**
 - **Verdict is a verb-enum, not a boolean:** `{ outcome: approve|changes|reject, notes, returns? }` (`pass` ≡
   approve). Routing keys off `outcome` per kind (see `shared/schemas.md` / `skills/checkpoint`).
-  **`returns` is a declared name-keyed map — `{ "<KEY_NAME>": { value, sensitive?: true } }` (D147)**, the key
+  **`returns` is a declared name-keyed map — `{ "<KEY_NAME>": { value } }` (D147, shape narrowed by D152)**, the key
   being the credential's own name so a returned secret is matchable against the declared set without a second
   identifier to get wrong; task identity lives at `tasks[].id`. The bus `400`s any other shape. *It was an open
   payload until D147, which meant the declared-secret diff downstream was matching against a structure nobody had
   defined — and in the shape actually produced, never matching at all.*
+  **`returns` MEANS credential (D152)** — there is no `sensitive` marker. It was composer-supplied and was the sole
+  trigger for redaction, shredding and storage at once, so a conforming entry that omitted it was printed verbatim
+  and never stored; protection now comes from the field, which no producer can forget to set. A non-credential value
+  the task hands back goes in **`artifacts`** — same shape, validated as strictly, never redacted, never stored (and
+  with no shipped producer: the console form renders only declared `secrets[]` names, which mean credential).
+  On the **request** side, `park` refuses the reply's own fields (`outcome`, `returns`) on a task and stays
+  permissive otherwise — a park that hard-fails is a checkpoint that never opens.
 - **Setup is machine-verified on resume** — "done" unblocks the agent to *probe the key/webhook actually works*
   before proceeding; a failed probe re-guides. Setup is the one kind whose human verdict is an input to a `verify`,
   not the terminal signal.
