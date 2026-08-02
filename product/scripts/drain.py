@@ -166,32 +166,41 @@ def cmd_list(paths, args):
 
 
 def _sensitive(body):
+    """Does this message carry a credential? Answered by SHAPE, not by a marker.
+
+    This used to walk the payload looking for a `sensitive: true` a composer had to
+    remember to set — one boolean gating redaction, the shred/store path, and removal
+    from the inbox, all three at once. An entry that conformed perfectly but omitted it
+    was printed verbatim into the orchestrator's context and never stored. `returns` now
+    MEANS credential, so a non-empty one is the whole answer and no producer can forget
+    to say so. `artifacts` is the declared non-credential field and is deliberately NOT
+    consulted here — it is meant to be readable.
+    """
     v = body.get("verdict")
     if not isinstance(v, dict):
         return False
-    if _marked(v.get("returns")):
+    if _has_returns(v):
         return True
-    return any(_marked(t.get("returns")) for t in (v.get("tasks") or [])
-               if isinstance(t, dict))
+    return any(_has_returns(t) for t in (v.get("tasks") or []) if isinstance(t, dict))
 
 
-def _marked(returns):
-    if isinstance(returns, dict):
-        return bool(returns.get("sensitive")) or any(_marked(x) for x in returns.values())
-    if isinstance(returns, list):
-        return any(_marked(x) for x in returns)
-    return False
+def _has_returns(obj):
+    r = obj.get("returns")
+    return isinstance(r, dict) and bool(r)
 
 
 def _redact(body):
+    """Blank every `returns`, and leave `artifacts` alone — that is the point of the
+    split. A benign value the orchestrator needs to act on (a webhook URL, a project id)
+    stays readable; a credential never is."""
     out = json.loads(json.dumps(body))  # cheap deep copy of plain JSON
     v = out.get("verdict")
     if isinstance(v, dict):
         if v.get("returns") is not None:
-            v["returns"] = "<redacted — sensitive>"
+            v["returns"] = "<redacted — credential>"
         for t in v.get("tasks") or []:
             if isinstance(t, dict) and t.get("returns") is not None:
-                t["returns"] = "<redacted — sensitive>"
+                t["returns"] = "<redacted — credential>"
     return out
 
 
@@ -267,7 +276,8 @@ def cmd_secret(paths, args):
     if not isinstance(body, dict):
         raise SystemExit("cannot read %s" % src)
     if not _sensitive(body):
-        raise SystemExit("%s carries no value marked sensitive — apply it normally" % mid)
+        raise SystemExit("%s carries no `returns` — it hands back no credential, so "
+                         "apply it normally" % mid)
 
     v = body.get("verdict") or {}
     payload = {"token": body.get("token"), "message_id": mid, "stored_at": now_iso(),

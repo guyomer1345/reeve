@@ -136,19 +136,34 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
     console render a *labelled* input per credential instead of asking a human to hand-compose a payload, and it is
     the **source** `config.json`'s `secrets_required[]` accumulates from (that key is the running projection of every
     task's `secrets[]`, not a second declaration of the same fact).
+    **`bus.py park` refuses a request task carrying `outcome`** — that is the *reply's* field (see `verdict` below),
+    and a request wearing it reads to a later human as though the question had already been answered. The refusal is
+    deliberately narrow: other undeclared request fields are still accepted, because `park` is how the machine ASKS
+    for help and a park that hard-fails is a checkpoint that never opens — a worse failure than an extra field.
   - **`how` — `[{ step, url?, breadcrumb?, query? }]`**, the `setup-guide` return: one action per `step`, each with
     the verified deep-link and the still-findable fallback. Structured because the console **renders** it beside the
     form; a plain string is accepted and shown as text, so a guide written before this shape still displays.
-- `verdict` — `{ outcome: approve|changes|reject, notes, returns? }` (`pass` ≡ `outcome=approve`); a `kind=setup`
-  verdict replaces the single `outcome` with **`tasks[]` — `{ id, outcome, returns? }` per task**, so a mixed reply
-  routes each item on its own (`id` matches the `request.tasks[]` id).
-- **`returns` is a NAME-KEYED MAP — `{ "<KEY_NAME>": { value, sensitive?: true } }`** — and this shape is
-  **declared, not open**. The key **is** the credential's name, which is what makes a returned secret matchable
-  against the declared set without a second identifier to get wrong; task identity already lives at `tasks[].id`, so
-  `returns` never carries one. Multiple credentials from one task are simply more keys. A non-credential artifact (a
-  webhook URL, a project id) is the same entry without `sensitive`. **The bus rejects any other shape at
-  `POST /api/verdict` with a `400`** — a payload that cannot be matched must fail loudly at the boundary rather than
-  reach the store and read later as total credential loss.
+- `verdict` — `{ outcome: approve|changes|reject, notes, returns?, artifacts? }` (`pass` ≡ `outcome=approve`); a
+  `kind=setup` verdict replaces the single `outcome` with **`tasks[]` — `{ id, outcome, returns?, artifacts? }` per
+  task**, so a mixed reply routes each item on its own (`id` matches the `request.tasks[]` id).
+- **`returns` is a NAME-KEYED MAP — `{ "<KEY_NAME>": { value } }` — and `returns` MEANS CREDENTIAL.** Every entry is
+  protected; there is nothing to mark. The key **is** the credential's name, which is what makes a returned secret
+  matchable against the declared set without a second identifier to get wrong; task identity already lives at
+  `tasks[].id`, so `returns` never carries one. Multiple credentials from one task are simply more keys.
+  **The bus rejects any other shape at `POST /api/verdict` with a `400`** — a payload that cannot be matched must
+  fail loudly at the boundary rather than reach the store and read later as total credential loss.
+- **`artifacts` is the non-credential half — the same `{ "<NAME>": { value } }` shape, never redacted, never stored.**
+  A webhook URL or a project id the task hands back goes here, and stays readable to the orchestrator that has to act
+  on it. It is validated exactly as strictly as `returns`: the only thing separating the two is which field a value
+  arrived in. *No shipped producer emits it* — the console's setup form renders one input per declared
+  `request.tasks[].secrets[]` name, and `secrets[]` means credential, so the form emits `returns` only; `artifacts`
+  is for a hand-composed or agent-composed reply.
+  - **Why the split, and why there is no `sensitive` marker.** There was one, and it was the *sole* trigger for three
+    protections at once — redaction out of the orchestrator's context, eligibility for the shred/store path, and
+    therefore whether the value was ever removed from the inbox. A **fully conforming** entry that simply omitted it
+    was printed verbatim, key and value, and never stored. Protection now comes from the FIELD, which no producer can
+    forget to set, rather than from a boolean somebody had to remember. A composer still sending `sensitive` gets a
+    `400` naming the field and pointing here.
   **Routing keys off `outcome`, per kind:**
   - **demo** — approve → lock the spec state · changes → `create-demo` (refine) · reject → `discuss`.
   - **qa** — approve → `document`/`commit` · reject → `debug` (`changes` ≡ reject here).

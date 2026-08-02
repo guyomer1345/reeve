@@ -288,8 +288,7 @@ class Drain(unittest.TestCase):
         self.msg(ID_A, "verdict", token="item-1:setup:x",
                  verdict={"outcome": "approve",
                           "returns": {"A_KEY": {
-                              "sensitive": True,
-                              "value": "canary-value-must-never-be-printed"}}})
+                                                            "value": "canary-value-must-never-be-printed"}}})
         out = drain.cmd_secret(self.paths, _Args(id=ID_A))
         self.assertFalse(os.path.exists(os.path.join(self.w, "inbox", ID_A + ".json")),
                          "the credential is still sitting on the durable inbox")
@@ -303,7 +302,7 @@ class Drain(unittest.TestCase):
     def test_secret_store_entry_is_0600(self):
         self.msg(ID_A, "verdict", token="t",
                  verdict={"outcome": "approve",
-                          "returns": {"A_KEY": {"sensitive": True, "value": "k"}}})
+                          "returns": {"A_KEY": {"value": "k"}}})
         out = drain.cmd_secret(self.paths, _Args(id=ID_A))
         self.assertIsNone(bus.verify_mode(out["stored"], 0o600), out.get("warning"))
 
@@ -311,8 +310,7 @@ class Drain(unittest.TestCase):
         self.msg(ID_A, "verdict", token="t",
                  verdict={"outcome": "approve",
                           "returns": {"A_KEY": {
-                              "sensitive": True,
-                              "value": "canary-value-must-never-be-printed"}}})
+                                                            "value": "canary-value-must-never-be-printed"}}})
         out = drain.cmd_list(self.paths, None)
         self.assertTrue(out["pending"][0]["sensitive"])
         self.assertNotIn("canary-value-must-never-be-printed", json.dumps(out),
@@ -329,7 +327,7 @@ class Drain(unittest.TestCase):
         """
         self.msg(ID_A, "verdict", token="item-1:setup:x", verdict={"tasks": [
             {"id": "runpod-credentials", "outcome": "approve", "returns": {
-                "IVRIT_RUNPOD_API_KEY": {"value": "sk_live_x", "sensitive": True}}}]})
+                "IVRIT_RUNPOD_API_KEY": {"value": "sk_live_x"}}}]})
         out = drain.cmd_secret(self.paths, _Args(id=ID_A))
         found, unreadable = rebind.present_secrets(os.path.dirname(out["stored"]))
         self.assertIn("IVRIT_RUNPOD_API_KEY", found)

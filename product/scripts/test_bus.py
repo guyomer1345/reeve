@@ -979,6 +979,33 @@ class DemoServing(LiveServer):
         # Token-free is not Host-free: a rebound page must not reach it either.
         self.assertEqual(self.get("/demo/item-42/", host="evil.com")[0], 403)
 
+    def test_subresources_survive_the_opaque_origins_cross_site_label(self):
+        """The regression that made every multi-file demo render BLANK.
+
+        DEMO_CSP's `sandbox` directive forces an opaque origin, and an opaque origin is
+        not same-site with anything — so a real browser labels every subresource of the
+        demo document `Sec-Fetch-Site: cross-site`. MEASURED in Chrome: the navigation
+        arrives `none`, then `style.css` and `app.js` both arrive `cross-site`/`no-cors`.
+        The site gate refused exactly those, so `index.html` rendered and its siblings
+        404'd — a silently unstyled, scriptless page. Every pre-existing demo test sent
+        NO Sec-Fetch-Site at all, which is why the whole class passed while the browser
+        showed a blank demo.
+        """
+        for path in ("/demo/item-42/", "/demo/item-42/app.js"):
+            code, body, _ = self.get(path, extra={"Sec-Fetch-Site": "cross-site"})
+            self.assertEqual(code, 200, path)
+            self.assertTrue(body, path)
+        # `same-site` is the other value the gate refuses; a framed demo asset can carry
+        # it too, so it must not be the difference between rendering and blank either.
+        self.assertEqual(
+            self.get("/demo/item-42/app.js", extra={"Sec-Fetch-Site": "same-site"})[0], 200)
+
+    def test_dropping_the_site_gate_is_scoped_to_the_demo_class(self):
+        """The exemption is the demo's alone — everything else still fails closed."""
+        for path in ("/", "/api/state", "/health"):
+            self.assertEqual(
+                self.get(path, extra={"Sec-Fetch-Site": "cross-site"})[0], 403, path)
+
     def test_dotfiles_are_never_served(self):
         # create-demo keeps the refine-round counter here; it (and any stray .git) must
         # not be servable even though it lives inside the bundle dir.
@@ -1132,6 +1159,43 @@ class Parking(Tmp):
         self.assertEqual(os.path.dirname(res["record"]),
                          os.path.join(native, "parked"))
         self.assertFalse(os.path.exists(os.path.join(self.w, "parked", "item-1.json")))
+
+    def _setup_park(self, task):
+        return a_park(kind="setup", checkpoint={
+            "kind": "setup",
+            "request": {"kind": "setup", "what": "hand back the key", "blocking": True,
+                        "tasks": [task]}})
+
+    def test_a_reply_side_outcome_on_a_request_task_is_refused(self):
+        """`schemas.md` declares a request task `{id, what, secrets?[]}` and the VERDICT
+        `{id, outcome, returns?}`. Nothing in the package writes `outcome` on a request —
+        the live install's came from a hand-reconstruction that copied the reply shape,
+        and it reads to a later human as though the question were already answered."""
+        with self.assertRaises(bus.Invalid) as cm:
+            bus.write_park(self.paths, self._setup_park(
+                {"id": "t1", "what": "do it", "outcome": None}))
+        self.assertIn("reply-side", str(cm.exception))
+        self.assertIn("outcome", str(cm.exception))
+        # Refused at the boundary means NOTHING was persisted — not a record that then
+        # has to be cleaned up by whoever notices.
+        self.assertFalse(os.path.exists(
+            os.path.join(self.paths.parked, "item-1.json")))
+
+    def test_a_conforming_request_task_still_parks(self):
+        """The refusal is narrow: the declared request-task shape is untouched, and so
+        is every kind that carries no `tasks[]` at all."""
+        res = bus.write_park(self.paths, self._setup_park(
+            {"id": "t1", "what": "do it", "secrets": ["A_KEY"]}))
+        self.assertEqual(res["kind"], "setup")
+        self.assertTrue(os.path.exists(res["record"]))
+
+    def test_other_undeclared_request_fields_are_still_accepted(self):
+        """Deliberately NOT a general strictness pass. `park` is how the machine asks a
+        human for help, and a park that hard-fails is a checkpoint that never opens —
+        a strictly worse failure than an extra field."""
+        res = bus.write_park(self.paths, self._setup_park(
+            {"id": "t1", "what": "do it", "invented_field": "kept"}))
+        self.assertTrue(os.path.exists(res["record"]))
 
     def test_the_record_is_written_0600(self):
         res = bus.write_park(self.paths, a_park(kind="setup"))
@@ -1425,7 +1489,7 @@ class AnsweredStamp(Tmp):
     def _verdict(self, token, note, value):
         return {"token": token, "kind": "verdict", "verdict": {
             "notes": note, "tasks": [{"id": "t", "outcome": "approve", "returns": {
-                "K": {"value": value, "sensitive": True}}}]}}
+                "K": {"value": value}}}]}}
 
     def _put(self, mid, token, note, value):
         p = os.path.join(self.paths.inbox, mid + ".json")
@@ -2076,17 +2140,30 @@ class RemotePayloadBoundary(unittest.TestCase):
     def test_any_returns_key_is_a_payload(self):
         self.assertTrue(bus.remote_carries_payload(
             {"verdict": {"outcome": "approve",
-                         "returns": {"API_KEY": {"value": "sk-live-x",
-                                                 "sensitive": True}}}}))
+                         "returns": {"API_KEY": {"value": "sk-live-x"}}}}))
 
-    def test_even_a_returns_that_is_not_flagged_sensitive_is_a_payload(self):
-        # A non-credential artifact (a project id) is the declared shape minus the
-        # marker. _is_sensitive MISSES it; the structural gate does not — presence of
-        # the key is enough, which is exactly why the boundary is not that heuristic.
-        body = {"verdict": {"outcome": "approve",
-                            "returns": {"PROJECT_ID": {"value": "not-marked"}}}}
-        self.assertFalse(bus._is_sensitive(body["verdict"]["returns"]))
-        self.assertTrue(bus.remote_carries_payload(body))
+    def test_the_structural_gate_and_is_sensitive_now_agree(self):
+        """This test used to assert they DISAGREED, and that disagreement was the bug.
+
+        `returns` minus a `sensitive` marker was a fully conforming entry that
+        `_is_sensitive` returned False for — so the structural boundary caught it and
+        the redaction/store path did not. Splitting the field removed the marker
+        entirely: `returns` MEANS credential, so both now answer from the same fact.
+        A genuinely non-credential value is no longer "returns minus a marker" — it is
+        `artifacts`, which is not a credential payload at all.
+        """
+        creds = {"verdict": {"outcome": "approve",
+                             "returns": {"PROJECT_ID": {"value": "v"}}}}
+        self.assertTrue(bus._is_sensitive(creds["verdict"]["returns"]))
+        self.assertTrue(bus.remote_carries_payload(creds))
+
+    def test_artifacts_alone_is_not_a_credential(self):
+        """The other half of the split: a benign value must stay readable, and must not
+        be treated as a credential by either the boundary or the redactor."""
+        v = {"outcome": "approve", "artifacts": {"WEBHOOK_URL": {"value": "https://x"}}}
+        self.assertFalse(bus._is_sensitive(v.get("returns")))
+        _, sensitive = bus.validate("verdict", {"token": "t:1:u", "verdict": v})
+        self.assertFalse(sensitive)
 
     def test_the_setup_tasks_shape_is_a_payload(self):
         self.assertTrue(bus.remote_carries_payload(
@@ -2094,7 +2171,7 @@ class RemotePayloadBoundary(unittest.TestCase):
 
 
 class DeclaredReturnsShape(unittest.TestCase):
-    """`returns` is a name-keyed map — {"<KEY_NAME>": {value, sensitive?}} — and the bus
+    """`returns` is a name-keyed map — {"<KEY_NAME>": {value}} — and the bus
     refuses anything else. The shape used to be an open payload, which meant the
     declared-secret diff downstream was matching on a structure nobody had defined: in
     the shape that was actually produced, NOTHING ever matched, so a machine that lost
@@ -2106,7 +2183,7 @@ class DeclaredReturnsShape(unittest.TestCase):
 
     def test_the_declared_shape_is_accepted_and_marked_sensitive(self):
         clean, sensitive = self._v({"outcome": "approve", "returns": {
-            "POLAR_WEBHOOK_SECRET": {"value": "whsec_x", "sensitive": True}}})
+            "POLAR_WEBHOOK_SECRET": {"value": "whsec_x"}}})
         self.assertTrue(sensitive)
         self.assertEqual(clean["verdict"]["returns"]["POLAR_WEBHOOK_SECRET"]["value"],
                          "whsec_x")
@@ -2115,14 +2192,24 @@ class DeclaredReturnsShape(unittest.TestCase):
         _, sensitive = self._v({"outcome": "approve", "notes": "looks right"})
         self.assertFalse(sensitive)
 
-    def test_a_non_credential_artifact_needs_no_sensitive_marker(self):
+    def test_a_non_credential_artifact_now_belongs_in_artifacts(self):
+        """This test asserted the OPPOSITE, and the assertion was the hole.
+
+        "A non-credential artifact is the same entry without `sensitive`" made an
+        unmarked `returns` entry both fully conforming AND unprotected — printed
+        verbatim into the orchestrator's context and never stored. There is no unmarked
+        `returns` any more: the field itself carries the meaning, so an entry here is a
+        credential and a benign value has its own field."""
         _, sensitive = self._v({"outcome": "approve",
                                 "returns": {"PROJECT_ID": {"value": "proj_42"}}})
-        self.assertFalse(sensitive)
+        self.assertTrue(sensitive, "a `returns` entry is a credential by the field")
+        _, sensitive = self._v({"outcome": "approve",
+                                "artifacts": {"PROJECT_ID": {"value": "proj_42"}}})
+        self.assertFalse(sensitive, "`artifacts` is the benign half — never a credential")
 
     def test_multiple_credentials_from_one_task_are_just_more_keys(self):
         clean, _ = self._v({"tasks": [{"id": "runpod", "outcome": "approve", "returns": {
-            "IVRIT_RUNPOD_API_KEY": {"value": "a", "sensitive": True},
+            "IVRIT_RUNPOD_API_KEY": {"value": "a"},
             "IVRIT_RUNPOD_ENDPOINT": {"value": "b"}}}]})
         self.assertEqual(sorted(clean["verdict"]["tasks"][0]["returns"]),
                          ["IVRIT_RUNPOD_API_KEY", "IVRIT_RUNPOD_ENDPOINT"])
@@ -2133,6 +2220,34 @@ class DeclaredReturnsShape(unittest.TestCase):
         with self.assertRaises(bus.Invalid):
             self._v({"outcome": "approve", "returns": [
                 {"id": "runpod-credentials", "sensitive": True, "value": "sk_live_x"}]})
+
+    def test_the_retired_sensitive_marker_is_refused_and_says_where_it_went(self):
+        """One composer-supplied boolean used to gate redaction, shredding and storage
+        at once, so a conforming entry that omitted it was printed verbatim and never
+        stored. The marker is gone: `returns` MEANS credential. A composer still sending
+        it is working from the old shape, so the error names the field and points at
+        `artifacts` — naming a SCHEMA key, never a credential name or value."""
+        with self.assertRaises(bus.Invalid) as caught:
+            self._v({"outcome": "approve",
+                     "returns": {"A_KEY": {"value": "sk_live_x", "sensitive": True}}})
+        self.assertIn("sensitive", str(caught.exception))
+        self.assertIn("artifacts", str(caught.exception))
+        self.assertNotIn("sk_live_x", str(caught.exception))
+
+    def test_returns_is_sensitive_by_the_field_not_by_a_marker(self):
+        _, sensitive = self._v({"outcome": "approve",
+                                "returns": {"A_KEY": {"value": "sk_live_x"}}})
+        self.assertTrue(sensitive)
+
+    def test_artifacts_is_validated_as_strictly_as_returns(self):
+        """The only thing separating the two is which field they arrived in, so a loose
+        shape here would re-open the question the split was made to close."""
+        for bad in ({"WEBHOOK": {"value": 1}},
+                    {"WEBHOOK": "flat"},
+                    {"WEBHOOK": {"value": "v", "sensitive": True}},
+                    {"WEBHOOK": {"value": "v", "extra": 1}}):
+            with self.assertRaises(bus.Invalid):
+                self._v({"outcome": "approve", "artifacts": bad})
 
     def test_a_bare_string_value_is_refused(self):
         with self.assertRaises(bus.Invalid):
@@ -2187,6 +2302,156 @@ def _js_function(name):
 
 def _node():
     return shutil.which("node")
+
+
+# A DOM shim just rich enough to run the REAL shipped renderCheckpoints. Every element
+# records what was done to it, so a test can ask the question that matters here — "does
+# this button have a click listener" — which no amount of reading `disabled` can answer.
+_DOM_SHIM = """
+function mkEl(sel) {
+  const el = {
+    sel, hidden: false, disabled: false, value: "", textContent: "", title: "",
+    src: "", href: "", dataset: {}, listeners: {},
+    classList: { s: new Set(), add(c) { this.s.add(c); }, remove(c) { this.s.delete(c); },
+                 contains(c) { return this.s.has(c); } },
+    addEventListener(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); },
+    querySelector() { return mkEl("stub"); },
+    querySelectorAll() { return []; },
+  };
+  return el;
+}
+function makeCard() {
+  const els = {};
+  const card = mkEl(".card");
+  // Every element resolves through the SAME map, including nested lookups: the real
+  // code reaches `.reanswer-btn` via `node.querySelector(".reanswer").querySelector(…)`,
+  // so a shim whose nested lookup minted a fresh node would silently record the click
+  // handler on a detached element and the test would assert about the wrong object.
+  const get = (sel) => {
+    if (!els[sel]) {
+      els[sel] = mkEl(sel);
+      els[sel].closest = () => card;
+      els[sel].querySelector = (s) => qs(s);
+      els[sel].querySelectorAll = (s) => qsa(s);
+    }
+    return els[sel];
+  };
+  const qs = (sel) => (sel === ".card" ? card : get(sel));
+  const qsa = (sel) => sel.split(",").map((s) => get(s.trim()));
+  const node = { els, querySelector: qs, querySelectorAll: qsa };
+  card.querySelector = qs; card.querySelectorAll = qsa; card.closest = () => card;
+  return node;
+}
+// Everything renderCheckpoints leans on that is not the thing under test.
+const CARDS = [];
+function renderList(items, a, b, c, fn) {
+  for (const it of items) { const n = makeCard(); CARDS.push(n); fn(n, it); }
+}
+function $() { return { contains: () => false, querySelectorAll: () => [] }; }
+const document = { activeElement: null };
+function renderSteps() {}
+function renderTasks() {}
+function node2(btn, sel) { return btn.closest(".card").querySelector(sel); }
+function collectVerdict() { return { outcome: "approve" }; }
+function remember() {}
+function flash() {}
+const SENT = [];
+async function send(kind, body) { SENT.push({ kind, body }); return { ticket: "t-1" }; }
+"""
+
+
+def _render_deps():
+    """The shim plus the REAL time helpers renderCheckpoints calls. Spliced in rather
+    than stubbed: a stub would keep this test passing through a break in the very
+    rendering it is standing next to."""
+    return "\n".join([_DOM_SHIM] + [_js_function(n) for n in
+                                    ("humanGap", "gapSeconds", "deadlineText")])
+
+
+class ConsoleReanswerWiring(unittest.TestCase):
+    """The "answer again" button was offered, gated correctly, and led nowhere.
+
+    `renderCheckpoints` attached the send-button click handler AFTER the
+    `if (cp.answered_at)` branch — and that branch ends in `return`. So on an answered
+    card the wiring never ran: "answer again" dutifully un-hid the form and re-enabled
+    every control, then handed back a button bound to nothing. Clicking it did nothing,
+    forever; a reload re-read the still-answered server state and closed the form again,
+    which reads to a human as "my answer will not send".
+
+    Found by a human clicking it — the unit tests asserted `disabled === false` and
+    PASSED, because "the button is enabled" and "the button does anything" are different
+    facts. This drives the real shipped function and asks the second question.
+    """
+
+    def _render(self, cp, click_reanswer=False):
+        node = _node()
+        if not node:
+            self.skipTest("node is not installed")
+        harness = """
+%s
+%s
+renderCheckpoints([%s]);
+const card = CARDS[0];
+const send_ = card.els[".send"];
+%s
+console.log(JSON.stringify({
+  sendListeners: (send_ && send_.listeners.click || []).length,
+  sendDisabled: send_ ? send_.disabled : null,
+  verdictHidden: card.els[".verdict"] ? card.els[".verdict"].hidden : null,
+  reanswerShown: card.els[".reanswer"] ? !card.els[".reanswer"].hidden : null,
+  posted: SENT.length,
+}));
+""" % (_render_deps(), _js_function("renderCheckpoints"), json.dumps(cp),
+            ("card.els['.reanswer-btn'].listeners.click[0]"
+             "({ target: card.els['.reanswer-btn'] });" if click_reanswer else ""))
+        out = subprocess.run([node, "-e", harness], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return json.loads(out.stdout)
+
+    ANSWERED = {"ticket_id": "item-1", "kind": "setup", "token": "tok-1",
+                "request": {"what": "hand back the key"},
+                "answered_at": "2026-08-02T13:05:09+00:00", "answer_pending": True}
+
+    def test_an_answered_card_still_wires_its_send_button(self):
+        """The regression itself: the handler must exist even on the answered path."""
+        r = self._render(self.ANSWERED)
+        self.assertEqual(r["sendListeners"], 1,
+                         "the send button has no click handler on an answered card")
+        # Wired but INERT until re-answering is chosen — the enable is the gate.
+        self.assertTrue(r["sendDisabled"])
+        self.assertTrue(r["verdictHidden"])
+        self.assertTrue(r["reanswerShown"])
+
+    def test_answer_again_hands_back_a_button_that_actually_sends(self):
+        """The human's path, end to end: re-enable, then fire it and see a POST."""
+        node = _node()
+        if not node:
+            self.skipTest("node is not installed")
+        harness = """
+%s
+%s
+renderCheckpoints([%s]);
+const card = CARDS[0];
+card.els['.reanswer-btn'].listeners.click[0]({ target: card.els['.reanswer-btn'] });
+const send_ = card.els['.send'];
+if (send_.disabled) { throw new Error("answer again left the send button disabled"); }
+Promise.resolve(send_.listeners.click[0]()).then(() => {
+  console.log(JSON.stringify({ posted: SENT.length, token: SENT[0] && SENT[0].body.token }));
+});
+""" % (_render_deps(), _js_function("renderCheckpoints"), json.dumps(self.ANSWERED))
+        out = subprocess.run([node, "-e", harness], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        got = json.loads(out.stdout)
+        self.assertEqual(got["posted"], 1, "clicking send after answer-again posted nothing")
+        self.assertEqual(got["token"], "tok-1")
+
+    def test_a_drained_answer_offers_no_override_it_cannot_honour(self):
+        """`answer_pending: false` — the bus can no longer supersede, so the button is
+        not offered. The send handler still exists; it is the ENABLE that is withheld."""
+        cp = dict(self.ANSWERED, answer_pending=False)
+        r = self._render(cp)
+        self.assertFalse(r["reanswerShown"])
+        self.assertTrue(r["sendDisabled"])
 
 
 class ConsoleSetupForm(unittest.TestCase):
@@ -2246,7 +2511,7 @@ console.log(JSON.stringify(collectVerdict(card, %s)));
         got = clean["verdict"]["tasks"][0]["returns"]
         self.assertEqual(sorted(got), ["IVRIT_RUNPOD_API_KEY", "IVRIT_RUNPOD_ENDPOINT"])
         self.assertEqual(got["IVRIT_RUNPOD_API_KEY"],
-                         {"value": "sk_live_x", "sensitive": True})
+                         {"value": "sk_live_x"})
 
     def test_the_credential_name_comes_from_the_request_not_the_task_id(self):
         """The whole bug in one assertion: the task id must never become the key."""
@@ -2462,8 +2727,7 @@ class RemoteSocket(Tmp):
                               token="remote-token-A",
                               body={"token": "cp1", "verdict": {
                                   "outcome": "approve",
-                                  "returns": {"API_KEY": {"value": "sk-live-x",
-                                                          "sensitive": True}}}})
+                                  "returns": {"API_KEY": {"value": "sk-live-x"}}}})
         self.assertEqual(code, 403, "a credential must not ride a plaintext-edge proxy")
 
     def test_a_setup_shaped_verdict_is_refused_on_access(self):
@@ -2534,8 +2798,7 @@ class RemoteSocketTailscale(RemoteSocket):
                                  token="remote-token-A",
                                  body={"token": "cp1", "verdict": {
                                      "outcome": "approve",
-                                     "returns": {"API_KEY": {"value": "sk-live-x",
-                                                             "sensitive": True}}}})
+                                     "returns": {"API_KEY": {"value": "sk-live-x"}}}})
         self.assertEqual(code, 202, body)
 
     def test_a_setup_shaped_verdict_is_refused_on_access(self):

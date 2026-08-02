@@ -791,7 +791,43 @@ def validate_park(rec):
                       % (cp.get("kind"), ", ".join(PARK_KINDS)))
     if not cp.get("request"):
         raise Invalid("checkpoint.request is empty — the human is being asked nothing")
+    check_request_tasks(cp["request"])
     return rec
+
+
+# The REPLY-side fields, refused on a REQUEST task. Not a general strictness pass on
+# `request` — that stays permissive on purpose, because `park` is how the machine ASKS
+# for help and a park that hard-fails is a checkpoint that never opens. These two are
+# the exception because it is not merely undeclared, it belongs to the OTHER side of
+# the exchange: `schemas.md` declares a request task as {id, what, secrets?[]} and the
+# reply as {id, outcome, returns?}. A request carrying `outcome` is a reply shape copied
+# onto a request — which is exactly how the live record got one on every task (a
+# hand-reconstruction copying the wrong half) — and it reads to a later human as though
+# the question had already been answered.
+#
+# `returns` is the sharper of the two and is refused for a reason `outcome` does not
+# have: it carries a VALUE, the whole `request` is handed to the console on every poll,
+# and nothing on the request path ever runs it through `check_returns`. So a credential
+# pasted onto a request would reach the browser having passed no boundary at all.
+REQUEST_TASK_REPLY_KEYS = ("outcome", "returns")
+
+
+def check_request_tasks(request):
+    """Refuse reply-side field(s) on a request task. No-op unless `tasks[]` is present."""
+    if not isinstance(request, dict):
+        return
+    tasks = request.get("tasks")
+    if not isinstance(tasks, list):
+        return
+    for i, task in enumerate(tasks, 1):
+        if not isinstance(task, dict):
+            continue
+        found = [k for k in REQUEST_TASK_REPLY_KEYS if k in task]
+        if found:
+            raise Invalid(
+                "request task %d carries the reply-side field(s) %s — a request task is "
+                "{id, what, secrets?[]}; the VERDICT carries {id, outcome, returns?}"
+                % (i, ", ".join(found)))
 
 
 def parked_mirror(paths):
@@ -928,16 +964,37 @@ MESSAGE_ID_RE = re.compile(r"\d{8}T\d{6}\.\d{6}Z-[0-9a-f]{8}-\d+")
 
 VERDICT_OUTCOMES = ("approve", "changes", "reject")
 
-# `returns` is a NAME-KEYED MAP — {"<KEY_NAME>": {value, sensitive?}} — and this regex
-# guards the key, because the key IS the credential's name and is what the declared-set
-# diff matches on. The shape is declared rather than open on purpose: it used to be an
+# `returns` is a NAME-KEYED MAP — {"<KEY_NAME>": {value}} — and this regex guards the
+# key, because the key IS the credential's name and is what the declared-set diff
+# matches on. The shape is declared rather than open on purpose: it used to be an
 # arbitrary payload, and a consumer deriving "which credentials are present" from an
 # undeclared payload is not a matcher with a tuning problem, it is a coin toss. Task
 # identity lives at tasks[].id, so nothing here needs a second identifier to confuse it
 # with. Rejecting at the boundary is the point — a payload that cannot be matched must
 # fail loudly on POST rather than reach the store and read later as total credential loss.
+#
+# `returns` MEANS CREDENTIAL, and that is now carried by the field itself rather than by
+# a `sensitive` boolean the composer had to remember to set. The marker was the sole
+# trigger for three protections at once — redaction out of the orchestrator's context,
+# eligibility for the shredding/storing path, and therefore whether the value was ever
+# removed from the inbox — so an entry that was fully CONFORMING but unmarked was printed
+# verbatim and never stored. Deriving the protection from the field instead of from a
+# supplied signal is the same rule the rest of this file already follows: a protection
+# that depends on somebody remembering to ask for it is not a protection. A non-credential
+# value the task hands back (a webhook URL, a project id) is no longer "the same entry
+# minus the marker" — it has its own field, `artifacts`, below.
 RETURNS_KEY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-RETURNS_ENTRY_KEYS = ("value", "sensitive")
+RETURNS_ENTRY_KEYS = ("value",)
+# The non-credential half of the split: same name-keyed shape, never redacted, never
+# routed to the secret store. Declared and validated rather than free-form for the
+# reason `returns` is — an undeclared payload is what the whole shape exists to end.
+# NOTE: this field has NO shipped producer. The console's setup form renders one input
+# per declared `request.tasks[].secrets[]` name, and `secrets[]` means credential, so the
+# form emits `returns` only; `artifacts` is for a hand-composed or agent-composed reply.
+# Stated plainly here rather than left to be discovered, because a field that is
+# specified as if it works while nothing can emit it is exactly the defect that made the
+# `returns` shape a coin toss in the first place.
+ARTIFACTS_ENTRY_KEYS = ("value",)
 # A CLOSED set, and that is load-bearing rather than tidy: a control op leaves no
 # durable artifact to anchor on, so the ONLY thing making a redelivered control
 # message safe is that re-applying it is a no-op by construction. Adding a
@@ -975,7 +1032,7 @@ def _req_str(body, field, maxlen=8192):
 
 
 def check_returns(returns, where):
-    """Enforce the declared `returns` shape: {"<KEY_NAME>": {value, sensitive?}}.
+    """Enforce the declared `returns` shape: {"<KEY_NAME>": {value}} — all credential.
 
     Absent is fine — most verdicts are a bare opinion. Anything present must conform,
     and the error locates the offending entry BY ORDINAL — never by key, never by value.
@@ -990,49 +1047,67 @@ def check_returns(returns, where):
     is indistinguishable from a missing credential later — which is exactly the silence
     this boundary exists to convert into a loud, immediate 400.
     """
-    if returns is None:
+    _check_named_map(returns, where, RETURNS_ENTRY_KEYS, "credential")
+
+
+def check_artifacts(artifacts, where):
+    """The non-credential half: {"<NAME>": {value}}, never redacted, never stored.
+
+    Validated exactly as strictly as `returns`, for the same reason — the ONLY thing
+    separating the two is which field they arrived in, so a sloppy shape here would
+    re-open the question the split was made to close.
+    """
+    _check_named_map(artifacts, where, ARTIFACTS_ENTRY_KEYS, "artifact")
+
+
+def _check_named_map(m, where, allowed, what):
+    if m is None:
         return
-    if not isinstance(returns, dict):
-        raise Invalid("%s must be an object keyed by credential name "
-                      "({\"KEY_NAME\": {\"value\": ...}})" % where)
+    if not isinstance(m, dict):
+        raise Invalid("%s must be an object keyed by %s name "
+                      "({\"NAME\": {\"value\": ...}})" % (where, what))
     # NOT ONE OF THESE MESSAGES ECHOES A KEY OR A VALUE, and that is deliberate rather
     # than terse. The reply crosses the same edge the credential boundary exists to
     # protect, and a mis-shaped payload is most often one where the VALUE was pasted
     # into the key position — where it would sail past the name regex (`sk_live_abc123`
     # is a legal-looking name) and get quoted straight back out through any proxy log
     # in between. An ordinal is enough for a human with the payload in front of them.
-    for i, (name, entry) in enumerate(returns.items(), 1):
+    for i, (name, entry) in enumerate(m.items(), 1):
         at = "%s entry %d" % (where, i)
         if not (isinstance(name, str) and RETURNS_KEY_RE.match(name)):
-            raise Invalid("%s has a key that is not a usable credential name "
-                          "(letters, digits, dot, dash, underscore)" % at)
+            raise Invalid("%s has a key that is not a usable %s name "
+                          "(letters, digits, dot, dash, underscore)" % (at, what))
         if not isinstance(entry, dict):
-            raise Invalid("%s must be an object {value, sensitive?}" % at)
+            raise Invalid("%s must be an object {value}" % at)
         if not isinstance(entry.get("value"), str):
             raise Invalid("%s needs a string \"value\"" % at)
-        if "sensitive" in entry and not isinstance(entry["sensitive"], bool):
-            raise Invalid("%s has a non-boolean \"sensitive\"" % at)
-        extra = set(entry) - set(RETURNS_ENTRY_KEYS)
+        # `sensitive` gets its own message rather than falling into the generic
+        # unknown-field one. It was a real field until the split, so a composer sending
+        # it is not guessing — they are working from the old shape, and the useful
+        # answer is where the meaning moved, not a field count. Naming it echoes a
+        # SCHEMA key, never a credential name or value, so the no-echo rule holds.
+        if "sensitive" in entry:
+            raise Invalid(
+                "%s carries \"sensitive\" — that marker is gone. `returns` now MEANS "
+                "credential (every entry is protected, nothing to mark), and a "
+                "non-credential value belongs in `artifacts`" % at)
+        extra = set(entry) - set(allowed)
         if extra:
-            raise Invalid("%s carries %d field(s) that are not value/sensitive"
-                          % (at, len(extra)))
+            raise Invalid("%s carries %d field(s) that are not %s"
+                          % (at, len(extra), "/".join(allowed)))
 
 
 def _is_sensitive(returns):
-    """Does this verdict hand back a credential?
+    """Does this verdict hand back a credential? Now a STRUCTURAL question.
 
-    Deliberately shallow and permissive: the shape is declared and validated above, but
-    this stays the belt to that braces — the cost of a false positive is a tighter mode
-    plus an unlink the orchestrator would do anyway, while the cost of a false negative
-    is a live key left lying on the inbox.
+    It used to hunt for a `sensitive: true` somewhere in the payload, which made one
+    composer-supplied boolean the sole trigger for redaction, shredding and storage all
+    at once — so a fully CONFORMING entry that simply omitted it was printed verbatim
+    and never stored. There is nothing to hunt for any more: a non-empty `returns` IS a
+    credential, because that is what the field means. The answer comes from the shape,
+    which no producer can forget to set.
     """
-    if isinstance(returns, dict):
-        if returns.get("sensitive"):
-            return True
-        return any(_is_sensitive(v) for v in returns.values())
-    if isinstance(returns, list):
-        return any(_is_sensitive(v) for v in returns)
-    return False
+    return isinstance(returns, dict) and bool(returns)
 
 
 def validate(kind, body):
@@ -1047,6 +1122,7 @@ def validate(kind, body):
             raise Invalid("verdict must be an object")
         tasks = v.get("tasks")
         check_returns(v.get("returns"), "verdict.returns")
+        check_artifacts(v.get("artifacts"), "verdict.artifacts")
         if tasks is None:
             if v.get("outcome") not in VERDICT_OUTCOMES:
                 raise Invalid("verdict.outcome must be one of %s"
@@ -1063,6 +1139,8 @@ def validate(kind, body):
                                   % ", ".join(VERDICT_OUTCOMES))
                 check_returns(t.get("returns"),
                               "verdict.tasks[%s].returns" % (t.get("id") or "?"))
+                check_artifacts(t.get("artifacts"),
+                                "verdict.tasks[%s].artifacts" % (t.get("id") or "?"))
         clean = {"token": token, "verdict": v}
         return clean, _is_sensitive(v.get("returns")) or any(
             _is_sensitive(t.get("returns")) for t in (tasks or []) if isinstance(t, dict))
@@ -2525,6 +2603,44 @@ function renderTasks(node, cp) {
   if (wantsSecret && !CREDS_OK) node.querySelector(".no-creds").hidden = false;
 }
 
+// Deadlines and answer stamps cross the wire as absolute ISO with MICROSECONDS
+// ("2026-08-03T12:37:19.611433+00:00"). That is a machine fact rendered straight at a
+// human: reading "OVERDUE — 2026-08-01T19:09:35.930246+00:00" means subtracting two
+// timestamps in your head to learn the only thing you actually wanted, which is HOW
+// LATE. So the card shows the distance and keeps the exact instant one hover away on
+// `title` — nothing is lost, it just stops being the first thing you read.
+//
+// Computed CLIENT-side on purpose. The snapshot is polled and ETag'd, and a
+// server-rendered "16h ago" would either change every second (destroying the 304) or
+// go stale between polls. Derived here, it is correct at every repaint for free.
+function humanGap(seconds) {
+  const a = Math.abs(seconds);
+  if (a < 45) return "moments";
+  if (a < 3600) return Math.round(a / 60) + "m";
+  if (a < 86400) return Math.round(a / 3600) + "h";
+  return Math.round(a / 86400) + "d";
+}
+
+// Seconds from `iso` until now (>0 = in the past), or null when it will not parse.
+// Unparseable must stay visible rather than render "NaN": the caller falls back to the
+// raw string, so a stamp this cannot read is still a stamp a human can.
+function gapSeconds(iso) {
+  const t = Date.parse(iso);
+  return isFinite(t) ? (Date.now() - t) / 1000 : null;
+}
+
+// The deadline line. `overdue` is the SERVER's call (its clock owns the escalation) and
+// stays authoritative; only the wording is derived here. If a skewed client disagrees
+// with the server's flag, the flag wins and the gap is simply omitted — better to say
+// "OVERDUE" with no number than a number contradicting the badge next to it.
+function deadlineText(cp) {
+  if (!cp.deadline) return "";
+  const gap = gapSeconds(cp.deadline);
+  if (gap === null) return (cp.overdue ? "OVERDUE — " : "due ") + cp.deadline;
+  if (cp.overdue) return gap > 0 ? "OVERDUE — overdue by " + humanGap(gap) : "OVERDUE";
+  return gap < 0 ? "due in " + humanGap(gap) : "due now";
+}
+
 function collectVerdict(card, notes) {
   const rows = [...card.querySelectorAll(".task")];
   if (!rows.length) return { outcome: card.querySelector(".outcome").value, notes };
@@ -2532,13 +2648,16 @@ function collectVerdict(card, notes) {
     notes,
     tasks: rows.map((r) => {
       const t = { id: r.dataset.tid, outcome: r.querySelector(".toutcome").value };
-      // The declared shape: keyed by credential NAME, value + sensitive, nothing else.
-      // The name comes from the request, never from anything the human typed.
+      // The declared shape: keyed by credential NAME, `value` and nothing else. There
+      // is no `sensitive` marker any more — every input here is rendered from a
+      // declared `request.tasks[].secrets[]` name, so everything this form can emit is
+      // a credential by construction, and `returns` is the field that says so. The name
+      // comes from the request, never from anything the human typed.
       const returns = {};
       let any = false;
       for (const inp of r.querySelectorAll(".svalue")) {
         if (!inp.value) continue;
-        returns[inp.dataset.name] = { value: inp.value, sensitive: true };
+        returns[inp.dataset.name] = { value: inp.value };
         any = true;
       }
       if (any) t.returns = returns;
@@ -2575,18 +2694,54 @@ function renderCheckpoints(items) {
       wrap.hidden = false;
     }
     const d = node.querySelector(".deadline");
-    d.textContent = cp.deadline ? (cp.overdue ? "OVERDUE — " : "due ") + cp.deadline : "";
+    d.textContent = deadlineText(cp);
+    if (cp.deadline) d.title = cp.deadline;   // the exact instant, one hover away
     if (cp.overdue) d.classList.add("overdue");
     const msg = node.querySelector(".msg");
     const btn = node.querySelector(".send");
+    // Wire the send handler FIRST, before the answered branch can return past it.
+    // It used to be attached after that branch, which meant an ANSWERED card never got
+    // one — so "answer again" dutifully un-hid the form and re-enabled every control,
+    // and then the button it had just re-enabled did nothing at all, because no click
+    // listener had ever been bound to it. A reload re-read the still-answered server
+    // state and closed the form again, which read as "my answer would not send".
+    // The override was real on the server and gated correctly in the page; the one
+    // thing missing was the wire between the button and the POST. Attaching it here is
+    // safe because the answered branch immediately DISABLES the button, so it cannot
+    // fire until "answer again" deliberately re-enables it.
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const card = btn.closest(".card");
+      try {
+        const verdict = collectVerdict(card, node2(btn, ".notes").value);
+        const r = await send("verdict", { token: cp.token, verdict });
+        // The value crosses once, over the POST, and is gone: cleared from the DOM here
+        // and never written to localStorage. `remember` records the OUTCOME only — the
+        // "my requests" history is durable browser state, and a credential has no
+        // business in it.
+        for (const inp of card.querySelectorAll(".svalue")) inp.value = "";
+        const shown = verdict.tasks
+          ? verdict.tasks.map((t) => t.id + ":" + t.outcome).join(", ")
+          : verdict.outcome;
+        remember(r.ticket, "verdict", (cp.kind || "checkpoint") + " " +
+                 (cp.ticket_id || "") + " → " + shown);
+        flash(msg, "sent — the loop applies it at its next boundary", true);
+      } catch (e) {
+        flash(msg, String(e.message || e), false);
+        btn.disabled = false;
+      }
+    });
     // Already answered: the verdict is durable, the loop just has not drained it yet.
     // Say so and close the form, rather than presenting a pristine one that invites a
     // human to type a live credential a second time. Server-supplied, so it holds
     // across a reload and across devices — answer on the phone, the laptop agrees.
     if (cp.answered_at) {
       const a = node.querySelector(".answered");
-      a.textContent = "answered " + cp.answered_at +
+      const ag = gapSeconds(cp.answered_at);
+      a.textContent = "answered " +
+        (ag === null ? cp.answered_at : humanGap(ag) + " ago") +
         " — waiting for the loop to pick it up. Nothing more to do here.";
+      a.title = cp.answered_at;
       a.hidden = false;
       node.querySelector(".verdict").hidden = true;
       for (const el of node.querySelectorAll(".svalue, .notes, .toutcome, .outcome, .send")) {
@@ -2623,28 +2778,6 @@ function renderCheckpoints(items) {
       }
       return;
     }
-    btn.addEventListener("click", async () => {
-      btn.disabled = true;
-      const card = btn.closest(".card");
-      try {
-        const verdict = collectVerdict(card, node2(btn, ".notes").value);
-        const r = await send("verdict", { token: cp.token, verdict });
-        // The value crosses once, over the POST, and is gone: cleared from the DOM here
-        // and never written to localStorage. `remember` records the OUTCOME only — the
-        // "my requests" history is durable browser state, and a credential has no
-        // business in it.
-        for (const inp of card.querySelectorAll(".svalue")) inp.value = "";
-        const shown = verdict.tasks
-          ? verdict.tasks.map((t) => t.id + ":" + t.outcome).join(", ")
-          : verdict.outcome;
-        remember(r.ticket, "verdict", (cp.kind || "checkpoint") + " " +
-                 (cp.ticket_id || "") + " → " + shown);
-        flash(msg, "sent — the loop applies it at its next boundary", true);
-      } catch (e) {
-        flash(msg, String(e.message || e), false);
-        btn.disabled = false;
-      }
-    });
   }, "none open");
 }
 
@@ -3302,12 +3435,27 @@ def make_handler(daemon):
             # Fail closed only when the browser positively tells us it is cross-site.
             return self.headers.get("Sec-Fetch-Site", "") in ("cross-site", "same-site")
 
-        def _guard(self, need_token=True):
+        def _guard(self, need_token=True, site_gated=True):
+            # `site_gated=False` is for the DEMO static class alone, and it is a
+            # correctness requirement rather than a relaxation. The demo is served under
+            # `sandbox allow-scripts allow-forms`, which forces an OPAQUE origin — and an
+            # opaque origin is, by definition, not same-site with anything, so a real
+            # browser labels every SUBRESOURCE of that document `Sec-Fetch-Site:
+            # cross-site` (measured in Chrome: the navigation is `none`, then `s.css` and
+            # `a.js` both arrive `cross-site`/`no-cors`). The site gate therefore cannot
+            # ever pass for a legitimate demo asset: with it on, only a single fully
+            # inline index.html renders and any bundle with a sibling file goes silently
+            # blank — the format `create-demo` actually prescribes. The gate is a CSRF
+            # control, and CSRF is a STATE-CHANGE concern; this class is read-only GET,
+            # token-free by design (a browser cannot header a document navigation), and
+            # carries a throwaway low-fi sandbox with no credential in it. So the demo
+            # keeps the two gates that do real work here — the host gate and the realpath
+            # guard — and drops the one the opaque origin makes structurally unsatisfiable.
             daemon.last_request = time.time()
             if not self._host_ok():
                 self._err(403, "host not allowed")
                 return False
-            if self._cross_site():
+            if site_gated and self._cross_site():
                 self._err(403, "cross-site request refused")
                 return False
             if need_token and not self._token_ok():
@@ -3425,7 +3573,7 @@ def make_handler(daemon):
             # Serves on BOTH sockets: on Socket A it is exactly the "static demo" the
             # reduced remote surface is meant to carry.
             if path.startswith("/demo/"):
-                if not self._guard(need_token=False):
+                if not self._guard(need_token=False, site_gated=False):
                     return
                 return self._serve_demo(path)
 
