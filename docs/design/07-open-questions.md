@@ -411,10 +411,19 @@ because `/update` never orders it; and because the automatic delivery path is CL
 **preventer** is replaced by a two-hop **detector** on the existing `SessionStart` hook. Sequencing is settled with
 it: `8a → drive 9a → 9b`. The measurements, the verbatim platform contract, the issue state and the rejected
 alternatives all live in **D164**; nothing is duplicated here.
-**Newly open from that re-design, both small and both deferred to build:** (1) the detector's **warn-once state** —
-which `.workflow/` key owns it, and whether `retention.py` prunes it; (2) the `--plugin-dir` **edge** where
-`basename(CLAUDE_PLUGIN_ROOT)` is `product` rather than a SHA, so the version fallback needs a
-`git rev-parse --short HEAD` rung before `unknown`.
+**Both items deferred to build are now CLOSED by the build (D165, owner, 2026-08-03 — 8a is BUILT).**
+(1) The **warn-once state** is `.git/hooks/.disciplined-builder-stale`, **not** under `.workflow/` as this question
+assumed: the facts are machine-local (committing them would let one machine silence another's warning), `.git/` is
+untrackable by construction so it needs no `.gitignore` line — which matters because the installs it must reach are
+exactly the ones too stale to have one — and **nothing prunes it** (one small file rewritten in place;
+`retention.py`'s remit is `.workflow/`). It adopts the convention the same hook already used for the foreign-hook
+marker, and `shared/schemas.md` now owns **both**. (2) The `--plugin-dir` **edge** closed as a four-rung chain
+(pin → resolved cache-dir basename → the source repo's `HEAD` → `unknown`), with basename deliberately *ahead* of
+git so a user who versions their dotfiles is not told their dotfiles' HEAD is the package version.
+**A third thing closed that this block never asked, because only a build could find it:** the SessionStart hook
+receives **no `CLAUDE_PLUGIN_ROOT`** (it is wired from the *project's* settings, the third layer D164 identified),
+so hop B reads the resolved key from `installed_plugins.json` instead. Anything the package installs into a project
+cannot assume plugin-scoped environment — the general form is worth remembering.
 
 ## Newly designed — Phase 9 (D159–D163, 2026-08-03) — sub-questions deferred to build
 Three capabilities were designed from a maintainer conversation (owners: `11` Phase 9 + D159–D163); **9a is now
@@ -426,9 +435,18 @@ Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away ca
 - **The chain-forecast (D159) — CLOSED by the build (D163, 2026-08-03).** The layout call was taken while building:
   a `#fc-list` panel (separate from the card, as D162 narrowed it — the card is gone once the orchestrator unparks,
   and the frozen forecast has to keep rendering after that), **one shared chain renderer** used by both card and
-  panel, per-event state badges, and a divergence banner. **Residual — it has never been rendered in a browser**:
-  every mechanical path is driven and tested, but this is exactly the D147/D156 shape where the logic held and the
-  *interaction shell* around it was where the human-only defects lived (D148/D149/D153 each found some). Two
+  panel, per-event state badges, and a divergence banner. **The browser residual is CLOSED (D166, 2026-08-03):**
+  rendered in real headless Chrome against a live daemon, and the D147/D156 shape held a ninth time — the logic was
+  fine and **both** defects were in the interaction shell (event numbers drawn twice; the reality probe not
+  item-scoped, which raised a false structural divergence off another change's checkpoint and would therefore have
+  paid for needless re-forecasts). Both fixed. **Still open from that drive — three shell judgment calls,
+  deliberately not fixed:** the panel prints a raw ISO `frozen <stamp>` while the card humanizes ("due in 24h"),
+  though the page's own `humanGap` helper exists and its comment argues against exactly this; the credential
+  **prefill hint ("Optional — …") renders *after* the inputs**, so a human meets two credential boxes before the
+  sentence saying they may skip them; and while a forecast checkpoint is open the **card and the panel render the
+  same chain twice** on one page, so the page is longest and most repetitive at the moment the human is being asked
+  to act (D162's separation is right — the artifact outlives the question — but the open-checkpoint overlap is its
+  cost, and a collapsed panel entry while the card is live may be the answer). Two
   further things the build deliberately did **not** do, worth a look once it has run for real:
   - **A per-ITEM forecast** on the `planner:plan-one` path. 9a is **intake-only** — the forecast gate is stated for a
     "change", not for a backlog item. `/create-forecast` is available by hand anywhere, so this is a convenience and
@@ -443,11 +461,42 @@ Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away ca
   D130-deferred "does adopted code pass its own gates" hazard, now sharper — you must NOT run a company's full suite on
   ingest); (3) the private tree's **archive-to-git default is local-only** (the governance caveat — derived company IP
   on personal infra), a backup remote a deliberate maintainer act.
-- **The context-budget law (D160)** — the shipped default budgets (derive by *measuring* the repo's own files, not a
-  constant) + `K`/threshold tuning, folded into the retention `K`/threshold open above.
+- **The context-budget law (D160) — CLOSED by the build (D167, owner, 2026-08-03; 9b is BUILT).** The defaults were
+  derived by measuring, and measuring forced a call D160 had not foreseen: the budget is **two-tier per role**
+  (hard fails `checks.sh`, advisory schedules a trim) because the package's own always-loaded templates are
+  3.3–3.4× the sub-1k target D160 cited, so an aggressive-only budget would be red on every clean install — and a
+  gate that fires on a fresh bootstrap is one a human learns to skip. Shipped: `chars_per_token` 3.2,
+  `always_hard` 4000 / `always_advisory` 1200, `ondemand_hard` **25000** (the Read ceiling, not a preference) /
+  `ondemand_advisory` 15000. The estimator is calibrated on this repo's own paging failure (85 083 chars at the 25k
+  ceiling ⇒ ≤3.40 chars/token), which **kills `chars/4`**. `K`/threshold tuning stays folded into the retention
+  `K` open above; Sessions **distillation is no longer deferred** (`memory-model.md`).
 - **Cross-cutting — the dogfooding call: HALF CLOSED (D162, 2026-08-03).** **9a was built BY HAND** (D163, same day),
   and self-hosting the workflow on itself is a **separate later experiment on a clone** — so 9a never waited on the
   **project-state view** (still `[stageable]`, the self-hosting prerequisite since 2026-06-30), and the first
   self-hosting run will not also be debugging a brand-new capability. **The sequencing decision vs Phase 8 is now
   CLOSED (D164): `8a → drive 9a → 9b`** — a stale install corrupts the evidence of every drive after it, so 8a leads
   and the 9a browser drive doubles as 8a's exit test. **Still open:** whether 9b/9c self-host.
+
+## Newly open from the Phase-8a / 9a-drive / 9b builds (2026-08-03 — D165 / D166 / D167)
+Small, all found by building or driving rather than by reasoning, and none blocking.
+- **`product/shared/schemas.md` is already past the hard wall — 28 519 tokens `[core]`.** 9b's own gate says a file
+  over the 25 000-token Read ceiling **cannot be loaded in one call**, and this is a *shipped* file that the whole
+  package names as the owner of every schema. It is therefore the **split-and-pointer arm's first real customer**,
+  and it is ours. Two things make it more than a chore: the gate ships scanning a *target project's* docs, so it
+  would never have flagged this by itself (the package's own docs have no gate — deliberately, since D164 had just
+  deleted a meta-gate, but worth revisiting); and this repo's `CLAUDE.md` tells every session to ground itself in
+  `08-decision-log.md` (~179k tokens) and `11-roadmap.md` (~31k), i.e. **the grounding instruction points at files
+  that cannot be read in one call**. The remedy is the one 9b prescribes — a lean current-state file plus an
+  archived-detail file with a head marker — and this repo already does it by hand for the roadmap/git split.
+- **`--project-root` means two different things in two shipped scripts `[small]`.** In `update_reconcile.py` it is
+  the **repo** root; in `retention.py` it is the **product** root (`./project` on greenfield), with `--workflow-dir`
+  carrying the repo-relative part. Both are internally coherent and documented, and renaming a shipped flag is a
+  breaking change with no forcing need — but it cost a wrong test harness during 9b (retention silently read no
+  config and capped at the default `K`), so it will cost a caller eventually. Either rename at a natural breaking
+  point or state the divergence where both are documented.
+- **The always-loaded advisory is deliberately red on the package's own templates `[expected, not a bug]`.** The
+  shipped brief and `loop.md` sit at ~3.3k/3.4k tokens against a 1 200 advisory, so a fresh install schedules a trim
+  ticket on day one. That is the design (green *gate*, tracked *aspiration*), but nobody has yet asked whether those
+  two files can actually reach 1k without losing the routing table — if they cannot, the advisory is the wrong
+  number rather than the trim being overdue, and the honest fix is to move the target, not to carry a permanent
+  ticket.

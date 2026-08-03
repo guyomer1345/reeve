@@ -17,10 +17,16 @@ import pytest
 
 HERE = Path(__file__).resolve().parent            # product/scripts
 RUNNER_SRC = HERE.parent / "templates" / "checks.sh"
+# Every script the shipped `checks.sh` invokes. The three coverage gates run per open item
+# (glob-guarded, so an empty tree skips them); `check_doc_budget.py` runs UNCONDITIONALLY on
+# every `--check`, which is why it has to be present here for even the empty-tree cases to
+# pass. That is not a fixture quirk — it is the dependency the runner really has, and both
+# files are package-owned so `/update` refreshes them together.
 COVERAGE_SCRIPTS = (
     "check_promise_coverage.py",
     "check_criterion_discharge.py",
     "check_decision_coverage.py",
+    "check_doc_budget.py",
 )
 
 
@@ -184,6 +190,29 @@ def test_no_mode_errors(tmp_path):
     root = _project(tmp_path, "")
     r = _run(root)
     assert r.returncode == 2
+
+
+def test_the_doc_budget_gate_blocks_a_commit_over_the_hard_wall(tmp_path):
+    """The WIRING, not the script (which has its own tests). An on-demand doc past the
+    25 000-token Read ceiling cannot be loaded in one call at all, so it fails the gate."""
+    root = _git_project(tmp_path, "TEST='true'", {"README.md": "# spec\n"})
+    docs = root / "project" / "docs"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "spec.md").write_text("x" * (26000 * 4))     # far past the wall at any ratio
+    r = _run(root, "--check")
+    assert r.returncode != 0
+    assert "OVER BUDGET" in r.stdout and "docs/spec.md" in r.stdout
+
+
+def test_an_advisory_alone_never_blocks_a_commit(tmp_path):
+    """The whole reason for two tiers: the always-loaded aspiration is a scheduled trim, and
+    a gate that failed a commit over one would be a gate people route around. The package's
+    own shipped brief and loop.md sit in exactly this band."""
+    root = _git_project(tmp_path, "TEST='true'", {"README.md": "# spec\n"})
+    (root / "CLAUDE.md").write_text("x" * (3300 * 3))     # over advisory, under hard
+    r = _run(root, "--check")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "OVER BUDGET" not in r.stdout
 
 
 if __name__ == "__main__":

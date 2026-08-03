@@ -22,6 +22,7 @@ The prose layer over `graph.json`: the structural fields are **copied from `grap
 - **Frontmatter** (structural, from `graph.json`): `path` · `type` · `lang` · `tier` · `centrality: { impact, orchestration, in_degree, out_degree }` (the two lenses + degrees) · `commitment` ∈ `{ locked, provisional, unspecified }` · `seeded_by` (e.g. `ingest`).
 - **`## Purpose`** — cheap extractive intent (signatures/docstrings); `ingest` seeds it, `document` sharpens intent-vs-actual on touch.
 - **`## Edges out`** — one line per `graph.json` edge: `` `<target>` (import|call) — why: `` with the **`why` left empty at seed time** (`document` authors it on first real touch). *(`## Key symbols` is an optional extractive aid.)*
+- **`# Lessons`** — APPEND-ONLY, top-level, and placed **immediately before `# Sessions`**; one line per distilled postmortem, written by the `audit` item *before* `retention.py` caps (compression beats raw retention — see `memory-model.md`). **Never capped**, because it is already the compressed form. The placement is a hard requirement, not a style: `# Sessions` is terminal and its region runs to EOF once entries begin, so a `## Lessons` nested under it would be parsed as a session entry and dropped by the cap it exists to survive.
 - **`# Sessions`** — the node's **terminal** section, APPEND-ONLY; each entry headed **`## [date] kind | title`** (the strict form `retention.py` splits on); empty until a postmortem (`debug-report`) applies.
 
 ## roadmap  · produced by `planner` (decompose mode) · *emitted as items into the live `backlog.md` queue*
@@ -455,6 +456,23 @@ fires it.
   `items_closed_m`; `every_p_items`). Absent → shipped defaults (sessions_k 10, decisions_superseded_n 30,
   items_closed_m 10, every_p_items 15). The Sessions trigger fires with a **margin** above `sessions_k` (the cap
   restores headroom), so a single append can't re-trip the audit.
+- `doc_budget` — the context-budget knobs read by `check_doc_budget.py` (the gate) and `prioritize` (the
+  trigger). **Budgets are per ROLE and in TOKENS** — model-window-agnostic, the same reason `context.warn_pct`
+  is a percentage — and **two-tier per role**: `always_hard` / `always_advisory` for the always-loaded set
+  (root `CLAUDE.md`, `.workflow/loop.md` — rent paid every turn, every session) and `ondemand_hard` /
+  `ondemand_advisory` for the on-demand set (`docs/spec.md`, `docs/architecture.md`, `rules/**`,
+  `docs/knowledge/**`, `docs/decisions/**`, `backlog.md`). **The hard tier FAILS `checks.sh`; the advisory tier
+  only schedules a trim.** Both tiers exist because an aggressive-only budget would be red on a clean install —
+  and a gate that fires on a fresh bootstrap is one a human learns to skip. `ondemand_hard` is not a
+  preference: it is the **Read tool's own 25 000-token ceiling**, past which a file cannot be loaded in one
+  call at all. `chars_per_token` is the estimator's divisor — there is no tokenizer in the standard library, so
+  the count is estimated from length and **deliberately errs high**, since under-reporting is what lets an
+  unreadable file pass. Lower it for a project whose docs are dense in fenced code. Absent → shipped defaults
+  (`chars_per_token` 3.2, `always_hard` 4000, `always_advisory` 1200, `ondemand_hard` 25000,
+  `ondemand_advisory` 15000, `every_p_items` 15). **Decoupled from `retention` and `align`** — doc size is not
+  memory pressure and not drift risk, so it gets its own threshold, the same shape those two already use.
+  The **VOLATILE tier is deliberately out of scope**: `handoff.md` is already capped mechanically at injection
+  time by the SessionStart hook, and a second budget for one bound is a second owner
 - `align` — the drift-scan knobs, read by `prioritize` (trigger) + `align` (budget): `every_n_commits` (commits
   since `.workflow/align/anchor.json`'s `base_sha` before an `align` item is injected) + `max_agents` (hard cap
   on the semantic pass's fan-out; deferred surface rides the next scan). **Decoupled from `retention`** (drift

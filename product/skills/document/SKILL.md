@@ -45,6 +45,13 @@ Updated `docs/knowledge/` (nodes, graph, Sessions) + the architecture doc.
 ## Audit mode (retention + prune)
 A second mode, run as a maintenance item `prioritize` injects on a count/size threshold (not after each phase).
 Keeps disk + context high-signal:
+- **Distil FIRST, then cap — the order is load-bearing.** For each entry about to fall past *K*, write its
+  one-line lesson into the node's **`# Lessons`** section before the script runs. Compression beats raw retention:
+  a distilled entry leaves something behind, a raw one dropped to git leaves nothing a future session will read.
+  The script is deterministic and cannot distil, so this pass must precede it — distilling *after* the cap means
+  distilling from git. `# Lessons` is append-only and **not** capped (it is already the compressed form), and it
+  is a **top-level section placed BEFORE `# Sessions`** — never a `##` inside it, because the Sessions region runs
+  to EOF once entries begin, so a nested heading would be read as a session entry and capped away.
 - **Run the retention script** (`.claude/scripts/retention.py` — mechanical + idempotent, counts/moves/deletes,
   no judgment): caps each node's `# Sessions` to the last *K* (`config.retention.sessions_k`; older → git, a
   one-line head marker under `# Sessions`), GCs superseded `docs/decisions/` bodies to git + tombstones
@@ -53,7 +60,9 @@ Keeps disk + context high-signal:
 - **Deletion-test (judgment)** over `CLAUDE.md` + `rules/` — cut prose the agent no longer needs; bloat makes
   it ignore its own instructions.
 - **Dead-node prune:** a deleted source file → delete its `docs/knowledge/` node.
-Distillation (postmortems → lessons) is deferred.
+- **Doc budget is a SEPARATE item, not part of this one.** `doc-budget` has its own trigger and its own remedy
+  (trim / split-and-pointer); folding it in here would tie doc size to memory pressure, which is the coupling
+  the three decoupled thresholds exist to avoid.
 
 ## Route
 → `commit`.

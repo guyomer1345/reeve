@@ -168,8 +168,16 @@ The structural graph regenerates (it cannot drift); `document` keeps durable doc
 doc fresh in the **same item as the code**; an `audit` pass keeps guidance high-signal. **Retention (D61):**
 each node's `# Sessions` is **cap-and-archived** — last-*K* raw entries on disk, older entries dropped to git
 with a one-line archive pointer; a deterministic script does this, so the entry format is **strict/lint-parseable**
-(`## [date] kind | title`) to split entries mechanically. A `Lessons` zone (distilled patterns) is left as a
-**deferred** signal-quality feature. **Staleness** = a diff-based signal (code changed without its node) that
+(`## [date] kind | title`) to split entries mechanically. **The `Lessons` zone is no longer deferred (D167):**
+compression beats raw retention, so the `audit` item distils each entry about to fall past *K* into a one-line
+lesson **before** the script caps — the script is deterministic and cannot distil, so distilling afterwards would be
+distilling from git. It is a **top-level `# Lessons` section placed BEFORE `# Sessions`**, never nested under it:
+`# Sessions` is terminal and its region runs to EOF once entries begin, so a `## Lessons` under it is parsed as an
+*entry* and dropped by the very cap it was written to survive (both placements verified against the real script).
+`# Lessons` is append-only and never capped — it is already the compressed form. **Node SIZE now has a gate too
+(D167):** a knowledge node is `on-demand` context under the context-budget law, so it is measured against the
+25 000-token Read ceiling like any other on-demand doc — `memory-model.md` owns that law, `config.doc_budget` its
+numbers. **Staleness** = a diff-based signal (code changed without its node) that
 schedules a doc-fix, not a prune. **Regenerate-vs-incremental is resolved (D78):** the static layer regenerates
 (cannot drift), the durable *observed* layer accretes and is **merged** on regenerate (endpoints that survive);
 open D78 follow-ons = node-ID stability across renames + observed-edge staleness/decay.

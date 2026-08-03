@@ -98,6 +98,14 @@ case "$MODE" in
       python3 "$SCRIPTS/forecast.py" lint "$fc" || fail=1
     done
 
+    # The context-budget gate. It belongs on the commit gate rather than only on a schedule
+    # because it is cheap, decidable and always-whole — it reads file SIZES, not content, so
+    # running it every time costs nothing and there is no partial-scan question to get wrong.
+    # HARD tier only: the advisory tier schedules a trim as a maintenance item, and failing a
+    # commit over an advisory is how a gate becomes something people route around.
+    echo "+ doc budget" >&2
+    python3 "$SCRIPTS/check_doc_budget.py" --project-root . || fail=1
+
     exit "$fail"
     ;;
   *)

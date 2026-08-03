@@ -416,10 +416,10 @@ The website+demo design decomposes into five clusters; the dependency spine is *
 
 **Phase 5 — pre-test hardening (D126). COMPLETE** (as are Phases 6 and 7 below); this paragraph is the
 historical framing of *why it opened*, not a live "next slice" pointer — it read as one for four phases after
-Phase 5 closed. **The live pointer is `### Phase 8` below** (opened D155): release discipline first, then the
-interaction-model rework. **`### Phase 9` (D159–D163) is DESIGNED, and `9a` — the chain-forecast — is BUILT**
-(2026-08-03, D163, by hand); **9b** (the context-budget law) and **9c** (org mode) remain unbuilt, and where the
-rest of Phase 9 sits against Phase 8 is still open. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
+Phase 5 closed. **The live pointer is `### Phase 8` below** (opened D155): its release-discipline half
+(**8a**) is BUILT (D165) and **8b — the interaction-model rework — is the next slice**. **`### Phase 9`
+(D159–D163):** `9a` is BUILT and browser-driven (D163 + D166) and `9b` is BUILT (D167); **`9c` (org mode) is all
+that remains**, and it is deliberately last, behind its own drive. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
 the release surface D125), but "release-ready" was a *build-completeness* claim: the whole **install → `/start` →
 loop** runtime has **never been driven end-to-end once** (every Phase-3 increment was driven in isolation; the only
 prior loop run — D52 — was a pre-D66 throwaway that *simulated* dispatch). A pre-first-run audit (two independent
@@ -629,10 +629,10 @@ lifecycle.
   `purpose` pass in batched subagents; `research`'s charter bounds `findings` (pointers, never file bodies);
   `ingest`/`start.md` state plainly that the motion ends the context window at the park.
   **[ctx — BUILT (D134); RE-DRIVEN (D138)]**
-- **Version-stamped installs (D135)** — `/start` step 7 writes `workflow_version` (from the plugin's
-  `plugin.json`, `0.1.0` until Phase 8a lands — **D164 deletes that field and the stamp becomes the commit
-  SHA**) into `.workflow/config.json`; `schemas.md` owns the field.
-  **[fwd — BUILT (D135)]**
+- **Version-stamped installs (D135)** — `/start` step 7 writes `workflow_version` into
+  `.workflow/config.json`; `schemas.md` owns the field. **Since 8a it is the commit SHA, not a semver**: D164
+  deleted `version` from `plugin.json` so the platform keys delivery on the commit, and D165 built the four-rung
+  resolver that reads it. **[fwd — BUILT (D135); the stamp became a SHA in 8a (D164/D165)]**
 - **`/update` — BUILT (D139)** — constraints pinned by D135 (regenerate `[G]`/`graph.json` under the new schema ·
   never clobber `[D]`/adopted docs (D39/D50/D130) · diff against the manifest `install[]` map over a pre-existing
   `.claude/`); **design (D137):** a 3-way file taxonomy (package-refresh · target-preserve · regenerate-from-code),
@@ -732,11 +732,16 @@ a park→verdict→unpark cycle and a `/rebind` on a real clone whose toolchain 
 probe did exactly what they were designed to do; the declared-secret diff did not, and its finding is open in `07`.
 One high-severity bug came out of it (the forged end marker) and one stated residual was retracted as never real.
 
-### Phase 8 — Release discipline, then the interaction-model rework **[NEXT — opened D155; 8a re-designed D164; nothing built]**
+### Phase 8 — Release discipline, then the interaction-model rework **[opened D155; 8a re-designed D164 and BUILT 2026-08-03 (D165, `540d0e0`); 8b is NEXT and is all that remains]**
 Phases 1–7 are complete and the package has a **real installed consumer**. The successor is therefore not the
 biggest remaining feature — it is the only open item that **harms a user today**, and it was measured, not feared.
-- **8a — a stale install cannot learn it is stale (D151) — `[core]`. RE-DESIGNED 2026-08-03 (D164, owner) — build
-  this shape, not the one D155/D158 described.** Installing **copies** `product/` into
+- **8a — a stale install cannot learn it is stale (D151) — `[core]`. RE-DESIGNED 2026-08-03 (D164, owner);
+  BUILT 2026-08-03 (D165, `540d0e0`) — DONE.** Two mechanisms changed under measurement and D165 owns both: the
+  SessionStart hook gets **no `CLAUDE_PLUGIN_ROOT`** (it is wired from the *project's* settings, so hop B reads
+  the resolved key from `installed_plugins.json`), and the warn-once state lives in **`.git/hooks/`**, not under
+  `.workflow/` — machine-local facts, and untrackable by construction so it needs no `.gitignore` line the stale
+  installs would not have. The delivery call is **proven end-to-end**: the install now keys on the commit SHA,
+  hop A fired on a genuinely stale install and went silent by itself once reinstalled. The shape D164 described:** Installing **copies** `product/` into
   `~/.claude/plugins/cache/<plugin>/<version>/`; `claude plugin update` compares **versions**, and
   `plugin.json` has been pinned at `0.1.0` since the first install. The D151 drive measured the consequence: the
   install had silently drifted **12 commits and 17 shipped files behind** HEAD — including the `SessionStart(clear)`
@@ -778,7 +783,7 @@ living code-map observed layer, the D84 reclassification, the proportional-rigor
 model/effort routing, the project-map tab, and the project-state view (still the self-hosting prerequisite it has
 been since 2026-06-30).*
 
-### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[DESIGNED 2026-08-03 — D159–D163. 9a BUILT 2026-08-03 (D163, by hand); 9b + 9c UNBUILT. Sequence within: 9a → 9b → 9c. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. Sequencing vs Phase 8 SETTLED D164: 8a → drive 9a → 9b]**
+### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[DESIGNED 2026-08-03 — D159–D163. 9a BUILT + browser-driven 2026-08-03 (D163; D166 closed its render residual and fixed two shell defects); 9b BUILT 2026-08-03 (D167); **9c is all that remains**. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. The D164 sequence `8a → drive 9a → 9b` is COMPLETE]**
 Born from a design conversation on four maintainer asks (the fourth — a console config tab — was **dropped**, D161;
 its "change credentials over Cloudflare" arm violated D112). All three build **ON** existing machinery, not beside it —
 that is the through-line and the reason none is large. Capture is design-only; the deep-doc edits ride each build.
@@ -790,8 +795,12 @@ that is the through-line and the reason none is large. Capture is design-only; t
   structural divergence re-forecasts. `create-demo` de-risks the *product* question; the forecast de-risks the
   *process* question. Loopback-only. Full call + rejected alternatives: **D159** (owner); the build + the seven calls
   it had to make: **D163**. **[core-ish — BUILT 2026-08-03]**
-  - **BUILT by hand (D163, `5a77aba`) — 690 tests + all six meta-gates green, both halves driven end-to-end in a
-    simulated install; NOT browser-rendered, and no real project has forecast a real change yet.** Shipped:
+  - **BUILT by hand (D163, `5a77aba`), then BROWSER-DRIVEN (D166, `613d230`) — the never-rendered residual is
+    CLOSED.** The drive found two shell defects, both fixed: every event was numbered **twice** (an `<ol>` marker
+    never suppressed beside the record's own `n` — invisible to any `textContent` assertion), and the reality probe's
+    `parked` arm was **not item-scoped**, so any open checkpoint project-wide marked a chain's `checkpoint:*` row
+    `open` and raised a **false structural divergence** — which re-forecasts the tail, and with parallel items would
+    have fired most of the time. Still true: **no real project has forecast a real change yet.** Shipped:
     `skills/create-forecast` (the skill-owned gate, placed BEFORE the sandbox gate at intake) · `scripts/forecast.py`
     (lifecycle owner: required horizon, linted names-only invariant, freeze + chain digest, reality, divergence) ·
     `check_contracts.py --forecast` (the graph half) · the committed `.workflow/forecasts/<id>.json` · the `forecast`
@@ -814,13 +823,24 @@ that is the through-line and the reason none is large. Capture is design-only; t
     the build split that — semantics there, **deletion in `retention.py`** with every other prune. D163, call 1.)*
     It built in the planned two increments — 9a-1 generate · lint · park · freeze · approve, then 9a-2 the derived
     reality column · divergence · re-forecast — and the `align` crash D162 folded in is **fixed** in the same commit.
-- **9b — the context-budget law (D160) `[core]`.** The enforcement `memory-model.md`'s "bounded by construction" claim
-  never had: a mechanical `check_doc_budget.py` token-counts every workflow-owned doc against a **role budget**
-  (always-loaded → ~200 lines/<1k tokens; on-demand → the **25k Read ceiling** as the hard wall), run in `checks.sh`
-  and as a **third decoupled maintenance item** `prioritize` injects (beside retention + `align`). Over-budget → a
-  ticket (trim/split-and-pointer/distill), never auto-mangle; it does **not** re-check truth (`align` owns "wrong").
-  **Un-defers Sessions distillation** (D61). The spec repo is its own counter-evidence — the roadmap paged at the 25k
-  ceiling this session. Full call: **D160** (owner). **[core — DESIGNED; unbuilt]**
+- **9b — the context-budget law (D160 designed it; D167 BUILT it) `[core]`.** The enforcement
+  `memory-model.md`'s "bounded by construction" claim never had: `check_doc_budget.py` token-counts every
+  workflow-owned doc against a **role budget**, runs in `checks.sh` and as a **third decoupled maintenance item**
+  `prioritize` injects (beside retention + `align`). Over-budget → a ticket (trim/split-and-pointer/distill), never
+  auto-mangle; it does **not** re-check truth (`align` owns "wrong"). **Un-defers Sessions distillation** (D61).
+  **What measurement changed at build (D167, owner):** the budget is **TWO-TIER per role** — hard fails `checks.sh`,
+  advisory schedules a trim — because the package's *own* always-loaded templates measure ~3.3k/3.4k tokens, i.e.
+  3.3–3.4× the sub-1k target D160 cited, so an aggressive-only budget would be **red on every clean install**, and a
+  gate that fires on a fresh bootstrap is one a human learns to skip. And the estimator is **calibrated on this
+  repo's own paging failure** (the roadmap: 85 083 chars at the 25k ceiling ⇒ ≤3.40 chars/token), which **kills
+  `chars/4`** — it would have scored that exact file *under* a wall it could not fit. **[core — BUILT 2026-08-03]**
+  - **BUILT — 741 tests + all meta-gates green.** Shipped: `scripts/check_doc_budget.py` (+ a `checks.sh` hard-tier
+    call on every commit — cheap, decidable, always-whole, since it reads sizes not content) · `config.doc_budget`
+    (`shared/schemas.md` owner) · the `doc-budget` maintenance item in `prioritize` + `loop.md` · the context-budget
+    law and the **split-and-pointer** convention in `memory-model.md` · distil-before-cap in `document`'s audit mode,
+    with `# Lessons` **top-level and before `# Sessions`** (nested under it, the cap would eat it — proven both ways).
+    **First real customer, and it is ours:** `product/shared/schemas.md` measures **28 519 tokens**, already past the
+    hard wall in a shipped file the package names as its schema owner (`07`, tracked debt).
 - **9c — org mode (D161) `[stageable — BUILD LAST, behind its own drive]`.** A **third `/start` mode** (`config.org`;
   absent ⇒ inert) for a company product the maintainer does not own: a **private-tree brain** (all machinery + derived
   + intent) over a **byte-pristine, zero-footprint** company checkout, `project_root` = an absolute path, a
@@ -834,7 +854,8 @@ that is the through-line and the reason none is large. Capture is design-only; t
   governance caveat: **D161** (owner). **[stageable — DESIGNED; unbuilt; build last]**
 
 *Sequencing note:* 9a → 9b → 9c is fixed (9b makes everything cheaper; 9c is riskiest and evidence-blind). **9a is
-done** (D163). **Where the rest of Phase 9 sits relative to Phase 8 is SETTLED (D164): `8a → drive 9a → 9b`.** Not on
+done** (D163 + D166) and **9b is done** (D167), so **the D164 sequence `8a → drive 9a → 9b` is COMPLETE** and what
+remains in Phase 9 is 9c alone. The reasoning it was ordered that way, kept because it is the argument: not on
 8a's user-facing payoff, but because **a stale install corrupts the evidence of every drive that follows it** — do 8a
 first and every later drive is trustworthy by construction, and **the 9a browser drive then doubles as 8a's exit
 test**, closing 9a's never-rendered `#fc-list` residual in the same pass. **The dogfooding half of that call was MADE for

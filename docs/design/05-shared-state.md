@@ -310,4 +310,7 @@ advances). It is the **transactional-outbox** pattern:
 
 Still to close: symbol-level knowledge paths. *(Read/write ownership + the request/response protocol closed — D93
 [single-writer + the two-mechanism protocol]; bus lifecycle — D94; bus trust — D95; **outward-action mechanics — D105**;
-retention/read law — D61; docs-root unified under `<project_root>/docs/` — D62.)*
+retention/read law — D61; **the context-budget law over prose — D160, built D167** (`config.doc_budget` +
+`check_doc_budget.py`: role-tiered, token-measured, two tiers per role — hard fails `checks.sh`, advisory schedules a
+`doc-budget` maintenance item; the VOLATILE tier is out of scope because `handoff.md` is already capped at injection
+by the `SessionStart` hook); docs-root unified under `<project_root>/docs/` — D62.)*

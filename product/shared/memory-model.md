@@ -17,10 +17,13 @@ demand** or **enforced by CI** — prose rots silently, code and checks fail lou
 - A `decision-record` is never edited — a reversal is a **new** record that supersedes (status flip).
 - Structural code maps are **generated, never hand-written** — not a tier, an output.
 - Enforceable rules live in lint/test/CI/hooks, not prose; prose shrinks to non-derivable intent.
-- **Always-read files are bounded by construction:** `CLAUDE.md`, `state.json`, `handoff.md`, `loop.md`
-  hold current state only — rewritten in place, never grown — so the loop can't inflate its own context cost.
-  History lives in git. The **retention & archival law** for the append-only tier is the read-law companion
-  (below): **cap-and-archive** — last-*K* on disk, the rest in git.
+- **Always-read files are bounded by construction, and now by a CHECK:** `CLAUDE.md`, `state.json`,
+  `handoff.md`, `loop.md` hold current state only — rewritten in place, never grown — so the loop can't inflate
+  its own context cost. History lives in git. "By construction" was for a long time an *assertion with no
+  mechanism*, which is how a file can grow past the point of being readable while the doc claiming it cannot
+  sits right next to it; the **context-budget law** below is the enforcement. The **retention & archival law**
+  for the append-only tier is the read-law companion (below): **cap-and-archive** — last-*K* on disk, the rest
+  in git.
 - **Don't duplicate state an external system owns:** e.g. GitHub issue open/closed — the backlog holds
   only the `github_ref` pointer; mirroring the state locally creates drift + post-commit bookkeeping.
 - **`backlog.md` is a live open queue, not append-only:** rewritten in place; closed items **leave**
@@ -39,5 +42,39 @@ superseded `decisions/` bodies to git + tombstones `decisions/index.md`, and pru
 so the mechanical pass can't delete un-promoted memory). The `git log` cold-start read is bounded by
 `handoff.base_sha`. Only the prose deletion-test over `CLAUDE.md`+`rules/` needs the LLM (mechanical → enforced).
 **Staleness** (a doc that's *wrong*, not *big*) is a separate diff-based signal — code changed without its node
-or the architecture doc — that schedules a doc-fix, not a prune. *Open:* `K`/thresholds; Sessions
-**distillation** (postmortems → lessons) is deferred.
+or the architecture doc — that schedules a doc-fix, not a prune. *Open:* `K`/thresholds.
+
+**Sessions distillation is no longer deferred.** Compression beats raw retention: a dropped entry that was first
+distilled to its lesson leaves something behind, and a dropped raw entry leaves nothing. So the `audit` item
+**distills before `retention.py` caps** — each entry about to fall past *K* is reduced to a one-line lesson
+appended to the node's **`# Lessons`** section, which is append-only and *not* capped (a lesson is already the
+compressed form; re-compressing it would be the loss distillation exists to prevent). The raw entry then drops to
+git as before. Two things are load-bearing and both are easy to get wrong:
+- **Order:** the script is deterministic and cannot distil, so the model's pass runs **first**. Distilling after
+  the cap means distilling from git.
+- **Placement:** `# Lessons` is a **top-level** section and sits **before** `# Sessions`, never inside it.
+  `# Sessions` is the terminal section and its region runs to EOF once entries begin, so a `## Lessons` nested
+  under it would be parsed as a *session entry* and could be dropped by the very cap it was written to survive.
+
+## The context-budget law
+The retention law above bounds the **append-only** tier. Everything else a session reads — the brief, the
+routing graph, the spec, a rule, a knowledge node — was bounded only by the claim above. **`check_doc_budget.py`**
+(shipped → `.claude/scripts/`, stdlib, read-only) is the mechanism: it sizes every workflow-owned doc against
+its **role's** budget, **in tokens** (model-window-agnostic, like `context.warn_pct`), **two tiers per role**.
+- **HARD** fails `checks.sh` on every commit — it is cheap, decidable and always-whole, because it reads sizes
+  and not content. For the on-demand set the hard number is not a preference: it is the **Read tool's
+  25 000-token ceiling**, past which a file cannot be loaded in one call at all. That is enforcement that is a
+  *failure*, not advice.
+- **ADVISORY** never fails a build; `prioritize` injects a `doc-budget` maintenance item. Both tiers exist
+  because an aggressive-only budget is red on a clean install, and a gate that fires on a fresh bootstrap is one
+  a human learns to skip — so the aspiration is tracked as work instead of as a broken build.
+- **Over budget is a TICKET, never an auto-edit.** You cannot drop half a spec doc to git the way retention drops
+  a Sessions entry; splitting prose coherently is judgment. The remedy is a **split-and-pointer**: a lean
+  *current-state* file, an *archived-detail* file, and a head marker in the survivor —
+  `<!-- doc-budget: detail split -> <path> @ <sha> -->` — mirroring retention's own Sessions marker. Trim and
+  split; never delete content that carries non-derivable intent.
+- **It does not re-check truth.** `align` owns "is this doc *wrong*"; this owns "is this doc *too big*". Two
+  owners, no overlap. `config.doc_budget` (`shared/schemas.md`) owns the numbers, decoupled from `retention` and
+  `align` because doc size is neither memory pressure nor drift risk.
+- The **VOLATILE tier is out of scope on purpose**: `handoff.md` is already capped mechanically at injection
+  time by the `SessionStart` hook, and one bound with two owners is a bound that drifts.

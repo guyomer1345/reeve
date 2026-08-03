@@ -116,11 +116,14 @@ disarm the gate — it stops the loop loudly until the stack is wired.
 ## Maintenance items
 `prioritize` injects a **maintenance item** on a threshold (§ `prioritize`): a *retention/size* threshold →
 `document:audit` (bound the append-only tier); a *drift* threshold → `align` (reconcile spec/decisions/promises
-vs code). A maintenance item is **self-contained**: it runs its own pass and flows straight to `commit` — there
+vs code); a *doc-size* advisory → `doc-budget` (trim or split-and-pointer a context-loaded doc that has grown
+past its role's budget — the hard tier is already enforced on the commit gate, so only advisories arrive here).
+A maintenance item is **self-contained**: it runs its own pass and flows straight to `commit` — there
 is no `planner`/`execute`/`verify`, because there is no product-code change to plan and no runtime behaviour to
 verify — then `close-issue?` (skip: no linked issue) → `prioritize`. `align`'s *semantic* findings leave as
 ordinary `create-issue` tickets (the side-door) and ride the normal queue; only its mechanical auto-fixes + the
-new scan anchor ride this commit. The two thresholds are **decoupled** — memory pressure ≠ drift risk.
+new scan anchor ride this commit. The three thresholds are **decoupled** — memory pressure ≠ drift risk ≠ doc
+size, and one shared threshold would make each of them fire for another's reason.
 
 ## Item-complete tail
 `verify`(pass) → `checkpoint:qa?` → `document` → `commit` → `close-issue?` → `prioritize`.

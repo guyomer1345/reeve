@@ -4538,3 +4538,159 @@ what Call 3 answers.
 → `07` (the Phase-8a OPEN block closes), `11` (Phase 8 rewritten; the Phase-9-vs-8 sequencing call resolved). At
 build: `product/.claude-plugin/plugin.json`, `product/scripts/update_reconcile.py`, `product/hooks/session_start.py`,
 `product/commands/{start,update}.md`, `product/shared/schemas.md`, `scripts/dev-reinstall.sh`.
+
+## D165 — Phase 8a BUILT, and two mechanisms changed under measurement: the SessionStart hook gets no `CLAUDE_PLUGIN_ROOT`, and the warn-once state belongs in `.git/hooks/` **[BUILT 2026-08-03 — `540d0e0`; realizes D164's four calls; both of `07`'s Phase-8a open items close]**
+D164's four calls were built as specified. Two things only a build could find changed *how*, not *what* — and one
+of them would have made the detector silently inert.
+
+**The hook receives no `CLAUDE_PLUGIN_ROOT`.** D164's hop B was written as "`config.workflow_version` vs
+`basename(CLAUDE_PLUGIN_ROOT)`". Measured on 2.1.220 with a real probe session: a project-settings hook is handed
+`CLAUDE_PROJECT_DIR` and **not** `CLAUDE_PLUGIN_ROOT`. That is not an accident of configuration — the package
+*installs itself into the project* (`.claude/settings.json` names hooks by project-relative path, which is the
+third layer D164 itself identified), so the hook that runs is the **project's copy**, wired from the project's
+settings, and there is no single plugin context for the harness to point at. The docs read ambiguously here; the
+probe settled it. Hop B therefore reads the resolved cache key from **`installed_plugins.json`** — the file the
+detector must open anyway for hop A's `gitCommitSha`, so no new source is adopted — and still prefers the env var
+when set, so a future harness that exports it is an improvement rather than a break. Same comparison, working
+anchor. **The lesson generalizes past this hook:** anything the package installs into a project cannot assume
+plugin-scoped environment, and three other shipped scripts take `--plugin-root` as an argument precisely because
+they are invoked from command prose that expands it — the hook has no such caller.
+
+**The warn-once state went to `.git/hooks/.disciplined-builder-stale`, not under `.workflow/`.** `07` framed this
+as "which `.workflow/` key owns it". All three of the requirements point elsewhere. The facts recorded are about
+**this machine** (which SHA is installed), so committing them would let one machine's install silence the warning
+on every other; `.git/` is untrackable **by construction**, needing no `.gitignore` entry — which is load-bearing
+rather than tidy, because the installs this must reach are precisely the ones too stale to have a new ignore line;
+and it must survive a `/rebind` and be readable before a project is bootstrapped. It is also **bounded at one
+small file rewritten in place, so nothing prunes it** — `retention.py`'s remit is `.workflow/` artifacts and
+extending it here would buy nothing. This adopts the convention the *same file* already used for the foreign-hook
+marker, and gives **both** markers a `shared/schemas.md` owner, which the older one never had.
+
+**The `--plugin-dir` edge (`07`'s second item) closed as a four-rung chain**, and the rung ORDER is the decision:
+a `plugin.json` pin → the resolved cache-dir basename → the source repo's `HEAD` → `unknown`. Basename comes
+*before* git deliberately — the cache lives under the CLI config dir, and a user who versions their dotfiles would
+otherwise have us report their **dotfiles'** HEAD as the package version. A `version` subcommand was added because
+`plugin.json` no longer has a field to read, and without it `start.md` would have had to re-describe the chain in
+prose — a second owner of the rule, which is the drift D80 exists to stop. `unknown` is now excluded from the
+no-op test: two installs that both failed to resolve a version are not the same install.
+
+*Rejected:* **a `.workflow/staleness.json` + a new `.gitignore` line** — the line arrives via `/update`, i.e.
+exactly the mechanism a stale install has not run, so the state file would sit untracked and be committable on the
+projects that need the warning most; **duplicating the resolution chain into the hook** — one rule, two spellings;
+**a `retention.py` arm for the marker** — a bounded single file needs no collector.
+
+*Evidence (measured, CLI 2.1.220):* a probe session dumped the SessionStart hook's environment — `CLAUDE_PROJECT_DIR`
+present, `CLAUDE_PLUGIN_ROOT` **absent**; the version chain resolved `ab1d951b06c8` under `--plugin-dir ./product`
+(rung 3, the `07` edge) and `0.1.0` against the still-pinned live cache dir (rung 1); `claude plugin validate` passes
+on the version-less package with the advisory `No version specified`; **the delivery call proved end-to-end** — before
+the reinstall hop A fired against the real registry (*"installed at 21dda6c43208, the source on this disk is at
+540d0e0ee9b4 — the source is 2 commits ahead"*), after it hop A went silent **with no state cleared** (the condition
+simply stopped holding) and hop B correctly asked for `/update`; `installed_plugins.json` `version` is now the SHA
+`540d0e0ee9b4`, and the cache held exactly two dirs so keep-2 reclaimed nothing. 712 tests (690 + 22), all meta-gates
+green. *Not built, deliberately:* the release gate D164 deleted — a pytest invariant asserts instead that no `version`
+reappears in `plugin.json` **or** the marketplace entry (resolution rule (2) re-pins from there), which guards the new
+shape rather than the old ritual.
+→ `07` (both Phase-8a items close), `11` (8a → BUILT). Files: `product/.claude-plugin/plugin.json`,
+`product/scripts/update_reconcile.py`, `product/hooks/session_start.py`, `product/commands/{start,update}.md`,
+`product/shared/schemas.md`, `scripts/dev-reinstall.sh`, `product/scripts/test_{update_reconcile,session_start}.py`.
+
+## D166 — The first browser render of the chain-forecast found two defects, and both were in the interaction shell — including one that would have re-forecast chains for someone else's checkpoint **[BUILT 2026-08-03 — `613d230`; closes 9a's never-rendered residual (`07`)]**
+9a shipped mechanically driven and never rendered. Rendered in real headless Chrome against a live bus daemon with
+three forecasts (frozen · frozen-and-diverged · draft) and two open forecast checkpoints. **The D147/D156 shape held
+a ninth time:** the logic was fine and both defects were in the shell, where every previous drive found its defects.
+
+**Defect 1 — every event was numbered twice.** The chain is an `<ol class="chain">` whose list marker was never
+suppressed while each `<li>` also renders the record's own `n`, so every row of every chain read "1. 1", "2. 2" — on
+the checkpoint card *and* the panel, since D163's one-shared-renderer decision means one fix covers both. **No
+assertion could have caught it:** each number is individually correct and `textContent` sees only one of them. The
+same stylesheet already sets `list-style:none` on `ol#log`, which is what marks this an oversight rather than a
+choice. Fixed by suppressing the marker, **not** by dropping `.ev-n` — `n` is a record field, and a browser marker
+always counts 1..N from the top, so the two would disagree the moment a chain were rendered partially or an event
+filtered.
+
+**Defect 2 — the reality probe's `parked` arm was not item-scoped, and it is the expensive one.** `_probe` computed
+`item` and then never applied it to parked records, so it answered from **any** open checkpoint in the project. Two
+consequences, both reproduced live before fixing: a `qa` checkpoint parked for an unrelated change made this chain's
+`checkpoint:qa` read `open` — whose entire meaning is *"the machine is waiting on YOU, here"* — when nothing about
+this change was waiting; and a chain predicting **no** checkpoint collected a structural **divergence** from somebody
+else's checkpoint. That second one is not cosmetic: **a structural divergence re-forecasts the tail** (D159), and
+since `prioritize` emits parallel items, an open checkpoint somewhere is the *normal* state — so the false positive
+would have fired most of the time and paid for a re-forecast each time. Fixed by testing `ticket_id` against the
+forecast's own id, which is what every other probe in the same function already did.
+
+*Checked and NOT defects:* the gate's secret-prefill inputs render correctly — the missing inputs on the first
+attempt were the fixture's fault, because projecting event gates into `request.tasks[]` is `create-forecast`'s own
+job (its step 6), not the console's; and both linters correctly refused a frozen record with no digest and a
+`branch[].then` naming no real node.
+
+*Rejected:* **dropping `.ev-n` and letting the `<ol>` marker number the chain** — the marker renumbers from 1
+regardless of the record, so a partial render would show two different numbers for one event; **inferring the
+checkpoint's owner from `state.json`** — volatile, holds only the current node, and the anchor table's whole premise
+is that reality is derived from durable artifacts.
+
+*Evidence:* real headless-Chrome renders before and after (numbering doubled → single; divergence banner
+`"the loop reached checkpoint, debug"` → `"the loop reached debug"`); the cross-item leak reproduced in both
+directions and then re-verified fixed; +5 tests (both directions of the scoping leak, the real signal still firing,
+and a stylesheet guard — the defect *was* a missing rule, so the guard asserts the rule's presence). 717 tests, all
+meta-gates green. *Left for judgment, not fixed:* the panel prints a raw ISO `frozen <stamp>` while the card
+humanizes ("due in 24h") though the page's own `humanGap` helper exists and its comment argues against exactly this;
+the prefill hint "Optional — …" renders *after* the credential inputs; and while a forecast checkpoint is open the
+card and panel render the same chain twice on one page.
+→ `07` (9a's browser residual closes; three shell observations open), `11` (9a residual cleared).
+Files: `product/scripts/bus.py`, `product/scripts/forecast.py`, `product/scripts/test_{bus,forecast}.py`.
+
+## D167 — Phase 9b BUILT: the context-budget law is two-tier per role, and its estimator is calibrated on this repo's own measured paging failure **[BUILT 2026-08-03 — realizes D160; the "bounded by construction" claim finally has a mechanism]**
+D160 designed the law and deliberately left the numbers to measurement (*"there is no single constant"*). Measuring
+produced one hard number, one dead heuristic, and one conflict D160 had not foreseen.
+
+**The estimator is calibrated, and the obvious choice was wrong.** There is no tokenizer in the standard library and
+this package ships stdlib-only Python, so the count must be estimated from length. The divisor is not folklore: this
+repo's own `11-roadmap.md` was **85 083 characters** at `9d13b3c` when it *paged at the 25 000-token ceiling*, which
+puts the real ratio at **≤ 3.40 chars/token** for markdown prose. That measurement **kills `chars/4`** — the usual
+rule of thumb scores that exact file at 21 271 tokens, comfortably "under" a wall it demonstrably could not fit. 3.2
+ships, for margin, and the estimate rounds **up**: under-reporting is the one failure this cannot have, because it
+lets an unreadable file pass. It is a config knob, because a doc dense in fenced code tokenizes worse than prose.
+
+**Call — TWO TIERS PER ROLE (hard fails `checks.sh`, advisory schedules a trim).** D160 prescribed a hard wall plus
+a softer advisory for the *on-demand* role; measuring forced the same shape onto the *always-loaded* role, for a
+reason D160 could not have known: **the package's own always-loaded templates measure ~3.3k and ~3.4k tokens**, i.e.
+**3.3–3.4× the sub-1k community target D160 cites**. Shipping the aggressive number alone would have made the gate
+**red on every clean install** — and a gate that fires on a fresh bootstrap is one a human learns to skip, which is
+the same failure D164's warn-once-per-SHA rule exists to avoid, one phase earlier. So: `always_hard` 4000 /
+`always_advisory` 1200, `ondemand_hard` **25000** (the Read ceiling — not a preference) / `ondemand_advisory` 15000.
+Green on install, with the aspiration tracked as **work** rather than as a broken build.
+
+**The trigger is the finding, so there is no second number to tune.** `prioritize` gains a **third** decoupled
+maintenance item — `doc-budget`, beside `document:audit` (memory pressure) and `align` (drift risk) — injected every
+`every_p_items` items *when the report actually carries an advisory*, at most one open at a time (an over-size doc
+stays over-size, and re-filing it every P items is sediment, not a signal). Only advisories reach the scheduler: the
+hard tier already failed the commit gate, so by then the unreadable-file case is impossible.
+
+**Sessions distillation is un-deferred, and its placement rule is a real trap.** Compression beats raw retention, so
+the `audit` item distils each entry about to fall past *K* into a one-line lesson **before** `retention.py` caps —
+the script is deterministic and cannot distil, so distilling afterwards would be distilling from git. The lessons
+live in a **top-level `# Lessons` section placed BEFORE `# Sessions`**, never nested under it: `# Sessions` is
+terminal and its region deliberately runs to EOF once entries begin (so a markdown H1 inside a postmortem body
+cannot truncate the region), which means a `## Lessons` under it would be parsed as a session **entry** and dropped
+by the very cap it was written to survive. Verified against the real script, both placements.
+
+*Rejected:* **`chars/4`** (measured unsafe, above); **a pip tokenizer** (`tiktoken`/the SDK) — the package is
+stdlib-only by construction and a size gate does not justify the first dependency; **budgets in lines** (a unit the
+model does not read, and window-dependent); **one budget for all roles** (there is no best-practice max size — that
+is *why* it is per role); **auto-trimming prose** (needs judgment → ticket + split-and-pointer); **a second
+truth-checker** (`align` owns "wrong", this owns "too big" — D80); **folding doc-budget into `document:audit`** (it
+would tie doc size to memory pressure, the coupling the decoupled thresholds exist to prevent); **budgeting the
+VOLATILE tier** — `handoff.md` is already capped mechanically at injection time by the `SessionStart` hook, and one
+bound with two owners is a bound that drifts.
+
+*Evidence (measured, not cited):* the calibration above, recovered from git (`9d13b3c`, 767 lines / 85 083 chars);
+the shipped always-loaded pair at 3309 and 3395 tokens; **`product/shared/schemas.md` measured at 28 519 tokens —
+already past the hard wall, in a shipped file the whole package names as its schema owner** (recorded as tracked debt
+in `07`, and the prose arm's first real customer); the gate dry-run green-with-one-advisory on a real bootstrapped
+project and blocking on a hard breach; `# Lessons` proven to survive a real `retention.py` cap while a `## Lessons`
+under `# Sessions` is proven to be capped away. +24 tests (17 gate, 5 lessons-placement, 2 wiring); **741** tests total,
+all meta-gates green. *Found while wiring, not fixed:* `retention.py`'s `--project-root` means the **product** root
+while `update_reconcile.py`'s means the **repo** root — one flag name, two meanings (`07`).
+→ `05`, `06`, `product/shared/{memory-model,schemas}.md`, `11`, `07`. Files: `product/scripts/check_doc_budget.py`
+(new), `product/templates/{checks.sh,loop.md}`, `product/skills/{prioritize,document}/SKILL.md`,
+`product/MANIFEST.json`, `product/scripts/test_{check_doc_budget,retention_lessons,checks_runner}.py`.
