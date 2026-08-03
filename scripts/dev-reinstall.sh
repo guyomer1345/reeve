@@ -20,10 +20,16 @@
 #
 #   scripts/dev-reinstall.sh
 #
-# NOT a substitute for the release-side version bump (Phase 8a): this fixes the
-# maintainer's own loop, where the fix must be that the version is IRRELEVANT. A real
-# installed user has no working tree to reinstall from, which is why the bump plus the
-# meta-gate that refuses an un-bumped release are still the answer for them.
+# This fixes the maintainer's own loop, where the fix must be that the version is
+# IRRELEVANT. A real installed user has no working tree to reinstall from.
+#
+# SUPERSEDED (D164): the released-user half is NOT a version bump plus a gate refusing an
+# un-bumped release — that plan is dropped. `version` is DELETED from plugin.json so the
+# platform keys delivery on the commit SHA, and a two-hop detector on the SessionStart
+# hook tells an install it is stale. Both audiences now share that detector, with
+# different anchors. This script keeps its own job (reinstall from the working tree) and
+# gains a keep-2 cache prune at build, because SHA versioning abandons a ~2.4MB cache dir
+# per update and nothing — not even `claude plugin uninstall` — reclaims it.
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

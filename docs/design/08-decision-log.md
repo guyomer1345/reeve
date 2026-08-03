@@ -4423,3 +4423,118 @@ the gate is stated for a "change", and `/create-forecast` is available by hand a
 worth revisiting if the column reads as mostly-unknown in practice; (3) the `#fc-list` panel has **never been
 rendered in a browser** (the D147/D156 pattern: mechanically driven, visually unproven).
 → `04`, `05`, `07`, `09`, `10`, `11`, `shared/schemas.md`.
+
+## D164 — Phase 8a RE-DESIGNED against the platform: the plugin `version` is DELETED, not disciplined — delivery becomes the commit SHA, and the staleness PREVENTER becomes a two-hop DETECTOR **[DECIDED 2026-08-03 — supersedes 8a's build plan (D151/D155/D158); the sixth meta-gate is deleted from the plan, not deferred; unbuilt. Also fixes the Phase-8/Phase-9 sequencing D163 left open]**
+8a was designed to build machinery enforcing a human ritual. Re-checked against the live platform docs before
+building it — the D136 precedent — the ritual turns out to be **something the platform performs for free**, and the
+one argument for keeping the ritual **does not survive reading our own code**.
+
+**The platform fact (verbatim, `code.claude.com/docs/en/plugins-reference#version-management`, re-read 2026-08-03).**
+`version` is optional, and the cache key resolves from the first of: (1) `plugin.json`'s `version`; (2) the
+**marketplace entry's** `version`; (3) **the git commit SHA** for `github`/`url`/`git-subdir`/relative-path sources
+in a git-hosted marketplace; (4) `unknown` for npm or a local directory not inside a git repo. The docs' own
+Warning: *"If you're iterating quickly, leave `version` unset so the git commit SHA is used instead."* Note rule (2):
+putting a semver in `marketplace.json` **re-pins** — so "semver in the marketplace, omit in the plugin" decouples
+nothing.
+
+**Call 1 — DELETE `version` from `plugin.json` (and never add one to the marketplace entry).** Delivery then keys on
+the commit SHA, so staleness becomes **structurally impossible to forget** rather than ritually prevented — this
+project's most-repeated lesson (D129, and again D142/D144/D145/D147/D150/D152): derive the protection from the
+artifact's shape, never from a signal somebody had to remember to send. **The sixth meta-gate in `build-release.py`
+is therefore deleted from the plan, not deferred** — there is no longer a ritual for it to guard. *(Caught by the
+blast-radius sweep: "the sixth meta-gate" was already a stale name — D163 records **six** gates green, so D155's
+proposed one would in fact have been a seventh. It is named here as D155/D158 named it, and dropped.)*
+
+**Call 2 — `config.json`'s `workflow_version` becomes that SHA.** *This retires the objection that killed the idea
+on first look.* The fear was that D135 couples the plugin version to the migration key, and a SHA is not ORDERED, so
+"is this install older than migration X?" becomes unanswerable. **Reading `update_reconcile.py` rather than its
+description: `/update` never asks that question.** `workflow_version` is used in exactly three ways — an **equality**
+test (`noop = old == new`), a **display** string (`STAMP old -> new`), and **absent ⇒ unknown-old ⇒ removals
+disabled**. There is no ordered comparison anywhere; every migration decision is **content-hash** driven through
+`install-set.json` (`ADD`/`SAME`/`REFRESH`/`LOCAL-EDIT`/`REFRESH?` all come from `_sha`). D137/D139 built the hash
+ledger *precisely* so the version would not have to carry ordering. Under a SHA the equality test gets strictly
+**more** correct: `noop` becomes true only when the content genuinely did not move, where under the pin `noop=True`
+**is** the D151 lie. `update.md` already conceded it in prose — *"a dev install can move without the version
+moving."* **If `/update` ever needs true ordering ("installs before N need step Z"), the escape hatch is a
+product-owned `schema_version` in a shipped file — a different field from the delivery cache key.** Not built now:
+adopting a second version source before anything asks for it is accretion, which D80 forbids.
+
+**Call 3 — the PREVENTER becomes a DETECTOR, covering BOTH hops, local-only, everywhere, once per distinct SHA.**
+There are **three** layers and therefore **two** copy hops, and 8a had only ever reasoned about one: the **source**
+(`product/` in this repo) → the **install** (`claude plugin install` *copies* it to
+`~/.claude/plugins/cache/<mkt>/<plugin>/<version>/`, one per machine — this is what `CLAUDE_PLUGIN_ROOT` points at,
+so *this* is what runs) → the **project scaffold** (`/start` copies the `MANIFEST` `install[]` set into the project's
+own git, because `.claude/settings.json` references those files by project-relative path and the cache path is
+machine-specific and uncommittable). **The hop nobody had written down is that `/update` is BOUNDED BY THE
+INSTALL** — it runs `${CLAUDE_PLUGIN_ROOT}/scripts/update_reconcile.py --plugin-root ${CLAUDE_PLUGIN_ROOT}` and never
+reaches back to the source. So a stale install does not merely run old code: it **propagates** old code into every
+project that runs `/update`, reporting success. That is why the two axes are not redundant. The detector rides
+`hooks/session_start.py`, which is **already wired at matcher `startup` and whose re-assert block already runs on
+every source** — no new hook surface: **hop A** compares the installed SHA against the on-disk marketplace anchor
+(`.gcs-sha` for a github source; `git rev-parse HEAD` for a directory source) → *reinstall*; **hop B** compares
+`config.workflow_version` against `basename(CLAUDE_PLUGIN_ROOT)` → *run `/update`*. Warn-once state keyed on the SHA,
+always fails open. **The governing reason a detector replaces a preventer: delivery is not ours to fix** — issue
+#17361's Failures 1 and 3 are CLI-side, so **no author-side choice makes delivery automatic**; what an author can
+control is that the *manual* path stops lying, and that the install can *say* it is stale.
+
+**Call 4 — the cache prune is meta-only, keep-2, in `scripts/dev-reinstall.sh`.** SHA versioning means every update
+writes a **new** dir and abandons the old one; Claude Code has **no retention policy at all** and `uninstall` does
+not reclaim them either (both measured). At ~2.4MB per update this is negligible for a released user and fastest for
+the maintainer, who is therefore the one who gets the prune. Keep-**2**, not keep-1: the CLI prints *"Restart to
+apply changes"*, so a session that began before an update is still executing from the older dir.
+
+**Call 5 — the sequencing D163 left open: `8a → drive 9a → 9b`.** Not on 8a's user-facing payoff, but because **a
+stale install corrupts the evidence of every drive that follows it** — D151's actual lesson. Do 8a first and every
+later drive is trustworthy by construction; then **the 9a browser drive doubles as 8a's exit test**, proving the
+delivery path end-to-end while closing 9a's never-rendered `#fc-list` residual in one pass. 9b is the largest of the
+three and unblocks neither, so it follows.
+
+*Rejected — **8a as designed** (bump-per-release + the sixth meta-gate):* the most work for the least benefit; it
+enforces a ritual the platform performs for free, and issue #17361's Failure 3 means even a correct bump does not
+reach clients automatically — so it buys only the manual path that deleting the field also buys, while preserving
+the misleading message on every skipped bump. *Rejected — **auto-bumping semver from a hook**:* D158 rejected this
+because "a version that moves five times a day is not a migration key" — **that reason is now void** (nothing orders
+it), but it loses anyway as local machinery reimplementing a native platform behaviour. *Rejected — **a version in
+the marketplace entry**:* resolution rule (2) re-pins. *Rejected — **`git ls-remote` in the detector**:* it would
+also catch Failure 1, but a network call at session start needs a timeout, an offline path and a cache rule — most
+of the detector's total complexity, for the one failure a directory-source install cannot exhibit. *Rejected — **a
+GC shipped into the product**:* a plugin deleting siblings of itself inside the CLI's own cache is outside our ship
+boundary and can yank a directory from under a live session. *Rejected — **a runner-only warning**:* it would skip
+interactive sessions, which is where **both** drift data points actually happened. *Rejected — **a hop-B-only
+detector**:* that is the axis that can lie, since a stale install makes `/update` report success over stale files.
+
+*Corrections this forces to prior entries:* **D158's stated reason for rejecting an auto-bump is void** (it assumed
+the version carried ordering; it does not), and **D158's "the two halves are deliberately different in kind" is
+partly superseded** — one detector serves both audiences with **different anchors** (released user → marketplace
+clone; maintainer → the repo), which is D161's "org-align is existing `align` with a different anchor" pattern.
+D158's *call* — that the maintainer's fix must not depend on a version — still stands and is what the prune rides.
+
+*Evidence (measured, CLI **2.1.220**, in a throwaway `CLAUDE_CONFIG_DIR` — the real install was verified untouched
+afterwards):* a version-less plugin in our exact shape (`source: directory` at a path that *is* a git repo; plugin
+`source: "./product"`) resolved to the **short commit SHA** (`5f8148115e14`), **not** `unknown` — settling the rule
+(3)/(4) seam that would have made omission *strictly worse* than the pin; a new commit was then delivered by
+`claude plugin update` **without even a preceding `marketplace update`** (a directory source reads live), content
+verified in the cache. **The pinned control reproduced D151 in 60 seconds:** content changed without a bump →
+`✔ already at the latest version (0.1.0)` → the change never reached the cache. `gitCommitSha` correctly stayed at
+the **install-time** commit, so `11`'s prescribed `gitCommitSha == HEAD` check is **sound** and is the detector's
+primitive. Four updates → **four** cache dirs, and `uninstall` reclaimed none. `claude plugin validate` on a
+version-less `product/` **passes** (advisory warning `No version specified`; note `--strict` would treat it as an
+error, which matters only if this is ever submitted to `claude-community`). *Corroboration:* Anthropic's own
+`claude-plugins-official` marketplace carries **`version: None` for every plugin**, pinned by SHA — the reference
+implementation already does this. *Issue state as of 2026-08-03:* #49410 and #52218 **closed**; #72616 (our exact
+directory shape) closed by a **bot as an auto-duplicate**, not fixed; **#17361 OPEN**, with reproductions on 2.1.220
+through 2026-07-31 separating three failures — **F1** autoUpdate never pulls the clone, **F2** the cache is keyed on
+the version string so content changes never re-extract (*this is D151, and this is the control above*), **F3**
+session start never performs the update even when the catalog is current and the version genuinely differs
+(`0.4.0`→`0.5.1` unapplied through a 30-minute idle session). F3 was **not** independently reproduced here — it needs
+a 30-minute idle session — so it rests on three independent reports at our exact CLI version. *Blast radius of the
+change itself is small:* one function (`plugin_version()`, 2 call sites) plus a `--plugin-dir` edge where
+`basename` is `product` rather than a SHA, one test fixture asserting `"0.2.0"`, and prose in `start.md` step 7,
+`shared/schemas.md`'s `config.json` owner line and `update.md`'s `STAMP` paragraph; `build-release.py` only copies
+the manifest and never reads the version. *Second data point for D151, from this session:* the install was **six
+commits stale** and was only fixed because the maintainer was explicitly told to reinstall — `dev-reinstall.sh` had
+shipped the day before (D158) and did not run. Two data points now say a manual script is not a control, which is
+what Call 3 answers.
+→ `07` (the Phase-8a OPEN block closes), `11` (Phase 8 rewritten; the Phase-9-vs-8 sequencing call resolved). At
+build: `product/.claude-plugin/plugin.json`, `product/scripts/update_reconcile.py`, `product/hooks/session_start.py`,
+`product/commands/{start,update}.md`, `product/shared/schemas.md`, `scripts/dev-reinstall.sh`.

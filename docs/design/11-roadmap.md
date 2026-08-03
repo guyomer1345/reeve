@@ -630,7 +630,8 @@ lifecycle.
   `ingest`/`start.md` state plainly that the motion ends the context window at the park.
   **[ctx — BUILT (D134); RE-DRIVEN (D138)]**
 - **Version-stamped installs (D135)** — `/start` step 7 writes `workflow_version` (from the plugin's
-  `plugin.json`, currently `0.1.0`) into `.workflow/config.json`; `schemas.md` owns the field.
+  `plugin.json`, `0.1.0` until Phase 8a lands — **D164 deletes that field and the stamp becomes the commit
+  SHA**) into `.workflow/config.json`; `schemas.md` owns the field.
   **[fwd — BUILT (D135)]**
 - **`/update` — BUILT (D139)** — constraints pinned by D135 (regenerate `[G]`/`graph.json` under the new schema ·
   never clobber `[D]`/adopted docs (D39/D50/D130) · diff against the manifest `install[]` map over a pre-existing
@@ -731,30 +732,41 @@ a park→verdict→unpark cycle and a `/rebind` on a real clone whose toolchain 
 probe did exactly what they were designed to do; the declared-secret diff did not, and its finding is open in `07`.
 One high-severity bug came out of it (the forged end marker) and one stated residual was retracted as never real.
 
-### Phase 8 — Release discipline, then the interaction-model rework **[NEXT — opened D155; nothing built]**
+### Phase 8 — Release discipline, then the interaction-model rework **[NEXT — opened D155; 8a re-designed D164; nothing built]**
 Phases 1–7 are complete and the package has a **real installed consumer**. The successor is therefore not the
 biggest remaining feature — it is the only open item that **harms a user today**, and it was measured, not feared.
-- **8a — a stale install cannot learn it is stale (D151) — `[core]`.** Installing **copies** `product/` into
+- **8a — a stale install cannot learn it is stale (D151) — `[core]`. RE-DESIGNED 2026-08-03 (D164, owner) — build
+  this shape, not the one D155/D158 described.** Installing **copies** `product/` into
   `~/.claude/plugins/cache/<plugin>/<version>/`; `claude plugin update` compares **versions**, and
   `plugin.json` has been pinned at `0.1.0` since the first install. The D151 drive measured the consequence: the
   install had silently drifted **12 commits and 17 shipped files behind** HEAD — including the `SessionStart(clear)`
   rehydrate, so a `/clear` there dropped into an empty session while the docs described resuming from `handoff.md`
   — while `claude plugin update` reported *"already at the latest version (0.1.0)"*. `11` already prescribed a
   manual force-reinstall; **the drive is the proof that the manual step did not hold.** A control nobody runs is
-  not a control. Two halves, and the second is what makes the first un-forgettable:
-  - **bump `version` on every release that changes a shipped file** — the same lever twice, since D135 makes that
-    value `config.json`'s `workflow_version` and `/update` keys its whole migration on it;
-  - **a sixth meta-gate in `build-release.py`** that refuses a release whose shipped set or hashes moved without a
-    bump. This is `check-status-coherence` applied to the ship boundary, and it is the `install-set.json` pattern
-    one level up: the ledger is what makes "did this actually change?" *provable* rather than remembered.
-  **The cadence is settled (D158): the version moves once per RELEASE that changes a shipped file, never per push** —
-  a version that moved every commit would keep every cache fresh and destroy what the version is *for*, since D135
-  makes it `config.json`'s `workflow_version` and `/update` keys its whole migration on it. **The maintainer's half
-  is already DONE and is deliberately a different mechanism**: `scripts/dev-reinstall.sh` (meta-only) reinstalls from
-  the working tree, because a released user has no working tree and the maintainer needs the version to be
-  *irrelevant*. That also sharpens why 8a leads: the user harmed by a stale install **today** is the maintainer, so
-  this is first a correctness argument about the project's own evidence — a drive that silently runs commits-old
-  code and reports it as HEAD — and only second a user-facing one.
+  not a control. **A second data point landed 2026-08-03:** the install sat six commits stale and was fixed only
+  because the maintainer was told to reinstall — `dev-reinstall.sh` had shipped the day before and did not run.
+  **What changed at re-design (D164):** the plugin `version` is **DELETED, not disciplined**. It is optional, and
+  omitting it makes the platform key delivery on the **commit SHA** — so staleness becomes structurally impossible
+  to forget instead of ritually prevented, and **the sixth meta-gate is deleted from the plan, not deferred**. The
+  objection that this collides with D135 **does not survive reading the code**: `workflow_version` does an equality
+  test, a display string and an absent-check — **no ordering anywhere** — because `/update`'s whole migration is
+  content-hash driven through `install-set.json`. The four build calls:
+  - **delete `version`** from `plugin.json` (and never add one to the marketplace entry — a version there re-pins);
+    `plugin_version()` falls back to `basename(CLAUDE_PLUGIN_ROOT)`, which *is* the resolved cache key;
+  - **`config.workflow_version` becomes that SHA** — the equality test gets strictly *more* correct under it;
+  - **a two-hop DETECTOR** on the existing `SessionStart` hook (already wired at `startup`): **hop A** installed SHA
+    vs the on-disk marketplace anchor → *reinstall*; **hop B** `config.workflow_version` vs the running package →
+    *run `/update`*. Local-only, everywhere, **warn-once per distinct SHA**, always fails open. A *preventer* is not
+    buildable — the automatic delivery path is CLI-side and broken (issue #17361, live on 2.1.220);
+  - **a keep-2 cache prune in `scripts/dev-reinstall.sh`** (meta-only): SHA versioning abandons a ~2.4MB dir per
+    update and nothing — not even `uninstall` — reclaims it.
+  **Why the detector covers two hops:** `/update` is **bounded by the install** (it runs
+  `${CLAUDE_PLUGIN_ROOT}/…/update_reconcile.py` and never reaches back to the source), so a stale install does not
+  merely run old code — it **propagates** old code into every project it updates, reporting success. **D158's call
+  stands** (the maintainer's fix must not depend on a version) but its *"two halves, different in kind"* is partly
+  superseded: one detector, two anchors. That also sharpens why 8a leads: the user harmed by a stale install
+  **today** is the maintainer, so this is first a correctness argument about the project's own evidence — a drive
+  that silently runs commits-old code and reports it as HEAD — and only second a user-facing one.
 - **8b — the interaction-model rework** (browser-primary async chat — `07`) — **`[core]`, sequenced second,
   deliberately.** Its blocker has cleared (D132 parked it behind a proper re-drive; D138 ran one), so this is a
   scheduling call, not a dependency: shipping a large new surface onto a fleet that cannot learn it is stale
@@ -766,7 +778,7 @@ living code-map observed layer, the D84 reclassification, the proportional-rigor
 model/effort routing, the project-map tab, and the project-state view (still the self-hosting prerequisite it has
 been since 2026-06-30).*
 
-### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[DESIGNED 2026-08-03 — D159–D163. 9a BUILT 2026-08-03 (D163, by hand); 9b + 9c UNBUILT. Sequence within: 9a → 9b → 9c. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. Where the rest of Phase 9 sits vs Phase 8 is still open]**
+### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[DESIGNED 2026-08-03 — D159–D163. 9a BUILT 2026-08-03 (D163, by hand); 9b + 9c UNBUILT. Sequence within: 9a → 9b → 9c. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. Sequencing vs Phase 8 SETTLED D164: 8a → drive 9a → 9b]**
 Born from a design conversation on four maintainer asks (the fourth — a console config tab — was **dropped**, D161;
 its "change credentials over Cloudflare" arm violated D112). All three build **ON** existing machinery, not beside it —
 that is the through-line and the reason none is large. Capture is design-only; the deep-doc edits ride each build.
@@ -822,8 +834,10 @@ that is the through-line and the reason none is large. Capture is design-only; t
   governance caveat: **D161** (owner). **[stageable — DESIGNED; unbuilt; build last]**
 
 *Sequencing note:* 9a → 9b → 9c is fixed (9b makes everything cheaper; 9c is riskiest and evidence-blind). **9a is
-done** (D163). **Where the rest of Phase 9 sits relative to Phase 8** (8a release-discipline "harms a user today" and
-is tiny; 8b async chat) remains an open call — the next discussion. **The dogfooding half of that call was MADE for
+done** (D163). **Where the rest of Phase 9 sits relative to Phase 8 is SETTLED (D164): `8a → drive 9a → 9b`.** Not on
+8a's user-facing payoff, but because **a stale install corrupts the evidence of every drive that follows it** — do 8a
+first and every later drive is trustworthy by construction, and **the 9a browser drive then doubles as 8a's exit
+test**, closing 9a's never-rendered `#fc-list` residual in the same pass. **The dogfooding half of that call was MADE for
 9a: it was built BY HAND** (2026-08-03), and self-hosting the workflow on itself is a **separate later experiment on
 a clone**, deliberately not entangled with shipping the feature. That kept 9a off the `[stageable]` project-state
 view it would otherwise have waited on, and keeps the first self-hosting run from having to debug a brand-new

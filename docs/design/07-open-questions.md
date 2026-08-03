@@ -401,33 +401,20 @@ are CLOSED by the D144 build.**
   earns a shared read-only helper or the duplication gets stated as intended. Touching the verify gate to add a
   warning a `pre-commit` hook cannot usefully display is the trade that kept it out of 7a.
 
-**OPEN (D151) — how does a released install learn it is stale, when the version never moves? — PROMOTED into
-Phase 8a (D155, `11`); still unbuilt, and now the *first* thing scheduled.** The post-Phase-7 `align` cold-audit
-had to answer "what comes after Phase 7", and this won on the only argument that should decide it: it is the sole
-open item that harms a **real installed user today**, and it was measured rather than feared. The call taken with
-the promotion is **both** options below, because the second is what makes the first un-forgettable: bump the
-`version` on every shipped-file release, **and** a sixth meta-gate in `build-release.py` that refuses a release
-whose shipped set moved without a bump. **D158 settles the cadence and splits off the maintainer's half:** the
-version moves once per *release*, never per push (a per-commit bump would keep every cache fresh and destroy the
-migration key `/update` diffs against), and the maintainer's own stale-install problem is answered by a different
-mechanism entirely — `scripts/dev-reinstall.sh`, meta-only, reinstalling from the working tree, because a released
-user has no working tree and the maintainer needs the version to be irrelevant. **What stays OPEN here is exactly
-the released-user half**, unbuilt. The question text stands as written. The package ships as
-a Claude Code plugin, and installing **copies** `product/` into `~/.claude/plugins/cache/<plugin>/<version>/` — a
-snapshot, not a live link. `claude plugin update` compares **versions**, and `product/.claude-plugin/plugin.json`
-has been pinned at `0.1.0` since the first install. **The no-op itself is not news** — `11`'s Phase-6 sequence line
-already says "a version-pinned `update` is a no-op — verify `gitCommitSha` == HEAD" and prescribes a force-reinstall.
-What the D151 drive showed is that **the known manual step did not hold**: the install had silently drifted back to
-**12 commits and 17 shipped files behind** HEAD (a pre-D142 `session_start.py`, a `dispatch.md` still instructing a
-hand-written `parked[]`) while `claude plugin update` reported *"already at the latest version (0.1.0)"* — an
-actively misleading message on the one path a user would trust. A manual verification step nobody runs is not a
-control, and this one will bite every user who installs once and then receives fixes.
-The options are roughly: **bump `version` on every release that changes a shipped file** — already meaningful,
-because D135 makes that value `config.json`'s `workflow_version` and `/update` keys on it, so the bump is the same
-lever twice; and/or **a sixth meta-gate** in `build-release.py` that refuses a release whose shipped files moved
-without a bump, which is the only form that cannot be forgotten. The second is the `check-status-coherence` pattern
-applied to the ship boundary. **Not a regression — a release-discipline gap that only became visible once the
-package had a real installed consumer.**
+**CLOSED (D151 → D155 → D158 → D164, 2026-08-03) — how does a released install learn it is stale, when the version
+never moves?** The design is settled and **unbuilt**; it is Phase 8a and the next thing scheduled (`11`).
+**Owner: D164** — which *re-designed* the answer rather than refining it, so the D155/D158 shape (bump the `version`
+per release + a sixth meta-gate to make the bump un-forgettable) is **superseded and must not be built**. In short:
+the plugin `version` is **deleted, not disciplined** (omitting it makes the platform key delivery on the commit SHA,
+so the sixth gate has no ritual left to guard); `config.workflow_version` becomes that SHA, which the code permits
+because `/update` never orders it; and because the automatic delivery path is CLI-side and broken, a staleness
+**preventer** is replaced by a two-hop **detector** on the existing `SessionStart` hook. Sequencing is settled with
+it: `8a → drive 9a → 9b`. The measurements, the verbatim platform contract, the issue state and the rejected
+alternatives all live in **D164**; nothing is duplicated here.
+**Newly open from that re-design, both small and both deferred to build:** (1) the detector's **warn-once state** —
+which `.workflow/` key owns it, and whether `retention.py` prunes it; (2) the `--plugin-dir` **edge** where
+`basename(CLAUDE_PLUGIN_ROOT)` is `product` rather than a SHA, so the version fallback needs a
+`git rev-parse --short HEAD` rung before `unknown`.
 
 ## Newly designed — Phase 9 (D159–D163, 2026-08-03) — sub-questions deferred to build
 Three capabilities were designed from a maintainer conversation (owners: `11` Phase 9 + D159–D163); **9a is now
@@ -461,5 +448,6 @@ Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away ca
 - **Cross-cutting — the dogfooding call: HALF CLOSED (D162, 2026-08-03).** **9a was built BY HAND** (D163, same day),
   and self-hosting the workflow on itself is a **separate later experiment on a clone** — so 9a never waited on the
   **project-state view** (still `[stageable]`, the self-hosting prerequisite since 2026-06-30), and the first
-  self-hosting run will not also be debugging a brand-new capability. **Still open:** the sequencing decision vs
-  Phase 8, and whether 9b/9c self-host.
+  self-hosting run will not also be debugging a brand-new capability. **The sequencing decision vs Phase 8 is now
+  CLOSED (D164): `8a → drive 9a → 9b`** — a stale install corrupts the evidence of every drive after it, so 8a leads
+  and the 9a browser drive doubles as 8a's exit test. **Still open:** whether 9b/9c self-host.
