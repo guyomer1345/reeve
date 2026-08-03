@@ -1,6 +1,5 @@
 {
   "name": "dev-autonomous-workflow",
-  "version": "0.1.0",
   "description": "An autonomous, disciplined dev workflow for Claude Code: a self-driving engineer loop with human checkpoints, a live supervision console, and a project knowledge base — installed and run locally on your own subscription.",
   "author": { "name": "Guy Omer" },
   "homepage": "https://github.com/guyomer1345/dev-autonomous-workflow"

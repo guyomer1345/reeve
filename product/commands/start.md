@@ -390,9 +390,16 @@ loop's normal `state.json` takes over when the motion ends.
    PY
    ```
    - **All present (exit 0)** → **stamp the install, write both ledgers, then commit**:
-     - add `"workflow_version": "<version>"` to `.workflow/config.json`, read from
-       `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` — the migration key a future `/update` diffs against;
-       without it an installed copy cannot say which package snapshot it holds;
+     - add `"workflow_version": "<version>"` to `.workflow/config.json`, taking the value from
+       ```bash
+       python3 "${CLAUDE_PLUGIN_ROOT}/scripts/update_reconcile.py" version --plugin-root "${CLAUDE_PLUGIN_ROOT}"
+       ```
+       — the migration key a future `/update` diffs against; without it an installed copy cannot say
+       which package snapshot it holds. **Do not read `plugin.json` for this.** The package deliberately
+       ships **no** `version` field, deliberately: omitting it makes Claude Code key the install on the **commit
+       SHA**, so delivery can no longer silently no-op over changed content. That resolution is the
+       runner's job — one owner, four rungs — and the value it prints is also what the SessionStart
+       staleness detector compares this stamp against;
      - **record the install-set** — run
        `python3 .claude/scripts/update_reconcile.py record --plugin-root "${CLAUDE_PLUGIN_ROOT}" --project-root "${CLAUDE_PROJECT_DIR}"`,
        which writes **`.workflow/install-set.json`**: every path this install wrote, with the hash it wrote.

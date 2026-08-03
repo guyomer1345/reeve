@@ -431,10 +431,18 @@ fires it.
 
 ## config.json  · written once by `/start`, read on demand · *rewrite-in-place · static after init (committed)*
 - `project_root` — `./project` (greenfield) | `.` (brownfield); makes code-touching skills path-agnostic
-- `workflow_version` — the installed package version, copied by `/start` step 7 from the plugin's
-  `.claude-plugin/plugin.json` and restamped by every `/update`; the migration key `/update` diffs against
-  (an install that cannot say which snapshot it holds cannot be migrated). Equal old/new ⇒ a **no-op**
-  update; **absent** ⇒ unknown-old ⇒ full reconcile + stamp, with removals disabled (see `install-set.json`)
+- `workflow_version` — the installed package version, stamped by `/start` step 7 and restamped by every
+  `/update`; the migration key `/update` diffs against (an install that cannot say which snapshot it holds
+  cannot be migrated). Equal old/new ⇒ a **no-op** update; **absent** ⇒ unknown-old ⇒ full reconcile +
+  stamp, with removals disabled (see `install-set.json`). **In practice a commit SHA, not a semver:** the
+  package ships no `version` field, so Claude Code names the install cache by the source commit and that
+  is the value. It is resolved by `update_reconcile.py version` — the single owner of the chain
+  (`plugin.json` pin → the resolved cache-dir basename → the source repo's `HEAD` → `unknown`) — never by
+  reading `plugin.json`, which no longer has the field. **Nothing orders this value**: it is used for an
+  equality test, a display string, and an absent-check only; every migration decision is content-hash
+  driven through `install-set.json`. `unknown` is never a no-op. If `/update` ever needs true ordering,
+  the escape hatch is a product-owned `schema_version` in a shipped file — a *different* field from the
+  delivery cache key, adopted deliberately
 - `run` — per-project run config (model/effort routing, wave caps — fields grow as those land)
 - `context` — the interactive context-governor knob, **read by the shipped statusline** (the one
   surface the running token count reaches — hooks and the model receive none): `warn_pct` (the
@@ -738,6 +746,24 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
   failing webhook backs off the whole channel (doubling, capped at `reminder_hours`) and does **not** mark the
   checkpoint alerted, so the reminder path retries it once the channel recovers. Keys are pruned when the
   checkpoint resolves / the dead-letter clears, which bounds the file and is what makes a re-park re-alert.
+
+## session-start warn-once markers  · written and read by `hooks/session_start.py` alone · *`.git/hooks/.disciplined-builder-assert` + `.git/hooks/.disciplined-builder-stale`; MACHINE-LOCAL, never committed, plain overwrite (no atomicity needed — a torn or lost file re-warns, which is the safe direction)*
+- `.disciplined-builder-assert` — a bare sha256 line: the hash of the **foreign** `.git/hooks/pre-commit`
+  already warned about. A *different* foreign hook is new information and warns again; installing our
+  backstop deletes the file, so a project that removes the foreign hook is told rather than staying silent.
+- `.disciplined-builder-stale` — `{ reinstall: "<installed>..<anchor>", update: "<old>..<new>" }`, the
+  staleness detector's warn-once state, keyed on the **SHA pair** per hop. New drift is a new key and
+  warns again; a fix needs no clearing, because the condition simply stops holding.
+- **Why `.git/hooks/` and not `.workflow/`** — all three requirements point there and only there. The facts
+  recorded are about **this machine** (which install is present, which foreign hook is on this clone), so
+  committing them would let one machine silence another's warning; `.git/` is untrackable **by
+  construction**, needing no `.gitignore` entry — which matters because the installs these must reach are
+  precisely the ones too stale to have a new ignore line. They must also survive `/rebind` (they are not in
+  the relocatable runtime tree) and be readable before a project is bootstrapped. **Nothing prunes them**
+  and nothing needs to: one small file per project, rewritten in place, and `retention.py`'s remit is
+  `.workflow/` artifacts. A project with no `.git/` **directory** (including a worktree, whose `.git` is a
+  file) gets neither marker and both features stay silent there — a detector that cannot remember having
+  warned becomes noise, which is the failure mode it exists to avoid.
 
 ## state.json  · the live loop pointer (volatile, gitignored) · *`.workflow/state.json`; published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
 - `status` ∈ `{ intake, building, idle }`

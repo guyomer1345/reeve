@@ -38,16 +38,24 @@ Subcommands:
   plan    -- print what would change; writes nothing. `--json` for machine consumption.
   apply   -- perform it: copies, proven-orphan removal, ledger + version stamp.
   record  -- write the ledger for an install that just landed (`/start` step 7).
+  version -- print the resolved version of the package at --plugin-root; writes nothing.
+             `plugin.json` no longer carries one, so this is the single owner of the
+             resolution chain and what `/start` step 7 stamps from.
 """
 import argparse
 import fnmatch
 import hashlib
 import json
 import os
+import re
+import subprocess
 import sys
 
 LEDGER_REL = os.path.join(".workflow", "install-set.json")
 CONFIG_REL = os.path.join(".workflow", "config.json")
+
+# The floor of the version chain, and the platform's own word for it (resolution rule (4)).
+UNKNOWN_VERSION = "unknown"
 
 # The orchestrator brief is a MANAGED BLOCK inside the target's root CLAUDE.md: /update replaces
 # only what is between these markers, so project notes around it are never touched. Both /start
@@ -185,9 +193,64 @@ def expected_files(plugin_root, project_root):
     return out
 
 
+_CACHE_KEY_RE = re.compile(r"(?:[0-9a-f]{7,40}|v?\d+(?:\.\d+)*[\w.+-]*)\Z")
+
+
+def _looks_like_cache_key(name):
+    """Is this directory name one the PLATFORM resolved, or one a human chose?
+
+    The cache dir is named by resolution rules (1)-(4): a `plugin.json` semver, a
+    marketplace semver, a short commit SHA, or the literal `unknown`. All three shapes are
+    recognisable; a source directory a human named (`product`, `dev-autonomous-workflow`)
+    is not. That is the whole discriminator -- see `plugin_version`.
+    """
+    return name == UNKNOWN_VERSION or bool(_CACHE_KEY_RE.match(name))
+
+
+def _git_sha(path):
+    """`git rev-parse --short=12 HEAD` at `path`, or None. 12 to match the platform's key."""
+    try:
+        out = subprocess.run(["git", "-C", path, "rev-parse", "--short=12", "HEAD"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                             timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    sha = out.stdout.decode("utf-8", "replace").strip()
+    return sha if re.fullmatch(r"[0-9a-f]{7,40}", sha) else None
+
+
 def plugin_version(plugin_root):
+    """The version of the package AT `plugin_root` -- four rungs, most-authoritative first.
+
+    `version` was DELETED from `plugin.json` so the platform keys delivery on the commit
+    SHA instead of on a number somebody had to remember to bump. The consequence here is
+    that this function can no longer just read the field: it has to resolve the same value
+    the platform did, because that value is `config.workflow_version` and the name of the
+    directory the package was extracted into.
+
+      1. `plugin.json`'s `version`, if a release ever pins one again. Still rung one, so
+         re-adding the field is a supported (if discouraged) act rather than a breakage.
+      2. `basename(plugin_root)` WHEN IT LOOKS PLATFORM-RESOLVED -- for a real install that
+         basename IS the resolved cache key, which is exactly the value we want and the one
+         the session-start detector compares against. Deliberately ahead of the git rung:
+         the cache lives under the CLI config dir, and a user who versions their dotfiles
+         would otherwise have us report their DOTFILES' HEAD as the package version.
+      3. `git rev-parse --short=12 HEAD` at `plugin_root`. This is the `--plugin-dir ./product`
+         edge: running against the source tree, the basename is `product`, so rung 2
+         correctly declines and the repo's own HEAD is the honest answer.
+      4. `unknown` -- the platform's own word for the same situation (rule (4)), and it is
+         excluded from the no-op test, because not knowing is not the same as not moving.
+    """
     meta = _read_json(os.path.join(plugin_root, ".claude-plugin", "plugin.json"), {})
-    return meta.get("version")
+    pinned = (meta or {}).get("version")
+    if pinned:
+        return pinned
+    base = os.path.basename(os.path.abspath(plugin_root))
+    if base and _looks_like_cache_key(base):
+        return base
+    return _git_sha(plugin_root) or UNKNOWN_VERSION
 
 
 # ---------------------------------------------------------------- the brief block
@@ -326,7 +389,11 @@ def compute_plan(plugin_root, project_root):
         "old_version": old_version,
         "new_version": new_version,
         "has_ledger": ledger is not None,
-        "noop": bool(old_version and new_version and old_version == new_version),
+        # `unknown` is excluded deliberately: two installs that both failed to resolve a
+        # version are not thereby the SAME install, and calling a no-op over content that
+        # DID move is the exact failure this key was reshaped to stop telling.
+        "noop": bool(old_version and new_version and old_version == new_version
+                     and new_version != UNKNOWN_VERSION),
         "actions": actions,
     }
 
@@ -446,7 +513,7 @@ def do_record(plugin_root, project_root):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="the /update reconcile runner")
-    ap.add_argument("mode", choices=["plan", "apply", "record"])
+    ap.add_argument("mode", choices=["plan", "apply", "record", "version"])
     ap.add_argument("--plugin-root", required=True, help="${CLAUDE_PLUGIN_ROOT} of the NEW package")
     ap.add_argument("--project-root", default=".", help="${CLAUDE_PROJECT_DIR}")
     ap.add_argument("--json", action="store_true", help="plan: emit the plan as JSON")
@@ -456,6 +523,15 @@ def main(argv=None):
 
     plugin_root = os.path.abspath(args.plugin_root)
     project_root = os.path.abspath(args.project_root)
+
+    # `version` is read-only and needs no initialised project: `/start` step 7 calls it on a
+    # scaffold it is still building. It exists because `plugin.json` no longer HAS a version
+    # to read — without it, `start.md` would have to re-describe the four-rung
+    # resolution chain in prose, which is a second owner of the rule and therefore drift.
+    if args.mode == "version":
+        print(plugin_version(plugin_root))
+        return 0
+
     if not os.path.isdir(os.path.join(project_root, ".workflow")):
         print("no .workflow/ under %s — this project is not initialised; run /start, not /update."
               % project_root)

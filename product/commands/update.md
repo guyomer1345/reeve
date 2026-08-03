@@ -76,8 +76,15 @@ It prints one line per package-owned path. Read them as:
 - `BRIEF-UNMARKED` — the root `CLAUDE.md` has no managed block, so the orchestrator brief is left
   alone (see §4).
 - `STAMP old -> new` — the version transition. `old == new` is a **no-op update**: report the
-  summary and stop unless the human explicitly wants a re-sync (a dev install can move without the
-  version moving).
+  summary and stop unless the human explicitly wants a re-sync.
+  **What these values are:** the package ships **no** `version` field, so Claude Code keys
+  the install on the **commit SHA** and that SHA is the stamp. The old caveat here — *"a dev install
+  can move without the version moving"* — is therefore **gone**: content that moved gets a new SHA,
+  so `old == new` now means the content genuinely did not move. `unknown` is the one exception and is
+  never treated as a no-op, because failing to resolve a version is not the same as not moving.
+  This equality test is the **only** thing the version is used for, besides display and the
+  absent-check — nothing anywhere orders it, which is exactly why a SHA is allowed to be the key
+  (every migration decision is content-hash driven through `install-set.json`).
 
 **Show the human the plan before applying anything.** For every `LOCAL-EDIT` and `REFRESH?` on
 `.claude/settings.json` or the brief, show the actual diff (`diff -u` the on-disk file against

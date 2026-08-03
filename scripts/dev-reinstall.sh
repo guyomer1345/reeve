@@ -23,13 +23,14 @@
 # This fixes the maintainer's own loop, where the fix must be that the version is
 # IRRELEVANT. A real installed user has no working tree to reinstall from.
 #
-# SUPERSEDED (D164): the released-user half is NOT a version bump plus a gate refusing an
-# un-bumped release — that plan is dropped. `version` is DELETED from plugin.json so the
-# platform keys delivery on the commit SHA, and a two-hop detector on the SessionStart
-# hook tells an install it is stale. Both audiences now share that detector, with
-# different anchors. This script keeps its own job (reinstall from the working tree) and
-# gains a keep-2 cache prune at build, because SHA versioning abandons a ~2.4MB cache dir
-# per update and nothing — not even `claude plugin uninstall` — reclaims it.
+# The D151 story above is now HISTORY, not the live mechanism (D164, built): `version` is
+# DELETED from plugin.json, so the platform keys delivery on the commit SHA and `claude
+# plugin update` is no longer a no-op over changed content. What replaced the version-bump
+# plan is a two-hop detector on the SessionStart hook, which tells an install it is stale —
+# both audiences share it, with different anchors. This script keeps its own job (reinstall
+# from the working tree, which the SHA key cannot cover because the install copies the
+# WORKING TREE and a dirty tree has no commit) and now also prunes the cache, because SHA
+# versioning abandons a ~2.4MB dir per update and nothing reclaims it. See the tail.
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -63,3 +64,57 @@ fi
 echo "==> installed. Roster the install now carries:"
 claude plugin list 2>/dev/null | grep -A 6 "$plugin" || true
 echo "==> source tree was $root @ $head_sha$dirty"
+
+# ---- keep-2 cache prune (D164 call 4) -------------------------------------------------
+# With `version` deleted from plugin.json the cache key is the COMMIT SHA, so every update
+# extracts into a NEW directory (~2.4MB) and abandons the previous one. Claude Code has no
+# retention policy at all, and `claude plugin uninstall` reclaims nothing either — both
+# measured on 2.1.220. A released user updates rarely enough that this is negligible; the
+# maintainer reinstalls many times a day, which is why the prune lives here, in meta-only
+# tooling, and is never shipped. A plugin deleting siblings of itself inside the CLI's own
+# cache would be outside our ship boundary and could yank a directory from under a live
+# session (D164 rejected exactly that).
+#
+# Keep TWO, not one. `claude plugin install` prints "Restart to apply changes", so a
+# session that STARTED before this reinstall is still executing out of the previous
+# directory; deleting it would break a session that is running right now.
+cache_root="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache"
+live="$(python3 - "$plugin" <<'PY' 2>/dev/null || true
+import json, os, sys
+name = sys.argv[1]
+cfg = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+try:
+    reg = json.load(open(os.path.join(cfg, "plugins", "installed_plugins.json")))
+except Exception:
+    sys.exit(0)
+for key, entries in (reg.get("plugins") or {}).items():
+    if str(key).partition("@")[0] != name:
+        continue
+    for e in entries or []:
+        p = (e or {}).get("installPath")
+        if p:
+            print(os.path.realpath(p))
+PY
+)"
+
+pruned=0
+for group in "$cache_root"/*/"$plugin"; do
+  [ -d "$group" ] || continue
+  # Newest-first by mtime; everything past the second is abandoned. `ls -dt` rather than
+  # `find -printf` so this is not GNU-find-only.
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    dir="${dir%/}"
+    [ -d "$dir" ] || continue
+    case "$live" in *"$(realpath "$dir" 2>/dev/null || echo "$dir")"*)
+      echo "    keeping (live install)  ${dir##*/}"; continue ;;
+    esac
+    size="$(du -sh "$dir" 2>/dev/null | cut -f1)"
+    rm -rf -- "$dir" && { echo "    pruned  ${dir##*/}  (${size:-?})"; pruned=$((pruned + 1)); }
+  done <<< "$(ls -1dt "$group"/*/ 2>/dev/null | tail -n +3)"
+done
+if [ "$pruned" -gt 0 ]; then
+  echo "==> cache prune: removed $pruned abandoned install dir(s), kept the 2 newest"
+else
+  echo "==> cache prune: nothing to reclaim (<= 2 install dirs)"
+fi

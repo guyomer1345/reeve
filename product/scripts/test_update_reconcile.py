@@ -19,22 +19,30 @@ import update_reconcile as ur
 
 def _plugin(root, version="0.2.0", extra_install=(), drop=()):
     """A minimal but structurally real package: a manifest, a dir entry with an excluded
-    test file, the three templates, and the orchestrator brief."""
+    test file, the three templates, and the orchestrator brief.
+
+    `version=None` omits the field entirely — the SHIPPED shape since D164 deleted it. The
+    reconcile tests below keep a pin, because what they exercise is the hash arithmetic and
+    a stable version keeps their intent legible; `TestPluginVersion` covers the real chain.
+    """
+    tag = version or "nover"
     root.mkdir(parents=True, exist_ok=True)
     (root / ".claude-plugin").mkdir(exist_ok=True)
-    (root / ".claude-plugin" / "plugin.json").write_text(
-        json.dumps({"name": "dev-autonomous-workflow", "version": version}))
+    meta = {"name": "dev-autonomous-workflow"}
+    if version is not None:
+        meta["version"] = version
+    (root / ".claude-plugin" / "plugin.json").write_text(json.dumps(meta))
 
     (root / "scripts" / "codemap").mkdir(parents=True, exist_ok=True)
-    (root / "scripts" / "bus.py").write_text("# bus v%s\n" % version)
-    (root / "scripts" / "codemap" / "codemap.py").write_text("# codemap v%s\n" % version)
+    (root / "scripts" / "bus.py").write_text("# bus v%s\n" % tag)
+    (root / "scripts" / "codemap" / "codemap.py").write_text("# codemap v%s\n" % tag)
     (root / "scripts" / "codemap" / "test_codemap.py").write_text("# MUST NOT INSTALL\n")
     # Build cruft a working-directory plugin source carries: a `.pyc` basename is not a
     # `*.py`, so it slips past a `test_*.py`-only exclude.
     (root / "scripts" / "codemap" / "__pycache__").mkdir(exist_ok=True)
     (root / "scripts" / "codemap" / "__pycache__" / "codemap.cpython-314.pyc").write_bytes(b"\x00cruft")
     (root / "hooks").mkdir(exist_ok=True)
-    (root / "hooks" / "guard.sh").write_text("# guard v%s\n" % version)
+    (root / "hooks" / "guard.sh").write_text("# guard v%s\n" % tag)
 
     install = [
         {"src": "scripts/bus.py", "dest": ".claude/scripts/bus.py"},
@@ -43,7 +51,7 @@ def _plugin(root, version="0.2.0", extra_install=(), drop=()):
     ]
     for e in extra_install:
         (root / e["src"]).parent.mkdir(parents=True, exist_ok=True)
-        (root / e["src"]).write_text("# %s v%s\n" % (e["dest"], version))
+        (root / e["src"]).write_text("# %s v%s\n" % (e["dest"], tag))
         install.append(e)
     install = [e for e in install if e["dest"] not in drop]
 
@@ -52,12 +60,12 @@ def _plugin(root, version="0.2.0", extra_install=(), drop=()):
          "exclude": ["**/test_*.py", "**/*.pyc", "**/*.pyo"], "install": install}))
 
     (root / "templates").mkdir(exist_ok=True)
-    (root / "templates" / "loop.md").write_text("# loop v%s\n" % version)
-    (root / "templates" / "checks.sh").write_text("#!/usr/bin/env bash\n# checks v%s\n" % version)
+    (root / "templates" / "loop.md").write_text("# loop v%s\n" % tag)
+    (root / "templates" / "checks.sh").write_text("#!/usr/bin/env bash\n# checks v%s\n" % tag)
     (root / "templates" / "settings.json").write_text(
-        json.dumps({"permissions": {"allow": ["Bash"]}, "version": version}, indent=2) + "\n")
+        json.dumps({"permissions": {"allow": ["Bash"]}, "version": tag}, indent=2) + "\n")
     (root / "templates" / "orchestrator-CLAUDE.md").write_text(
-        "# <project> — Orchestrator\nv%s\nroot=<project_root>\n" % version)
+        "# <project> — Orchestrator\nv%s\nroot=<project_root>\n" % tag)
     return root
 
 
@@ -388,6 +396,100 @@ def test_write_failure_leaves_no_tmp_debris(tmp_path, monkeypatch):
 
     assert list(tmp_path.glob("*.tmp.update")) == []
     assert not target.exists()
+
+
+# ---------------------------------------------------------------- the version chain (D164)
+
+class TestPluginVersion:
+    """`plugin_version`'s four rungs. D164 deleted `version` from `plugin.json` so the
+    PLATFORM keys delivery on the commit SHA; this function has to resolve the same value
+    the platform did, because that value becomes `config.workflow_version`."""
+
+    def test_rung1_a_pin_still_wins(self, tmp_path):
+        """Re-adding the field stays supported, just discouraged — otherwise a future
+        release that wants a pin would find the code has decided against it."""
+        p = _plugin(tmp_path / "0.9.9", version="0.9.9")
+        assert ur.plugin_version(str(p)) == "0.9.9"
+
+    def test_rung2_basename_is_the_resolved_cache_key(self, tmp_path):
+        """For a real install the basename IS the key the platform resolved — measured on
+        2.1.220 as a 12-char short SHA for a version-less directory-source plugin."""
+        p = _plugin(tmp_path / "5f8148115e14", version=None)
+        assert ur.plugin_version(str(p)) == "5f8148115e14"
+
+    def test_rung2_accepts_a_semver_or_unknown_cache_key(self, tmp_path):
+        # Resolution rules (1)/(2) name the dir with a semver; rule (4) names it `unknown`.
+        assert ur.plugin_version(str(_plugin(tmp_path / "0.1.0", version=None))) == "0.1.0"
+        assert ur.plugin_version(str(_plugin(tmp_path / "unknown", version=None))) == "unknown"
+
+    def test_rung3_the_plugin_dir_edge_falls_back_to_git_head(self, tmp_path):
+        """The `07` edge: under `--plugin-dir ./product` the basename is `product`, not a
+        SHA. Rung 2 must DECLINE a human-chosen directory name and the repo's own HEAD is
+        the honest answer — otherwise `/update` would stamp the literal string `product`."""
+        repo = tmp_path / "repo"
+        (repo).mkdir()
+        _plugin(repo / "product", version=None)
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@e",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@e")
+        import subprocess
+        for args in (["init", "-q"], ["add", "-A"], ["commit", "-qm", "x"]):
+            subprocess.run(["git", "-C", str(repo)] + args, check=True, env=env,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        head = subprocess.run(["git", "-C", str(repo), "rev-parse", "--short=12", "HEAD"],
+                              stdout=subprocess.PIPE, check=True).stdout.decode().strip()
+
+        got = ur.plugin_version(str(repo / "product"))
+        assert got == head, "the --plugin-dir edge must resolve HEAD, not 'product'"
+        assert got != "product"
+
+    def test_rung4_no_pin_no_key_no_git_is_unknown(self, tmp_path):
+        p = _plugin(tmp_path / "some-checkout-dir", version=None)
+        assert ur.plugin_version(str(p)) == "unknown"
+
+    def test_unknown_is_never_a_noop(self, tmp_path):
+        """Two installs that both FAILED to resolve a version are not the same install.
+        Calling that a no-op would be the D151 lie in a new costume."""
+        plugin = _plugin(tmp_path / "some-checkout", version=None)
+        project = _project(tmp_path / "proj")
+        _install(plugin, project)
+        cfg = json.loads((project / ".workflow" / "config.json").read_text())
+        assert cfg["workflow_version"] == "unknown"
+
+        plan = ur.compute_plan(str(plugin), str(project))
+        assert plan["old_version"] == plan["new_version"] == "unknown"
+        assert plan["noop"] is False
+        assert "no-op" not in ur.render_plan(plan)
+
+    def test_a_resolved_key_that_did_not_move_is_still_a_noop(self, tmp_path):
+        """The other direction: under a SHA the equality test gets strictly MORE correct,
+        so it must still fire when the content genuinely did not move."""
+        plugin = _plugin(tmp_path / "5f8148115e14", version=None)
+        project = _project(tmp_path / "proj")
+        _install(plugin, project)
+        assert ur.compute_plan(str(plugin), str(project))["noop"] is True
+
+
+def test_the_shipped_package_pins_no_version_anywhere():
+    """Call 1's invariant, as a test rather than as a release ritual.
+
+    Delivery keys on the commit SHA only while BOTH of these stay absent: resolution rule
+    (1) re-pins from `plugin.json`, and rule (2) re-pins from the MARKETPLACE entry — so
+    "omit it in the plugin, keep a semver in the marketplace" decouples nothing. This is
+    not the release gate D164 deleted (that one guarded a bump nobody had to make); it
+    guards the new shape against a well-meaning re-pin.
+    """
+    here = Path(__file__).resolve().parent                      # product/scripts
+    meta = json.loads((here.parent / ".claude-plugin" / "plugin.json").read_text())
+    assert "version" not in meta, (
+        "plugin.json pins a version again — that restores resolution rule (1) and delivery "
+        "stops keying on the commit SHA (D164)")
+
+    mkt = here.parent.parent / ".claude-plugin" / "marketplace.json"
+    if mkt.exists():                                            # absent in a shipped tarball
+        for entry in json.loads(mkt.read_text()).get("plugins", []):
+            assert "version" not in entry, (
+                "the marketplace entry pins %s — resolution rule (2) re-pins from there "
+                "(D164)" % entry.get("name"))
 
 
 if __name__ == "__main__":
