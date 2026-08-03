@@ -209,11 +209,11 @@ class Reality(unittest.TestCase):
     def _item(self, name):
         open(os.path.join(self.w, "items", "item-1", name), "w").close()
 
-    def _park(self, kind, answered=False):
-        rec = {"ticket_id": "item-1", "token": "t", "checkpoint": {"kind": kind}}
+    def _park(self, kind, answered=False, ticket="item-1"):
+        rec = {"ticket_id": ticket, "token": "t", "checkpoint": {"kind": kind}}
         if answered:
             rec["answered_at"] = "2026-08-03T11:00:00Z"
-        with open(os.path.join(self.w, "parked", kind + ".json"), "w") as fh:
+        with open(os.path.join(self.w, "parked", ticket + "-" + kind + ".json"), "w") as fh:
             json.dump(rec, fh)
 
     def _fc(self, nodes, **kw):
@@ -254,6 +254,25 @@ class Reality(unittest.TestCase):
         self.assertEqual(st["checkpoint:setup"], "open")
         self.assertEqual(st["checkpoint:qa"], "done")
 
+    def test_a_checkpoint_parked_for_a_DIFFERENT_change_is_not_this_chains(self):
+        """`parked/` is project-wide, and every other probe here is item-scoped.
+
+        Unscoped, this row read `open` — whose whole meaning is "the machine is waiting on
+        YOU, here" — off a checkpoint belonging to some other change, pointing the human at
+        a step that was not waiting on them at all. And since `prioritize` emits parallel
+        items, an open checkpoint somewhere is the NORMAL state, so it would have been
+        wrong most of the time. Caught by rendering the panel in a real browser.
+        """
+        fc = self._fc(["checkpoint:qa"])
+        self._park("qa", ticket="some-other-change")
+        self.assertEqual(self._states(fc)["checkpoint:qa"], "pending")
+
+    def test_this_changes_OWN_checkpoint_still_reads_open(self):
+        """The other side of the scoping: it must not have gone blind."""
+        fc = self._fc(["checkpoint:qa"])
+        self._park("qa")
+        self.assertEqual(self._states(fc)["checkpoint:qa"], "open")
+
     def test_a_node_with_NO_anchor_is_unknown_never_pending(self):
         """The honest fourth state. `decision-engineer`'s output is a global decision
         record that cannot be tied to one item, so this column must not claim it did not
@@ -291,6 +310,31 @@ class Divergence(unittest.TestCase):
 
     def _div(self, fc):
         return f.reality(fc, workflow_dir=self.w)["divergences"]
+
+    def _park(self, kind, ticket):
+        with open(os.path.join(self.w, "parked", ticket + "-" + kind + ".json"), "w") as fh:
+            json.dump({"ticket_id": ticket, "token": "t",
+                       "checkpoint": {"kind": kind}}, fh)
+
+    def test_another_changes_checkpoint_is_NOT_a_divergence(self):
+        """The expensive half of the same project-wide leak.
+
+        A structural divergence RE-FORECASTS the tail, so an unscoped read meant a chain
+        that predicts no checkpoint got re-forecast because some *other* change happened to
+        be waiting on a human — and with parallel items that is the ordinary state, not an
+        edge case.
+        """
+        self._item("plan.md"); self._item("changelog.md")
+        self._park("forecast", ticket="some-other-change")
+        self.assertEqual(self._div(self._fc(["planner:plan-one", "execute"])), [])
+
+    def test_this_changes_OWN_unforecast_checkpoint_IS_a_divergence(self):
+        """Scoping must not have disarmed the real signal: a checkpoint opening for THIS
+        change that the chain never predicted is exactly the turn nobody saw coming."""
+        self._item("plan.md"); self._item("changelog.md")
+        self._park("qa", ticket="item-1")
+        div = self._div(self._fc(["planner:plan-one", "execute"]))
+        self.assertTrue(any(d["node"] == "checkpoint" for d in div), div)
 
     def test_a_forecast_chain_walked_as_predicted_does_not_diverge(self):
         self._item("plan.md"); self._item("changelog.md")

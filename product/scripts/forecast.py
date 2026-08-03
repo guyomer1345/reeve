@@ -254,8 +254,20 @@ def _probe(node, fc, workflow_dir):
         # `checkpoint:<kind>` — an unanswered record is the one genuinely live state the
         # column can show, and it is the most useful thing on it: "the machine is waiting
         # on YOU, here."
+        #
+        # SCOPED TO THIS ITEM, like every other probe here. `parked/` is a project-wide
+        # directory, and without the `ticket_id` test this arm answered from ANY open
+        # checkpoint in the project — so a `qa` gate parked for a different change made
+        # this chain's `checkpoint:qa` read `open` ("the machine is waiting on YOU, here")
+        # when nothing about this change was waiting, and worse, a chain predicting NO
+        # checkpoint at all collected a structural DIVERGENCE from somebody else's
+        # checkpoint. That one is not cosmetic: a structural divergence re-forecasts the
+        # tail, and since `prioritize` emits parallel items, an open checkpoint somewhere
+        # is the NORMAL state — so the false positive would have fired most of the time.
         want = node.split(":", 1)[1] if ":" in node else None
         for rec in _parked_records(workflow_dir):
+            if rec.get("ticket_id") != item:
+                continue
             cp = rec.get("checkpoint") or {}
             if want and cp.get("kind") != want:
                 continue

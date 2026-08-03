@@ -1689,6 +1689,20 @@ class AnsweredStamp(Tmp):
         `hidden` toggle on this page rides on it."""
         self.assertIn("[hidden] { display:none !important; }", bus.STYLE_CSS)
 
+    def test_the_forecast_chain_does_not_number_every_event_twice(self):
+        """The chain is an `<ol>`, and each `<li>` also renders the record's own `n` into
+        `.ev-n`. Without `list-style:none` the browser draws its marker as well, so every
+        row of every chain read "1. 1", "2. 2" — on the checkpoint card and the panel both,
+        since they share one renderer.
+
+        Found only by rendering the panel in a real browser: no `textContent` assertion can
+        see it, because each of the two numbers is individually correct. The record's `n` is
+        the one that must be shown — a marker always counts 1..N from the top, so it would
+        disagree with `n` the moment a chain were rendered partially."""
+        chain = [ln for ln in bus.STYLE_CSS.splitlines() if ln.startswith(".chain {")]
+        self.assertTrue(chain, "the .chain rule is gone; this guard is now vacuous")
+        self.assertIn("list-style:none", chain[0])
+
 
 class ParkedMirrorBackfill(Tmp):
     """The block otherwise comes into existence only at the next park/unpark. An install

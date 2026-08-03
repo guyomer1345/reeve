@@ -3337,7 +3337,15 @@ dd { margin:0; }
    deliberately distinguishable at a glance: `done` reads settled, `open` is the one that
    wants you, `pending` is quiet, and `unknown` is visibly NOT a claim — a column that
    renders "I can't tell" the same as "hasn't happened" is a column that lies. */
-.chain { margin:.35rem 0; padding-left:1.1rem; }
+/* `list-style:none` is load-bearing, not cosmetic. The chain is an `<ol>` because it IS an
+   ordered sequence, but the number a human must read is the record's own `n` (rendered into
+   `.ev-n`), NOT the browser's marker: the marker always counts 1..N from the top, so the
+   moment a chain is ever rendered partially — or an event is filtered — the marker and `n`
+   would disagree and the page would show two different numbers for one event. Without this
+   rule both are drawn and every single row reads "1. 1", "2. 2". Found by rendering the
+   panel in a real browser; no assertion on `textContent` can see it, because each number is
+   correct on its own. `ol#log` already does this, for the same reason. */
+.chain { margin:.35rem 0; padding-left:1.1rem; list-style:none; }
 .chain .event { margin:.3rem 0; }
 .chain .ev-what, .chain .hint { margin:.1rem 0; }
 .ev-state { font-size:.8em; padding:0 .4rem; border-radius:.6rem; border:1px solid var(--line); }
