@@ -13,7 +13,10 @@ Structured **manual** checkpoints surfaced through the website. Flow:
 A checkpoint sits at a boundary only a human can cross, of one of two types — this organizes every trigger and
 verdict below:
 - **Judgment** ("is this what we meant?") — `demo` (spec vs mental picture, intake), `qa` (behaviour vs intent,
-  build-tail), `reconcile` (reconstructed spec vs reality, brownfield). The verdict is an opinion.
+  build-tail), `reconcile` (reconstructed spec vs reality, brownfield), and **`forecast`** (proposed *routing* vs
+  intended *process*, intake — **[DESIGNED — D159, `11` Phase 9a; unbuilt]**: a pre-execution forecast of the loop's
+  own chain of events, `approve|changes|reject`, `changes` re-forecasts). The verdict is an opinion. *`demo` de-risks
+  the product question, `forecast` the process question — the same pre-plan intake primitive on an orthogonal axis.*
 - **Action** ("do something in the world I can't reach") — `setup` (perform an external action, obtain a
   credential). The verdict is "I did it" + a returned artifact, then **machine-verified**.
 

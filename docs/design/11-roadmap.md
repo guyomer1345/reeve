@@ -417,7 +417,9 @@ The website+demo design decomposes into five clusters; the dependency spine is *
 **Phase 5 — pre-test hardening (D126). COMPLETE** (as are Phases 6 and 7 below); this paragraph is the
 historical framing of *why it opened*, not a live "next slice" pointer — it read as one for four phases after
 Phase 5 closed. **The live pointer is `### Phase 8` below** (opened D155): release discipline first, then the
-interaction-model rework. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
+interaction-model rework. **`### Phase 9` (D159–D161) is now DESIGNED** (the chain-forecast · the context-budget law ·
+org mode) but **unbuilt and not yet sequenced** against Phase 8 — the maintainer intends to drive it through the
+project's own workflow, a dogfooding call still open. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
 the release surface D125), but "release-ready" was a *build-completeness* claim: the whole **install → `/start` →
 loop** runtime has **never been driven end-to-end once** (every Phase-3 increment was driven in isolation; the only
 prior loop run — D52 — was a pre-D66 throwaway that *simulated* dispatch). A pre-first-run audit (two independent
@@ -764,6 +766,42 @@ living code-map observed layer, the D84 reclassification, the proportional-rigor
 model/effort routing, the project-map tab, and the project-state view (still the self-hosting prerequisite it has
 been since 2026-06-30).*
 
+### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[DESIGNED 2026-08-03 — D159–D161; ALL UNBUILT. Sequence within: 9a → 9b → 9c. Where it sits vs Phase 8, and whether it drives through the product itself, is the pending dogfooding call]**
+Born from a design conversation on four maintainer asks (the fourth — a console config tab — was **dropped**, D161;
+its "change credentials over Cloudflare" arm violated D112). All three build **ON** existing machinery, not beside it —
+that is the through-line and the reason none is large. Capture is design-only; the deep-doc edits ride each build.
+- **9a — the chain-forecast (D159) `[core-ish]`.** A `/create-forecast` command (+ orchestrator self-invoke on the
+  D69 triage) emits a **cheap, conditional forecast of the loop's own routing** for a requested change — ordered events
+  each naming a real `loop.md` node, decision-meaningful branch points explicit, predicted setups elicited early
+  (front-loading D97's elicitation, never its probe). Surfaced as a **new judgment checkpoint kind** (reuses the whole
+  park/verdict/away stack — no new inbox kind); `approve` freezes it, reality renders as a **derived** column, a
+  structural divergence re-forecasts. `create-demo` de-risks the *product* question; the forecast de-risks the
+  *process* question. Loopback-only. Full call + rejected alternatives: **D159** (owner). **[core-ish — DESIGNED; unbuilt]**
+- **9b — the context-budget law (D160) `[core]`.** The enforcement `memory-model.md`'s "bounded by construction" claim
+  never had: a mechanical `check_doc_budget.py` token-counts every workflow-owned doc against a **role budget**
+  (always-loaded → ~200 lines/<1k tokens; on-demand → the **25k Read ceiling** as the hard wall), run in `checks.sh`
+  and as a **third decoupled maintenance item** `prioritize` injects (beside retention + `align`). Over-budget → a
+  ticket (trim/split-and-pointer/distill), never auto-mangle; it does **not** re-check truth (`align` owns "wrong").
+  **Un-defers Sessions distillation** (D61). The spec repo is its own counter-evidence — the roadmap paged at the 25k
+  ceiling this session. Full call: **D160** (owner). **[core — DESIGNED; unbuilt]**
+- **9c — org mode (D161) `[stageable — BUILD LAST, behind its own drive]`.** A **third `/start` mode** (`config.org`;
+  absent ⇒ inert) for a company product the maintainer does not own: a **private-tree brain** (all machinery + derived
+  + intent) over a **byte-pristine, zero-footprint** company checkout, `project_root` = an absolute path, a
+  **remote-less private clone** the loop commits to freely (its resume ledger — invisible to the org), and a
+  **human-only** git boundary (the loop writes no company-visible surface — not `main`, not the tracker, not the
+  hooks). Coworker drift re-aligns via a `describes_sha` stamp read off `FETCH_HEAD` — **org-align is existing `align`
+  with a different anchor**, not new machinery. Mostly **brownfield-minus-footprint** (reuses `ingest`/codemap/reconcile)
+  plus one net-new **review-bundle producer** (form deferred to build). **Zero prior multi-repo/multi-committer
+  evidence**, so it is gated on its own drive (a real public repo at a pinned SHA + its own later commits replayed as
+  coworker drift → assert pristine/no-push/drift-detected/no-leak). Full call + the org-brownfield delta list + the
+  governance caveat: **D161** (owner). **[stageable — DESIGNED; unbuilt; build last]**
+
+*Sequencing note:* 9a → 9b → 9c is fixed (9b makes everything cheaper; 9c is riskiest and evidence-blind). **Where
+Phase 9 sits relative to Phase 8** (8a release-discipline "harms a user today" and is tiny; 8b async chat) — and the
+maintainer's stated intent to **drive Phase 9 through this project's own workflow (self-hosting/dogfooding)** — is an
+open call, deliberately **not** captured here: it is the next discussion, and the project-state view it may want is
+still `[stageable]`.
+
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
 `rules/` + the drift gate), **knowledge-complete** (code-map generation → brownfield ingest), **visible + reachable**
@@ -820,4 +858,7 @@ that named `returns`/`tasks[]`/steps/deep-links, so D122's Tailscale credential 
 nothing could emit. `returns` is now a declared name-keyed map, the console gained the setup form (increment 3b),
 and the matcher went exact. **`### Phase 8` (D155) is what comes next** — release discipline (a released install
 cannot currently learn it is stale) ahead of the interaction-model rework, because shipping a new surface onto a
-fleet that cannot receive fixes multiplies the problem. Beyond those, everything is `[stageable]`/`[later]`.
+fleet that cannot receive fixes multiplies the problem. **`### Phase 9` (D159–D161)** then adds three new capabilities
+— the chain-forecast, the context-budget law, and org mode — all **designed 2026-08-03, all unbuilt**, each built ON
+existing machinery; its sequencing vs Phase 8 and whether it self-hosts through the product are an open dogfooding
+call. Beyond those, everything is `[stageable]`/`[later]`.

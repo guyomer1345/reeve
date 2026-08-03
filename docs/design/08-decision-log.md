@@ -4067,4 +4067,180 @@ must be that the version is irrelevant.
 maintainer, on the machine the package is tested on. So 8a's payoff is not mainly "future users get updates" — it is
 that a test drive stops silently running commits-old code and attributing the result to HEAD. That is a correctness
 argument about the project's own evidence, and it is stronger than the user-facing one D155 promoted it on.
+
+## D159 — The chain-forecast: a pre-execution routing forecast over the EXISTING loop, surfaced as a new judgment checkpoint kind **[DESIGNED 2026-08-03 — Phase 9a; unbuilt. Answers the maintainer's "show me the chain of events before you walk it"]**
+The maintainer wanted, before a large change, to *see the chain of events the loop proposes* — "orchestrator launches
+research → figures out the current implementation → proposes a plan → executes → human QA here → testing…" — with each
+event's probable outcome and its fallback, so he can view / question / modify it, front-load the human gates he can
+answer up front (e.g. hand over a credential now instead of at the blocking step), and afterwards watch reality unfold
+against it. Nothing today produces this: `planner` decompose gives a roadmap of **work units**, plan-one gives **code
+steps** — neither forecasts the loop's own **routing**.
+
+**Call — a forecast of the loop's routing, generated cheap and read as conditional, surfaced as a checkpoint.**
+- **A `/create-forecast` command** (the explicit human trigger on big work, the exact sibling of `/create-demo`) **+ an
+  orchestrator self-invoke gated on the D69 proportional-rigor triage** (high blast-radius × hard-to-reverse →
+  auto-forecast; not a vibe). The forecast reads the **indices** — `graph.json` + the spec + `loop.md` — and applies
+  the loop's *own* trigger rules **without firing them** (planner declares a `human-qa` criterion → a qa checkpoint is
+  predicted; `spec.integrations[]` or an execute-discovered step → setup; the sandbox gate → demo; a decision with no
+  recorded answer → `decision-engineer`→`research`). That is what makes it **smart yet cheap** — it predicts the
+  trigger, it does not resolve it; it forecasts the territory from the map, it never does the work.
+- **Every event NAMES a real `loop.md` node** — the forecast is a *prediction over the existing graph*, not a second
+  graph, so `check_contracts.py` can lint that every event resolves (D80: one routing owner).
+- **Branch points are explicit but bounded.** A branch earns a node only where the *human would do something different*
+  (pre-supply a credential, pick a 4a/4b integration path, decide a qa is worth their time). `verify → succeeds: X |
+  fails: debug` is shown once as "this step self-corrects"; it is **not** recursively unrolled into every
+  verify→debug→refine cycle, which would redraw `loop.md` per-item and drown the signal.
+- **Surfaced as a judgment checkpoint** (D96 taxonomy) — `{outcome: approve|changes|reject, notes}` parked on the bus
+  like a demo. `changes` re-forecasts with the edits; `approve` **freezes** it. Reuses the token/deadline/away-alert/
+  drain/"my requests" machinery whole — no new inbox kind. **The framing: `create-demo` de-risks the PRODUCT question
+  ("did we agree *what* to build?"); the forecast de-risks the PROCESS question ("did we agree *how* the machine will
+  proceed?") — the same pre-plan intake primitive on an orthogonal axis** (D21/D22 set the precedent of a checkpoint
+  that fires pre-plan at intake).
+- **The front-loading superset over D97** — D97 bundles foreseeable setups *within-plan at first-contact*, deliberately
+  not front-loaded, to avoid pestering. The forecast **front-loads the ELICITATION, never the VERIFICATION**: a
+  predicted setup surfaces as an optional pre-fill ("this chain needs `IVRIT_API_KEY` at event 5 — hand it over now, or
+  be asked then"); if provided, event 5 finds it in the secret store and skips the *asking* but **still runs D97's
+  machine-verify probe** (a key handed over 40 minutes early can still be wrong). A strict superset of D97, not a
+  reversal — which is why D97's within-plan bundling stands unchanged for everything not pre-supplied.
+- **Reality is DERIVED, and a structural divergence re-forecasts.** The frozen forecast renders beside a reality column
+  computed from `state.json` + `git log` + the item `changelog` (never a rewrite; the "my requests" pattern of
+  resolving off per-effect anchors — D108/D119). An event that unfolds as predicted just fills in; a **structural
+  divergence** — an event that was never forecast (D37's structural tier) — does not silently continue: it re-forecasts
+  the tail and re-shows. The forecast also **marks its own blind spots** ("beyond event 6, unforeseeable — do not read
+  this as unattended"), because execute-discovered needs are unforecastable by definition (`align`'s honest-truncation
+  rule: a silent cap reads as "all clear").
+- **Loopback-only (Socket B).** A forecast is *more* authoritative than a verdict — it is a whole execution plan, and
+  D90 makes an approved one drive the agent — so it never rides the reduced remote surface (D112).
+
+*Rejected:* a **new routing graph** the orchestrator follows *instead of* `loop.md` (two routing owners = the drift
+D80 exists to kill; the forecast names existing nodes); a **new inbox `kind`** (it is a checkpoint verdict — reusing
+the kind buys the whole park/resume/away stack free); **unrolling every mechanical edge** (rebuilds `loop.md` as a
+per-item state machine — branch only at decision-meaningful points); reversing **D97** to front-load verification (the
+elicit-early/verify-at-the-gate superset gets the away-run benefit without dropping the probe that catches a wrong
+key); riding the **remote** surface (an approved forecast is agent control — D112). *What is binding about an approved
+forecast is NOT the sequence* — it is the corrections made reviewing it (which land as ordinary spec edits / decision
+records) and the human gates it front-loads; deviation is a divergence event, which `execute` already has the
+vocabulary for (D37), not a failure.
+*Reuse:* D96/D97 (checkpoint taxonomy + verb-enum verdict + the setup probe), D69 (the self-trigger's principled gate),
+D21/D22 (`create-demo` — the pre-plan intake-checkpoint precedent + the de-risking framing), D37 (divergence tiers),
+D108/D119 (derived "my requests" anchors), D112 (loopback = authoritative), D80 (single routing owner + `check_contracts`).
+→ `04`, `09`, `11`, `07`.
+
+## D160 — The context-budget law: a mechanical doc-size gate extends the retention/read law over PROSE **[DESIGNED 2026-08-03 — Phase 9b; unbuilt. The enforcement the "bounded by construction" claim never had]**
+The maintainer asked what currently ensures no context-loaded file exceeds a sane size and periodically flags one that
+does. The answer is **nothing**: `memory-model.md` *asserts* "always-read files are bounded by construction," and there
+is **no mechanical check anywhere** that holds it true; `retention.py` (D71) caps the append-only tier (`# Sessions`)
+and nothing else. The claim is enforced by hope — and this repo is the counter-evidence: `11-roadmap.md` (767 lines)
+**paged at the 25 000-token Read-tool ceiling** during this very session, in the file whose product is meant to prevent
+exactly that.
+
+**Call — a role-tiered, token-measured, mechanically-enforced budget, built ON the retention law, not beside it.**
+- **A mechanical check `check_doc_budget.py`** token-counts every workflow-owned doc against its **role budget** and
+  runs (a) in `checks.sh` (cheap, decidable, always-whole) and (b) as a **third maintenance item `prioritize` injects
+  on a threshold — decoupled** from retention (memory pressure) and `align` (drift risk), the same shape those two
+  already use. This *is* the maintainer's "the orchestrator flags it by itself periodically."
+- **Budget by ROLE, in TOKENS, not lines** (model-window-agnostic, the same reason `warn_pct` is a percentage — D136):
+  - **always-loaded** (`CLAUDE.md` brief, `loop.md`) → aggressive: the community ~200-line / sub-1k-token target, because
+    every token is rent paid *every turn, every session, before a word is typed*;
+  - **on-demand context** (a spec doc, a `rules/*.md`, a knowledge node) → **the 25 000-token Read ceiling is the HARD
+    wall** (a file over it *mechanically cannot be loaded in one call* — enforcement that is a failure, not advice), with
+    a softer advisory flag below it (schedule a trim before it becomes a wall).
+- **Over-budget → a TICKET** (trim / split / distill), never auto-mangle. The **prose arm** is the one genuinely new
+  mechanism: you cannot drop half a spec doc to git like a `# Sessions` entry — splitting prose coherently needs
+  judgment — so an over-budget prose file routes to a **split-and-pointer** (lean current-state file + archived-detail
+  file + a head marker), mirroring retention's existing Sessions marker. This repo already does it by hand (roadmap =
+  status, git = history); the product just never made it a rule.
+- **It does NOT re-check truth.** `align` owns "is this doc *wrong*"; the budget gate owns "is this doc *too big*" — two
+  owners, no overlap (D80). Building a second truth-checker was the trap.
+- **Un-defer Sessions distillation** (deferred at D61; D88 already holds "distill a postmortem to a one-line lesson
+  *before* drop"). The best-practice finding that **compression beats raw retention** is the evidence to build it now —
+  it is the prose/log arm's real answer, better than tuning "keep last N."
+
+*Numbers (researched, tiered — there is no single constant):* **25 000 tokens** = the Read-tool hard ceiling (the
+enforcement point); **~40 KB** = Claude Code's own `CLAUDE.md` performance warning; **~200 lines / <1k tokens** = the
+community target for an always-loaded brief. Derive the shipped defaults by measuring the repo's own files, not by
+citing a number.
+*Rejected:* an **"every X turns" trigger** (turns are not durable — a `/clear` resets them and the away-runner spawns a
+fresh `claude -p` per ticket with no turn history; use item/commit boundaries like retention/`align`); a **second
+truth-checker** (D80 violation — `align` already classifies + routes); a **single best-practice max size** (none
+exists; budget by role in tokens); **auto-trimming prose** (needs judgment → ticket + split-pointer). *Corrections
+folded from the discussion:* trigger on boundaries not turns; do not duplicate `align`.
+*Reuse:* D59–D61/D71 (the retention/read law + `retention.py` + the maintenance-item injection pattern), D80 (single
+owner), D88 (distill-to-lesson-before-drop), D136 (`warn_pct` = percentage-not-token precedent). Research: Claude
+Code #4002 (25k read ceiling), #2766 (40KB `CLAUDE.md` warning), context-rot / compression-beats-retention (2026).
+→ `05`, `06`, `product/shared/memory-model.md`, `11`, `07`.
+
+## D161 — Org mode: the third `/start` mode — a private-tree brain over a read-only company checkout, ZERO footprint, human-only git **[DESIGNED 2026-08-03 — Phase 9c; unbuilt, and BUILD-LAST behind its own drive. Reframes the maintainer's "project repo vs docs repo"]**
+The maintainer wants to run the workflow against a **company product he does not own** — where the docs/rules/knowledge/
+machinery the workflow generates "cannot by any means be included in the org's repo, not in a sandbox, not in testing,
+definitely not in prod," where **coworkers change the product independently** so the workflow must be able to re-align
+on demand or on every push, and where the whole thing is **optional** (a solo dev pays its cost for no benefit). His
+first framing — a "project repo" vs a "docs repo" — is the wrong cut and he set it aside.
+
+**Call — two working trees + a private brain; `config.org` (absent ⇒ inert, like `config.remote`/`config.runner`); a
+third `/start` mode beside greenfield/brownfield.**
+- **The user's checkout** — the normal company clone. **The workflow touches it never** (reads nothing, writes nothing,
+  adds no `.claude/`, no `.workflow/`, no `docs/`, not even a `.gitignore` line). **Zero footprint IS the leak
+  guarantee** — there is nothing in the checkout to leak, so no gitignore mistake can expose anything. Stronger *and*
+  simpler than the rejected orphan branch.
+- **The workflow's private tree** (on the workstation) holds the entire brain: the `CLAUDE.md` brief, `.claude`
+  scripts/hooks, `.workflow/`, and `docs/` (spec + decisions + knowledge + graph). **`claude` runs from here**, and
+  **`project_root` = an absolute path to the checkout** — the third `project_root` value (greenfield `./project`,
+  brownfield `.`, org = an external absolute path). The relocation precedent already exists (D114/D115/`rebind`).
+- **A private clone of the product code inside the brain, with no write-remote to the company** ("Reading A", the
+  maintainer's choice): the loop commits **freely** there as its resume ledger (D48 intact), and those commits
+  **physically cannot reach the company** (no remote to push to). Its output is a **reviewable branch/diff** the human
+  pulls into *their* checkout, reviews, and commits + pushes **themselves**. "User and user only" is enforced
+  structurally, not by discipline.
+- **Sync (the maintainer's "align on every push"):** the private clone `git fetch`es company `HEAD` **read-only**;
+  `align` reads drift off `FETCH_HEAD` vs a **`describes_sha`** stamp (every knowledge snapshot records the company
+  `HEAD` it describes) — so **org-align is existing `align` with a different anchor + diff-base, not new machinery**. A
+  coworker's push is the ordinary drift case with a bigger diff (already budget-capped + honestly-truncated). A
+  **non-trivial upstream conflict is the human's to resolve** (a checkpoint), never an autonomous merge — detection is
+  not resolution, and the human applies the bundle anyway.
+- **The absolute outward boundary:** in org mode the loop writes **no company-visible surface** — not `main`
+  (`guard.sh` push floor → absolute deny, D110), not the tracker, not the repo's hooks. `guard.sh` is where the push
+  half already lives; the issue-create half belongs beside it.
+
+**Org-brownfield is mostly brownfield-minus-footprint** (it reuses `ingest`/codemap/reconcile wholesale — D68/D130 —
+which de-risks the build). The deltas, all gated on `config.org`:
+- *Does less (footprint-avoidance):* no install into the checkout · **never edit the company `CLAUDE.md`** (read-only
+  as the ingest intent-seed, never inject the managed block) · **no git hooks in the checkout** (they would fire on the
+  user's & coworkers' own commits) · **`create-issue`/`close-issue` go LOCAL-ONLY** (never `gh issue` the company
+  tracker — the roster's from-anywhere side-door is the sharpest leak; `prioritize`'s GC on a no-`github_ref` issue,
+  D142, already supports it) · no `.gitignore` edit · **do not adopt the company's existing secrets** · **ingest gates
+  run read-only** (never the company's full test suite — a real deferred brownfield hazard, D130).
+- *Does more:* the read-only upstream sync; the remote-less private clone; **the review-bundle producer** — the one
+  net-new capability (the roster has no PR/patch producer today), its exact form (branch / `format-patch` / squashed
+  diff) **deferred to build**.
+
+**Governance caveat (stated, not solved — the honest limit):** the private tree concentrates *derived company IP*
+(knowledge nodes describing proprietary code, decision records about their architecture) on personal infra. "Zero
+footprint on the company repo" is **not** "compliant with the company's data policy." So the private tree's
+archive-to-git default is **local-only, no remote**; a backup remote is a deliberate act the maintainer takes against
+his own policy.
+
+**BUILD LAST, behind its own drive** — there is **zero prior multi-repo / multi-committer evidence** (every drive to
+date was solo, single-orchestrator, one repo), and an optional rarely-run mode is exactly where the F2/F3-class silent
+breakage hides. Drive protocol: clone a **real public repo** at a **pinned historical SHA**, run org mode, then
+**replay the repo's own later real commits onto `FETCH_HEAD`** as free, realistic coworker drift, and assert the four
+properties that DEFINE org mode — **(a)** the checkout stayed byte-pristine, **(b)** the loop never pushed/committed to
+the company, **(c)** `align` detected the replayed drift via `describes_sha`, **(d)** no artifact leaked across the
+boundary.
+
+*Rejected:* the **project-repo-vs-docs-repo two-repo split** (converts every same-item STABLE guarantee into a
+distributed transaction — there is no single staged diff across two repos, so `verify_check.py`/the commit hook/
+`align`'s single anchor all break; the private-brain model has no second *synced* repo to tear); an **orphan branch**
+in the company repo (the maintainer wants the artifacts *nowhere the company can see*, not on a side branch); **Reading
+B / zero-commit patch-only** (breaks resume-from-git D48 for no gain — a remote-less local commit is invisible to the
+org either way, so it is stricter than the actual goal and fights the architecture); a **config tab to toggle it**
+(switching a live project's git topology is a *migration*, not a setting → chosen at `/start`. **The config tab is
+dropped entirely**, and with it its D112-violating "change credentials over Cloudflare" arm — Cloudflare terminates
+TLS, so a key would transit a third party; the credential-away case is Tailscale-only, D112).
+*Reuse:* D28/D29 (start modes), D68/D130 (brownfield ingest — org mode ≈ this minus footprint), D114/D115/`rebind`
+(runtime relocation → `project_root`/private-tree), D81 (`align` — `describes_sha` rides its existing diff-scope), D110
+(the `guard.sh` push floor → absolute in org mode), D142 (`prioritize` GC on a no-`github_ref` issue — local-only
+issues already supported), D109 (operator-responsibility), D93 (single-writer — the checkout's sole writer stays the
+human).
+→ `05`, `09`, `11`, `07`.
 → `07`, `11`, `README.md`, `scripts/dev-reinstall.sh`.

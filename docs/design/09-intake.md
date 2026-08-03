@@ -194,3 +194,12 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
   built or decided — `07`.
 - **Engineer agent** in the roster — **resolved (D69): no new agent** — the feasibility role is the
   proportional-rigor gate reusing `planner`/`decision-engineer`/`research` (`02`).
+- **The chain-forecast** — **[DESIGNED — D159, `11` Phase 9a; unbuilt]:** a pre-execution forecast of the loop's own
+  *routing* for a requested change (events naming real `loop.md` nodes, conditional branch points, predicted setups
+  elicited early), surfaced as a **`forecast` judgment checkpoint** (`04`). The demo's sibling on the intake stage —
+  `create-demo` de-risks *what* to build, `/create-forecast` de-risks *how the machine will proceed* — and, like the
+  demo's spec edits, it fires **pre-plan**. Front-loads D97's setup *elicitation*, never its verify probe. Owner: **D159**.
+- **Org mode** — **[DESIGNED — D161, `11` Phase 9c; unbuilt]:** a third intake mode beside greenfield/brownfield for a
+  company product the maintainer does not own — **org-brownfield is `ingest` minus footprint** (never edits the
+  company `CLAUDE.md`, ingest gates run read-only, `create-issue` is local-only), over a private-tree brain with
+  `project_root` = the external checkout. Owner: **D161**.
