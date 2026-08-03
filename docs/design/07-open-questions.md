@@ -429,14 +429,18 @@ without a bump, which is the only form that cannot be forgotten. The second is t
 applied to the ship boundary. **Not a regression — a release-discipline gap that only became visible once the
 package had a real installed consumer.**
 
-## Newly designed — Phase 9 (D159–D161, 2026-08-03) — sub-questions deferred to build
-Three capabilities were designed from a maintainer conversation (owners: `11` Phase 9 + D159–D161). A fourth ask — a
+## Newly designed — Phase 9 (D159–D162, 2026-08-03) — sub-questions deferred to build
+Three capabilities were designed from a maintainer conversation (owners: `11` Phase 9 + D159–D162). A fourth ask — a
 console **config tab** — was **DROPPED** (D161): writing `config.json` from the browser makes the bus a second writer
 (D93 violation), switching a project's git topology is a migration not a setting, and its "change credentials over
 Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away case is Tailscale-only). What stays open
 *inside* the three, to settle at build:
 - **The chain-forecast (D159)** — the on-page rendering of the frozen forecast + its derived reality column (reuses the
-  cockpit poll; no new channel — but the exact layout is a build call).
+  cockpit poll; no new channel — but the exact layout is a build call). **Narrowed by D162:** it is a **separate
+  console panel, not a checkpoint-card variant** — the card is gone once the orchestrator unparks, and the frozen
+  forecast has to keep rendering after that. What stays open is only the layout *inside* that panel (how a branch and
+  a truncated horizon read at a glance). D162 settles the four mechanics that were the real deferrals — artifact
+  location + lifecycle, the trigger gate, the pre-fill vocabulary, and where reality is derived from.
 - **Org mode (D161)** — (1) **the review-bundle format** (branch / `format-patch` / squashed diff) — the one net-new
   capability, no producer exists today; (2) confirm **ingest gates run read-only** on adopted company code (the
   D130-deferred "does adopted code pass its own gates" hazard, now sharper — you must NOT run a company's full suite on
@@ -444,6 +448,8 @@ Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away ca
   on personal infra), a backup remote a deliberate maintainer act.
 - **The context-budget law (D160)** — the shipped default budgets (derive by *measuring* the repo's own files, not a
   constant) + `K`/threshold tuning, folded into the retention `K`/threshold open above.
-- **Cross-cutting — the dogfooding call:** the maintainer intends to **drive Phase 9 through this project's own
-  workflow**. That wants the **project-state view** (still `[stageable]`, the self-hosting prerequisite since
-  2026-06-30) and a sequencing decision vs Phase 8 — the next discussion, not yet decided.
+- **Cross-cutting — the dogfooding call: HALF CLOSED (D162, 2026-08-03).** **9a is built BY HAND**, and self-hosting
+  the workflow on itself is a **separate later experiment on a clone** — so 9a no longer waits on the
+  **project-state view** (still `[stageable]`, the self-hosting prerequisite since 2026-06-30), and the first
+  self-hosting run will not also be debugging a brand-new capability. **Still open:** the sequencing decision vs
+  Phase 8, and whether 9b/9c self-host.

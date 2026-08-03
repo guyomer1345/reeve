@@ -14,11 +14,25 @@ A checkpoint sits at a boundary only a human can cross, of one of two types — 
 verdict below:
 - **Judgment** ("is this what we meant?") — `demo` (spec vs mental picture, intake), `qa` (behaviour vs intent,
   build-tail), `reconcile` (reconstructed spec vs reality, brownfield), and **`forecast`** (proposed *routing* vs
-  intended *process*, intake — **[DESIGNED — D159, `11` Phase 9a; unbuilt]**: a pre-execution forecast of the loop's
-  own chain of events, `approve|changes|reject`, `changes` re-forecasts). The verdict is an opinion. *`demo` de-risks
-  the product question, `forecast` the process question — the same pre-plan intake primitive on an orthogonal axis.*
+  intended *process*, intake — **[DESIGNED — D159, mechanics settled D162, `11` Phase 9a; unbuilt]**: a pre-execution
+  forecast of the loop's own chain of events, `approve|changes|reject`, `changes` re-forecasts). The verdict is an
+  opinion. *`demo` de-risks the product question, `forecast` the process question — the same pre-plan intake
+  primitive on an orthogonal axis.* At intake the **forecast runs BEFORE the demo**: a forecast placed after it
+  cannot predict the demo checkpoint, which is one of the gates it exists to front-load.
 - **Action** ("do something in the world I can't reach") — `setup` (perform an external action, obtain a
   credential). The verdict is "I did it" + a returned artifact, then **machine-verified**.
+
+**A judgment verdict MAY carry an optional action payload; it does not become an action checkpoint (D162).** The
+`forecast` kind front-loads D97's *elicitation* — a predicted setup renders its labelled inputs on the forecast card,
+so a credential can be handed over early — which means a judgment verdict may arrive carrying `returns`. The two
+types classify **what the verdict means**, and a forecast verdict still means "this is my opinion of the process":
+the credential is not the verdict, it is a payload the human volunteered ahead of the gate. **The action boundary is
+still crossed at the gate**, where D97's machine-verify probe runs unchanged on the pre-supplied value (a key handed
+over 40 minutes early can still be wrong). **A blank input is the vocabulary for declining** — filled → the secret
+store, blank → simply not front-loaded, and D97's within-plan ask stands. That is deliberate: `outcome` is
+`approve|changes|reject` and a timeout never auto-proceeds, so without it the stack has no way to express a
+*skippable* ask, and a separately-parked optional `setup` would re-alert every `reminder_hours` and escalate as
+overdue forever — pestering by construction, the exact thing D97 refused front-loading to avoid.
 
 **Not a checkpoint: authorizing an *outward* action (D105).** Approving a `git push` / `gh issue create|close` /
 deploy is *not* a fifth checkpoint kind — the real fault line is **blocks-the-ticket (a checkpoint parks and resumes)

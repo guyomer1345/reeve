@@ -4244,3 +4244,80 @@ issues already supported), D109 (operator-responsibility), D93 (single-writer �
 human).
 → `05`, `09`, `11`, `07`.
 → `07`, `11`, `README.md`, `scripts/dev-reinstall.sh`.
+
+## D162 — Phase 9a's deferred mechanics: the forecast is a COMMITTED artifact that outlives its own checkpoint, gated by a skill-owned gate, and its verdict may carry an optional action payload **[DECIDED 2026-08-03 — the four calls D159 deferred, taken while writing the build plan; 9a still UNBUILT. One live shipped bug found while grounding: `align`'s mechanical layer crashes in every product repo]**
+D159 designed the chain-forecast and deferred its mechanics "to build". Writing that build plan showed four of them
+are not schedule items — they **change the artifact list**, and three of them are load-bearing enough that a plan
+written without them would have been a plan to build the wrong thing.
+
+- **The forecast is a COMMITTED artifact with the item-dir lifecycle** — `.workflow/forecasts/<id>.json`, the parked
+  record carrying only `checkpoint.forecast_id` (the `demo_id` passthrough pattern). **It cannot live in the parked
+  record**: `bus.py unpark` *removes* `parked/<id>.json` and the `handoff.md` mirror deliberately carries ids + kind +
+  summary + opened-at and never a `request` body — so the thing D159 says `approve` **freezes** would be destroyed at
+  the exact moment it is approved. That is **D154's defect one layer up** (approve deletes the only other copy),
+  and D157's fix (promote before the delete) is the precedent. Committed rather than runtime because the frozen
+  forecast is the anchor reality is compared against for the *life of the change* — across sessions, cold starts,
+  and a `/rebind` to a machine where the runtime tree explicitly may not survive. It is safe to commit because it
+  carries credential **key names only, never values** (the same class as `config.json`'s `secrets_required[]`), and
+  that becomes a **linted invariant**, not a promise. Lifecycle copies `.workflow/items/<id>/` exactly: committed
+  while the change is open, pruned by the audit pass when it closes, **history in git** — the project's own memory
+  law (D38/D51/D61), not a new retention policy.
+- **The trigger is a skill-owned FORECAST GATE, not D69.** D159 gated the orchestrator self-invoke on "the D69
+  proportional-rigor triage". That triage **does not ship** — `grep -rn 'proportional\|rigor' product/` is empty, and
+  `planner` carries `risk_class` + the three coverage gates but no tier-0/1/2 grading. Worse, D69 hosts it on
+  **`planner` output** — *after* planning — while the forecast is a pre-plan intake checkpoint whose first predicted
+  event **is** planning: the gate sits downstream of the moment it is useful. So 9a ships a **forecast gate** stated
+  in `create-forecast/SKILL.md`, on D69's own axes (reversibility × blast-radius × ambiguity), evaluated by whoever
+  routes past it — **exactly what the sandbox gate is to `create-demo`**. When D69's universal planner triage is
+  later built it **subsumes** this gate rather than forking from it; this entry is that amendment, recorded rather
+  than smuggled.
+- **The front-loaded elicitation rides the forecast card, and a BLANK input is the vocabulary.** D159's pre-fill is
+  explicitly optional ("hand it over now, **or be asked then**") — but `VERDICT_OUTCOMES` is `approve|changes|reject`,
+  a per-task `reject` means "replan or escalate", a timeout "never auto-proceeds", and `request.blocking` is literally
+  `true`: **the stack has no vocabulary for a skippable ask**. Filled → the secret store; blank → simply not
+  front-loaded, and D97's within-plan ask stands unchanged. No new outcome enum, no new state.
+- **A judgment verdict MAY carry an optional action payload — a refinement of the D96 taxonomy, written into `04`.**
+  The two types classify *what the verdict means*: a forecast verdict still means "this is my opinion of the
+  process", and the credential is not the verdict but a payload the human volunteered early. **The action boundary
+  is still crossed at the gate**, where D97's machine-verify probe runs unchanged. Stated in `04` as designed, so it
+  never reads as a leak. It also enforces one arm of D159's loopback-only for free: `remote_carries_payload()`
+  already `403`s any `returns`/`tasks`-bearing verdict on Socket A.
+- **Two sub-calls that fell out.** *Forecast runs BEFORE demo at intake* — a forecast placed after the demo cannot
+  predict the demo checkpoint, which is one of the very gates it exists to front-load, and the forecast is cheap
+  while the demo is expensive. *Re-forecast fires at the SCHEDULER BOUNDARY only, never mid-item* — which is what
+  keeps `prioritize`'s non-preemption (D91) and D35 never-stall intact, and is why the divergence check belongs in
+  `loop.md`'s **§ Scheduler boundary** (explicitly "plain control-flow, not a node") rather than as a routing edge.
+- **Reality derives from a per-effect ANCHOR TABLE, not `state.json`.** D159 named `state.json` first; it is volatile
+  and holds only the **current** node, never a history, so "which events have happened" is not readable from it. The
+  table (`plan.md` ⇒ planner ran · `changelog` ⇒ execute · `verify-verdict.md` ⇒ verify · a parked record's
+  `answered_at` ⇒ that checkpoint happened · `git log` ⇒ commit) is the **actual deliverable of the reality half**,
+  lives in `schemas.md`, and needs no writer — the D108/D119 resolve-off-anchors pattern D159 itself cites.
+- **Lint ownership splits by fact-domain (D80).** *Graph facts* — "does this event name a real node" — go to
+  `check_contracts.py` as a new `--forecast <path>` mode, because it already owns `loop.md` parsing. *Forecast
+  lifecycle* — freeze / reality / divergence / the names-only invariant — goes to a new `scripts/forecast.py`,
+  imported by `bus.py` **with a guarded fallback** so a partial install renders the panel "unavailable" instead of
+  taking the console daemon down.
+- **Found while grounding, folded into 9a rather than filed: `align`'s mechanical layer is dead in every product
+  repo.** `align` invokes `.claude/scripts/check_contracts.py` with **no arguments**, but the script's defaults
+  resolve relative to its own parent-of-parent — `.claude/templates/loop.md`, `.claude/skills`,
+  `.claude/shared/schemas.md` — none of which exist in an installed target (`/start` copies loop.md to
+  **`.workflow/loop.md`**; skills and `shared/` live under `${CLAUDE_PLUGIN_ROOT}`). Reproduced in a simulated
+  install layout: a `FileNotFoundError` traceback, exit 1. It is folded into 9a because 9a adds a mode to that same
+  script, and **shipping a new mode onto a script that crashes in situ is building on sand**.
+
+*Rejected:* keeping the forecast **in the parked record** (destroyed by `unpark` at the instant of approval — D154);
+a **runtime/gitignored** forecast (dies on the machine move the artifact most needs to survive); **claiming D69's
+triage** (it does not ship, and its host fires after the forecast is useful); **spawning a real `setup` checkpoint**
+for the pre-fill (it needs its own ticket or it deadlocks the change on an optional ask — and an unanswered optional
+ticket then re-alerts every `reminder_hours` and escalates as overdue *forever*, pestering by construction, which is
+the exact thing D97 refused front-loading to avoid); a fourth **`defer` outcome** (an enum change rippling through
+bus validation + `04` + `schemas.md` to express what blankness already expresses); **`state.json` as the reality
+source** (no history); a **single lint script** (one owner per fact-domain, D80); **filing the `check_contracts`
+bug as fix-later** (a queue entry routed past the build that is already touching the file is how the D136 governor
+residual sat stale for six decisions — `11`'s own lesson).
+*Reuse:* D154/D157 (approve deletes the only other copy → freeze/promote first), D96/D97 (taxonomy + the verb-enum
+verdict + the setup probe that still runs at the gate), D22 (the sandbox gate — the per-capability-gate precedent),
+D108/D119 (derived per-effect anchors), D91/D35 (non-preemption + never-stall → boundary-only re-forecast), D80
+(one owner per fact-domain), D38/D51/D61 (lean files, history in git → the prune-at-close lifecycle), D112
+(loopback = authoritative).
+→ `04`, `07`, `11`.
