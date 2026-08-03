@@ -3944,3 +3944,127 @@ Reuses **D89** (the tier-3 ritual + the three-tier split), **D80/D114** (one own
 **D152/D154** (the retired marker; the refine ledger), **D147** (a field that cannot be emitted), **D151** (the
 staleness measurement), **D117** (a rule the consumer never receives). → `05`, `07`, `11`, `reviews/post-phase7/`,
 `product/skills/align/SKILL.md`, `product/shared/memory-model.md`, `product/commands/start.md`.
+
+## D156 — `artifacts` gets its producer: the request declares `provides[]`, and the two halves of the exchange share no key name **[BUILT 2026-08-03 — D152's residual CLOSED; the tests were proven against the unfixed source, but the form itself is NOT yet browser-driven]**
+D152 split the setup reply in two — `returns` **means** credential, `artifacts` is the non-credential half — and
+shipped the second half **declared, validated, and unproducible**: the console's setup form renders one input per
+declared `request.tasks[].secrets[]` name, and `secrets[]` means credential, so the form could only ever emit
+`returns`. It was disclosed in place rather than left to be discovered, which is the property D147 established, but
+a disclosure is not a producer. D155 (JF2) retagged it off the `align` queue as a build; this is that build.
+
+**Call — a request-side `tasks[].provides[]`, the exact mirror of `secrets[]`.** Same labelled row, a different
+input class (`.avalue`), a different reply field (`artifacts`). Two declared lists, never one list with a flag:
+**which list a name was declared in is what decides the value's protection**, and that is a property no composer can
+forget to set. *Rejected — typing the existing declaration (`secrets[]` becoming `[{name, kind}]`):* one array, no
+new field, and disqualifying — a composer-supplied `kind` deciding whether a value is shredded is the deleted
+`sensitive` marker wearing a different hat, and it breaks the load-bearing sentence "`secrets[]` *means*
+credential". *Rejected — leaving it declared-and-disclosed with a test pinning the disclosure:* zero cost, but it
+buys no capability and guards prose.
+
+**The name is the sharp part, and the roadmap's own phrasing had it wrong.** `11` proposed a request-side
+`artifacts[]`. But request and reply deliberately share **no** key name — the request declares NAMES to ask for
+(`secrets[]`), the reply carries VALUES (`returns`) — and that non-overlap is the *only* reason `check_request_tasks`
+can refuse a reply-side field on a request at all (D152 call 2). Reusing `artifacts` on both sides would make one key
+mean "a list of names" outbound and "a map of values" inbound, and would forfeit that refusal permanently. Hence
+`provides[]`.
+
+**A capability, not just a gap closed.** The `provides[]` inputs are **not** gated on the credential-socket check.
+That gate exists to keep secrets off a socket that may not carry one; a webhook URL is not a secret. Until now a
+paired **remote** console could answer a setup task with an outcome and *nothing else* — the first thing it can hand
+back is this.
+
+**Two traps the surface had waiting**, both of the class that broke it under human hands twice before: the repaint
+guard latches on any non-empty input, so `.avalue` had to join it (and had to be cleared on send, or a left-behind
+artifact freezes the whole list at its last painted snapshot); and the answered/re-answer disable sweeps needed it
+too, or a re-answered card hands back a live input beside dead ones. *Evidence:* six tests drive the **real shipped**
+`renderTasks`/`collectVerdict` through node and feed the output to the real validator — the artifacts-only reply is
+asserted **not** sensitive (it must not be shredded), a credential and a provided value in one task are asserted to
+land in different fields, and `renderTasks` is driven with the credential socket **refused** to prove the
+non-credential input still renders. **Five of the six were run against HEAD's unfixed source and fail there**; the
+sixth is a negative case that passes trivially, and is kept as a guard rather than as evidence.
+**Residual — not browser-driven.** Everything here is a node-over-DOM-shim drive plus the validator. The surface's
+own history (D148/D149/D153) says a shim answers "does the code do X", never "does the page do X" — so this lands
+**BUILT, not DRIVEN**, and `11` carries it as needing one browser pass on both sockets.
+→ `11`, `product/shared/schemas.md`, `product/skills/checkpoint/SKILL.md`,
+`product/scripts/{bus.py,test_bus.py}`.
+
+## D157 — the refine ledger survives the delete: `--promote` writes a committed approvals file, and `align`'s approved-demo lens gets the discriminator and the scope it was missing **[BUILT 2026-08-03 — closes D154's residual for real; corrects D155's JF1, which shipped a lens that could not fire]**
+D155 gave `align` the approved-demo lens D154's residual had been queued to. Reading the shipped lens against the
+shipped mechanics **before relying on it** found it could not perform the detection it was credited with — the same
+failure JF1 itself named, one level in.
+
+**Defect 1 — the entry condition is a tautology.** The lens fires on "a terminal demo approval with an **absent
+ledger**". But `.refine.json` lives *inside* `demos/<item-id>/`, and the terminal `approve` **deletes that
+directory**. After any approval the ledger is always absent, so the condition is true of **every approved demo item,
+forever** — it cannot separate a pre-floor item from a post-floor one, and the set is unbounded rather than "finite
+and historical" as D155 claimed.
+**Defect 2 — a standing check inside a scoped pass.** Step 3 runs only over the work-list step 1 builds from the
+diff since the anchor. A historical item has no diff, so it never enters the work-list: the lens was scoped out of
+ever seeing precisely the items it exists for.
+**Defect 3 — nothing clears a clean item.** D155 leaned on the findings register's dedup, but the register dedups
+**findings**, and a clean read produces none. Every passing item would be re-read on every scan forever — a budget
+leak in the one pass that is budget-bounded.
+
+**Call 1 — promote the ledger instead of destroying it.** `check_demo_bundle.py --promote <bundle>` folds
+`{item_id, approved_at, rounds, spec_ref}` into a committed **`.workflow/demo-approvals.json`**, and `checkpoint`'s
+demo route runs it **immediately before** the delete. Ids, a count and a hash — no bytes, no values. An item **with**
+an entry is settled mechanically (the lint already refused any round that did not move the spec); an item **without**
+one was approved before the floor existed, and that set is finite and shrinks to nothing. Idempotent on `item_id`,
+because applying a verdict is itself re-appliable after a crash and two entries would later read as two approvals.
+This also repairs something already true: the approve path *already* read the ledger before deleting it and left no
+evidence it had — a load-bearing check that records nothing is indistinguishable from one that never ran.
+*Rejected — dating items against the package version that processed them:* no per-item version stamp exists, and
+inventing one to answer a question a three-line ledger answers is the wrong direction. *Rejected — accepting the
+gap and retiring the lens:* defensible today (nothing has been released, so the pre-floor set is plausibly empty
+everywhere but the maintainer's own bed) and rejected anyway — it is the disclosure-instead-of-mechanism move this
+project keeps punishing, and it would forfeit the forward half, where a *missing* promoted entry now also catches a
+round that bypassed the lint.
+**Call 2 — scope admits the backlog where scope is decided.** Step 1 now also admits every item with a terminal demo
+approval, no promoted entry, and no place in the anchor's `cleared_demo_items[]`. Putting the exception in the
+scoping step rather than letting a lens quietly read outside its own work-list is what keeps "the work-list is the
+only thing the semantic pass looks at" true.
+**Call 3 — a clean read is recorded.** `anchor.json` gains `cleared_demo_items[]`. Only a *clean* read clears an
+item; one that produced a finding stays in the backlog until the ticket closes it, because the ticket, not the scan,
+is what resolves a finding. *This is the state D155 explicitly rejected adding* ("accretes state the register's dedup
+already provides") — the rejection was wrong on a fact: the register cannot dedup an absence.
+
+*Evidence:* seven tests over the real promote — the last round's `spec_ref` outliving an `rmtree` of the bundle, a
+round-0 approval recording an honest `null`, promote-twice replacing rather than duplicating, a torn approvals file
+being replaced rather than propagated or wedging every future promote, and no temp file left behind.
+*The pattern worth naming:* this is the second residual in two decisions routed to a process that could not
+discharge it (D155/JF2 was the first). "Queued to `align`" reads as *filed* when it is often *parked*.
+→ `11`, `product/shared/schemas.md`, `product/commands/start.md`,
+`product/skills/{checkpoint,align}/SKILL.md`, `product/scripts/{check_demo_bundle.py,test_check_demo_bundle.py}`.
+
+## D158 — the plugin version tracks RELEASES, not pushes; the maintainer's stale-install problem gets its own mechanism **[DECIDED 2026-08-03 — settles the cadence half of Phase 8a before it is built; one meta-script shipped nowhere]**
+A question about what "being on the plugin marketplace" means surfaced a conflation worth settling in writing,
+because two different staleness problems were being treated as one.
+
+**What the marketplace actually is, stated once so it stops being re-asked:** there is no central Anthropic
+directory and this package is not listed in one. A "marketplace" is *a repo containing
+`.claude-plugin/marketplace.json`* — so "being on the marketplace" means only that **this repo is addressable as a
+plugin source** by someone who already knows its name. Nothing is published, reviewed, or discoverable, and nothing
+on any server can go stale. The only thing that goes stale is **the copy in an install's cache**. There is therefore
+nothing to withdraw or gate on stability, and removing the manifest would break only the maintainer's own install
+path.
+
+**Call — the `version` in `plugin.json` moves once per RELEASE that changes a shipped file, never per push.**
+*Rejected — a pre-push hook that bumps whenever a manifest file moved:* it would keep every cache fresh and it
+destroys what the version is *for* — D135 makes that value `config.json`'s `workflow_version` and `/update` diffs
+its whole migration against it. A version that moves five times a day is not a migration key, it is a commit
+counter. Phase 8a's per-release bump plus the sixth meta-gate stands unchanged.
+
+**Call — the maintainer's loop gets a mechanism instead: `scripts/dev-reinstall.sh` (meta-only, never ships).**
+Uninstall-then-install from the working tree, printing the roster and the source sha it just installed. `11` already
+prescribed a manual force-reinstall before a drive, and **D151 is the proof the manual step did not hold** — the
+install sat 12 commits and 17 shipped files behind while `claude plugin update` reported the latest version. The
+same rule the product applies to itself: a documented step nobody runs is not a control. The two halves are
+deliberately different in kind, and that is the whole point — a **released user** has no working tree to reinstall
+from, so their fix must be the version bump and the gate that refuses an un-bumped release; the **maintainer's** fix
+must be that the version is irrelevant.
+
+*Worth stating because it changes the priority argument for 8a:* the user harmed by a stale install today is the
+maintainer, on the machine the package is tested on. So 8a's payoff is not mainly "future users get updates" — it is
+that a test drive stops silently running commits-old code and attributing the result to HEAD. That is a correctness
+argument about the project's own evidence, and it is stronger than the user-facing one D155 promoted it on.
+→ `07`, `11`, `README.md`, `scripts/dev-reinstall.sh`.

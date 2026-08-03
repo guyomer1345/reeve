@@ -407,7 +407,12 @@ had to answer "what comes after Phase 7", and this won on the only argument that
 open item that harms a **real installed user today**, and it was measured rather than feared. The call taken with
 the promotion is **both** options below, because the second is what makes the first un-forgettable: bump the
 `version` on every shipped-file release, **and** a sixth meta-gate in `build-release.py` that refuses a release
-whose shipped set moved without a bump. The question text stands as written. The package ships as
+whose shipped set moved without a bump. **D158 settles the cadence and splits off the maintainer's half:** the
+version moves once per *release*, never per push (a per-commit bump would keep every cache fresh and destroy the
+migration key `/update` diffs against), and the maintainer's own stale-install problem is answered by a different
+mechanism entirely — `scripts/dev-reinstall.sh`, meta-only, reinstalling from the working tree, because a released
+user has no working tree and the maintainer needs the version to be irrelevant. **What stays OPEN here is exactly
+the released-user half**, unbuilt. The question text stands as written. The package ships as
 a Claude Code plugin, and installing **copies** `product/` into `~/.claude/plugins/cache/<plugin>/<version>/` — a
 snapshot, not a live link. `claude plugin update` compares **versions**, and `product/.claude-plugin/plugin.json`
 has been pinned at `0.1.0` since the first install. **The no-op itself is not news** — `11`'s Phase-6 sequence line

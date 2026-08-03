@@ -86,8 +86,11 @@ loop's normal `state.json` takes over when the motion ends.
        knowledge/      # code map                            (committed)
        decisions/      # decision-records = ADRs (append-only) (committed)
    ```
-   `.workflow/items/<id>/` and `.workflow/align/` are **not** scaffolded here — `planner` `mkdir`s each item
-   dir on demand, and `align` `mkdir`s `.workflow/align/` on its first run (writing `anchor.json`).
+   `.workflow/items/<id>/`, `.workflow/align/` and `.workflow/demo-approvals.json` are **not** scaffolded here —
+   `planner` `mkdir`s each item dir on demand, `align` `mkdir`s `.workflow/align/` on its first run (writing
+   `anchor.json`), and `check_demo_bundle.py --promote` writes the approvals file the first time a demo is
+   approved. All three are **committed** when they appear (the gitignore below is an allowlist of runtime paths,
+   so a new durable file is committed by default — which is the right default for a ledger).
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
    `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,

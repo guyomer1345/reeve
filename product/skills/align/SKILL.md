@@ -23,7 +23,12 @@ them is the trap:
 - **Not every commit.** The per-commit teeth are the mechanical gates (`checks.sh --check` + the commit hook).
 
 ## Inputs
-- The **last-scan anchor** (`.workflow/align/anchor.json`: `base_sha` + the carried findings register).
+- The **last-scan anchor** (`.workflow/align/anchor.json`: `base_sha`, the carried findings register, and
+  `cleared_demo_items[]` — item ids the approved-demo lens has already read and found clean). The cleared set is
+  there because the register dedups **findings**, and a clean read produces none: without it, every item that passes
+  is re-read on every scan forever, which is a budget leak in the one pass that is budget-bounded.
+- **`.workflow/demo-approvals.json`** — the promoted refine ledgers. An item listed here is settled mechanically;
+  an item with a terminal demo approval and **no** entry is the only kind the approved-demo lens must read.
 - `git diff <base_sha>..HEAD` — the changed surface (the semantic layer's scope; the mechanical layer ignores it).
 - The **code map** (`docs/knowledge/graph.json`) — expands the changed files into their blast-radius (impact
   lens) and maps them to the decisions / skills / schema contracts they touch. **This is the index that makes
@@ -35,6 +40,12 @@ them is the trap:
    via the impact lens to the affected nodes; map those to the governing decisions, skills, and schema
    contracts. Order by blast-radius. *This bounded work-list is the only thing the semantic pass looks at.*
    (The mechanical layer, step 2, is not scoped by this — it runs whole.)
+   - **One admission the diff cannot make: the approved-demo backlog.** Also add every item with a **terminal demo
+     approval** that has no entry in `demo-approvals.json` and is not in the anchor's `cleared_demo_items[]`. These
+     are history, not change — an item approved two years ago has no diff since the anchor, so a diff-scoped
+     work-list can never reach the very items the approved-demo lens exists for. Scope is decided here, so the
+     exception belongs here rather than as a lens quietly reading outside its own work-list. The set is finite and
+     shrinks: every promoted item and every cleared item leaves it permanently.
 2. **Mechanical layer (free, decidable, always whole).** Run the decidable checks:
    - the **contract linter** (`.claude/scripts/check_contracts.py`) — the routing graph is real structured
      data, so its consistency is a fact: every routing target resolves; every `node:mode` a skill invokes is
@@ -58,14 +69,15 @@ them is the trap:
    - **The approved-demo lens — the one thing here with no artifact left to compare against.** Approving a demo
      is terminal, and it **deletes the bundle**. So a change the human agreed to during a refine round that was
      never written back into the `spec` is destroyed at the exact moment it is approved, leaving a locked spec
-     that is confidently missing it. The `refine-ledger` now refuses a round that did not move the spec, so
-     *new* rounds are covered mechanically — but that floor is forward-only, and an item approved before it
-     existed carries no ledger at all. For any item whose history shows a **terminal demo approval** with an
-     absent ledger (or one naming no spec it regenerated from), read that item's `spec` slice against its own
-     checkpoint request, verdict `notes`, and commit history, and flag any agreed change the spec does not
-     carry. **A read, not a gate** — there is nothing left to diff, so it can only ever be judgment; a hit
-     leaves as an ordinary ticket at the spec element's `commitment`. The set is finite and historical, and the
-     findings register's dedup is what stops a cleared item being re-flagged every scan.
+     that is confidently missing it. The `refine-ledger` refuses a round that did not move the spec, and
+     `--promote` copies its summary into `demo-approvals.json` before the delete — so an item **listed there is
+     already settled** and never reaches this lens. What reaches it is step 1's admitted backlog: items approved
+     before that floor existed, which carry no promoted entry and never will. For each, read the item's `spec`
+     slice against its own checkpoint request, verdict `notes`, and commit history, and flag any agreed change the
+     spec does not carry. **A read, not a gate** — there is nothing left to diff, so it can only ever be judgment;
+     a hit leaves as an ordinary ticket at the spec element's `commitment`. A **clean** read is recorded in the
+     anchor's `cleared_demo_items[]` (step 5), which is what makes this converge: an absent finding is not
+     something the register can dedup, so without the cleared set the same item is re-read on every scan forever.
 4. **Judgment verification — principle-class only.** Each finder tags its findings `decidable | judgment`.
    Decidable/contract findings are already settled by the read. **Only judgment findings** go to a small
    **2-vote skeptic panel** — two *orthogonal* lenses, **occurrence** (can this actually happen?) and
@@ -76,6 +88,9 @@ them is the trap:
    blast-radius, classify `principle | skill | gap`. Route: mechanical → auto-fix or ticket; semantic →
    `create-issue` (severity from the affected element's commitment) → `prioritize` → the normal loop. **Never
    auto-resolve an authority call.** Write the new anchor + a one-screen summary (scoped / found / deferred).
+   The anchor also gains **`cleared_demo_items[]`** — every approved-demo item read clean this scan, appended to the
+   carried set. Only a *clean* read clears an item: one that produced a finding stays in the backlog until the
+   finding is resolved, because the ticket, not the scan, is what closes it.
 
 ## Rules
 - **Budget-bounded, with honest truncation.** A hard cap on semantic fan-out agents (`config.align.max_agents`,

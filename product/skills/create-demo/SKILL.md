@@ -54,6 +54,10 @@ The visual/behavioural slice of the `spec`.
      missing, whose latest hash does not match the spec on disk, or **whose hash is unchanged from the previous
      round** (a regeneration that did not move the spec), and it refuses a `round` over the cap. Run it before every
      park — the same call as step 2a.
+   - **The ledger's summary outlives it.** Because the bundle is deleted on a terminal verdict, `checkpoint`'s demo
+     route runs `check_demo_bundle.py --promote` first, folding `{item_id, approved_at, rounds, spec_ref}` into the
+     committed `demo-approvals.json`. Nothing here changes — it is stated so the ledger does not read as a file whose
+     evidence simply vanishes.
 
 ## Sandbox format
 - **Self-contained, no external hosts, no `eval`** — every asset local; renders identically local and over the

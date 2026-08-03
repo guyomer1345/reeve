@@ -799,8 +799,10 @@ def validate_park(rec):
 # `request` — that stays permissive on purpose, because `park` is how the machine ASKS
 # for help and a park that hard-fails is a checkpoint that never opens. These two are
 # the exception because it is not merely undeclared, it belongs to the OTHER side of
-# the exchange: `schemas.md` declares a request task as {id, what, secrets?[]} and the
-# reply as {id, outcome, returns?}. A request carrying `outcome` is a reply shape copied
+# the exchange: `schemas.md` declares a request task as {id, what, secrets?[], provides?[]}
+# and the reply as {id, outcome, returns?, artifacts?}. The two halves deliberately share
+# NO key name — the request declares NAMES to ask for, the reply carries VALUES — which is
+# the only reason this refusal can exist at all. A request carrying `outcome` is a reply shape copied
 # onto a request — which is exactly how the live record got one on every task (a
 # hand-reconstruction copying the wrong half) — and it reads to a later human as though
 # the question had already been answered.
@@ -826,8 +828,8 @@ def check_request_tasks(request):
         if found:
             raise Invalid(
                 "request task %d carries the reply-side field(s) %s — a request task is "
-                "{id, what, secrets?[]}; the VERDICT carries {id, outcome, returns?}"
-                % (i, ", ".join(found)))
+                "{id, what, secrets?[], provides?[]}; the VERDICT carries "
+                "{id, outcome, returns?, artifacts?}" % (i, ", ".join(found)))
 
 
 def parked_mirror(paths):
@@ -988,12 +990,12 @@ RETURNS_ENTRY_KEYS = ("value",)
 # The non-credential half of the split: same name-keyed shape, never redacted, never
 # routed to the secret store. Declared and validated rather than free-form for the
 # reason `returns` is — an undeclared payload is what the whole shape exists to end.
-# NOTE: this field has NO shipped producer. The console's setup form renders one input
-# per declared `request.tasks[].secrets[]` name, and `secrets[]` means credential, so the
-# form emits `returns` only; `artifacts` is for a hand-composed or agent-composed reply.
-# Stated plainly here rather than left to be discovered, because a field that is
-# specified as if it works while nothing can emit it is exactly the defect that made the
-# `returns` shape a coin toss in the first place.
+# Its PRODUCER is the setup form's `provides[]` inputs, the mirror of the `secrets[]`
+# ones. It shipped declared-but-unproducible for a while, which is the same defect the
+# `returns` shape was rebuilt to end — a field specified as if it works while nothing
+# can emit it. The request-side field is `provides[]` and NOT `artifacts[]` on purpose:
+# request and reply must never share a key name, because that is what lets
+# `check_request_tasks` refuse a reply-side field on a request at all.
 ARTIFACTS_ENTRY_KEYS = ("value",)
 # A CLOSED set, and that is load-bearing rather than tidy: a control op leaves no
 # durable artifact to anchor on, so the ONLY thing making a redelivered control
@@ -2355,8 +2357,11 @@ INDEX_HTML = """<!doctype html>
   </article>
 </template>
 
-<!-- One row per setup task: its own outcome (a mixed reply routes each item on its own)
-     and one labelled input per credential the task declared. -->
+<!-- One row per setup task: its own outcome (a mixed reply routes each item on its own),
+     one labelled input per credential the task declared, and one per non-credential value
+     it declared. The two boxes are separate because the FIELD the value lands in is the
+     whole protection — `.tsecrets` feeds `returns` (shredded into the store), `.tprovides`
+     feeds `artifacts` (kept readable). -->
 <template id="task-tpl">
   <div class="task">
     <div class="row">
@@ -2369,6 +2374,7 @@ INDEX_HTML = """<!doctype html>
     </div>
     <p class="twhat"></p>
     <div class="tsecrets"></div>
+    <div class="tprovides"></div>
   </div>
 </template>
 
@@ -2385,6 +2391,19 @@ INDEX_HTML = """<!doctype html>
          nothing against a network attacker — this socket is loopback or WireGuard —
          while costing correctness and putting the key somewhere nobody asked for. -->
     <input class="svalue" type="text" autocomplete="off" spellcheck="false"
+           autocapitalize="off" autocorrect="off" placeholder="paste the value">
+  </label>
+</template>
+
+<!-- The non-credential half. Visually the same row, deliberately a DIFFERENT input class:
+     `.avalue` is what routes the value into `artifacts` rather than `returns`, and the two
+     must never be collected by one selector. Unlike `.svalue` this renders on EVERY
+     socket — a value that is not a credential has no reason to be withheld from the remote
+     console, which until now could answer a setup task with nothing but an outcome. -->
+<template id="provide-tpl">
+  <label class="provide">
+    <span class="aname mono"></span>
+    <input class="avalue" type="text" autocomplete="off" spellcheck="false"
            autocapitalize="off" autocorrect="off" placeholder="paste the value">
   </label>
 </template>
@@ -2571,9 +2590,11 @@ function renderSteps(node, how) {
 }
 
 // The setup form: one row per task (its own outcome, so a mixed reply routes each item
-// on its own) and one labelled input per credential the task declared. This is the ONLY
-// shipped producer of a `returns` payload — everything downstream of it (the store, the
-// declared-set diff, the credential socket boundary) exists to serve what is typed here.
+// on its own), one labelled input per credential the task declared, and one per
+// non-credential value it declared. This is the ONLY shipped producer of a `returns`
+// payload — everything downstream of it (the store, the declared-set diff, the credential
+// socket boundary) exists to serve what is typed here — and, since `provides[]`, the only
+// shipped producer of `artifacts` too.
 function renderTasks(node, cp) {
   const req = cp.request;
   const tasks = req && Array.isArray(req.tasks) ? req.tasks : [];
@@ -2594,6 +2615,17 @@ function renderTasks(node, cp) {
       sec.querySelector(".sname").textContent = name;
       sec.querySelector(".svalue").dataset.name = name;
       box.append(sec);
+    }
+    // `provides[]` — the non-credential names the task hands back. NOT gated on CREDS_OK:
+    // the credential boundary exists to keep secrets off a socket that cannot carry them,
+    // and a webhook URL is not one. This is the only thing a remote console can return.
+    const pbox = row.querySelector(".tprovides");
+    for (const name of (t && Array.isArray(t.provides) ? t.provides : [])) {
+      if (typeof name !== "string" || !name) continue;
+      const pro = $("#provide-tpl").content.cloneNode(true);
+      pro.querySelector(".aname").textContent = name;
+      pro.querySelector(".avalue").dataset.name = name;
+      pbox.append(pro);
     }
     wrap.append(row);
   }
@@ -2661,6 +2693,18 @@ function collectVerdict(card, notes) {
         any = true;
       }
       if (any) t.returns = returns;
+      // The non-credential half, collected by its OWN selector. Two collectors and two
+      // fields, never one loop with a flag deciding where a value lands — a value's
+      // protection follows from which declared list its name came from, which is exactly
+      // the property the deleted `sensitive` marker did not have.
+      const artifacts = {};
+      let anyArt = false;
+      for (const inp of r.querySelectorAll(".avalue")) {
+        if (!inp.value) continue;
+        artifacts[inp.dataset.name] = { value: inp.value };
+        anyArt = true;
+      }
+      if (anyArt) t.artifacts = artifacts;
       return t;
     }),
   };
@@ -2673,7 +2717,7 @@ function renderCheckpoints(items) {
   // value, and let the next tick take it.
   const live = $("#cp-list");
   if (live.contains(document.activeElement) ||
-      [...live.querySelectorAll(".svalue, .notes")].some((i) => i.value)) return;
+      [...live.querySelectorAll(".svalue, .notes, .avalue")].some((i) => i.value)) return;
   renderList(items, "#cp-list", "#cp-count", "#cp-tpl", (node, cp) => {
     node.querySelector(".kind").textContent = cp.kind || "checkpoint";
     node.querySelector(".ticket").textContent = cp.ticket_id || "";
@@ -2719,7 +2763,10 @@ function renderCheckpoints(items) {
         // and never written to localStorage. `remember` records the OUTCOME only — the
         // "my requests" history is durable browser state, and a credential has no
         // business in it.
-        for (const inp of card.querySelectorAll(".svalue")) inp.value = "";
+        // `.avalue` is cleared beside it for a different reason: it holds no secret, but
+        // the repaint guard above latches on ANY non-empty value, so a left-behind
+        // artifact would freeze the whole list at the last painted snapshot.
+        for (const inp of card.querySelectorAll(".svalue, .avalue")) inp.value = "";
         const shown = verdict.tasks
           ? verdict.tasks.map((t) => t.id + ":" + t.outcome).join(", ")
           : verdict.outcome;
@@ -2744,7 +2791,8 @@ function renderCheckpoints(items) {
       a.title = cp.answered_at;
       a.hidden = false;
       node.querySelector(".verdict").hidden = true;
-      for (const el of node.querySelectorAll(".svalue, .notes, .toutcome, .outcome, .send")) {
+      for (const el of node.querySelectorAll(
+             ".svalue, .avalue, .notes, .toutcome, .outcome, .send")) {
         el.disabled = true;
       }
       // Disabling the controls is not enough on its own: a card whose inputs merely
@@ -2771,7 +2819,7 @@ function renderCheckpoints(items) {
           }
           live.querySelector(".verdict").hidden = false;
           for (const el of live.querySelectorAll(
-                 ".svalue, .notes, .toutcome, .outcome, .send")) {
+                 ".svalue, .avalue, .notes, .toutcome, .outcome, .send")) {
             el.disabled = false;
           }
         });
@@ -2994,9 +3042,9 @@ dd { margin:0; }
 .how-text { margin:.35rem 0; font-size:.9rem; }
 .task { border-top:1px dashed var(--line); margin-top:.45rem; padding-top:.45rem; }
 .twhat { margin:.2rem 0; font-size:.9rem; }
-.tsecrets { display:grid; gap:.35rem; margin-top:.35rem; }
-.secret { display:flex; gap:.5rem; align-items:center; }
-.secret .svalue { flex:1; min-width:10rem; }
+.tsecrets, .tprovides { display:grid; gap:.35rem; margin-top:.35rem; }
+.secret, .provide { display:flex; gap:.5rem; align-items:center; }
+.secret .svalue, .provide .avalue { flex:1; min-width:10rem; }
 .no-creds { color:var(--bad); }
 .answered { color:var(--ok); font-weight:600; margin:.5rem 0 .25rem; }
 /* An answered card must READ as answered before it is touched. Everything above the

@@ -192,6 +192,7 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     items/<id>/     # per-item artifacts (mkdir on demand; pruned once closed — D61)  (committed) · bus:none
     align/          # anchor.json — the drift-scan base_sha (align mkdir's it on first run) — committed · bus:none
     demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves (both sockets) under a sandbox-CSP opaque origin; also holds create-demo's .refine.json round counter (a dotfile the server refuses); pruned on TERMINAL checkpoint-resolve by the verdict-apply path, retention's prune_demos backstops stragglers — D102/D104/D124, gitignored · bus:static · no-pin (write-once-then-serve, content-atomic on 9p — D104/D124)
+    demo-approvals.json # the promoted refine ledgers — {item_id, approved_at, rounds, spec_ref} per TERMINAL demo verdict, written by check_demo_bundle.py --promote immediately BEFORE the bundle delete (the .refine.json above dies with it, so without this "approved with no ledger" is true of every approved item forever); ids/counts/a hash only, no bytes and no values; read by align's approved-demo lens — D157  (committed) · bus:none
   <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored · bus:none · no-pin
   <project_root>/   # the product (greenfield: project/ ; brownfield: the repo root)
     CLAUDE.md       # the product's own brief

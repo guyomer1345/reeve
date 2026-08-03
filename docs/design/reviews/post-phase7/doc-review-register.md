@@ -89,6 +89,14 @@ these are prose edits; the suite is the proof they changed no behaviour).
 > release discipline (D151) ahead of the interaction-model rework, because it is the only open item harming a real
 > installed user today. Full call + what was rejected: **D155**. *The statements below are the audit's original
 > framing, kept as the record of what it found.*
+>
+> **Both MEDIUM builds landed 2026-08-03.** **JF2** → **D156** (`request.tasks[].provides[]` is the producer;
+> the request half is deliberately *not* named `artifacts[]`, since request and reply sharing no key name is what
+> lets `park` refuse a reply field on a request). **JF1** → **D157**, which had to *correct* D155's resolution:
+> the lens as shipped could not fire — its trigger ("a terminal approval with an absent ledger") is true of every
+> approved item forever, because the ledger lives inside the directory `approve` deletes, and a standing check
+> inside a diff-scoped pass never reaches a historical item anyway. The fix promotes the ledger out before the
+> delete, admits the backlog in step 1 where scope is decided, and records clean reads in the anchor.
 
 ### JF1 — `align` has no lens for the D154 backwards gap, and the roadmap queued it to *this* pass *(MEDIUM)*
 - **Area:** `11:188-194` **[fix-later — bundle with the `align` pass; `align` is the natural detector, not a new

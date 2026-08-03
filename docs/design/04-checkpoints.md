@@ -73,8 +73,9 @@ Declared upstream wherever the intent lives, with setup's one exception:
   **`returns` MEANS credential (D152)** — there is no `sensitive` marker. It was composer-supplied and was the sole
   trigger for redaction, shredding and storage at once, so a conforming entry that omitted it was printed verbatim
   and never stored; protection now comes from the field, which no producer can forget to set. A non-credential value
-  the task hands back goes in **`artifacts`** — same shape, validated as strictly, never redacted, never stored (and
-  with no shipped producer: the console form renders only declared `secrets[]` names, which mean credential).
+  the task hands back goes in **`artifacts`** — same shape, validated as strictly, never redacted, never stored;
+  its producer is the form's **`provides[]`** inputs (D156), the mirror of the credential ones. It shipped
+  declared-but-unproducible until then, disclosed in place rather than left to be discovered.
   On the **request** side, `park` refuses the reply's own fields (`outcome`, `returns`) on a task and stays
   permissive otherwise — a park that hard-fails is a checkpoint that never opens.
 - **Setup is machine-verified on resume** — "done" unblocks the agent to *probe the key/webhook actually works*
@@ -82,10 +83,14 @@ Declared upstream wherever the intent lives, with setup's one exception:
   not the terminal signal.
 - **Setup is plural + coalesced:** `request.tasks[]` (a lone setup is a one-element set), per-task outcomes;
   foreseeable setups are bundled **within-plan at first-setup-contact** (not front-loaded). Cross-ticket coalescing
-  is deferred (the schema already fits it — additive, not a refactor). **A task entry is `{ id, what, secrets?[] }`
-  (D147)** — `secrets[]` naming the credential key names it will hand back, which is what lets the console render a
-  labelled input per key instead of asking a human to hand-compose a payload, and is the source `config.json`'s
-  `secrets_required[]` accumulates from.
+  is deferred (the schema already fits it — additive, not a refactor). **A task entry is
+  `{ id, what, secrets?[], provides?[] }` (D147, extended D156)** — `secrets[]` naming the credential key names it
+  will hand back, which is what lets the console render a labelled input per key instead of asking a human to
+  hand-compose a payload, and is the source `config.json`'s `secrets_required[]` accumulates from; **`provides[]`
+  the same for a NON-credential value** (it lands in `artifacts`, not `returns`). Which of the two lists a name was
+  declared in is what decides the value's protection — the property a composer-set flag could never have. The
+  request half is named `provides[]` rather than `artifacts[]` deliberately: request and reply share no key name,
+  and that is the only reason `park` can refuse a reply-side field on a request.
 - **A returned secret rides the inbox, sensitive + shred** — written to the gitignored **secret store**, now
   located and owned (D111): **`.workflow/secrets/`**, native-FS-pinned, atomic `0600`/ACL create **whose achieved
   mode is verified, not assumed** (D115 — a 0600 create silently returns 0777 on the WSL repo mount), orchestrator

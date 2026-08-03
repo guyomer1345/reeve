@@ -42,6 +42,11 @@ claude plugin marketplace add ./dev-autonomous-workflow
 claude plugin install dev-autonomous-workflow
 ```
 
+Installing **copies** the package — it is a snapshot, not a live link to the checkout, and `claude plugin update`
+compares *versions*, which move once per release rather than once per commit. So while you are editing the package,
+re-install rather than update: `scripts/dev-reinstall.sh` does it from the working tree and prints what the install
+now carries.
+
 ## Getting started
 
 Open the project you want the workflow to build (or an empty directory for a new one) in Claude Code and run:

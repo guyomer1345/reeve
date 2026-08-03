@@ -207,5 +207,74 @@ class RefineLedger(unittest.TestCase):
         self.assertEqual(cdb.main(["x", self.bundle]), 0)
 
 
+class PromoteTheLedger(RefineLedger):
+    """`--promote` — the half that survives the delete.
+
+    The ledger proves a refine round moved the spec, and it lives INSIDE the bundle the
+    terminal approve deletes. So without this, "approved with no ledger" describes every
+    approved item that has ever existed: a tautology, not a detectable condition, and
+    `align`'s backwards-looking lens had nothing to key on. Promoting the summary before
+    the delete is what turns that into a finite, shrinking set.
+    """
+
+    def approvals(self):
+        with open(os.path.join(self.workflow, cdb.APPROVALS)) as fh:
+            return json.load(fh)["approvals"]
+
+    def test_the_last_rounds_spec_ref_survives_the_bundle(self):
+        sha = cdb._sha256(self.spec)
+        self.ledger({"round": 1, "rounds": [{"round": 1, "spec_ref": self.ref(sha)}]})
+        cdb.promote(self.bundle, self.workflow)
+        shutil.rmtree(self.bundle)          # what approve does next
+        got = self.approvals()
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["item_id"], "item-1")
+        self.assertEqual(got[0]["rounds"], 1)
+        self.assertEqual(got[0]["spec_ref"]["sha256"], sha)
+        self.assertTrue(got[0]["approved_at"])
+
+    def test_a_demo_approved_without_ever_refining_records_a_null_spec_ref(self):
+        """Round 0 is honest: nothing was refined, so there is no spec-moving claim.
+        It still gets an entry — the entry is what says "this one was checked"."""
+        cdb.promote(self.bundle, self.workflow)
+        got = self.approvals()
+        self.assertEqual(got[0]["rounds"], 0)
+        self.assertIsNone(got[0]["spec_ref"])
+
+    def test_promoting_twice_replaces_rather_than_duplicates(self):
+        """Applying a verdict is re-appliable after a crash; two entries for one item
+        would later read as two approvals."""
+        sha = cdb._sha256(self.spec)
+        self.ledger({"round": 1, "rounds": [{"round": 1, "spec_ref": self.ref(sha)}]})
+        cdb.promote(self.bundle, self.workflow)
+        cdb.promote(self.bundle, self.workflow)
+        self.assertEqual([e["item_id"] for e in self.approvals()], ["item-1"])
+
+    def test_a_second_item_is_appended_beside_the_first(self):
+        cdb.promote(self.bundle, self.workflow)
+        other = os.path.join(self.workflow, "demos", "item-2")
+        os.makedirs(other)
+        cdb.promote(other, self.workflow)
+        self.assertEqual(sorted(e["item_id"] for e in self.approvals()),
+                         ["item-1", "item-2"])
+
+    def test_an_unreadable_approvals_file_is_replaced_not_propagated(self):
+        """A torn file must not be read as "this item was never promoted" AND must not
+        wedge every future promote — the recovery is to start a sound file."""
+        with open(os.path.join(self.workflow, cdb.APPROVALS), "w") as fh:
+            fh.write("{tor")
+        cdb.promote(self.bundle, self.workflow)
+        self.assertEqual([e["item_id"] for e in self.approvals()], ["item-1"])
+
+    def test_the_cli_promotes_and_derives_the_workflow_dir(self):
+        self.assertEqual(cdb.main(["x", "--promote", self.bundle]), 0)
+        self.assertEqual([e["item_id"] for e in self.approvals()], ["item-1"])
+
+    def test_promote_leaves_no_temp_file_behind(self):
+        cdb.promote(self.bundle, self.workflow)
+        self.assertEqual([f for f in os.listdir(self.workflow)
+                          if f.startswith(".approvals-")], [])
+
+
 if __name__ == "__main__":
     unittest.main()

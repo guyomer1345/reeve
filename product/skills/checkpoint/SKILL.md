@@ -21,11 +21,18 @@ Two boundary types. **Judgment** — the human gives an opinion:
 
 ## Inputs
 A `checkpoint.request` `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
-**A `setup` `tasks[]` entry is `{ id, what, secrets?[] }`** — `secrets[]` naming the credential **key names** that
-task will hand back (`POLAR_WEBHOOK_SECRET`), never values. Fill it whenever the task returns a credential: it is
-what makes the console render a labelled input per key instead of asking a human to hand-compose a payload, and it
-is where `config.json`'s `secrets_required[]` gets its names. A task you leave un-named still works — the human just
-gets a generic entry — but the declared-loss report can then only say "the store is gone", never *which* keys.
+**A `setup` `tasks[]` entry is `{ id, what, secrets?[], provides?[] }`** — `secrets[]` naming the credential **key
+names** that task will hand back (`POLAR_WEBHOOK_SECRET`), never values. Fill it whenever the task returns a
+credential: it is what makes the console render a labelled input per key instead of asking a human to hand-compose a
+payload, and it is where `config.json`'s `secrets_required[]` gets its names. A task you leave un-named still works —
+the human just gets a generic entry — but the declared-loss report can then only say "the store is gone", never
+*which* keys.
+**`provides[]` is the same declaration for a value that is NOT a credential** (`POLAR_WEBHOOK_URL`, a project id):
+same labelled input, but the reply lands in `artifacts` instead of `returns`, so the value stays readable to you
+instead of being shredded into the secret store and unlinked. **Declare each name in exactly one of the two lists** —
+which list it came from is what decides the value's protection, and that is deliberately not a flag anyone can forget
+to set. `provides[]` is also the only thing a **remote** console can hand back: credential inputs are withheld from a
+socket that may not carry one, non-credential inputs are not.
 
 ## Workflow
 1. Assemble the `request` + its correlation `token`.
@@ -60,8 +67,8 @@ reply carries `tasks[] {id, outcome, returns?}` instead of the single `outcome`)
 the token and routes below. **`returns` is a name-keyed map — `{ "<KEY_NAME>": { value } }`, and `returns` MEANS
 credential** (there is no `sensitive` marker: protection comes from the field, not from a flag a composer must
 remember). A non-credential value the task hands back goes in **`artifacts`** — same shape, never redacted, never
-stored. The key *is* the credential name, task identity already lives at `tasks[].id`, and the bus `400`s any other
-shape.
+stored, emitted by the inputs the task's `provides[]` declared. The key *is* the credential name, task identity
+already lives at `tasks[].id`, and the bus `400`s any other shape.
 You never compose a verdict yourself: the human answers it in the console, and it arrives on the bus.
 
 ## Route
@@ -78,6 +85,12 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
     the human never agreed to. `check_demo_bundle.py` refuses a refine round that did not move the spec, so this
     should already hold — treat a mismatch here as evidence a round bypassed the lint, and fold the decision in
     **before** locking rather than approving over it.
+  - **Then promote the ledger, and only then delete:** `check_demo_bundle.py --promote .workflow/demos/<item-id>/`.
+    It folds `{item_id, approved_at, rounds, spec_ref}` into the committed **`demo-approvals.json`**, so the one
+    durable trace that this item's refine rounds were ever checked survives the directory that carried it. Skip it
+    and the item becomes indistinguishable from one approved before the floor existed — which is what `align`'s
+    approved-demo lens then has to re-read by hand, forever. A read that left no record is why that lens had nothing
+    to key on in the first place.
 - **qa** — approve → `document`/`commit` · reject → `debug` (behaviour ≠ intent) → `refine` (`changes` ≡ reject here).
 - **setup** — approve|changes → **verify the external precondition actually works** (probe the key/webhook) before
   proceeding; a failed probe re-guides via `setup-guide` (an external step can't be `debug`ged); reject → replan or

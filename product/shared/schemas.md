@@ -130,12 +130,23 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   *set* of setup items a `kind=setup` checkpoint carries (a lone setup is a one-element set); the orchestrator
   coalesces a plan's foreseeable setups (spec `integrations[]`) into one checkpoint **at first-setup-contact** (not
   front-loaded at intake) — an unforeseen setup is raised by `execute` on hitting the wall.
-  - **`tasks[]` entry — `{ id, what, secrets?[] }`.** `id` is the **task** id (`polar-webhook`), stable across the
-    reply so a per-task outcome routes back; `what` is the one-line ask the console shows. **`secrets[]` names the
-    credential **KEY NAMES** this task will hand back** (`POLAR_WEBHOOK_SECRET`) — never values. It is what lets the
-    console render a *labelled* input per credential instead of asking a human to hand-compose a payload, and it is
-    the **source** `config.json`'s `secrets_required[]` accumulates from (that key is the running projection of every
-    task's `secrets[]`, not a second declaration of the same fact).
+  - **`tasks[]` entry — `{ id, what, secrets?[], provides?[] }`.** `id` is the **task** id (`polar-webhook`), stable
+    across the reply so a per-task outcome routes back; `what` is the one-line ask the console shows. **`secrets[]`
+    names the credential **KEY NAMES** this task will hand back** (`POLAR_WEBHOOK_SECRET`) — never values. It is what
+    lets the console render a *labelled* input per credential instead of asking a human to hand-compose a payload, and
+    it is the **source** `config.json`'s `secrets_required[]` accumulates from (that key is the running projection of
+    every task's `secrets[]`, not a second declaration of the same fact).
+    **`provides[]` is the non-credential mirror** — the NAMES of values the task hands back that are *not* secrets
+    (`POLAR_WEBHOOK_URL`, a project id). It renders the same labelled input and lands in the reply's **`artifacts`**,
+    never `returns`, so the value stays readable to the orchestrator instead of being shredded into the secret store.
+    Two declared lists, not one list with a flag: **which list a name was declared in is what decides the value's
+    protection**, and that is a property a composer cannot forget to set (the `sensitive` marker is deleted, not
+    renamed). It also carries the one thing a **remote** console can return — those inputs are not gated on the
+    credential-socket check, because a webhook URL is not a credential and withholding it left a paired phone able to
+    answer a setup task with an outcome and nothing else.
+    **Request and reply share NO key name, deliberately** — the request declares NAMES to ask for (`secrets[]` /
+    `provides[]`), the reply carries VALUES (`returns` / `artifacts`). That non-overlap is the only reason `park` can
+    refuse a reply-side field on a request at all; naming the request half `artifacts[]` would forfeit it.
     **`bus.py park` refuses a request task carrying `outcome`** — that is the *reply's* field (see `verdict` below),
     and a request wearing it reads to a later human as though the question had already been answered. The refusal is
     deliberately narrow: other undeclared request fields are still accepted, because `park` is how the machine ASKS
@@ -155,9 +166,10 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
 - **`artifacts` is the non-credential half — the same `{ "<NAME>": { value } }` shape, never redacted, never stored.**
   A webhook URL or a project id the task hands back goes here, and stays readable to the orchestrator that has to act
   on it. It is validated exactly as strictly as `returns`: the only thing separating the two is which field a value
-  arrived in. *No shipped producer emits it* — the console's setup form renders one input per declared
-  `request.tasks[].secrets[]` name, and `secrets[]` means credential, so the form emits `returns` only; `artifacts`
-  is for a hand-composed or agent-composed reply.
+  arrived in. **Its producer is the setup form's `provides[]` inputs** (above) — the same row as the credential
+  inputs, a different input class, a different field. It shipped declared-but-unproducible for a while and said so
+  in place; that is now closed, because a field specified as if it works while nothing can emit it is the same defect
+  that made the old `returns` shape a coin toss.
   - **Why the split, and why there is no `sensitive` marker.** There was one, and it was the *sole* trigger for three
     protections at once — redaction out of the orchestrator's context, eligibility for the shred/store path, and
     therefore whether the value was ever removed from the inbox. A **fully conforming** entry that simply omitted it
@@ -177,7 +189,9 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
     `localStorage`, inputs cleared on send, and the "my requests" memory records the **outcome only**. It renders
     **only where the socket may accept a credential** (loopback, or a remote socket over an end-to-end-encrypted
     transport) — but that is UX, not the boundary: the `403` at the socket stays the enforcement, because a page is
-    never allowed to be the thing that decides. **The input is deliberately `type="text"`, not a password field** —
+    never allowed to be the thing that decides. The **`provides[]`** inputs beside it are the producer of
+    `artifacts`, and they render on **every** socket: the credential gate exists to keep secrets off a socket that
+    cannot carry them, and a non-credential is not one. **The input is deliberately `type="text"`, not a password field** —
     driving the form in a real browser showed masking cost a human the ability to confirm a paste landed whole, and
     made Chrome offer to save the key into its password manager, which `autocomplete="off"` cannot suppress on a
     password field. Masking defended a loopback (or WireGuard) socket against a shoulder while costing correctness
@@ -311,6 +325,25 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
   `spec_ref.sha256` does not match the file on disk, and one whose hash is **unchanged from the previous round**.
   Only the latest round is pinned to current bytes — earlier rounds legitimately describe superseded revisions.
 - The lint also refuses `round` over the cap, so the cap stops being a number two documents state and no code reads.
+- **It dies with its bundle, so its summary is promoted out first.** On a terminal verdict the route runs
+  `check_demo_bundle.py --promote` before deleting the directory, folding `{item_id, approved_at, rounds, spec_ref}`
+  into the committed **`demo-approvals.json`** (below). Otherwise nothing later can tell an item that was checked
+  from one approved before this floor existed.
+
+## demo-approvals  · written by `check_demo_bundle.py --promote` on a terminal demo verdict, read by `align` · *`.workflow/demo-approvals.json`; **COMMITTED** (ids, counts and a hash — no bytes, no values, so it is small and carries nothing that needs protecting); atomic write; append-with-replace, keyed on `item_id`*
+- `{ approvals: [{ item_id, approved_at, rounds, spec_ref: { path, sha256 } | null }] }` — one entry per item whose
+  demo reached a **terminal** verdict, written **immediately before the bundle is deleted**. `spec_ref` is the last
+  round's, or `null` for a demo approved at round 0 (never refined, so there is no spec-moving claim to record).
+- **Why it exists: the refine ledger dies with the bundle.** `.refine.json` is what proves a refine round moved the
+  spec, and it lives *inside* `demos/<item-id>/`, which the terminal `approve` deletes. So the moment an item is
+  approved, every trace that it was ever checked is gone — and "approved with no ledger" becomes true of **every**
+  approved item that has ever existed. That is not a detectable condition, it is a tautology, and a backwards-looking
+  check built on it would re-read the whole history on every scan and never clear anything.
+- **What it buys.** An item **with** an entry is settled mechanically (the lint already refused any round that did
+  not move the spec). An item **without** one was approved before this floor existed, and is the only kind `align`'s
+  approved-demo lens has to read by judgment. The set is finite and shrinks to nothing; the promote is a **command
+  the route runs**, not a step it is asked to remember. Idempotent on `item_id`, because applying a verdict is
+  itself re-appliable after a crash and two entries would later read as two approvals.
 
 ## outbox / pending-outward-action  · written by the orchestrator when a skill defers an outward action, cleared by the `release` consumer · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, single-writer (orchestrator), kept on a native filesystem; read by the bus to render the console's release panel; the mirror of the bus-owned `inbox/`*
 The **transactional-outbox** queue behind the "never stalls — queue the outward action, one approval releases a

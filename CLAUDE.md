@@ -14,7 +14,7 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
 - **`docs/design/`** — this construction record: the numbered design docs `00`–`11` + the `08` decision log +
   `reviews/`. Dense and internal by design; a consumer never needs it.
 - **`scripts/`** — meta-only tooling that never ships (`check-no-spec-refs.sh`, `check-status-coherence.sh`,
-  `check_enum_coherence.py`, `build-release.py`), plus their tests.
+  `check_enum_coherence.py`, `build-release.py`, `dev-reinstall.sh`), plus their tests.
 
 ## Ground yourself first (read before proposing anything)
 - **`docs/design/11-roadmap.md`** — the complete by-space map of what's left + the phased build sequence (canonical status).

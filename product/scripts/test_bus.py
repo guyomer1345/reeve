@@ -2465,7 +2465,13 @@ class ConsoleSetupForm(unittest.TestCase):
     """
 
     def _emit(self, tasks, notes="ok"):
-        """Run the shipped collectVerdict() over a minimal DOM shim; return its output."""
+        """Run the shipped collectVerdict() over a minimal DOM shim; return its output.
+
+        The shim resolves `.svalue` and `.avalue` SEPARATELY, because that separation is
+        the thing under test: which field a value lands in is its whole protection, and a
+        shim that handed both selectors the same inputs would pass while the real page
+        shredded a webhook URL into the secret store.
+        """
         node = _node()
         if not node:
             self.skipTest("node is not installed")
@@ -2473,9 +2479,10 @@ class ConsoleSetupForm(unittest.TestCase):
 %s
 const TASKS = %s.map((t) => ({
   dataset: { tid: t.id },
-  _inputs: t.secrets.map((s) => ({ value: s.value, dataset: { name: s.name } })),
+  _secrets: (t.secrets || []).map((s) => ({ value: s.value, dataset: { name: s.name } })),
+  _provides: (t.provides || []).map((s) => ({ value: s.value, dataset: { name: s.name } })),
   querySelector() { return { value: t.outcome }; },
-  querySelectorAll() { return this._inputs; },
+  querySelectorAll(sel) { return sel === ".avalue" ? this._provides : this._secrets; },
 }));
 const card = {
   querySelectorAll: (sel) => (sel === ".task" ? TASKS : []),
@@ -2540,6 +2547,85 @@ console.log(JSON.stringify(collectVerdict(card, %s)));
         bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
         self.assertNotIn("returns", verdict["tasks"][0])
 
+    # -- the non-credential half: `provides[]` in, `artifacts` out --
+    def test_the_form_emits_artifacts_from_the_provides_inputs(self):
+        """`artifacts` shipped DECLARED AND UNPRODUCIBLE, which is the D147 defect the
+        `returns` shape was rebuilt to end. `request.tasks[].provides[]` is its producer:
+        the same row, a different input class, a different field."""
+        verdict = self._emit([{"id": "polar", "outcome": "approve", "secrets": [],
+                               "provides": [{"name": "POLAR_WEBHOOK_URL",
+                                             "value": "https://x.example/hook"}]}])
+        clean, sensitive = bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
+        got = clean["verdict"]["tasks"][0]
+        self.assertEqual(got["artifacts"],
+                         {"POLAR_WEBHOOK_URL": {"value": "https://x.example/hook"}})
+        self.assertNotIn("returns", got)
+        # The whole point of the split: this must NOT be shredded into the secret store,
+        # and must stay readable to the orchestrator that has to act on it.
+        self.assertFalse(sensitive)
+
+    def test_a_provided_value_never_lands_in_returns(self):
+        """The two collectors must not cross. If they ever did, a non-credential would be
+        written to `.workflow/secrets/` and unlinked from the inbox — unrecoverable, and
+        invisible until the loop went looking for a value that had been shredded."""
+        verdict = self._emit([{"id": "polar", "outcome": "approve",
+                               "secrets": [{"name": "POLAR_WEBHOOK_SECRET",
+                                            "value": "whsec_x"}],
+                               "provides": [{"name": "POLAR_PROJECT_ID",
+                                             "value": "proj_42"}]}])
+        _, sensitive = bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
+        task = verdict["tasks"][0]
+        self.assertEqual(sorted(task["returns"]), ["POLAR_WEBHOOK_SECRET"])
+        self.assertEqual(sorted(task["artifacts"]), ["POLAR_PROJECT_ID"])
+        # One credential anywhere in the reply still makes the whole message sensitive —
+        # redaction is per-message, so a benign value riding beside a secret is protected
+        # with it rather than leaking the message it travels in.
+        self.assertTrue(sensitive)
+
+    def test_an_unfilled_provided_value_yields_no_artifacts_at_all(self):
+        verdict = self._emit([{"id": "polar", "outcome": "changes", "secrets": [],
+                               "provides": [{"name": "POLAR_WEBHOOK_URL", "value": ""}]}])
+        bus.validate("verdict", {"token": "t:1:u", "verdict": verdict})
+        self.assertNotIn("artifacts", verdict["tasks"][0])
+
+    def test_provides_renders_on_a_socket_that_cannot_carry_a_credential(self):
+        """The capability this buys: the remote console could previously answer a setup
+        task with an outcome and nothing else. A non-credential value has no reason to be
+        withheld from it, so `.avalue` is NOT gated on CREDS_OK — and the real shipped
+        `renderTasks` is what has to prove it, not the comment above it."""
+        node = _node()
+        if not node:
+            self.skipTest("node is not installed")
+        harness = """
+// Counts inputs by the box they were appended to, so "which half rendered" is the
+// answer, not "did anything render".
+const MADE = { secret: 0, provide: 0 };
+const BOXES = { ".tsecrets": "secret", ".tprovides": "provide" };
+function $(sel) {
+  if (sel === "#task-tpl") {
+    return { content: { cloneNode: () => ({
+      querySelector: (s) => (BOXES[s] ? { append: () => { MADE[BOXES[s]] += 1; } }
+                                      : { textContent: "", dataset: {} }) }) } };
+  }
+  return { content: { cloneNode: () => ({
+    querySelector: () => ({ textContent: "", dataset: {} }) }) } };
+}
+const CREDS_OK = false;   // the remote socket: it may not carry a credential
+const WRAP = { hidden: true, append: () => {} };
+const NODE = { querySelector: (s) => (s === ".tasks" ? WRAP : { hidden: true }) };
+%s
+renderTasks(NODE, { kind: "setup", request: { tasks: [
+  { id: "polar", what: "make a webhook",
+    secrets: ["POLAR_WEBHOOK_SECRET"], provides: ["POLAR_WEBHOOK_URL"] }] } });
+console.log(JSON.stringify(MADE));
+""" % _js_function("renderTasks")
+        out = subprocess.run([node, "-e", harness], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        made = json.loads(out.stdout)
+        self.assertEqual(made["secret"], 0, "a credential input on a socket that refuses one")
+        self.assertEqual(made["provide"], 1,
+                         "the non-credential input was withheld from the remote console")
+
     def test_a_non_setup_checkpoint_still_posts_a_bare_opinion(self):
         verdict = self._emit([], notes="looks right")
         self.assertEqual(verdict, {"outcome": "approve", "notes": "looks right"})
@@ -2571,8 +2657,9 @@ console.log(JSON.stringify(collectVerdict(card, %s)));
     def test_the_form_clears_the_value_and_remembers_only_the_outcome(self):
         """`remember` writes to localStorage, which is durable browser state."""
         js = bus.APP_JS
-        self.assertIn('for (const inp of card.querySelectorAll(".svalue")) inp.value = ""',
-                      js)
+        self.assertIn(
+            'for (const inp of card.querySelectorAll(".svalue, .avalue")) inp.value = ""',
+            js)
         send = js[js.index("btn.addEventListener"):]
         remembered = send[send.index("remember("):send.index("flash(msg")]
         self.assertIn("shown", remembered)
@@ -2584,6 +2671,10 @@ console.log(JSON.stringify(collectVerdict(card, %s)));
         js = _js_function("renderCheckpoints")
         self.assertIn("document.activeElement", js)
         self.assertIn(".svalue, .notes", js)
+        # `.avalue` latches the same guard. It holds no secret, but a repaint would still
+        # wipe a half-typed value — and the send handler clears it for the mirror reason:
+        # a value left in the box would freeze the list at its last painted snapshot.
+        self.assertIn(".avalue", js)
 
 
 class RemoteHelpers(Tmp):

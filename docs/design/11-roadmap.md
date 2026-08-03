@@ -177,32 +177,37 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
 - **Engineering-feasibility pass** — the spike that de-risks the technical unknowns the demo deliberately
   skips (`09`). **[stageable]**
 - **Automated testing · test-from-anywhere · paid device/QA platform** — designed-for, not built. **[later]**
-- **`artifacts` has no shipped producer (D152 residual).** The non-credential half of the `returns` split is
-  declared, validated and pruned-from-nothing — but nothing in the package can emit it. The console's setup form
-  renders one input per declared `request.tasks[].secrets[]` name, and `secrets[]` *means* credential, so the form
-  emits `returns` only. Stated plainly in `schemas.md` rather than left to be discovered (a field specified as if it
-  works while nothing can emit it is the D147 defect), so this is a known gap, not a lie. Closing it is a small
-  build — a request-side `tasks[].artifacts[]` declaration plus form rendering — but it **touches the setup form**,
-  the surface that broke twice in D148/D149, so it wants a browser drive rather than a mechanical pass.
-  **The field stays declared regardless of the producer gap:** it is what lets `returns` *mean* credential, so
-  deleting it until something emits it would re-open the hole D152 closed — a composer with a non-credential value
-  and nowhere to put it puts it in `returns`, and it gets shredded into the secret store.
-  **[stageable — a BUILD needing a browser drive. Retagged D155: it was queued as `fix-later — bundle with the
-  `align` pass`, and the post-Phase-7 `align` pass proved that queue cannot discharge it — a coherence pass can
-  confirm the disclosure is honest and nothing more. A queue entry routed to a process that cannot close it is how
-  a residual sits stale for six decisions.]**
+- **`artifacts` has a producer — `request.tasks[].provides[]` (D152 residual, closed by D156).** The non-credential
+  half of the `returns` split shipped declared, validated and unproducible: the console's setup form rendered one
+  input per declared `secrets[]` name, and `secrets[]` *means* credential. It now renders a second, mirrored input
+  per `provides[]` name, emitting `artifacts`. Two declared lists rather than one list with a flag — **which list a
+  name came from is what decides the value's protection**, which is the one thing the deleted `sensitive` marker
+  could not be. The request-side field is **not** called `artifacts[]` (as this entry previously proposed): request
+  and reply deliberately share no key name, and that non-overlap is the only reason `park` can refuse a reply-side
+  field on a request at all. It also buys a capability — the inputs are not gated on the credential-socket check, so
+  a paired **remote** console can hand back a value for the first time.
+  **[BUILT (D156) — NOT browser-driven.** Six tests drive the real shipped `renderTasks`/`collectVerdict` through
+  node into the real validator, five of them proven to fail against the unfixed source. But this is the surface that
+  broke under human hands in D148/D149/D153, where a passing assertion hid the defect every time — a shim answers
+  *"does the code do X"*, never *"does the page do X"*. **Owed: one browser pass on both sockets** (loopback: a
+  credential and a provided value in one task land in different fields; remote: the `provides[]` input renders and
+  the credential input does not).**]**
 - **Specs locked BEFORE the D154 floor may be missing what was approved.** The refine ledger stops the drift going
   forward; nothing checks backwards. Any project whose history contains an approved demo can hold a spec that never
   learned a decision made in a refine round — and the evidence is gone, because the terminal `approve` deleted the
   bundle. Detection is the honest limit here: there is no artifact left to diff against, so this is a **read the
   spec against the item's history** job, not a mechanical one — precisely the shape `align` exists for (spec vs
   decisions vs promises vs the actual code). The one measured instance was repaired by hand during the D154 drive.
-  **[DONE — D155.** The post-Phase-7 `align` cold-audit found that `align` had been *named* the detector and never
-  *given* the lens, so running it as shipped did not perform the detection this entry claims. `align` step 3 now
-  carries the **approved-demo lens** as a third standing check: for an item with a terminal demo approval and no
-  refine ledger, read its spec slice against its own checkpoint request, verdict notes and commit history. A read,
-  not a gate — there is no bundle left to diff — bounded because the set is historical and the findings register
-  dedups a cleared item.**]**
+  **[DONE — D155 gave `align` the lens; D157 made it able to fire.** D155's cold audit found `align` had been
+  *named* the detector and never *given* one, and added the **approved-demo lens**. Reading that lens against the
+  shipped mechanics before relying on it found it could not perform the detection: its trigger was "a terminal
+  approval with an **absent ledger**", but `.refine.json` lives inside the directory `approve` deletes, so *every*
+  approved item matches, forever — a tautology, not a condition. It was also a standing check inside a **diff-scoped**
+  pass, so a historical item never entered the work-list at all. D157 fixes all three legs: `check_demo_bundle.py
+  --promote` folds the ledger's summary into a committed **`demo-approvals.json`** before the delete (so a promoted
+  item is settled mechanically and the un-promoted set is finite and shrinking); `align` step 1 **admits** that
+  backlog where scope is decided; and the anchor's `cleared_demo_items[]` remembers a clean read, which the findings
+  register cannot — it dedups findings, and a clean read produces none.**]**
 
 ### Space 5 — Shared state & bus
 - **Read/write ownership per file + the request/response protocol** — **DECIDED (D93):** a single-writer partition
@@ -740,6 +745,14 @@ biggest remaining feature — it is the only open item that **harms a user today
   - **a sixth meta-gate in `build-release.py`** that refuses a release whose shipped set or hashes moved without a
     bump. This is `check-status-coherence` applied to the ship boundary, and it is the `install-set.json` pattern
     one level up: the ledger is what makes "did this actually change?" *provable* rather than remembered.
+  **The cadence is settled (D158): the version moves once per RELEASE that changes a shipped file, never per push** —
+  a version that moved every commit would keep every cache fresh and destroy what the version is *for*, since D135
+  makes it `config.json`'s `workflow_version` and `/update` keys its whole migration on it. **The maintainer's half
+  is already DONE and is deliberately a different mechanism**: `scripts/dev-reinstall.sh` (meta-only) reinstalls from
+  the working tree, because a released user has no working tree and the maintainer needs the version to be
+  *irrelevant*. That also sharpens why 8a leads: the user harmed by a stale install **today** is the maintainer, so
+  this is first a correctness argument about the project's own evidence — a drive that silently runs commits-old
+  code and reports it as HEAD — and only second a user-facing one.
 - **8b — the interaction-model rework** (browser-primary async chat — `07`) — **`[core]`, sequenced second,
   deliberately.** Its blocker has cleared (D132 parked it behind a proper re-drive; D138 ran one), so this is a
   scheduling call, not a dependency: shipping a large new surface onto a fleet that cannot learn it is stale

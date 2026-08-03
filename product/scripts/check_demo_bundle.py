@@ -26,15 +26,27 @@ The refine CAP is enforced here too, for the same reason: it was a number in two
 documents that no code read, so a counter nobody increments is a circuit-breaker that
 never trips.
 
+`--promote` is the other half of that floor, and it exists because the ledger DIES WITH
+THE BUNDLE. The ledger is what proves a refine round moved the spec — and the terminal
+`approve` deletes the directory it lives in, so the moment an item is approved every
+trace that it was ever checked is gone. "Approved with no ledger" then describes every
+approved item that ever existed, which makes it useless as a question anyone can ask
+later. Promoting the ledger's summary into a small committed file *before* the delete is
+what keeps the answer: an item with no promoted entry is one approved before this floor
+existed, and that set is finite and shrinking rather than "all of them, forever".
+
 Stdlib only. Exit 0 = clean; exit 1 = violations (printed one per line); exit 2 = usage.
 
   check_demo_bundle.py <bundle-dir> [--workflow-dir DIR]
+  check_demo_bundle.py --promote <bundle-dir> [--workflow-dir DIR]
 """
+import datetime
 import hashlib
 import json
 import os
 import re
 import sys
+import tempfile
 
 # Text asset extensions worth scanning. Binary local assets (png/woff2/…) are fine by
 # being local; an external font/image is a URL inside CSS/HTML, caught below.
@@ -179,15 +191,87 @@ def check_refine_ledger(bundle_dir, workflow_dir):
     return violations
 
 
+APPROVALS = "demo-approvals.json"
+
+
+def _workflow_dir_for(bundle_dir, workflow_dir):
+    """demos/<item-id>/ sits under .workflow/, so the workflow dir is two levels up
+    unless the caller says otherwise."""
+    if workflow_dir is not None:
+        return workflow_dir
+    return os.path.dirname(os.path.dirname(os.path.abspath(bundle_dir)))
+
+
+def promote(bundle_dir, workflow_dir=None):
+    """Fold this bundle's refine ledger into the committed approvals file, then say so.
+
+    Called on a TERMINAL demo verdict, immediately before the bundle is deleted. Records
+    ids, a count and a spec hash — never demo bytes and never a value, so the file stays
+    small and carries nothing that needs protecting.
+
+    Idempotent on `item_id`: applying a verdict is itself re-appliable after a crash, so
+    a second promote of the same item must replace its entry rather than add a duplicate
+    that would later read as two approvals.
+    """
+    workflow_dir = _workflow_dir_for(bundle_dir, workflow_dir)
+    item_id = os.path.basename(os.path.abspath(bundle_dir))
+    led = {}
+    try:
+        with open(os.path.join(bundle_dir, REFINE_LEDGER)) as fh:
+            led = json.load(fh)
+    except (OSError, ValueError):
+        led = {}
+    if not isinstance(led, dict):
+        led = {}
+    rounds = led.get("rounds") if isinstance(led.get("rounds"), list) else []
+    last = rounds[-1] if rounds and isinstance(rounds[-1], dict) else {}
+    ref = last.get("spec_ref") if isinstance(last.get("spec_ref"), dict) else None
+    entry = {
+        "item_id": item_id,
+        "approved_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "rounds": led.get("round") if isinstance(led.get("round"), int) else 0,
+        # `null` is an honest answer and a meaningful one: a demo approved at round 0 was
+        # never refined, so there is no spec-moving claim to record for it.
+        "spec_ref": {"path": ref.get("path"), "sha256": ref.get("sha256")} if ref else None,
+    }
+
+    path = os.path.join(workflow_dir, APPROVALS)
+    doc = {"approvals": []}
+    try:
+        with open(path) as fh:
+            got = json.load(fh)
+        if isinstance(got, dict) and isinstance(got.get("approvals"), list):
+            doc = got
+    except (OSError, ValueError):
+        pass
+    doc["approvals"] = [e for e in doc["approvals"]
+                        if not (isinstance(e, dict) and e.get("item_id") == item_id)]
+    doc["approvals"].append(entry)
+
+    # Atomic publish — a torn approvals file would be read as "this item was never
+    # promoted", which is the exact wrong answer (it re-opens a question already closed).
+    os.makedirs(workflow_dir, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=workflow_dir, prefix=".approvals-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            json.dump(doc, fh, indent=2, sort_keys=True)
+            fh.write("\n")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return entry
+
+
 def lint(bundle_dir, workflow_dir=None):
     """Return a list of violation strings (empty => clean)."""
     violations = []
     if not os.path.isdir(bundle_dir):
         return ["%s: not a directory" % bundle_dir]
-    # demos/<item-id>/ sits under .workflow/, so the workflow dir is two levels up unless
-    # the caller says otherwise.
-    if workflow_dir is None:
-        workflow_dir = os.path.dirname(os.path.dirname(os.path.abspath(bundle_dir)))
+    workflow_dir = _workflow_dir_for(bundle_dir, workflow_dir)
     if not os.path.exists(os.path.join(bundle_dir, "index.html")):
         violations.append("%s: no index.html (a bundle's entry point is index.html)"
                           % bundle_dir)
@@ -219,9 +303,15 @@ def main(argv):
             workflow_dir = argv[i + 1]
             args = [x for x in args if x != workflow_dir]
     if len(args) != 1:
-        sys.stderr.write("usage: check_demo_bundle.py <bundle-dir> "
+        sys.stderr.write("usage: check_demo_bundle.py [--promote] <bundle-dir> "
                          "[--workflow-dir DIR]\n")
         return 2
+    if "--promote" in argv:
+        entry = promote(args[0], workflow_dir)
+        print("PROMOTED: %s → %s (rounds=%s, spec=%s) — the bundle may now be deleted"
+              % (entry["item_id"], APPROVALS, entry["rounds"],
+                 (entry["spec_ref"] or {}).get("path") or "none"))
+        return 0
     violations = lint(args[0], workflow_dir)
     if violations:
         sys.stderr.write("BLOCKED: this demo bundle must not be parked:\n")
