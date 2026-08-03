@@ -184,14 +184,25 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   works while nothing can emit it is the D147 defect), so this is a known gap, not a lie. Closing it is a small
   build — a request-side `tasks[].artifacts[]` declaration plus form rendering — but it **touches the setup form**,
   the surface that broke twice in D148/D149, so it wants a browser drive rather than a mechanical pass.
-  **[fix-later — bundle with the `align` pass]**
+  **The field stays declared regardless of the producer gap:** it is what lets `returns` *mean* credential, so
+  deleting it until something emits it would re-open the hole D152 closed — a composer with a non-credential value
+  and nowhere to put it puts it in `returns`, and it gets shredded into the secret store.
+  **[stageable — a BUILD needing a browser drive. Retagged D155: it was queued as `fix-later — bundle with the
+  `align` pass`, and the post-Phase-7 `align` pass proved that queue cannot discharge it — a coherence pass can
+  confirm the disclosure is honest and nothing more. A queue entry routed to a process that cannot close it is how
+  a residual sits stale for six decisions.]**
 - **Specs locked BEFORE the D154 floor may be missing what was approved.** The refine ledger stops the drift going
   forward; nothing checks backwards. Any project whose history contains an approved demo can hold a spec that never
   learned a decision made in a refine round — and the evidence is gone, because the terminal `approve` deleted the
   bundle. Detection is the honest limit here: there is no artifact left to diff against, so this is a **read the
   spec against the item's history** job, not a mechanical one — precisely the shape `align` exists for (spec vs
   decisions vs promises vs the actual code). The one measured instance was repaired by hand during the D154 drive.
-  **[fix-later — bundle with the `align` pass; `align` is the natural detector, not a new gate]**
+  **[DONE — D155.** The post-Phase-7 `align` cold-audit found that `align` had been *named* the detector and never
+  *given* the lens, so running it as shipped did not perform the detection this entry claims. `align` step 3 now
+  carries the **approved-demo lens** as a third standing check: for an item with a terminal demo approval and no
+  refine ledger, read its spec slice against its own checkpoint request, verdict notes and commit history. A read,
+  not a gate — there is no bundle left to diff — bounded because the set is historical and the findings register
+  dedups a cleared item.**]**
 
 ### Space 5 — Shared state & bus
 - **Read/write ownership per file + the request/response protocol** — **DECIDED (D93):** a single-writer partition
@@ -232,7 +243,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   `ingest` skill over existing leaves (`research` *gathers* → `ingest` *synthesizes* the spec → reconciliation
   `checkpoint`; `document` authors the durable `why`/Sessions later, **not** during ingest — no new agent) that
   seeds behavioural-core **intent from the existing `CLAUDE.md`/spec** (un-derivable from code), builds
-  `docs/knowledge/` + a reconstructed `docs/spec/` (default **unspecified**, reconciliation checkpoint locks
+  `docs/knowledge/` + a reconstructed `docs/spec.md` (default **unspecified**, reconciliation checkpoint locks
   invariants). **DRIVEN end-to-end (D130, Phase-5 Wave-2):** brownfield `/start` (§3) → `ingest` → codemap-at-scale
   over a real ~720-file repo → real `research` GATHER → `spec` reconstructed (`unspecified`) → schema-correct node
   seeds → blocking `checkpoint:reconcile` (relocation-aware, daemon-surfaced); adopt-without-clobber held. The drive
@@ -400,9 +411,8 @@ The website+demo design decomposes into five clusters; the dependency spine is *
 
 **Phase 5 — pre-test hardening (D126). COMPLETE** (as are Phases 6 and 7 below); this paragraph is the
 historical framing of *why it opened*, not a live "next slice" pointer — it read as one for four phases after
-Phase 5 closed. **What comes after Phase 7 is not yet declared here**; the only candidate named anywhere is the
-interaction-model rework (browser-primary async chat, `07`), which the Phase-6 sequence line parks behind a
-re-drive. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
+Phase 5 closed. **The live pointer is `### Phase 8` below** (opened D155): release discipline first, then the
+interaction-model rework. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
 the release surface D125), but "release-ready" was a *build-completeness* claim: the whole **install → `/start` →
 loop** runtime has **never been driven end-to-end once** (every Phase-3 increment was driven in isolation; the only
 prior loop run — D52 — was a pre-D66 throwaway that *simulated* dispatch). A pre-first-run audit (two independent
@@ -714,6 +724,33 @@ a park→verdict→unpark cycle and a `/rebind` on a real clone whose toolchain 
 probe did exactly what they were designed to do; the declared-secret diff did not, and its finding is open in `07`.
 One high-severity bug came out of it (the forged end marker) and one stated residual was retracted as never real.
 
+### Phase 8 — Release discipline, then the interaction-model rework **[NEXT — opened D155; nothing built]**
+Phases 1–7 are complete and the package has a **real installed consumer**. The successor is therefore not the
+biggest remaining feature — it is the only open item that **harms a user today**, and it was measured, not feared.
+- **8a — a stale install cannot learn it is stale (D151) — `[core]`.** Installing **copies** `product/` into
+  `~/.claude/plugins/cache/<plugin>/<version>/`; `claude plugin update` compares **versions**, and
+  `plugin.json` has been pinned at `0.1.0` since the first install. The D151 drive measured the consequence: the
+  install had silently drifted **12 commits and 17 shipped files behind** HEAD — including the `SessionStart(clear)`
+  rehydrate, so a `/clear` there dropped into an empty session while the docs described resuming from `handoff.md`
+  — while `claude plugin update` reported *"already at the latest version (0.1.0)"*. `11` already prescribed a
+  manual force-reinstall; **the drive is the proof that the manual step did not hold.** A control nobody runs is
+  not a control. Two halves, and the second is what makes the first un-forgettable:
+  - **bump `version` on every release that changes a shipped file** — the same lever twice, since D135 makes that
+    value `config.json`'s `workflow_version` and `/update` keys its whole migration on it;
+  - **a sixth meta-gate in `build-release.py`** that refuses a release whose shipped set or hashes moved without a
+    bump. This is `check-status-coherence` applied to the ship boundary, and it is the `install-set.json` pattern
+    one level up: the ledger is what makes "did this actually change?" *provable* rather than remembered.
+- **8b — the interaction-model rework** (browser-primary async chat — `07`) — **`[core]`, sequenced second,
+  deliberately.** Its blocker has cleared (D132 parked it behind a proper re-drive; D138 ran one), so this is a
+  scheduling call, not a dependency: shipping a large new surface onto a fleet that cannot learn it is stale
+  multiplies the exact problem 8a exists to fix. Do 8a first — it is small — then build this on a fleet that can
+  actually receive it.
+
+*Everything else stays `[stageable]`/`[later]` and is picked off the by-space list above, not this sequence — the
+living code-map observed layer, the D84 reclassification, the proportional-rigor gate, build-once-per-wave,
+model/effort routing, the project-map tab, and the project-state view (still the self-hosting prerequisite it has
+been since 2026-06-30).*
+
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
 `rules/` + the drift gate), **knowledge-complete** (code-map generation → brownfield ingest), **visible + reachable**
@@ -768,4 +805,6 @@ the shape the code actually produces. **That finding is CLOSED by D147**, which 
 one: `returns` had **no producer** — the console's verdict form posted `{outcome, notes}` only, against a D99 spec
 that named `returns`/`tasks[]`/steps/deep-links, so D122's Tailscale credential arm had been guarding a payload
 nothing could emit. `returns` is now a declared name-keyed map, the console gained the setup form (increment 3b),
-and the matcher went exact. Beyond these, everything is `[stageable]`/`[later]`.
+and the matcher went exact. **`### Phase 8` (D155) is what comes next** — release discipline (a released install
+cannot currently learn it is stale) ahead of the interaction-model rework, because shipping a new surface onto a
+fleet that cannot receive fixes multiplies the problem. Beyond those, everything is `[stageable]`/`[later]`.

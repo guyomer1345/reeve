@@ -51,9 +51,21 @@ them is the trap:
    alignment, classified by commitment** — a *locked* contradiction is drift, *provisional* is a finalize
    signal, *unspecified* is steering; (b) **promise adequacy** — re-derive the decision's negative/tail class
    *blind to the code* and diff it against what the code actually exercises; (c) **over-delivery** — behaviour
-   that traces to no promise. Two lenses are baked in as standing checks: the **status-ownership** lens (one
-   owner per fact-domain; a second copy is drift) and the **promise↔plan mirror** lens (every
-   `decision-record.promises[]` has a matching `plan.promises[]`). Stop dispatching at the budget cap (Rules).
+   that traces to no promise. Three lenses are baked in as standing checks: the **status-ownership** lens (one
+   owner per fact-domain; a second copy is drift), the **promise↔plan mirror** lens (every
+   `decision-record.promises[]` has a matching `plan.promises[]`), and the **approved-demo** lens (below).
+   Stop dispatching at the budget cap (Rules).
+   - **The approved-demo lens — the one thing here with no artifact left to compare against.** Approving a demo
+     is terminal, and it **deletes the bundle**. So a change the human agreed to during a refine round that was
+     never written back into the `spec` is destroyed at the exact moment it is approved, leaving a locked spec
+     that is confidently missing it. The `refine-ledger` now refuses a round that did not move the spec, so
+     *new* rounds are covered mechanically — but that floor is forward-only, and an item approved before it
+     existed carries no ledger at all. For any item whose history shows a **terminal demo approval** with an
+     absent ledger (or one naming no spec it regenerated from), read that item's `spec` slice against its own
+     checkpoint request, verdict `notes`, and commit history, and flag any agreed change the spec does not
+     carry. **A read, not a gate** — there is nothing left to diff, so it can only ever be judgment; a hit
+     leaves as an ordinary ticket at the spec element's `commitment`. The set is finite and historical, and the
+     findings register's dedup is what stops a cleared item being re-flagged every scan.
 4. **Judgment verification — principle-class only.** Each finder tags its findings `decidable | judgment`.
    Decidable/contract findings are already settled by the read. **Only judgment findings** go to a small
    **2-vote skeptic panel** — two *orthogonal* lenses, **occurrence** (can this actually happen?) and

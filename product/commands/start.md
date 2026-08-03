@@ -81,7 +81,7 @@ loop's normal `state.json` takes over when the motion ends.
      llms.txt          # thin agent entry point → docs/knowledge/  (committed)
      rules/            # engineering rules — specialized baseline, subtree-overridable (committed)
      docs/             # docs-root — durable product knowledge
-       spec/           # product spec (discuss fills this)   (committed)
+       spec.md         # product spec — ONE file (discuss fills this)  (committed)
        architecture.md # inline Mermaid-C4 (document-owned)  (committed)
        knowledge/      # code map                            (committed)
        decisions/      # decision-records = ADRs (append-only) (committed)
@@ -423,7 +423,8 @@ loop's normal `state.json` takes over when the motion ends.
   is the `ingest` skill below.
 - **Run `ingest` now, in this session — the scaffold commit was not the end of `/start`.** Update the ledger to
   **`bootstrap: ingesting`** first. The skill runs `.workflow/codemap.sh` to build the structural graph, seeds
-  `docs/knowledge/` nodes, and reconstructs `docs/spec/` from the existing `CLAUDE.md`/docs + code (tagged
+  `docs/knowledge/` nodes, and reconstructs the spec from the existing `CLAUDE.md`/docs + code — into
+  `docs/spec.md`, **or into the project's own adopted spec file when it already has one** (tagged
   `unspecified`), publishing the `state.json` progress markers at every stage (the §1 preamble — the console is
   watching). **Adopt an existing `docs/`** if present — write to known subpaths, never clobber; namespace
   ours on a name collision. Match subpaths **case-insensitively**: `docs/` here sits on the repo mount, which on

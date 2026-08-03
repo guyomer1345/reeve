@@ -401,7 +401,13 @@ are CLOSED by the D144 build.**
   earns a shared read-only helper or the duplication gets stated as intended. Touching the verify gate to add a
   warning a `pre-commit` hook cannot usefully display is the trade that kept it out of 7a.
 
-**OPEN (D151) — how does a released install learn it is stale, when the version never moves?** The package ships as
+**OPEN (D151) — how does a released install learn it is stale, when the version never moves? — PROMOTED into
+Phase 8a (D155, `11`); still unbuilt, and now the *first* thing scheduled.** The post-Phase-7 `align` cold-audit
+had to answer "what comes after Phase 7", and this won on the only argument that should decide it: it is the sole
+open item that harms a **real installed user today**, and it was measured rather than feared. The call taken with
+the promotion is **both** options below, because the second is what makes the first un-forgettable: bump the
+`version` on every shipped-file release, **and** a sixth meta-gate in `build-release.py` that refuses a release
+whose shipped set moved without a bump. The question text stands as written. The package ships as
 a Claude Code plugin, and installing **copies** `product/` into `~/.claude/plugins/cache/<plugin>/<version>/` — a
 snapshot, not a live link. `claude plugin update` compares **versions**, and `product/.claude-plugin/plugin.json`
 has been pinned at `0.1.0` since the first install. **The no-op itself is not news** — `11`'s Phase-6 sequence line

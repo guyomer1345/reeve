@@ -3865,3 +3865,82 @@ makes detection a judgment pass over the spec and the item's history rather than
 already is. Queued in `11` (Space 4) to bundle with the next `align` findings, deliberately **not** as a new gate.
 → `04`, `11`, `product/shared/schemas.md`,
 `product/skills/{create-demo,checkpoint}/SKILL.md`, `product/scripts/{check_demo_bundle.py,test_check_demo_bundle.py}`.
+
+## D155 — The post-Phase-7 cold audit's four judgment calls: `align` gains the lens it was already credited with, the spec is ONE file, a mis-routed residual is re-queued, and Phase 8 is release discipline **[DECIDED 2026-08-03 — the audit is the evidence; only the `align` lens is a package change, the rest are ownership + sequencing]**
+The **D89 tier-3 phase-boundary cold audit** ran over the 46 commits (**D114→D154**) since the pre-Phase-3 pass —
+the whole console/bus build, the demo + release surface, and Phases 5/6/7, none of it previously cold-audited.
+Thirteen doc↔artifact drifts were auto-fixed under the audit's autonomy contract; **four judgment findings were
+logged, not resolved** (`reviews/post-phase7/`). This entry resolves all four.
+
+**The audit's own headline, because it is the reason three of these four exist:** ten of the thirteen auto-fixes
+were **one shape repeating** — a decision retired a mechanism and the D80 blast-radius sweep reached the primary
+surface but not the terse ones. Two were in the **shipped** package and worse than cosmetic: `schemas.md`
+contradicted **itself** about the `sensitive` marker D152 deleted (four sites still told a producer to set one,
+which `bus.py` `400`s — a doc that *induces* a defect), and `05`'s layout tree, which **D114 made the owner** of
+every `.workflow/` path's commit-class/`bus:`/`pin`, was missing two paths that landed after it
+(`install-set.json` D139, `statusline.delegate` D136) — because `check_enum_coherence.py` holds *listed* rows to
+their consumers and **cannot see an absent row**. D114's own failure mode, one layer up. The tier-2/tier-3 split
+held exactly as D89 predicted: all five gates were green before and after, because every finding lived in prose.
+
+- **JF1 — `align` was NAMED the detector and never GIVEN the lens.** D154's residual is forward-only (a terminal
+  `approve` deletes the bundle, so nothing can diff a spec locked before the refine ledger existed) and `11`
+  queued it here with "`align` is the natural detector, not a new gate". But `align`'s standing checks were
+  exactly two, so **running the pass as shipped did not perform the detection `11` says it performs.** That is
+  D117's lesson recurring verbatim: *a rule that lives only in this repo's log is not a rule the consumer
+  follows.* **Call — a third standing lens in `align` step 3, the "approved-demo" lens:** for an item whose
+  history shows a terminal demo approval with an absent ledger, read its `spec` slice against its own checkpoint
+  request, verdict `notes` and commit history, and flag an agreed change the spec does not carry. **A read, not a
+  gate** — there is nothing left to diff, so it can only ever be judgment; a hit leaves as an ordinary ticket at
+  the element's `commitment`. It is **bounded by construction**: the set is finite and historical (new rounds are
+  lint-gated), and the existing findings-register dedup stops a cleared item being re-flagged every scan — reuse,
+  not a new piece of state. *Rejected:* a new gate (there is no artifact to gate on); a per-project "backfill
+  done" flag in `anchor.json` (accretes state the register's dedup already provides).
+- **JF2 — `artifacts` has no producer, and was queued to a process that CANNOT close it.** Verified still true
+  and still honestly disclosed in `schemas.md`, which is the property D147 established. The real defect was the
+  **tag**: `[fix-later — bundle with the `align` pass]`. This pass proved a coherence sweep can only confirm the
+  disclosure is honest — closing it is a build touching the setup form, the surface that broke twice at human
+  hands (D148/D149), so it wants a browser drive. **Call — retag `[stageable — a BUILD needing a browser
+  drive]`** and take it off the align queue. *A queue entry routed to a process that cannot discharge it is
+  exactly how the D136 governor residual sat stale for six decisions* (`11`'s own lesson). **The field stays
+  declared despite the gap** — it is what lets `returns` *mean* credential, so deleting it re-opens the D152 hole
+  (a composer with a non-credential value and nowhere to put it puts it in `returns`, and it is shredded into the
+  secret store). *Rejected:* removing `artifacts` until something emits it; building it blind here (tagging BUILT
+  against an undriven surface is the D147 defect itself).
+- **JF3 — `docs/spec/` (dir) vs `docs/spec.md` (file): genuinely two owners, now one.** `schemas.md` (the owner of
+  artifact shapes) said the file; `05`'s tree, `memory-model.md`, `start.md` ×2 and `11` said the directory.
+  **Call — `docs/spec.md`, ONE file, is canonical**; the five directory sites are repointed. The decisive argument
+  is mechanical rather than aesthetic: **D154's `refine-ledger` hashes exactly one file** (`spec_ref: {path,
+  sha256}`), so a directory spec would silently weaken the newest floor — there would be no defined thing to hash.
+  Corroborating: the one real brownfield drive (D130) produced `docs/spec.md`, two shipped tests assume it, and
+  D154's own prose already reasons about "`docs/spec.md`" as the greenfield name. The brownfield case is
+  **unaffected and stays first-class**: an adopted spec keeps its own name (D39/D50/D130 never-clobber), which is
+  precisely why every reference is a *recorded* path and `spec_ref.path` is free-form. *Rejected:* a `docs/spec/`
+  directory with `spec.md` as its entry (buys nothing today and needs a tree-hash rule to keep D154 coherent).
+- **JF4 — Phase 8 = release discipline FIRST, then the interaction-model rework.** `11` is the declared owner of
+  "what's left" and, after Phase 7 closed, **named no successor** — its next-slice pointer had named the completed
+  Phase 5 for three phases (auto-fixed as A13). **Call — open Phase 8 with D151 (8a) ahead of async chat (8b).**
+  The argument is that 8a is the only open item that **harms a real installed user today**, and it was *measured*:
+  the install had drifted 12 commits / 17 shipped files behind — including the `SessionStart(clear)` rehydrate, so
+  a `/clear` dropped into an empty session — while `claude plugin update` said *"already at the latest version
+  (0.1.0)"*. `11` already prescribed a manual force-reinstall, and **the drive is the proof the manual step did not
+  hold**; a control nobody runs is not a control. Both D151 options are taken, because the second makes the first
+  un-forgettable: **bump `version` on every shipped-file release** (the same lever twice — D135 makes that value
+  `config.json`'s `workflow_version` and `/update` keys its migration on it) **and a sixth meta-gate in
+  `build-release.py`** refusing a release whose shipped set moved without a bump — `check-status-coherence` applied
+  to the ship boundary, the `install-set.json` pattern one level up. Async chat's blocker *has* cleared (D132
+  parked it behind a re-drive; D138 ran one), so sequencing it second is a deliberate scheduling call, not a
+  dependency: **shipping a large new surface onto a fleet that cannot learn it is stale multiplies the very problem
+  8a exists to fix.** *Rejected:* declaring the sequence closed and running purely `[stageable]`-driven (leaves the
+  status owner unable to answer its one question); leading with async chat (the biggest feature is not the most
+  urgent); a self-hosting/dogfooding slice first (wants the project-state view, still `[stageable]`).
+
+*Rejected across all four:* resolving any of them **inside** the audit commit — the D89 contract exists so a
+detection pass cannot quietly become an authority, and it held (the audit shipped 13 mechanical fixes and zero
+judgment calls; these four arrived only when the maintainer asked for them).
+*Evidence:* `reviews/post-phase7/doc-review-register.md` (the full pass — base `3fb93dd`, HEAD `9d13b3c`, 46
+commits / 105 files, method + every finding re-verified against its artifact); five meta-gates green before and
+after; 584 tests green across both commits (prose-only edits, which is what proves they changed no behaviour).
+Reuses **D89** (the tier-3 ritual + the three-tier split), **D80/D114** (one owner per fact; the tree's ownership),
+**D152/D154** (the retired marker; the refine ledger), **D147** (a field that cannot be emitted), **D151** (the
+staleness measurement), **D117** (a rule the consumer never receives). → `05`, `07`, `11`, `reviews/post-phase7/`,
+`product/skills/align/SKILL.md`, `product/shared/memory-model.md`, `product/commands/start.md`.

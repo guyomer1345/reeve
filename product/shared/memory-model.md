@@ -8,7 +8,7 @@ demand** or **enforced by CI** — prose rots silently, code and checks fail lou
 | Tier | Rule | Examples |
 |---|---|---|
 | **VOLATILE** | rewrite freely each iteration | `.workflow/state.json`, `handoff.md` |
-| **STABLE** | change **only in the same item as the code that changes it**, CI-gated | `docs/spec/`, `docs/architecture.md` |
+| **STABLE** | change **only in the same item as the code that changes it**, CI-gated | `docs/spec.md`, `docs/architecture.md` |
 | **APPEND-ONLY** | **supersede, never edit** | `docs/decisions/`, the per-file `# Sessions` sections |
 
 ## Consequences (binding on all skills)

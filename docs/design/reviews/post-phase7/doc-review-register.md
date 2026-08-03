@@ -76,7 +76,19 @@ these are prose edits; the suite is the proof they changed no behaviour).
 
 ---
 
-## Judgment findings (NOT auto-fixed — the maintainer's call)
+## Judgment findings (NOT auto-fixed by the audit — **all four resolved by D155**)
+
+> **STATUS: FULLY RESOLVED (2026-08-03) → D155.** The audit shipped its thirteen mechanical fixes and **zero**
+> judgment calls, per the D89 contract; the maintainer then asked for the calls, and all four are taken in D155:
+> **JF1** → `align` step 3 gains the **approved-demo lens** it had been credited with and never given (a read, not
+> a gate; bounded by the register's existing dedup); **JF2** → retagged `[stageable — a BUILD needing a browser
+> drive]` and taken **off** the align queue, since this pass proved a coherence sweep cannot discharge it — the
+> field stays declared regardless, because it is what lets `returns` mean credential; **JF3** → **`docs/spec.md`,
+> ONE file**, is canonical and the five directory sites are repointed (decided mechanically: D154's refine ledger
+> hashes exactly one file, so a directory would silently weaken the newest floor); **JF4** → **Phase 8 opened** —
+> release discipline (D151) ahead of the interaction-model rework, because it is the only open item harming a real
+> installed user today. Full call + what was rejected: **D155**. *The statements below are the audit's original
+> framing, kept as the record of what it found.*
 
 ### JF1 — `align` has no lens for the D154 backwards gap, and the roadmap queued it to *this* pass *(MEDIUM)*
 - **Area:** `11:188-194` **[fix-later — bundle with the `align` pass; `align` is the natural detector, not a new

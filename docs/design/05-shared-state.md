@@ -197,7 +197,7 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     CLAUDE.md       # the product's own brief
     llms.txt        # thin agent entry point → points into docs/knowledge/  (committed)
     docs/           # ← the DOCS-ROOT — durable product knowledge (D62)
-      spec/         # the product spec (discuss fills it)           (committed)
+      spec.md       # the product spec — ONE file (discuss fills it; schemas.md owns its shape). A brownfield project's ADOPTED spec keeps its own name, which is why every reference to it is a recorded path, never a hardcoded one  (committed)
       architecture.md  # inline Mermaid-C4 L1/L2 (document-owned)   (committed)
       knowledge/    # code map — Space 6 (index.md, graph.json, nodes/)  (committed) · bus:read (graph.json — the map tab, post-MVP)
       decisions/    # decision-records = ADRs (append-only, global) (committed)
@@ -253,7 +253,7 @@ commit → merge → `worktree remove`.
 
 **Memory tiers (D38 — `shared/memory-model.md`):** every durable file is **volatile** (rewrite freely:
 `state.json`, `handoff.md`, and `backlog.md` — a live *open* queue, closed items leave, D59), **stable**
-(change only with the code that changes it, CI-gated: `docs/spec/`, the inline Mermaid-C4 `docs/architecture.md`
+(change only with the code that changes it, CI-gated: `docs/spec.md`, the inline Mermaid-C4 `docs/architecture.md`
 — D41, *not* a separate `diagrams/`), or **append-only** (supersede, never edit: `docs/decisions/`, the
 per-file `# Sessions` sections). Skills key off location + filename to know their rights.
 
