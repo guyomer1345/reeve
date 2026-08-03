@@ -816,7 +816,13 @@ Reality is **derived**, never recorded — there is no second ledger to keep in 
 | `create-demo` | `demos/<id>/` | a sandbox was built |
 | `create-forecast` | this record's `frozen_at` | the chain itself was approved |
 | `checkpoint:<kind>` | a `parked/` record of that kind — `answered_at` set ⇒ **done**, unset ⇒ **open** | the human was asked |
-| `commit` | a `git log` subject naming the item id | the change was snapshotted |
+
+This table is **exhaustive**: a node not listed here has no anchor and resolves to `unknown` (below). In
+particular **`commit` is deliberately unanchored** — it is divergence-exempt, so a probe would buy one column
+cell and never a signal; `document`'s `promoted.json` runs *before* it and already says the item reached its
+tail; and every anchor here is a pure presence check in a module the console daemon imports, which a `git`
+subprocess is not. If it is ever wanted, the exact probe is `git log --grep='^Refs: item #<id>$'` — the trailer
+`commit` actually pins, not the subject.
 
 - **`state.json` is deliberately NOT the source.** It is volatile and holds only the *current* node — never a
   history — so "which events have happened" is not a question it can answer at all.

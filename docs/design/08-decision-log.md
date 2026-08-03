@@ -4321,3 +4321,105 @@ D108/D119 (derived per-effect anchors), D91/D35 (non-preemption + never-stall �
 (one owner per fact-domain), D38/D51/D61 (lean files, history in git → the prune-at-close lifecycle), D112
 (loopback = authoritative).
 → `04`, `07`, `11`.
+
+## D163 — Phase 9a BUILT: the chain-forecast ships, and the seven calls the build had to make that D162 did not settle — plus two live shipped bugs found on the way **[BUILT 2026-08-03 — 9a-1 + 9a-2 by hand at `5a77aba`; 690 tests + all six meta-gates green; both halves driven end-to-end in a simulated install. NOT browser-rendered, and no real project has forecast a real change yet]**
+D159 designed the chain-forecast, D162 settled the four mechanics that changed its artifact list. Building it
+surfaced **seven more calls neither entry had taken** — each one a place where the design was underdetermined and
+the code could not be written without choosing. They are captured here rather than absorbed silently, because five
+of the seven *contradict or correct* something a prior entry states, and a build that quietly overrides its own
+design record is how a spec stops being the source of truth.
+
+**What shipped** (the commit message at `5a77aba` is the build record and is not restated here): `skills/create-forecast`
+with the skill-owned forecast gate placed BEFORE the sandbox gate at intake · `scripts/forecast.py` as the lifecycle
+owner (required horizon, linted names-only invariant, freeze + chain digest, reality, divergence) ·
+`check_contracts.py --forecast` as the graph half · committed `.workflow/forecasts/<id>.json` · the `forecast`
+checkpoint kind through schemas + bus + checkpoint + roster · the anchor table in `schemas.md` · a `#fc-list`
+console panel with a shared chain renderer, state badges and a divergence banner.
+
+**The seven calls:**
+- **1. The prune lives in `retention.py`, not `forecast.py` — correcting D162's "lifecycle → `forecast.py`."** D162
+  split lint ownership by fact-domain and assigned the whole forecast *lifecycle* to the new script. But **every
+  other prune in the system is in the audit pass**, and a second pruner is a second owner of "what gets deleted when"
+  — the exact D80 failure the split was meant to avoid, reintroduced one level down. So `forecast.py` owns the
+  forecast's *semantics* (freeze, reality, divergence, lint) and `retention.py` owns its *deletion*, keyed off the
+  **same `promoted.json` marker** that closes the item dir. It runs **BEFORE** the item prune, because the reverse
+  order has a crash window that orphans a forecast whose anchors are already gone. **Closure is read positively,
+  never from absence** — a forecast is born *before* any item dir exists, so "no item dir" is the normal state of a
+  brand-new forecast, and a pruner that read absence as closure would delete every forecast at the moment it was
+  created.
+- **2. No `/create-forecast` command file.** D159 says "a `/create-forecast` command … the exact sibling of
+  `/create-demo`". Plugin skills **already** expose a slash command by name — `create-demo` ships no command file
+  either. Writing one would create a **second entry point** to the same capability, which is the drift D80 exists to
+  kill; the sibling framing is honoured by *being* the same shape, not by adding a file.
+- **3. The per-item artifact filenames are PINNED.** `changelog.md` · `debug-report.md` · `plan-delta.md` were named
+  **nowhere** in the repo — the anchor table cannot anchor `execute` without them, and an artifact written under a
+  different name is an event that silently reads as never having happened. `schemas.md` now states the fixed set and
+  says why (two mechanisms read them by name and neither can guess: the coverage gates key off `promises.json`, the
+  anchor table keys off the rest).
+- **4. A FOURTH reality state, `unknown` — an addition to D159's model.** D159 implied a binary (an event either
+  unfolds as predicted or is a divergence). Some nodes have **no derivable anchor at all**: `decision-engineer`'s
+  output is a *global* decision record that cannot be tied to one item. Rendering "I can't tell" as `pending` would
+  make the column **lie** — a reader would see "did not happen" for something that may well have. So: `done` · `open`
+  · `pending` · `unknown`, and `unknown` renders as unknown. This is `align`'s honest-truncation rule (a silent cap
+  reads as "all clear") applied to a column instead of a list.
+- **5. Divergence exempts the item-complete tail** (`commit` · `document` · `close-issue` · `prioritize`). These run
+  for **every** item, so their absence from a forecast chain is the horizon talking, not a surprise — and **a signal
+  that fires on every finished item is not a signal**. They stay in the *reality column* (which is information); they
+  are out of *divergence detection* (which is an alarm). D159 defined structural divergence but never bounded it, and
+  unbounded it would have re-forecast at the end of every single item.
+- **6. Re-forecast is a SUPERSEDE, never an in-place edit.** D159 says `changes` "re-forecasts with the edits" without
+  saying what happens to the frozen record. Editing a frozen chain in place destroys the thing approval exists to
+  create — the anchor reality is measured against — and would make the chain digest meaningless. So a re-forecast
+  writes a **new version over the same `<id>.json` with `status` back to `draft`**, and the superseded version lives
+  in **git**. Same file, same id, one live chain; history where this project always keeps it (D38/D51/D61).
+- **7. The loopback-only gate is keyed on KIND, not payload — correcting D162.** D162 claimed D159's loopback-only
+  rule was enforced "for free" because `remote_carries_payload()` already `403`s a `returns`/`tasks`-bearing verdict
+  on Socket A. That covers **only the pre-fill arm**. A **bare `forecast` approve** — no payload at all — carries no
+  `returns`, passed the payload check, and **was riding the remote socket**. But an approved forecast is *a whole
+  execution plan the agent follows* (D90 makes an approved verdict authoritative), which is precisely why D159 put it
+  on loopback. The gate is now on the checkpoint **kind**: a `forecast` verdict is refused on Socket A whether or not
+  it carries anything.
+
+**Two live shipped bugs, both fixed in the same commit, both proved failing first:**
+- **`check_contracts.py` crashed in every product repo** — `align` invokes it with no arguments and the defaults
+  resolved to `.claude/templates/loop.md` + `.claude/skills`, which no install has. `FileNotFoundError`, exit 1:
+  **`align`'s entire mechanical layer was dead in situ**, in every installed project, silently. Found while grounding
+  D162 and folded into 9a rather than filed, because 9a adds a mode to that same script. Defaults are now
+  layout-aware, a missing package input degrades **loudly** instead of crashing, and `align` passes the plugin root
+  explicitly. 7 regression tests, 6 of which fail against the unfixed source.
+- **`bus.py`'s `PARK_KINDS` was an unguarded second copy of the schema kind enum** — a kind the schema declares and
+  the tuple omits is a checkpoint that **can never open**, and no prose consumer could see the drift. It is now
+  parsed by `check_enum_coherence.py` like the other code consumers. This is the same class of defect as the bug
+  above: a second source of truth that no gate was watching.
+
+**One row of the anchor table is RETRACTED.** `schemas.md` declared `commit` → "a `git log` subject naming the item
+id", and `forecast.py`'s `ANCHOR_TABLE` never implemented it. The row is **dropped**, not implemented, and this is
+the call rather than the deferral: (a) it is **misspecified as written** — `commit/SKILL.md` pins `Refs: item
+#<backlog-id>` as a **trailer**, and the subject is `type(scope): summary`, so the declared probe looks in the wrong
+place; (b) `commit` is **divergence-exempt** (call 5), so the anchor buys a single column cell and never a signal;
+(c) `document` (`promoted.json`) already anchors the item-complete tail and runs *before* `commit`, so the adjacent
+cell already tells the human the item reached its tail; (d) every other anchor is a pure `path.exists()`, and
+`forecast.py` is imported by the console daemon — adding a subprocess with a timeout, a cache and a bounded window
+to a module whose whole virtue is that it cannot fail is a poor trade for (b). If it is ever wanted, the exact
+anchor exists and is not a fuzzy subject grep: `git log --grep='^Refs: item #<id>$'`. Better to ship a table where
+every row is true.
+
+*Rejected:* a **second pruner** in `forecast.py` (two owners of deletion — D80); reading closure from the **absence**
+of an item dir (deletes every newborn forecast); a **`/create-forecast` command file** (a second entry point to one
+capability); a **binary reality model** (renders "I can't tell" as "did not happen" — a column that lies); **unbounded
+structural divergence** (fires on every finished item, so it is noise, not signal); an **in-place edit of a frozen
+chain** (destroys the anchor approval exists to create, and voids the digest); the **payload-keyed** loopback gate
+(passes a bare approve, which is the *most* authoritative verdict there is); **implementing the `commit` anchor**
+(misspecified, signal-free, redundant with `document`, and a subprocess in the daemon's import path).
+*Reuse:* D80 (one owner per fact-domain — twice: the pruner and the command file), D38/D51/D61 (history in git → the
+supersede), D90/D112 (an approved verdict is agent control → loopback by kind), D37 (divergence vocabulary), the
+`align` honest-truncation rule (→ `unknown`), D22 (the sandbox gate, the per-capability-gate precedent the forecast
+gate copies), D154/D157 (approve deletes the only other copy → freeze before unpark).
+*Evidence:* `5a77aba` (the build, with the two bugs each proved failing against the unfixed source); 690 tests + all
+six meta-gates green; both halves driven end-to-end in a simulated install layout.
+*Residuals — deliberately NOT built:* (1) a **per-ITEM forecast** on the `planner:plan-one` path — 9a is intake-only,
+the gate is stated for a "change", and `/create-forecast` is available by hand anywhere; (2) `discuss`, `prioritize`,
+`align`, `close-issue` and `ingest` have **no anchor-table entry**, so they render `unknown` — honest, but thin, and
+worth revisiting if the column reads as mostly-unknown in practice; (3) the `#fc-list` panel has **never been
+rendered in a browser** (the D147/D156 pattern: mechanically driven, visually unproven).
+→ `04`, `05`, `07`, `09`, `10`, `11`, `shared/schemas.md`.

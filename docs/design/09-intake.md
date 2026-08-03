@@ -194,7 +194,7 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
   built or decided — `07`.
 - **Engineer agent** in the roster — **resolved (D69): no new agent** — the feasibility role is the
   proportional-rigor gate reusing `planner`/`decision-engineer`/`research` (`02`).
-- **The chain-forecast** — **[DESIGNED — D159, `11` Phase 9a; unbuilt]:** a pre-execution forecast of the loop's own
+- **The chain-forecast** — **[BUILT — D159 · D162 · D163, `11` Phase 9a]:** a pre-execution forecast of the loop's own
   *routing* for a requested change (events naming real `loop.md` nodes, conditional branch points, predicted setups
   elicited early), surfaced as a **`forecast` judgment checkpoint** (`04`). The demo's sibling on the intake stage —
   `create-demo` de-risks *what* to build, `/create-forecast` de-risks *how the machine will proceed* — and, like the

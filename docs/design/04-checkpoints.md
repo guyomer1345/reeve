@@ -14,8 +14,9 @@ A checkpoint sits at a boundary only a human can cross, of one of two types — 
 verdict below:
 - **Judgment** ("is this what we meant?") — `demo` (spec vs mental picture, intake), `qa` (behaviour vs intent,
   build-tail), `reconcile` (reconstructed spec vs reality, brownfield), and **`forecast`** (proposed *routing* vs
-  intended *process*, intake — **[DESIGNED — D159, mechanics settled D162, `11` Phase 9a; unbuilt]**: a pre-execution
-  forecast of the loop's own chain of events, `approve|changes|reject`, `changes` re-forecasts). The verdict is an
+  intended *process*, intake — **[BUILT — D159 · mechanics D162 · the build + its seven calls D163; `11` Phase 9a]**:
+  a pre-execution forecast of the loop's own chain of events, `approve|changes|reject`, `changes` re-forecasts as a
+  **supersede** over the same record, never an in-place edit of a frozen chain — D163). The verdict is an
   opinion. *`demo` de-risks the product question, `forecast` the process question — the same pre-plan intake
   primitive on an orthogonal axis.* At intake the **forecast runs BEFORE the demo**: a forecast placed after it
   cannot predict the demo checkpoint, which is one of the gates it exists to front-load.
