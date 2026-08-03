@@ -231,6 +231,40 @@ class DefaultLayouts(unittest.TestCase):
         _write(os.path.join(plugin, "shared", "schemas.md"), SCHEMAS)
         return proj, plugin, script
 
+
+    # ---------------------------------------------- the split resolver
+    # `schemas.md` is split, so the enum union must be taken across both halves. These pin
+    # the two things that must stay true of that: it is FOLLOWED when it can be, and its
+    # absence degrades with a message rather than the traceback this suite exists to prevent.
+
+    def test_a_split_schema_is_read_across_both_halves(self):
+        root, script = self._package()
+        shared = os.path.join(root, "shared")
+        _write(os.path.join(shared, "schemas.md"),
+               SCHEMAS + "\n<!-- doc-budget: detail split -> schemas-runtime.md -->\n")
+        _write(os.path.join(shared, "schemas-runtime.md"),
+               "## config.json\n- `notify` — `kind: generic|slack`\n")
+        shutil.copy(os.path.join(os.path.dirname(SCRIPT), "check_doc_budget.py"),
+                    os.path.join(root, "scripts", "check_doc_budget.py"))
+        _skills(os.path.join(root, "skills"), dict(CLEAN, extra="---\nname: extra\n---\nkind=slack\n"))
+        r = self._run(root, script)
+        # `slack` lives ONLY in the detail half — unfollowed, it would be a novel kind.
+        self.assertNotIn("kind='slack'", r.stderr)
+
+    def test_a_missing_split_resolver_degrades_loudly_never_tracebacks(self):
+        root, script = self._package()      # copied WITHOUT check_doc_budget.py beside it
+        _write(os.path.join(root, "shared", "schemas.md"),
+               SCHEMAS + "\n<!-- doc-budget: detail split -> schemas-runtime.md -->\n")
+        r = self._run(root, script)
+        self.assertNotIn("Traceback", r.stderr)
+        self.assertIn("could not be followed", r.stderr)
+
+    def test_an_unsplit_schema_stays_quiet_without_the_resolver(self):
+        """The degrade must not nag every project that never split anything."""
+        root, script = self._package()
+        r = self._run(root, script)
+        self.assertNotIn("could not be followed", r.stderr)
+
     def _package(self):
         """`<root>/scripts/` + `<root>/templates/loop.md` — the meta-repo / plugin root."""
         root = os.path.join(self.tmp, "product")

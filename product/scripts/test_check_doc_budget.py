@@ -214,3 +214,104 @@ def test_runs_as_a_subprocess_the_way_checks_sh_calls_it(tmp_path):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# ------------------------------------------------- following the split pointer
+# A split moves sections OUT of a doc, so a consumer that PARSES the survivor alone reads
+# less than the schema declares. These pin the resolver the two contract gates read through
+# — and, just as load-bearing, that the SIZER deliberately does not follow it.
+
+def _survivor(root, detail_rel, sha=None, body="alpha\n"):
+    marker = (db.SPLIT_MARKER % (detail_rel, sha)) if sha else (db.SPLIT_MARKER_SIBLING % detail_rel)
+    path = os.path.join(root, "doc.md")
+    with open(path, "w") as fh:
+        fh.write("# doc\n\n%s\n\n%s" % (marker, body))
+    return path
+
+
+def test_a_live_sibling_pointer_is_followed(tmp_path):
+    root = str(tmp_path)
+    with open(os.path.join(root, "detail.md"), "w") as fh:
+        fh.write("omega\n")
+    text, unresolved = db.read_with_splits(_survivor(root, "detail.md"))
+    assert "alpha" in text and "omega" in text
+    assert unresolved == []
+
+
+def test_an_archived_pointer_carries_a_sha_and_a_sibling_pointer_does_not(tmp_path):
+    """The two forms exist because the first real customer split into a LIVE sibling —
+    stamping a sha on a file still being edited would send a reader to git for nothing."""
+    root = str(tmp_path)
+    assert "@" in db.SPLIT_MARKER % ("d.md", "abc1234")
+    assert "@" not in db.SPLIT_MARKER_SIBLING % "d.md"
+    for marker in (db.SPLIT_MARKER % ("detail.md", "abc1234"), db.SPLIT_MARKER_SIBLING % "detail.md"):
+        assert db.split_pointers(marker)[0][0] == "detail.md"
+
+
+def test_archived_detail_absent_from_disk_is_normal_not_an_error(tmp_path):
+    """`@ <sha>` means the content lives in git. Absence is the design, not a fault."""
+    root = str(tmp_path)
+    text, unresolved = db.read_with_splits(_survivor(root, "gone.md", sha="abc1234"))
+    assert unresolved == []
+    assert "alpha" in text
+
+
+def test_a_missing_LIVE_sibling_is_reported_never_swallowed(tmp_path):
+    """A silently skipped half reads as 'all clear' — the failure this whole thing avoids."""
+    root = str(tmp_path)
+    text, unresolved = db.read_with_splits(_survivor(root, "gone.md"))
+    assert len(unresolved) == 1 and "gone.md" in unresolved[0]
+
+
+def test_pointers_are_followed_recursively_and_cycles_terminate(tmp_path):
+    root = str(tmp_path)
+    with open(os.path.join(root, "a.md"), "w") as fh:
+        fh.write("AAA\n" + db.SPLIT_MARKER_SIBLING % "b.md")
+    with open(os.path.join(root, "b.md"), "w") as fh:
+        fh.write("BBB\n" + db.SPLIT_MARKER_SIBLING % "doc.md")   # cycle back to the survivor
+    text, unresolved = db.read_with_splits(_survivor(root, "a.md"))
+    assert "alpha" in text and "AAA" in text and "BBB" in text
+    assert unresolved == []
+
+
+def test_the_SIZER_does_not_follow_the_pointer(tmp_path):
+    """The counterpart to everything above, and the reason the resolver is opt-in: the
+    survivor is under the wall *because* the detail moved out. A sizer that followed the
+    pointer would re-add the bytes and report the split as having achieved nothing. The
+    detail is budgeted, but as its OWN row -- otherwise the remedy produces a file the gate
+    stopped watching, free to grow back through the wall."""
+    root = _project(str(tmp_path))
+    _write(root, "docs/spec.md", tokens=20000)
+    with open(os.path.join(root, "docs", "spec.md"), "a") as fh:
+        fh.write("\n" + db.SPLIT_MARKER_SIBLING % "spec-detail.md")
+    _write(root, "docs/spec-detail.md", tokens=20000)
+    rows = {r["path"]: r for r in _scan(root)["files"]}
+    assert rows["docs/spec.md"]["tokens"] < 25000        # judged alone, and it passes
+    assert rows["docs/spec-detail.md"]["tokens"] < 25000  # the detail is sized on its own
+
+
+def test_a_split_detail_file_is_itself_budgeted(tmp_path):
+    """The remedy must not produce a file the gate stopped watching: a detail half that
+    grows back through the wall is exactly the failure the split was meant to fix."""
+    root = _project(str(tmp_path))
+    _write(root, "docs/spec.md", tokens=1000)
+    with open(os.path.join(root, "docs", "spec.md"), "a") as fh:
+        fh.write("\n" + db.SPLIT_MARKER_SIBLING % "spec-detail.md")
+    _write(root, "docs/spec-detail.md", tokens=26000)
+    result = _scan(root)
+    over = {r["path"] for r in result["over"]}
+    assert "docs/spec-detail.md" in over
+    assert "docs/spec.md" not in over
+
+
+def test_a_detail_split_out_of_an_always_loaded_file_is_on_demand(tmp_path):
+    """Breaking detail out of `CLAUDE.md` is the always-tier remedy; what lands is by
+    definition no longer read every turn, so it must not inherit the always-loaded budget."""
+    root = _project(str(tmp_path))
+    _write(root, "CLAUDE.md", tokens=900)
+    with open(os.path.join(root, "CLAUDE.md"), "a") as fh:
+        fh.write("\n" + db.SPLIT_MARKER_SIBLING % "docs/brief-detail.md")
+    _write(root, "docs/brief-detail.md", tokens=3000)   # over always_hard, under ondemand_hard
+    rows = {r["path"]: r for r in _scan(root)["files"]}
+    assert rows["docs/brief-detail.md"]["role"] == db.ONDEMAND
+    assert rows["docs/brief-detail.md"]["tier"] == "ok"

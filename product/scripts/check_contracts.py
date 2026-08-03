@@ -35,6 +35,31 @@ import os
 import re
 import sys
 
+# `schemas.md` is SPLIT (it outgrew the Read ceiling), so reading it as one file no longer
+# yields the whole schema. The enum checks below union values out of whatever text they are
+# handed: measured against the real split, a survivor-only read drops `generic` and `slack`
+# out of the kind-union, and check 5 then reports legitimate uses as novel kinds. That is
+# false-positive noise rather than a silent pass -- but noise is what teaches a human to stop
+# reading advisories, and the union is simply wrong. `check_doc_budget.py` owns the split
+# marker, so it owns following it.
+#
+# The import DEGRADES, it does not crash. Both scripts ship in the same manifest set, so in
+# any real install the sibling is there — but this script's whole test suite exists because it
+# once died in every product repo, and "resolve it or say so, never traceback" is the rule it
+# was given then. A partial copy now reads the survivor and SAYS the split went unfollowed.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from check_doc_budget import read_with_splits
+except ImportError:
+    def read_with_splits(path):
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        # A deliberately LOOSE sentinel, not a second copy of the marker: its only job is to
+        # decide whether there is anything to warn about, so an unsplit schema stays quiet.
+        note = ("check_doc_budget.py is not beside this script, so the split pointer in "
+                "%s could not be followed" % os.path.basename(path))
+        return text, [note] if "doc-budget:" in text else []
+
 BACKTICK = re.compile(r"`([^`]+)`")
 # a `node:mode` token: lower-kebab left + colon + lower-kebab right
 MODE_REF = re.compile(r"^[a-z][a-z-]*:[a-z][a-z-]+$")
@@ -291,12 +316,18 @@ def main(argv=None):
     unread = [f for f in (_missing("--skills-dir", args.skills_dir, d_skills, os.path.isdir),
                           _missing("--schemas", args.schemas, d_schemas, os.path.isfile)) if f]
     skills = _load_skills(args.skills_dir) if "--skills-dir" not in unread else {}
-    schemas_text = _read(args.schemas) if "--schemas" not in unread else ""
+    # Follow the split, so the enum union is taken over the WHOLE schema and not just the
+    # survivor -- see the import note. An unreadable split half is announced, never swallowed.
+    schemas_text, lost_splits = (
+        read_with_splits(args.schemas) if "--schemas" not in unread else ("", []))
 
     hard, advisory = check(_read(args.loop), skills, schemas_text)
 
     for a in advisory:
         print(f"advisory: {a}", file=sys.stderr)
+    for miss in lost_splits:
+        print(f"advisory: schema split detail unreadable — {miss}; the enum union is "
+              f"INCOMPLETE, so a novel `kind=` may go unflagged", file=sys.stderr)
     if unread:
         print(
             f"contracts: NOT CHECKED — {', '.join(unread)} unresolved"

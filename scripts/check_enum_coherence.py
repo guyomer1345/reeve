@@ -25,6 +25,12 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # scripts/ -> repo root
 
+# One owner for the split-marker spelling (`check_doc_budget.py`, which ships it) — a marker
+# with two spellings is a marker nothing can find, and this gate exists to stop exactly that
+# class of second copy. Borrow the parser; never restate the regex.
+sys.path.insert(0, os.path.join(ROOT, "product", "scripts"))
+from check_doc_budget import split_pointers  # noqa: E402
+
 # --- ENUM invariants ---------------------------------------------------------
 # owner_re must capture the pipe-joined value set on the owning line.
 ENUMS = [
@@ -164,6 +170,37 @@ def check_layout_markers(rows):
     return errs
 
 
+def read_with_splits(rel, read):
+    """A doc PLUS its live split-detail siblings, through the injected reader.
+
+    Every invariant here names an OWNER doc and parses it whole. Once a doc outgrows the
+    Read ceiling and splits, "whole" stops meaning "one file". `schemas.md` is the live case,
+    and it is R2 that feels it hardest: the half that moved out is the runtime-substrate
+    records, i.e. almost every section whose header carries the 'kept on a native filesystem'
+    claim R2 is built on. Measured, a survivor-only read fails R2 with FIVE false errors
+    (`alerts.json`, `bus.json`, `bus.lock`, `orchestrator.lock`, `remote_token` -- pinned by
+    the layout tree, claimed by no header this gate could see). It fails closed, so the split
+    could not have shipped past this gate unnoticed; following the pointer is what makes the
+    split viable, not what makes the gate honest. Applied to every owner and not just
+    `schemas.md`, because the next doc to cross the wall should not need this thought again.
+    The marker's spelling has ONE owner, `check_doc_budget.py`, so this borrows its parser
+    rather than copying the regex.
+    """
+    text = read(rel)
+    parts = [text]
+    for target, _sha in split_pointers(text):
+        tgt = os.path.normpath(os.path.join(os.path.dirname(rel), target))
+        try:
+            parts.append(read(tgt.replace(os.sep, "/")))
+        except (OSError, KeyError):
+            # KeyError as well as OSError because `read` is INJECTED: the real one opens a
+            # file, the test one is a dict, and this must not care which it was handed.
+            # Absent detail is not silently tolerated -- the invariants themselves fail
+            # closed on the values that go missing, and they name the paths when they do.
+            pass
+    return "\n".join(p for p in parts if p)
+
+
 def schemas_native_paths(text):
     """`.workflow/` keys whose schemas.md header claims a native filesystem."""
     out = set()
@@ -208,7 +245,7 @@ def check_layout(read=_default_read):
         return [f"layout: the disk-layout tree was not found in {LAYOUT_OWNER} "
                 f"(the gate's own anchor moved — update check_enum_coherence.py)"]
     return (check_layout_markers(rows)
-            + check_pin_consumer(rows, read("product/shared/schemas.md"))
+            + check_pin_consumer(rows, read_with_splits("product/shared/schemas.md", read))
             + check_gitignore_consumer(rows, read("product/commands/start.md")))
 
 
@@ -244,7 +281,7 @@ def declared_values(consumer_text, consumer_re):
 def check_enums(read=_default_read):
     errs = []
     for inv in ENUMS:
-        values = enum_values(read(inv["owner"]), inv["owner_re"])
+        values = enum_values(read_with_splits(inv["owner"], read), inv["owner_re"])
         if values is None:
             errs.append(f"{inv['name']}: owner pattern not found in {inv['owner']} "
                         f"(the gate's own anchor moved — update check_enum_coherence.py)")
@@ -279,7 +316,8 @@ def check_enums(read=_default_read):
 def check_counts(read=_default_read):
     errs = []
     for inv in COUNTS:
-        n = registry_count(read(inv["owner"]), inv["owner_re"], inv.get("exclude", set()))
+        n = registry_count(read_with_splits(inv["owner"], read), inv["owner_re"],
+                           inv.get("exclude", set()))
         if n is None:
             errs.append(f"{inv['name']}: registry pattern not found in {inv['owner']}")
             continue

@@ -276,5 +276,38 @@ class Layout(unittest.TestCase):
         self.assertTrue(any("anchor moved" in x for x in errs))
 
 
+class SplitAwareRead(unittest.TestCase):
+    """`schemas.md` outgrew the Read ceiling and split. Every invariant here parses an OWNER
+    doc whole, so "whole" has to keep meaning "whole" once a doc is two files."""
+
+    MARKER = "<!-- doc-budget: detail split -> schemas-runtime.md -->"
+
+    def test_a_split_owner_is_read_across_both_halves(self):
+        files = {"product/shared/schemas.md": "head\n" + self.MARKER,
+                 "product/shared/schemas-runtime.md": "tail"}
+        got = e.read_with_splits("product/shared/schemas.md", reader(files))
+        self.assertIn("head", got)
+        self.assertIn("tail", got)
+
+    def test_the_marker_spelling_is_borrowed_not_restated(self):
+        """One owner for the string — a marker with two spellings is a marker nothing finds."""
+        self.assertEqual(e.split_pointers(self.MARKER)[0][0], "schemas-runtime.md")
+
+    def test_R2_would_FAIL_CLOSED_on_a_survivor_only_read(self):
+        """The measured direction: the native-FS claims live in the half that moved out, so
+        not following the pointer makes R2 report pins no header backs — loud, not silent."""
+        rows = [("bus.lock", "RUNTIME pin"), ("alerts.json", "RUNTIME pin")]
+        survivor_only = "## spec\n"
+        both = survivor_only + ("## bus.lock · *`.workflow/bus.lock`; kept on a native filesystem*\n"
+                                "## alerts.json · *`.workflow/alerts.json`; kept on a native filesystem*\n")
+        self.assertEqual(len(e.check_pin_consumer(rows, survivor_only)), 2)
+        self.assertEqual(e.check_pin_consumer(rows, both), [])
+
+    def test_an_unreadable_detail_half_does_not_crash_the_gate(self):
+        files = {"product/shared/schemas.md": "head\n" + self.MARKER}   # detail absent
+        got = e.read_with_splits("product/shared/schemas.md", reader(files))
+        self.assertIn("head", got)   # degrades to the survivor; the invariants then fail closed
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -70,9 +70,22 @@ its **role's** budget, **in tokens** (model-window-agnostic, like `context.warn_
   a human learns to skip — so the aspiration is tracked as work instead of as a broken build.
 - **Over budget is a TICKET, never an auto-edit.** You cannot drop half a spec doc to git the way retention drops
   a Sessions entry; splitting prose coherently is judgment. The remedy is a **split-and-pointer**: a lean
-  *current-state* file, an *archived-detail* file, and a head marker in the survivor —
-  `<!-- doc-budget: detail split -> <path> @ <sha> -->` — mirroring retention's own Sessions marker. Trim and
-  split; never delete content that carries non-derivable intent.
+  survivor, a detail file, and a head marker in the survivor. Trim and split; never delete content that carries
+  non-derivable intent. **Two marker forms**, because the detail can be dead or alive:
+  - `<!-- doc-budget: detail split -> <path> @ <sha> -->` — **archived**: the detail is frozen and recoverable
+    from git, mirroring retention's own Sessions marker. Its target is *expected* to be absent from disk.
+  - `<!-- doc-budget: detail split -> <path> -->` — **live sibling**: the detail is a real file still being
+    edited. It carries no sha, because a sha on a live file is stale at the next edit and sends a reader to git
+    for something sitting next to them. (`shared/schemas.md` → `shared/schemas-runtime.md` is the shipped case.)
+- **A split doc is still ONE doc to anything that parses it.** A reference of the form `<doc> § <section>`
+  resolves across both halves — the section name is the anchor. Any *machine* consumer must read through
+  `check_doc_budget.read_with_splits`, which follows the marker, recursively and cycle-guarded; `check_contracts.py`
+  and the meta-repo's `check_enum_coherence.py` both do. Parsing the survivor alone reads strictly less than the
+  schema declares, and the two shipped readers were measured breaking in *opposite* directions on the real split
+  (one hard-failed with five false errors, the other turned two legitimate enum values into "novel" advisories).
+  **The sizer deliberately does not follow the pointer** — the survivor is under the wall precisely because the
+  detail moved out — but the detail file *is* budgeted, as its own row and always as **on-demand**, so the remedy
+  cannot produce a file this gate stopped watching.
 - **It does not re-check truth.** `align` owns "is this doc *wrong*"; this owns "is this doc *too big*". Two
   owners, no overlap. `config.doc_budget` (`shared/schemas.md`) owns the numbers, decoupled from `retention` and
   `align` because doc size is neither memory pressure nor drift risk.

@@ -49,6 +49,7 @@ import glob
 import json
 import math
 import os
+import re
 import sys
 
 CONFIG_REL = os.path.join(".workflow", "config.json")
@@ -72,7 +73,19 @@ DEFAULTS = {
 # detail is findable and the split is self-documenting. One owner for the string, here, for
 # the same reason the brief markers live in `update_reconcile.py`: it is a compatibility
 # contract, and a marker with two spellings is a marker nothing can find.
+#
+# TWO FORMS, because the first real customer proved one was not enough. The original marker
+# mirrored retention's Sessions marker, which points at content FROZEN IN GIT -- hence the
+# `@ <sha>`. But a doc can also split into a LIVE SIBLING that is still edited (the package's
+# own `schemas.md` -> `schemas-runtime.md`: the runtime-substrate records did not stop
+# changing, they just stopped belonging in the same file). Stamping a sha on a live sibling
+# would be a lie the moment the sibling is next edited, and would tell a reader to go looking
+# in git for a file sitting right next to them. So:
+#   ARCHIVED  detail frozen at a sha, recoverable from git   -> `... -> <path> @ <sha> -->`
+#   SIBLING   detail live on disk, still edited              -> `... -> <path> -->`
 SPLIT_MARKER = "<!-- doc-budget: detail split -> %s @ %s -->"
+SPLIT_MARKER_SIBLING = "<!-- doc-budget: detail split -> %s -->"
+SPLIT_RE = re.compile(r"<!--\s*doc-budget:\s*detail split\s*->\s*(\S+?)(?:\s+@\s+(\S+))?\s*-->")
 
 ALWAYS = "always-loaded"
 ONDEMAND = "on-demand"
@@ -81,6 +94,65 @@ ROLE_WHY = {
     ALWAYS: "rent paid every turn, every session, before a word is typed",
     ONDEMAND: "loaded when something needs it -- the 25 000-token Read ceiling is a hard wall",
 }
+
+
+def split_pointers(text):
+    """[(path, sha_or_None)] for every split marker in `text`, in order of appearance."""
+    return [(m.group(1), m.group(2)) for m in SPLIT_RE.finditer(text)]
+
+
+def read_with_splits(path, _seen=None):
+    """(text, unresolved) -- `path` PLUS every live split-detail file it points at.
+
+    THE POINT OF THIS FUNCTION, because it is the opposite of what the sizer does. A split
+    physically moves sections OUT of a doc, so any consumer that parses the survivor alone
+    sees strictly less than the doc declares. Both readers of `schemas.md` were MEASURED
+    against the real split rather than reasoned about, and both break LOUDLY, in opposite
+    directions: the meta-gate's native-FS rule hard-failed with five false "the layout pins
+    a path no schema header claims" errors (fail-closed -- it would simply have blocked the
+    commit), while the contract linter's `kind:` union lost `generic` and `slack` and began
+    flagging legitimate uses as novel kinds (fail-noisy). Neither goes quiet today, so this
+    is not a silent gate defeat -- it is the plainer fact that the split is not even VIABLE
+    without it. The fail-open sliver is structural rather than current: the
+    novel-kind check skips itself entirely on an empty union, so a future split that carried
+    the last definition of an enum out of the survivor would shrink what other checks consume
+    without saying so. Read the whole artifact; do not depend on which half is in front of you.
+
+    So: a CONTENT parser reads through this. The SIZER (`scan` below) deliberately does not --
+    the survivor is under the wall precisely because the detail moved out, and a sizer that
+    followed the pointer would re-add the bytes and report the split as having achieved
+    nothing. Two readers of one file, two correct answers.
+
+    Pointers are resolved relative to the referring file's directory, followed recursively,
+    and cycle-guarded. An ARCHIVED pointer (`@ <sha>`) names content that lives in git rather
+    than on disk, so a target that is simply absent is normal and is not reported; anything
+    else that cannot be read comes back in `unresolved` for the caller to SAY, never to
+    swallow -- an unreported skip reads as "all clear", which is the failure again.
+    """
+    _seen = set() if _seen is None else _seen
+    real = os.path.realpath(path)
+    if real in _seen:
+        return "", []
+    _seen.add(real)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError as exc:
+        return "", ["%s (%s)" % (path, exc.strerror or exc)]
+    parts, unresolved = [text], []
+    base = os.path.dirname(os.path.abspath(path))
+    for target, sha in split_pointers(text):
+        tgt = target if os.path.isabs(target) else os.path.join(base, target)
+        if not os.path.exists(tgt):
+            # Archived detail is *expected* to be absent -- it is in git, by design.
+            if sha is None:
+                unresolved.append("%s (split detail of %s: no such file)"
+                                  % (target, os.path.basename(path)))
+            continue
+        sub, sub_unresolved = read_with_splits(tgt, _seen)
+        parts.append(sub)
+        unresolved.extend(sub_unresolved)
+    return "\n".join(p for p in parts if p), unresolved
 
 
 def _read_json(path, default=None):
@@ -141,6 +213,29 @@ def workflow_docs(project_root, proot):
             if os.path.isfile(path) and path not in seen:
                 seen.add(path)
                 out.append((ONDEMAND, path))
+
+    # SPLIT DETAIL FILES ARE BUDGETED TOO, or the gate prescribes a remedy it then stops
+    # watching. `docs/spec.md` is in the glob above; the `docs/spec-detail.md` a split
+    # produces is not, so without this the detail half could grow straight back through the
+    # wall unseen -- and the second split would have nowhere to land. Always ON-DEMAND,
+    # whatever the referrer was: detail broken out of an always-loaded file is precisely
+    # detail that is no longer loaded every turn, which is the point of that remedy.
+    # Sized as its OWN row, never merged into the survivor's -- see `read_with_splits`.
+    i = 0
+    while i < len(out):
+        _role, path = out[i]
+        i += 1
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                pointers = split_pointers(fh.read())
+        except OSError:
+            continue
+        for target, _sha in pointers:
+            tgt = target if os.path.isabs(target) else os.path.join(os.path.dirname(path), target)
+            tgt = os.path.normpath(tgt)
+            if os.path.isfile(tgt) and tgt not in seen:
+                seen.add(tgt)
+                out.append((ONDEMAND, tgt))
     return out
 
 
@@ -170,8 +265,11 @@ def _remedy(row):
     if row["role"] == ALWAYS:
         return ("trim it -- move detail to an on-demand doc and leave a pointer; this file "
                 "is read before every single turn")
-    return ("split-and-pointer -- a lean current-state file plus an archived-detail file, "
-            "with `%s` at the head of the survivor" % (SPLIT_MARKER % ("<detail path>", "<sha>")))
+    return ("split-and-pointer -- a lean survivor plus a detail file, with a marker at the "
+            "head of the survivor: `%s` when the detail is frozen in git, or `%s` when it is "
+            "a live sibling still being edited"
+            % (SPLIT_MARKER % ("<detail path>", "<sha>"),
+               SPLIT_MARKER_SIBLING % "<detail path>"))
 
 
 def render(result, report):
