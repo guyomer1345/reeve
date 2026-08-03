@@ -26,17 +26,25 @@ BUS_OK = '''\
 """The console daemon. It survives /clear, --resume, and session death."""
 VERDICT_OUTCOMES = ("approve", "changes", "reject")
 CONTROL_OPS = ("reprioritize", "pause", "resume")
+PARK_KINDS = ("demo", "qa", "setup", "reconcile")
 '''
 BUS_STALE_OPS = '''\
 """The console daemon. It survives /clear, --resume, and session death."""
 VERDICT_OUTCOMES = ("approve", "changes", "reject")
 CONTROL_OPS = ("reprioritize", "pause")
+PARK_KINDS = ("demo", "qa", "setup", "reconcile")
 '''
 BUS_EXTRA_OPS = '''\
 """The console daemon. It survives /clear, --resume, and session death."""
 VERDICT_OUTCOMES = ("approve", "changes", "reject")
 CONTROL_OPS = ("reprioritize", "pause", "resume", "abort")
+PARK_KINDS = ("demo", "qa", "setup", "reconcile")
 '''
+# The kind a park REFUSES is a kind whose checkpoint can never open. A kind added to
+# the schema (and to the skill that raises it) but not to this tuple fails at the one
+# place the failure is invisible from the schema side.
+BUS_STALE_KINDS = BUS_OK.replace(', "reconcile")', ")")
+BUS_EXTRA_KINDS = BUS_OK.replace(', "reconcile")', ', "reconcile", "vibes")')
 CHECKPOINT = "Four kinds — demo, qa, setup, reconcile. Routes by outcome — approve, changes, reject."
 CHECKPOINT_STALE = "Four kinds — demo, qa, setup, reconcile. Routes on approve, reject."  # missing changes
 ROSTER_OK = "| checkpoint | skill | verdict (demo / qa / setup / reconcile) |"
@@ -140,6 +148,17 @@ class Enums(unittest.TestCase):
         files = self._files(ROSTER_OK, bus=BUS_STALE_OPS)
         self.assertIn("resume", files["product/scripts/bus.py"], "fixture must still mention it")
         self.assertTrue(e.check_enums(reader(files)), "the gate fell back to a word-search")
+
+    def test_park_kinds_dropping_a_member_is_caught(self):
+        """`bus.py`'s PARK_KINDS is the enum's DECIDER — `write_park` refuses anything
+        outside it. A kind the schema declares and this tuple omits is a checkpoint that
+        can never open, and nothing on the schema side can see it."""
+        errs = e.check_enums(reader(self._files(ROSTER_OK, bus=BUS_STALE_KINDS)))
+        self.assertTrue(any("checkpoint.kind" in x and "bus.py" in x for x in errs), errs)
+
+    def test_park_kinds_adding_a_member_is_caught(self):
+        errs = e.check_enums(reader(self._files(ROSTER_OK, bus=BUS_EXTRA_KINDS)))
+        self.assertTrue(any("checkpoint.kind" in x and "vibes" in x for x in errs), errs)
 
     def test_moved_code_declaration_is_flagged_not_ignored(self):
         files = self._files(ROSTER_OK, bus="# the tuple got renamed\nOPS = ('pause',)\n")

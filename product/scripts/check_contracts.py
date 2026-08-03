@@ -30,6 +30,7 @@ are grep heuristics (advisory) — they can't tell a checkpoint-`kind` from an
 issue-`kind` in prose, so they check the *union* and flag only the genuinely novel.
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -152,6 +153,48 @@ def check(loop_text, skills, schemas_text):
     return hard, advisory
 
 
+# --- forecast mode -----------------------------------------------------------
+# A chain-forecast is a PREDICTION OVER THIS GRAPH, never a second graph — that is the
+# whole reason every event has to name a real `loop.md` node, and it is what makes the
+# forecast lintable at all (one routing owner). The check belongs here rather than
+# in `forecast.py` because "is this a real node" is a `loop.md` fact, and this script
+# already owns `loop.md` parsing; `forecast.py` owns the LIFECYCLE facts (freeze,
+# reality, divergence, names-only) — one owner per fact-domain.
+
+def check_forecast(loop_text, forecast):
+    """Every event (and every branch target) names a place the graph really has.
+
+    Returns a list of hard findings — a forecast routing somewhere `loop.md` does not go
+    is decidably broken, exactly like a dangling routing target."""
+    nodes, targets, side_doors = parse_loop(loop_text)
+    reachable = nodes | {n.split(":")[0] for n in nodes} | side_doors | TERMINALS
+    events = forecast.get("events") if isinstance(forecast, dict) else None
+    if not isinstance(events, list) or not events:
+        return ["forecast carries no `events[]` — there is no chain to lint"]
+
+    def _resolve(tok, where):
+        if not isinstance(tok, str) or not tok.strip():
+            return [f"{where}: names no loop.md node (an event with no node is a "
+                    f"prediction about nothing — it can never be matched to reality)"]
+        tok = _norm(tok)
+        # a mode of a real node (`document:audit`) is a real place, same as `check`'s rule
+        if tok in reachable or tok.split(":")[0] in reachable:
+            return []
+        return [f"{where}: names {tok!r}, which is not a loop.md node, side-door, or terminal"]
+
+    hard = []
+    for i, ev in enumerate(events):
+        if not isinstance(ev, dict):
+            hard.append(f"event {i + 1}: is not an object")
+            continue
+        label = f"event {ev.get('n', i + 1)}"
+        hard += _resolve(ev.get("node"), label)
+        for j, br in enumerate(ev.get("branch") or []):
+            if isinstance(br, dict):
+                hard += _resolve(br.get("then"), f"{label} branch {j + 1}")
+    return hard
+
+
 def _read(path):
     with open(path, encoding="utf-8") as fh:
         return fh.read()
@@ -166,18 +209,101 @@ def _load_skills(skills_dir):
     return skills
 
 
-def main():
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ap = argparse.ArgumentParser(description="Lint the routing graph against the skills.")
-    ap.add_argument("--loop", default=os.path.join(root, "templates", "loop.md"))
-    ap.add_argument("--skills-dir", default=os.path.join(root, "skills"))
-    ap.add_argument("--schemas", default=os.path.join(root, "shared", "schemas.md"))
-    args = ap.parse_args()
+def default_paths(script=None, env=None):
+    """(loop, skills_dir, schemas) for the layout this script is sitting in.
 
-    hard, advisory = check(_read(args.loop), _load_skills(args.skills_dir), _read(args.schemas))
+    Two real layouts, and the defaults must fit BOTH — `align` invokes this with no
+    arguments from an installed project, and the meta-repo pre-commit invokes it with
+    no arguments from the package tree.
+
+      PACKAGE  `<root>/scripts/check_contracts.py`  (the meta-repo's `product/`, or a
+               plugin root) → everything is a sibling of `scripts/`.
+      INSTALLED `<project>/.claude/scripts/check_contracts.py` → the pieces live in two
+               different trees: the routing graph the orchestrator actually follows is
+               the PROJECT's `.workflow/loop.md` (`/start` copies it there), while the
+               skills and `shared/schemas.md` are never installed at all — they stay
+               under `${CLAUDE_PLUGIN_ROOT}`. Resolving all three as siblings of
+               `.claude/scripts/` is what made this crash in every product repo.
+
+    A path this cannot resolve comes back empty rather than wrong; `main` reports it.
+    """
+    script = script or os.path.abspath(__file__)
+    root = os.path.dirname(os.path.dirname(script))
+    if os.path.basename(root) != ".claude":
+        return (os.path.join(root, "templates", "loop.md"),
+                os.path.join(root, "skills"),
+                os.path.join(root, "shared", "schemas.md"))
+    project = os.path.dirname(root)
+    plugin = (env if env is not None else os.environ).get("CLAUDE_PLUGIN_ROOT") or ""
+    return (os.path.join(project, ".workflow", "loop.md"),
+            os.path.join(plugin, "skills") if plugin else "",
+            os.path.join(plugin, "shared", "schemas.md") if plugin else "")
+
+
+def main(argv=None):
+    d_loop, d_skills, d_schemas = default_paths()
+    ap = argparse.ArgumentParser(description="Lint the routing graph against the skills.")
+    ap.add_argument("--loop", default=d_loop)
+    ap.add_argument("--skills-dir", default=d_skills)
+    ap.add_argument("--schemas", default=d_schemas)
+    ap.add_argument("--forecast", metavar="PATH",
+                    help="lint a chain-forecast's events against the graph, and nothing "
+                         "else (the package-wiring checks need inputs a forecast run has "
+                         "no reason to resolve)")
+    args = ap.parse_args(argv)
+
+    # An input that is EXPLICITLY named but absent is a caller bug; an input that was
+    # only defaulted and is absent is an environment we degrade through. Either way the
+    # answer is an exit code and a sentence, never a traceback — `align` reads this.
+    def _missing(flag, path, default, ok):
+        if path and ok(path):
+            return None
+        if path and path != default:
+            ap.error(f"{flag} {path!r} does not exist")
+        return flag
+
+    if _missing("--loop", args.loop, d_loop, os.path.isfile):
+        ap.error(
+            f"no routing graph to lint: {args.loop or '(unresolved)'} does not exist "
+            "(installed layout expects the project's .workflow/loop.md)"
+        )
+
+    if args.forecast:
+        try:
+            with open(args.forecast, encoding="utf-8") as fh:
+                fc = json.load(fh)
+        except OSError as exc:
+            ap.error(f"--forecast {args.forecast!r}: {exc.strerror}")
+        except ValueError as exc:
+            ap.error(f"--forecast {args.forecast!r} is not valid JSON: {exc}")
+        hard = check_forecast(_read(args.loop), fc)
+        if hard:
+            print("BLOCKED: the forecast routes outside the graph:", file=sys.stderr)
+            for h in hard:
+                print(f"  - {h}", file=sys.stderr)
+            return 1
+        print("forecast: OK (every event names a real loop.md node)", file=sys.stderr)
+        return 0
+
+    # The package-wiring half needs the plugin tree, which an install does not copy.
+    # Missing ⇒ run the graph-only half and SAY the rest was skipped: `align`'s own rule
+    # is degrade-never-halt, but a silent skip reads as "all clear" (honest truncation).
+    unread = [f for f in (_missing("--skills-dir", args.skills_dir, d_skills, os.path.isdir),
+                          _missing("--schemas", args.schemas, d_schemas, os.path.isfile)) if f]
+    skills = _load_skills(args.skills_dir) if "--skills-dir" not in unread else {}
+    schemas_text = _read(args.schemas) if "--schemas" not in unread else ""
+
+    hard, advisory = check(_read(args.loop), skills, schemas_text)
 
     for a in advisory:
         print(f"advisory: {a}", file=sys.stderr)
+    if unread:
+        print(
+            f"contracts: NOT CHECKED — {', '.join(unread)} unresolved"
+            + (" (set CLAUDE_PLUGIN_ROOT)" if not os.environ.get("CLAUDE_PLUGIN_ROOT") else "")
+            + "; only the routing-graph half ran (skill/enum checks skipped)",
+            file=sys.stderr,
+        )
     if hard:
         print("BLOCKED: contract linter found a broken routing graph:", file=sys.stderr)
         for h in hard:

@@ -9,7 +9,8 @@ Core principle: turn a user's intent into a written `spec`. Requirements only �
 stack or any engineering choice here.**
 
 ## When
-The first capability in any new intake loop (project or feature), ahead of `create-demo` and `planner`.
+The first capability in any new intake loop (project or feature), ahead of `create-forecast`, `create-demo`
+and `planner`.
 
 ## Inputs
 The user's intent (conversation) + any existing `spec` to extend.
@@ -38,8 +39,9 @@ The user's intent (conversation) + any existing `spec` to extend.
 A `spec`, every field commitment-tagged, with `TBD → decision-engineer` pointers where decisions are open.
 
 ## Route
-→ the sandbox-gate check (`create-demo`), then `planner`. Exit when every required field is filled or
-explicitly provisional/TBD.
+→ the forecast-gate check (`create-forecast`), then the sandbox-gate check (`create-demo`), then `planner`.
+The forecast comes **first**: one of the gates it exists to front-load is the demo checkpoint itself, which it
+could not predict from behind it. Exit when every required field is filled or explicitly provisional/TBD.
 
 ## Calls
 `create-issue` (kind=debt) — for `provisional` fields on the no-demo path.

@@ -123,9 +123,9 @@ line 1.
 
 ## checkpoint  · the `checkpoint` gate · *a **durable park boundary**: the orchestrator writes handoff + the request, yields, and resumes via `claude --resume` with the verdict as an authoritative prompt*
 A checkpoint sits at **a boundary only a human can cross** — either a **judgment** boundary (does this match intent:
-`demo`, `qa`, `reconcile` — the verdict is an opinion) or an **action** boundary (do something in the world the loop
-can't reach: `setup` — the verdict is "I did it" + a returned artifact, then machine-verified).
-- `request` — `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), tasks?[], blocking: true, token }`.
+`demo`, `qa`, `reconcile`, `forecast` — the verdict is an opinion) or an **action** boundary (do something in the world
+the loop can't reach: `setup` — the verdict is "I did it" + a returned artifact, then machine-verified).
+- `request` — `{ kind: demo|qa|setup|reconcile|forecast, what, expected, how?(←setup-guide), tasks?[], blocking: true, token }`.
   **`token`** (`{ticket}:{step}:{uuid}`) correlates the async verdict back to this parked ticket. **`tasks[]`** is the
   *set* of setup items a `kind=setup` checkpoint carries (a lone setup is a one-element set); the orchestrator
   coalesces a plan's foreseeable setups (spec `integrations[]`) into one checkpoint **at first-setup-contact** (not
@@ -201,7 +201,7 @@ can't reach: `setup` — the verdict is "I did it" + a returned artifact, then m
   not always a defect — hence routing by kind, not a universal `debug` sink.
 
 ## parked-ticket  · composed by the orchestrator, **written by `bus.py park`** · *`.workflow/parked/<id>.json`; RUNTIME, gitignored, kept on a native filesystem; projected onto `handoff.md`'s **`parked` machine block** for cold-start rebuild*
-- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request, demo_id?}, predicted_outcome, deadline, opened_at, summary, answered_at? }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile` checkpoint parks before any build worktree exists); a build-stage park always carries them. **`checkpoint.demo_id`** is present only for `kind: demo` — the id of the served bundle under `demos/`, so the console builds the `/demo/<id>/` iframe (validated to the served-id shape before it is rendered). The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
+- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request, demo_id?, forecast_id?}, predicted_outcome, deadline, opened_at, summary, answered_at? }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile`/`forecast` checkpoint parks before any build worktree exists); a build-stage park always carries them. **`checkpoint.demo_id`** is present only for `kind: demo` — the id of the served bundle under `demos/`, so the console builds the `/demo/<id>/` iframe (validated to the served-id shape before it is rendered). **`checkpoint.forecast_id`** is the same passthrough for `kind: forecast` — a **pointer** to the committed `forecasts/<id>.json`, never the chain itself, because `unpark` deletes *this* record at the instant of approval and approval is exactly when the forecast must be frozen (see § forecast). Both are shape-validated before the console is allowed to resolve them. The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
 - **`bus.py park` is the writer, and the split is the usual one.** The orchestrator composes the **judgment**
   (`token`, `checkpoint.request`, `predicted_outcome`, `loop_position`) and pipes the record in on **stdin**; the
   runner does the **arithmetic** — resolves the runtime root through `Paths`, stamps `deadline` + `opened_at`,
@@ -344,6 +344,50 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
   approved-demo lens has to read by judgment. The set is finite and shrinks to nothing; the promote is a **command
   the route runs**, not a step it is asked to remember. Idempotent on `item_id`, because applying a verdict is
   itself re-appliable after a crash and two entries would later read as two approvals.
+
+## forecast  · written by `create-forecast`, frozen by `forecast.py freeze`, read by the bus's Forecast-chains panel · *`.workflow/forecasts/<id>.json`; **COMMITTED** (key NAMES only — no bytes, no values); atomic write; the item-dir lifecycle — committed while the change is open, pruned by the `audit` pass when it closes, history in git*
+The loop's **prediction of its own routing** for one change: an ordered chain of events shown to the human before
+the machine walks it. It de-risks the **process** question, the orthogonal axis to `create-demo`'s product one.
+- `{ forecast_id, created_at, status: draft|frozen, for: { what, item_id? }, events: [...], horizon: { beyond, note },
+  frozen_at?, events_sha256? }` — `forecast_id` is the change/item id and **becomes the filename**, so it is a safe
+  single path component (the `ticket_id` rule).
+- **`events[]` entry — `{ n, node, what, likely?, fallback?, branch?[], gate? }`.** `n` runs **1..N in sequence** — the
+  chain is an ORDER, read as "then", and reality is matched against it position by position. **`node` NAMES A REAL
+  `loop.md` NODE** (or a mode of one, a side-door, or a terminal): the forecast is a *prediction over the existing
+  graph*, never a second graph, which is the one property that keeps a single routing owner **and** the one
+  that makes it lintable — `check_contracts.py --forecast` refuses an event that resolves nowhere.
+  - **`branch[]` — `{ if, then }`, and only where the HUMAN would do something different** (pre-supply a credential,
+    pick between two integration paths, decide a qa is worth their time). A mechanical self-correcting edge
+    (`verify → fails: debug`) is stated once in `fallback`, never unrolled: unrolling redraws `loop.md` per item and
+    drowns the one signal the human is here to give.
+  - **`gate` — `{ kind, prefill?: { secrets?[], provides?[] } }`** on an event that predicts a checkpoint. `secrets[]`
+    holds the credential **KEY NAMES** the step will need, and the console renders a labelled input per key on the
+    forecast card. It is the setup **elicitation** front-loaded, never its verification: filled → the secret store; **blank
+    → simply not front-loaded**, and the ordinary within-plan ask stands unchanged. That blankness is the whole
+    vocabulary for a skippable ask — there is no `defer` outcome, because the stack needs no new state to express it.
+- **`horizon` is REQUIRED — `{ beyond, note }`.** The event number past which the chain is guesswork, and a note
+  saying so plainly. Execute-discovered needs are unforecastable *by definition*, so a chain that does not mark its
+  own blind spot reads as a complete plan; a silent cap reads as "all clear". `forecast.py lint` refuses a record
+  without one — the honest-truncation rule, made mechanical rather than asked for.
+- **Why COMMITTED, and why that is safe.** The frozen chain is the anchor reality is compared against for the *life
+  of the change* — across sessions, cold starts, and a `/rebind` to a machine where the runtime tree explicitly may
+  not survive. It is safe to commit because it carries credential **key names only, never values** (the same class as
+  `config.json`'s `secrets_required[]`), and `forecast.py lint` enforces that as an **invariant**: a `secrets[]`/
+  `provides[]` entry must be a plain `UPPER_SNAKE` name, never an object, and no field named `value` may appear at
+  any depth.
+- **It CANNOT live in the parked record.** `bus.py unpark` *removes* `parked/<id>.json`, and the `handoff.md` mirror
+  deliberately carries ids + kind + summary + opened-at and never a `request` body. So the thing `approve` is meant
+  to **freeze** would be destroyed at the exact instant it is approved. The parked record therefore carries only
+  **`checkpoint.forecast_id`**, a pointer — the `demo_id` passthrough pattern, one artifact along.
+- **`frozen_at` + `events_sha256` are what make the freeze real** rather than a label: the digest is a stable hash of
+  `events[]` (key order and whitespace cannot move it), and `lint` refuses a frozen record whose chain no longer
+  matches it — a frozen forecast that was edited is not the thing the human approved. `freeze` is **idempotent on
+  `frozen_at`**, because applying a verdict is re-appliable after a crash and a moved timestamp would silently
+  re-baseline the comparison.
+- **Lint ownership splits by fact-domain.** Graph facts (does this event name a real node) → `check_contracts.py
+  --forecast`, which already owns `loop.md` parsing. Lifecycle facts (shape, horizon, names-only, the freeze) →
+  `forecast.py`. The **prune** is neither: it lives with every other prune in `retention.py`, keyed off the *same*
+  `promoted.json` marker that closes the item dir — which is what "copies the item-dir lifecycle exactly" means.
 
 ## outbox / pending-outward-action  · written by the orchestrator when a skill defers an outward action, cleared by the `release` consumer · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, single-writer (orchestrator), kept on a native filesystem; read by the bus to render the console's release panel; the mirror of the bus-owned `inbox/`*
 The **transactional-outbox** queue behind the "never stalls — queue the outward action, one approval releases a
@@ -750,6 +794,44 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
   committed file.
 
 ## per-item artifacts  · on disk
+**The filenames are FIXED, because they are anchors, not just storage.** Under `.workflow/items/<id>/`:
+`plan.md` · `promises.json` · `changelog.md` · `verify-verdict.md` · `debug-report.md` · `plan-delta.md` ·
+`promoted.json`. Two mechanisms read them by name and neither can guess: the coverage gates key off
+`promises.json`, and the **forecast anchor table** (below) derives "did this event happen?" from the *presence*
+of the artifact its node produces. An artifact written under a different name is an event that silently reads as
+never having happened.
+
+### the forecast ANCHOR TABLE  · read by `forecast.py reality`, written by nobody
+Reality is **derived**, never recorded — there is no second ledger to keep in step, and no writer to forget. Each
+`loop.md` node is resolved through the durable effect it leaves behind:
+
+| node | anchor | proves |
+|---|---|---|
+| `planner` | `items/<id>/plan.md` | the item was planned |
+| `execute` | `items/<id>/changelog.md` | the plan was carried out |
+| `verify` | `items/<id>/verify-verdict.md` | the artifacts were checked |
+| `debug` | `items/<id>/debug-report.md` | something failed and was diagnosed |
+| `refine` | `items/<id>/plan-delta.md` | a correction was routed |
+| `document` | `items/<id>/promoted.json` | the essence was folded into knowledge |
+| `create-demo` | `demos/<id>/` | a sandbox was built |
+| `create-forecast` | this record's `frozen_at` | the chain itself was approved |
+| `checkpoint:<kind>` | a `parked/` record of that kind — `answered_at` set ⇒ **done**, unset ⇒ **open** | the human was asked |
+| `commit` | a `git log` subject naming the item id | the change was snapshotted |
+
+- **`state.json` is deliberately NOT the source.** It is volatile and holds only the *current* node — never a
+  history — so "which events have happened" is not a question it can answer at all.
+- **Four states, and the fourth is the honest one.** `done` (the anchor is there) · `open` (a checkpoint is parked
+  and unanswered) · `pending` (the node has an anchor and it is absent — it has not happened yet) · **`unknown`**
+  (the node has *no* anchor in this table, e.g. `decision-engineer`, whose output is a global decision record that
+  cannot be tied to one item). `unknown` renders as unknown and never as "did not happen".
+- **Divergence is the same table read the other way.** An anchor that fired for a node the forecast never
+  named is a **structural divergence** — the machine took a turn nobody saw coming. It does not silently
+  continue: the tail is re-forecast and re-shown. The item-complete tail (`commit`, `document`, `close-issue`,
+  `prioritize`) is exempt, because it runs for every item and its absence from a chain is the horizon talking,
+  not a surprise.
+- **The check fires at the SCHEDULER BOUNDARY only, never mid-item** — which is what keeps non-preemption and
+  never-stall intact, and is why it is plain control-flow in `loop.md` rather than a routing edge.
+
 `plan` / `changelog` / `verify-verdict` / `debug-report` live under `.workflow/items/<id>/` — `planner`
 `mkdir`s the dir on demand when it writes `plan.md`; the dir is **item-scoped**, committed while the item
 is open (crash-survival) and **pruned once closed** by the `audit` pass — but **only** after `document` folds

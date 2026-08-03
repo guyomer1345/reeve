@@ -317,11 +317,90 @@ class ReadModel(Tmp):
                        "checkpoint": {"kind": "qa", "request": "ok?"},
                        "deadline": deadline}, fh)
 
+    def _forecast(self, fid="item-1", **kw):
+        d = os.path.join(self.w, "forecasts")
+        os.makedirs(d, exist_ok=True)
+        rec = {"forecast_id": fid, "status": "frozen", "frozen_at": "2026-08-03T11:00:00Z",
+               "events": [{"n": 1, "node": "execute", "what": "build it"}],
+               "horizon": {"beyond": 1, "note": "unforeseeable past here"}}
+        rec.update(kw)
+        with open(os.path.join(d, fid + ".json"), "w") as fh:
+            json.dump(rec, fh)
+        return rec
+
     def test_snapshot_shape(self):
         snap = self.model.snapshot()
-        for k in ("state", "parked", "outbox_pending", "backlog", "recent", "generated_at"):
+        for k in ("state", "parked", "outbox_pending", "backlog", "recent", "generated_at",
+                  "forecasts"):
             self.assertIn(k, snap)
         self.assertEqual(snap["state"]["node"], "execute")
+
+    # --- forecasts: the artifact that OUTLIVES its checkpoint (D162) ------------
+    def test_forecasts_are_read_from_the_committed_dir(self):
+        """The console surface for a forecast cannot hang off the parked record: `unpark`
+        deletes that at the instant of approval. The panel reads the committed artifact,
+        which is why a frozen chain is still there to watch reality against afterwards."""
+        self._forecast("item-1")
+        rows = self.model.forecasts()
+        self.assertEqual([r["forecast_id"] for r in rows], ["item-1"])
+        self.assertEqual(rows[0]["status"], "frozen")
+        self.assertEqual(len(rows[0]["events"]), 1)
+
+    def test_forecasts_are_ordered_and_multiple(self):
+        self._forecast("item-b")
+        self._forecast("item-a")
+        self.assertEqual([r["forecast_id"] for r in self.model.forecasts()],
+                         ["item-a", "item-b"])
+
+    def test_an_absent_forecasts_dir_is_empty_not_an_error(self):
+        self.assertEqual(self.model.forecasts(), [])
+
+    def test_an_unreadable_forecast_is_skipped_not_fatal(self):
+        """The daemon is the always-alive process; one bad file must never take the
+        console down (the same guarded-degradation rule the forecast.py import gets)."""
+        self._forecast("good")
+        os.makedirs(os.path.join(self.w, "forecasts"), exist_ok=True)
+        with open(os.path.join(self.w, "forecasts", "bad.json"), "w") as fh:
+            fh.write("{not json")
+        self.assertEqual([r["forecast_id"] for r in self.model.forecasts()], ["good"])
+
+    def test_a_forecast_row_carries_the_derived_reality(self):
+        """The reality column is DERIVED here, not stored — one owner for the anchor
+        table (forecast.py), and the panel reads through it rather than reimplementing
+        'has this happened' a second time."""
+        self._forecast("item-1", events=[
+            {"n": 1, "node": "planner:plan-one", "what": "plan"},
+            {"n": 2, "node": "execute", "what": "build"}])
+        os.makedirs(os.path.join(self.w, "items", "item-1"), exist_ok=True)
+        open(os.path.join(self.w, "items", "item-1", "plan.md"), "w").close()
+        row = self.model.forecasts()[0]
+        self.assertEqual([e.get("state") for e in row["events"]], ["done", "pending"])
+
+    def test_a_divergence_reaches_the_panel(self):
+        self._forecast("item-1", events=[{"n": 1, "node": "planner:plan-one", "what": "plan"}])
+        os.makedirs(os.path.join(self.w, "items", "item-1"), exist_ok=True)
+        open(os.path.join(self.w, "items", "item-1", "debug-report.md"), "w").close()
+        self.assertTrue(any(d["node"] == "debug"
+                            for d in self.model.forecasts()[0]["divergences"]))
+
+    def test_the_panel_degrades_when_the_lifecycle_script_is_absent(self):
+        """A PARTIAL install must cost the reality column, never the console. The daemon
+        is the only always-alive process — an ImportError here would take down the whole
+        surface a human uses to answer checkpoints."""
+        self._forecast("item-1")
+        saved = bus._forecast_lib
+        bus._forecast_lib = None
+        self.addCleanup(setattr, bus, "_forecast_lib", saved)
+        row = self.model.forecasts()[0]
+        self.assertTrue(row["reality_unavailable"])
+        self.assertEqual(row["divergences"], [])
+
+    def test_a_forecast_row_carries_no_request_body(self):
+        """Whatever the panel renders is served on every poll. The chain is prose the
+        human wrote or approved — but nothing that could hold a value rides along."""
+        self._forecast("item-1")
+        row = self.model.forecasts()[0]
+        self.assertNotIn("returns", json.dumps(row))
 
     def test_overdue_flag(self):
         past = "2020-01-01T00:00:00+00:00"
@@ -1351,6 +1430,16 @@ class Parking(Tmp):
         with self.assertRaises(bus.Invalid):
             bus.write_park(self.paths, a_park(kind="vibes"))
 
+    def test_every_schema_kind_parks(self):
+        """PARK_KINDS is a second copy of schemas.md's `request.kind` enum, and the one
+        that DECIDES: a kind the schema declares but this tuple omits is refused at the
+        writer, so the checkpoint can never open at all. Checked per kind rather than as
+        a set-equality on the tuple, because what matters is that a park succeeds."""
+        for kind in ("demo", "qa", "setup", "reconcile", "forecast"):
+            with self.subTest(kind=kind):
+                bus.write_park(self.paths, a_park(tid="item-" + kind, kind=kind))
+                self.assertIn(kind, [r["kind"] for r in self.mirror()["parked"]])
+
     def test_an_empty_request_is_refused(self):
         with self.assertRaises(bus.Invalid) as cm:
             bus.write_park(self.paths, a_park(
@@ -1382,6 +1471,24 @@ class Parking(Tmp):
                                            "deadline": first["deadline"]}),
                             bus.alert_key({"ticket_id": "item-1",
                                            "deadline": second["deadline"]}))
+
+    def test_a_forecast_park_passes_its_forecast_id_through(self):
+        """The `demo_id` passthrough pattern, for the same reason: the forecast record is
+        a COMMITTED artifact at `.workflow/forecasts/<id>.json`, so the parked record
+        carries a POINTER, never the chain. `unpark` deletes the parked record at the
+        instant of approval — the thing `approve` is supposed to freeze cannot live in
+        the file that approval destroys (D154 one layer up)."""
+        bus.write_park(self.paths, a_park(kind="forecast", checkpoint={
+            "kind": "forecast", "forecast_id": "item-1",
+            "request": {"what": "approve the chain", "blocking": True}}))
+        row = bus.ReadModel(self.paths).parked()[0]
+        self.assertEqual((row["kind"], row["forecast_id"]), ("forecast", "item-1"))
+
+    def test_a_malformed_forecast_id_is_dropped_not_passed_through(self):
+        bus.write_park(self.paths, a_park(kind="forecast", checkpoint={
+            "kind": "forecast", "forecast_id": "../../etc/passwd",
+            "request": {"what": "x", "blocking": True}}))
+        self.assertIsNone(bus.ReadModel(self.paths).parked()[0]["forecast_id"])
 
     def test_the_daemon_and_the_console_read_what_park_wrote(self):
         """The writer is only correct if the two existing READERS agree with it — the
@@ -2454,6 +2561,47 @@ Promise.resolve(send_.listeners.click[0]()).then(() => {
         self.assertTrue(r["sendDisabled"])
 
 
+class ConsoleForecast(unittest.TestCase):
+    """The forecast's two console surfaces, and why they are two.
+
+    The CARD is the question ("do you approve this chain?") and dies when the checkpoint
+    resolves. The PANEL is the artifact, and outlives it — that is the whole of D162's
+    first call, and a panel that lived inside the card would vanish at the exact moment
+    the forecast became authoritative."""
+
+    def test_the_page_has_a_forecast_panel_and_template(self):
+        self.assertIn('id="fc-list"', bus.INDEX_HTML)
+        self.assertIn('<template id="fc-tpl">', bus.INDEX_HTML)
+
+    def test_the_panel_is_rendered_from_the_snapshot(self):
+        js = _js_function("renderForecasts")
+        self.assertIn("#fc-list", js)
+        self.assertIn("#fc-tpl", js)
+
+    def test_the_chain_renderer_is_shared_by_card_and_panel(self):
+        """One renderer, two mount points. Two renderers would be two answers to "what
+        does this chain say", and they would drift."""
+        self.assertIn("renderChain", _js_function("renderForecasts"))
+        self.assertIn("renderChain", _js_function("renderCheckpoints"))
+
+    def test_the_prefill_reuses_the_one_labelled_input_producer(self):
+        """`renderTasks` is documented as the ONLY shipped producer of a `returns`
+        payload. The forecast pre-fill needs exactly those labelled inputs, so it goes
+        through the same function — a second producer would be a second place for the
+        credential boundary to be got wrong."""
+        js = _js_function("renderTasks")
+        self.assertIn('"forecast"', js)
+
+    def test_a_forecast_keeps_the_single_outcome_select(self):
+        """A setup reply is plural (per-task outcomes replace the card's select). A
+        forecast verdict is singular — approve/changes/reject on the CHAIN — and the
+        pre-fill is an optional payload beside it, not the answer."""
+        js = _js_function("renderTasks")
+        self.assertIn('.outcome").hidden = true', js)
+        # ...but only on the setup arm; the forecast arm must not reach it
+        self.assertIn("prefill", js)
+
+
 class ConsoleSetupForm(unittest.TestCase):
     """The console's setup form is the ONLY shipped producer of a `returns` payload.
 
@@ -2827,6 +2975,44 @@ class RemoteSocket(Tmp):
                               body={"token": "cp1",
                                     "verdict": {"tasks": [{"outcome": "approve"}]}})
         self.assertEqual(code, 403)
+
+    # -- the forecast arm: loopback-only by KIND, not by payload (D159/D112) --
+    def _park_forecast(self, token="fc-token"):
+        bus.write_park(bus.Paths(self.w), {
+            "ticket_id": "item-fc", "token": token, "loop_position": "create-forecast",
+            "predicted_outcome": "approve",
+            "checkpoint": {"kind": "forecast", "forecast_id": "item-fc",
+                           "request": {"what": "approve the chain", "blocking": True}}})
+
+    def test_a_BARE_forecast_verdict_is_still_refused_on_access(self):
+        """`remote_carries_payload` covers the pre-fill arm for free, but an approve with
+        no payload sails through it — and an approved forecast is a whole execution plan
+        that D90 makes drive the agent, so it is MORE authoritative than an opinion, not
+        less. The gate has to key off the checkpoint kind, which lives on the parked
+        record, not off the shape of the body."""
+        self._park_forecast()
+        code, _, _ = self.req(self.rport, "/api/verdict", method="POST",
+                              token="remote-token-A",
+                              body={"token": "fc-token",
+                                    "verdict": {"outcome": "approve", "notes": "looks right"}})
+        self.assertEqual(code, 403, "an approved forecast rode the reduced remote surface")
+
+    def test_the_same_bare_forecast_verdict_is_accepted_on_loopback(self):
+        self._park_forecast()
+        code, body, _ = self.req(self.bport, "/api/verdict", method="POST",
+                                 token="loopback-token-B",
+                                 body={"token": "fc-token",
+                                       "verdict": {"outcome": "approve", "notes": "ok"}})
+        self.assertEqual(code, 202, body)
+
+    def test_an_unknown_token_is_not_treated_as_a_forecast(self):
+        """The kind gate resolves the token against parked/. An unknown token has no kind,
+        and must not become a blanket 403 that hides the real dead-letter path."""
+        code, _, _ = self.req(self.rport, "/api/verdict", method="POST",
+                              token="remote-token-A",
+                              body={"token": "no-such-token",
+                                    "verdict": {"outcome": "approve"}})
+        self.assertEqual(code, 202)
 
     # -- the host allowlist accepts the public host, nothing else --
     def test_A_accepts_the_declared_public_host(self):

@@ -9,7 +9,9 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `ingest` *(brownfield entry — `/start` routes here)* | knowledge graph + reconstructed spec built | `checkpoint:reconcile` |
 | `checkpoint:reconcile` | reconstructed spec confirmed | `prioritize` |
 | `checkpoint:reconcile` | corrections needed | `ingest` (re-run) / `discuss` |
-| `discuss` | spec drafted | `create-demo?` (sandbox gate) |
+| `discuss` | spec drafted | `create-forecast?` (forecast gate) |
+| `create-forecast` | forecast approved (checkpoint pass) | `create-demo?` (sandbox gate) |
+| `create-forecast` | gate not triggered | `create-demo?` (sandbox gate) |
 | `create-demo` | demo approved (checkpoint pass) | `planner:decompose` |
 | `create-demo` | gate not triggered | `planner:decompose` |
 | `planner:decompose` | roadmap → backlog | `prioritize` |
@@ -35,6 +37,9 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `checkpoint:demo` | approve | lock the spec state → **prune the demo** → continue (`planner:decompose` at inception · `execute` per-item) |
 | `checkpoint:demo` | changes | `create-demo` (refine the sandbox / spec — **keep** the bundle + its refine count) |
 | `checkpoint:demo` | reject | `discuss` (→ **prune the demo**) |
+| `checkpoint:forecast` | approve | **freeze the forecast** (before the unpark) → continue (`create-demo?`) |
+| `checkpoint:forecast` | changes | `create-forecast` (re-forecast with the edits — the record stays a draft) |
+| `checkpoint:forecast` | reject | `discuss` |
 | `checkpoint:setup` | fail (couldn't complete) | re-attempt `checkpoint` (re-guides via setup-guide) / escalate to human |
 | `document` | knowledge + Sessions updated | `commit` |
 | `commit` | snapshot made | `close-issue?` |
@@ -66,6 +71,22 @@ What each kind does at the boundary, and the anchor that makes a repeat a no-op:
 
 A parked ticket resumes **only** via this drain. The consumer **never deletes** an inbox file (the bus owns that
 directory and collects consumed messages itself).
+
+**Forecast divergence check — here and nowhere else.** If the item being picked has a frozen
+`.workflow/forecasts/<id>.json`, run it before starting work:
+```bash
+python3 .claude/scripts/forecast.py reality .workflow/forecasts/<id>.json \
+  --workflow-dir .workflow --check
+```
+A non-zero exit means the loop reached a node the approved chain never predicted — a **structural** divergence.
+Do not walk on: re-run `create-forecast` for the remaining tail and re-show it, so the human is re-consulted on a
+route they never agreed to. Reality is **derived** from the anchor table (`schemas.md § the forecast ANCHOR
+TABLE`), so there is nothing to record and nothing to keep in step.
+
+**This fires at the boundary ONLY, never mid-item** — that is what keeps `prioritize`'s non-preemption and the
+never-stall rule intact, and it is why this is plain control-flow here rather than a routing edge in the table
+above. A divergence found mid-item is not lost; it is picked up at the next boundary, which is the first moment
+the loop is allowed to change its mind anyway.
 
 **The drain is split, and the split is the point.** *Which* messages are new, in what order they apply, what the
 watermark is now, and what may be pruned are all a pure function of the inbox and `handoff.md` — that half is
@@ -113,7 +134,10 @@ flowchart TD
   start -->|brownfield| ingest --> reconcile{reconcile ok?}
   reconcile -->|confirmed| prioritize
   reconcile -->|corrections| ingest
-  discuss --> demo{sandbox gate?}
+  discuss --> fc{forecast gate?}
+  fc -->|big + hard to reverse| create-forecast --> demo{sandbox gate?}
+  fc -->|no| demo
+  create-forecast -.reject.-> discuss
   demo -->|visible surface| create-demo --> dec[planner:decompose]
   demo -->|no| dec
   create-demo -.refine cap hit.-> discuss

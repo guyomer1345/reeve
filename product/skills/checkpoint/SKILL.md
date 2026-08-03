@@ -1,6 +1,6 @@
 ---
 name: checkpoint
-description: Pause autonomous work to get a human verdict on the live app, then resume on the answer. Four kinds — demo (approve a sandbox), qa (test a built feature), setup (perform a manual external action), reconcile (confirm a brownfield-reconstructed spec). Parks the ticket durably and yields — never a live wait; routes by kind on both pass and fail (see Route).
+description: Pause autonomous work to get a human verdict on the live app, then resume on the answer. Five kinds — demo (approve a sandbox), qa (test a built feature), setup (perform a manual external action), reconcile (confirm a brownfield-reconstructed spec), forecast (approve the chain of events the loop proposes to walk). Parks the ticket durably and yields — never a live wait; routes by kind on both pass and fail (see Route).
 ---
 
 # Checkpoint — the human-in-the-loop gate
@@ -13,6 +13,9 @@ Two boundary types. **Judgment** — the human gives an opinion:
 - **demo** — approve a `create-demo` sandbox.
 - **qa** — test a built feature against its acceptance criteria.
 - **reconcile** — confirm a brownfield-reconstructed `spec` before the build loop starts (from `ingest`).
+- **forecast** — approve the chain of events the loop proposes to walk for a change, before it walks it (from
+  `create-forecast`). Where `demo` de-risks the **product** question ("did we agree *what* to build?"), this
+  de-risks the **process** question ("did we agree *how* the machine will proceed?").
 
 **Action** — the human does something the loop can't reach, then the loop *verifies* it worked:
 - **setup** — perform a manual external action (create an account, add a key, configure a webhook); calls
@@ -20,7 +23,7 @@ Two boundary types. **Judgment** — the human gives an opinion:
   plan's foreseeable setups into one checkpoint at first-setup-contact.
 
 ## Inputs
-A `checkpoint.request` `{ kind: demo|qa|setup|reconcile, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
+A `checkpoint.request` `{ kind: demo|qa|setup|reconcile|forecast, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
 **A `setup` `tasks[]` entry is `{ id, what, secrets?[], provides?[] }`** — `secrets[]` naming the credential **key
 names** that task will hand back (`POLAR_WEBHOOK_SECRET`), never values. Fill it whenever the task returns a
 credential: it is what makes the console render a labelled input per key instead of asking a human to hand-compose a
@@ -109,6 +112,24 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
   against the store and itemizes what is missing. It is **early warning, not a gate**: point-of-use fail-closed
   (the thing that needs the key failing loudly when it is absent) stays the floor.
 - **reconcile** — approve → `prioritize` · else → `ingest` (re-run) / `discuss`.
+- **forecast** — approve → **freeze** the forecast, then continue to the next intake step (the sandbox gate) ·
+  changes → `create-forecast` (re-forecast with the human's edits; the record stays a draft) · reject → `discuss`.
+  - **Freeze BEFORE you unpark, and the order is the whole point.** `unpark` removes `parked/<id>.json`, and the
+    `handoff.md` mirror carries ids + kind + summary and never a `request` body — so anything living only in the
+    parked record is destroyed at the exact instant it is approved. That is why the chain is a **committed**
+    artifact and this record carries only `checkpoint.forecast_id`, a pointer. Run
+    `python3 .claude/scripts/forecast.py freeze .workflow/forecasts/<forecast-id>.json` first; it stamps
+    `frozen_at` and a digest of the chain, which is what makes the freeze real rather than a label — from here on
+    a later edit to the chain fails the lint instead of quietly re-baselining what the human agreed to.
+  - **A forecast verdict may carry an optional action payload, and that does not make it an action checkpoint.**
+    Its `returns` is the pre-fill the human volunteered early; write it to `.workflow/secrets/` on the `setup`
+    path's usual terms (below) and add the key name to `secrets_required[]`. **The action boundary is still
+    crossed at the gate** — the machine-verify probe still runs when the loop reaches the step that needs the
+    key. A value handed over forty minutes early can still be the wrong value. **A blank input declined the
+    offer**, nothing more: the ordinary within-plan ask stands unchanged and nothing is owed.
+  - The forecast record is **not** deleted here. Unlike a demo bundle it outlives its checkpoint by design — it
+    is what reality is measured against for the life of the change — and the `audit` pass prunes it when the
+    change closes.
 
 ## Calls
 `setup-guide` (kind=setup).

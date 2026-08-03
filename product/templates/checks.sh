@@ -85,6 +85,19 @@ case "$MODE" in
       python3 "$SCRIPTS/check_decision_coverage.py"   "$m" || fail=1
     done
 
+    # Chain-forecast gates over every committed forecast. Two lints because they settle
+    # two different facts (one owner each): the GRAPH half asks whether every event names
+    # a real loop.md node — the property that keeps the forecast a reading of the routing
+    # graph rather than a second one — and the LIFECYCLE half checks shape, the required
+    # horizon, and the names-only invariant that is the whole reason a forecast is safe to
+    # commit. Both belong on the commit gate rather than only in the skill: the record is
+    # committed, so a malformed one would otherwise enter history unchallenged.
+    for fc in .workflow/forecasts/*.json; do
+      echo "+ forecast gates: $fc" >&2
+      python3 "$SCRIPTS/check_contracts.py" --forecast "$fc" --loop .workflow/loop.md || fail=1
+      python3 "$SCRIPTS/forecast.py" lint "$fc" || fail=1
+    done
+
     exit "$fail"
     ;;
   *)

@@ -59,6 +59,7 @@ overlap into one adjudicator.
 | adjudicate | skill (base) | gather views → judge → confidence-gate | `skills/adjudicate` |
 | discuss | skill | intake conversation → `spec` | `skills/discuss` |
 | create-demo | skill *(→ agent, D84 — pending)* | throwaway sandbox for product approval | `skills/create-demo` |
+| create-forecast | skill | the chain of events the loop proposes, before it walks it | `skills/create-forecast` |
 | prioritize | skill | order the backlog, emit the next wave | `skills/prioritize` |
 | planner | skill | decompose → `roadmap` / plan one item → `plan` | `skills/planner` |
 | decision-engineer | skill | resolve an open build decision (adjudicate) | `skills/decision-engineer` |
@@ -67,7 +68,7 @@ overlap into one adjudicator.
 | verify | skill | artifact conformance (adjudicate) | `skills/verify` |
 | debug | skill | root-cause behaviour ≠ intended (adjudicate) | `skills/debug` |
 | refine | skill | route corrections back through planner→execute | `skills/refine` |
-| checkpoint | skill | pause for a human verdict (demo / qa / setup / reconcile) | `skills/checkpoint` |
+| checkpoint | skill | pause for a human verdict (demo / qa / setup / reconcile / forecast) | `skills/checkpoint` |
 | setup-guide | agent | precise human steps for a manual external task | `agents/setup-guide` |
 | document | skill | fold changes + decisions into the knowledge base | `skills/document` |
 | ingest | skill | brownfield: build the knowledge base + reconstructed spec from existing code | `skills/ingest` |

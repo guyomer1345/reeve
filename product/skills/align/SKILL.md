@@ -50,6 +50,19 @@ them is the trap:
    - the **contract linter** (`.claude/scripts/check_contracts.py`) — the routing graph is real structured
      data, so its consistency is a fact: every routing target resolves; every `node:mode` a skill invokes is
      routed; every skill is a node or a declared side-door; commitment/kind tags stay in their schema enum.
+     The graph it lints is **`.workflow/loop.md`** — the copy the orchestrator actually routes from, not the
+     package template — while the skills and `schemas.md` it lints against are **never installed**; they stay
+     under the plugin root. So the plugin root is passed explicitly, and its absence **degrades to the
+     graph-only half** rather than failing the layer (the script says which checks it skipped):
+     ```bash
+     P="${CLAUDE_PLUGIN_ROOT}"
+     if [ -d "$P/skills" ]; then
+       python3 .claude/scripts/check_contracts.py \
+         --skills-dir "$P/skills" --schemas "$P/shared/schemas.md"
+     else
+       python3 .claude/scripts/check_contracts.py
+     fi
+     ```
    - the **coverage gates** — promise-, criterion-, and decision-coverage (`check_promise_coverage.py`,
      `check_criterion_discharge.py`, `check_decision_coverage.py`); the same ones `checks.sh --check` runs.
    These are the gates the package **installs** (see `MANIFEST.json`) and that mean something in a product repo.

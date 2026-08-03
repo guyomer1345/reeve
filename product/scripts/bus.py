@@ -126,6 +126,25 @@ DEMO_MIME = {
 # contribute a path segment that climbs out of the demo root (the realpath guard is the
 # real defense; this refuses the obvious junk before a filesystem call).
 DEMO_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+# A forecast id becomes a FILENAME under `forecasts/`, so it is the same path-safety
+# shape — one component, no separator, cannot be `.`/`..`. Kept as its own name rather
+# than aliased to DEMO_ID_RE: they are equal today by coincidence of the same rule, not
+# because one is defined in terms of the other.
+FORECAST_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+# The forecast lifecycle owner, imported for its ANCHOR TABLE so the console's reality
+# column is derived through the one place that knows how — rather than a second copy of
+# "has this happened yet" living here and drifting from it.
+#
+# GUARDED, and the guard is the point: this daemon is the only always-alive process, the
+# one surface a human uses to answer a checkpoint at all. A partial install (an older
+# project updated before `forecast.py` shipped) must cost the reality column and nothing
+# else. Bare `except Exception` deliberately — an ImportError is the expected case, but
+# ANY failure to load a sibling script is still strictly better handled as "no column".
+try:
+    import forecast as _forecast_lib
+except Exception:                                             # pragma: no cover
+    _forecast_lib = None
 
 # --- the relaunch-runner ----------------------------------------------------
 # Only these kinds ADVANCE a dead/whole-parked loop, so only these are worth spawning a
@@ -282,6 +301,12 @@ class Paths:
         # repo mount — a torn render self-heals on the next poll and carries no secret.
         # It is the served root the /demo/* realpath guard is anchored to.
         self.demos = os.path.join(self.workflow, "demos")
+        # The chain-forecasts. COMMITTED, so squarely in the repo-mount half: the frozen
+        # chain is the anchor reality is compared against for the life of the change, and
+        # it has to survive a cold start and a /rebind to a machine where the runtime tree
+        # explicitly may not. Never relocated, never pinned — a committed file lives
+        # on the repo mount by construction.
+        self.forecasts = os.path.join(self.workflow, "forecasts")
 
     def _resolve_runtime_root(self):
         pointer = os.path.join(self.workflow, "runtime.json")
@@ -696,7 +721,7 @@ def upsert_handoff_block(text, block):
 # handoff.md is COMMITTED. The record does not MOVE to the committed half, it PROJECTS
 # onto it — which is what keeps the projection small, bounded, and safe to read back.
 DEFAULT_DEADLINE_HOURS = 24
-PARK_KINDS = ("demo", "qa", "setup", "reconcile")
+PARK_KINDS = ("demo", "qa", "setup", "reconcile", "forecast")
 # A ticket id becomes a FILENAME, so this is a path-safety check before it is a format
 # check: one component, no separator, and it cannot be `.`/`..` because it must open on
 # an alphanumeric.
@@ -2092,6 +2117,15 @@ class ReadModel:
             demo_id = cp.get("demo_id")
             if not (isinstance(demo_id, str) and DEMO_ID_RE.match(demo_id)):
                 demo_id = None
+            # The same passthrough for the same reason, one artifact along: a forecast
+            # checkpoint carries a POINTER to its committed record, never the chain. It
+            # cannot carry the chain — `unpark` removes this file at the instant of
+            # approval, and approval is precisely when the forecast is supposed to be
+            # FROZEN. Shape-validated before it is passed
+            # through, so a malformed record can never steer the panel's lookup.
+            forecast_id = cp.get("forecast_id")
+            if not (isinstance(forecast_id, str) and FORECAST_ID_RE.match(forecast_id)):
+                forecast_id = None
             out.append({
                 "ticket_id": rec.get("ticket_id"),
                 "token": rec.get("token"),
@@ -2115,6 +2149,59 @@ class ReadModel:
                 # happens once per answer.
                 "answer_pending": self._still_pending(rec.get("answer_message_id")),
                 "demo_id": demo_id,
+                "forecast_id": forecast_id,
+            })
+        return out
+
+    def forecasts(self):
+        """The committed chain-forecasts, for the console's own panel.
+
+        Deliberately NOT hung off the parked record. The card that asks "do you approve
+        this chain?" dies when the checkpoint resolves; the forecast does not — it is what
+        reality is then watched against. A surface that lived inside the card would vanish
+        at the exact moment the chain became authoritative.
+
+        Conservative like every other read here: one unreadable file is skipped, never
+        fatal. The daemon is the only always-alive process, so a bad artifact must cost a
+        row, not the console.
+        """
+        out = []
+        try:
+            names = sorted(os.listdir(self.paths.forecasts))
+        except OSError:
+            return out
+        for n in names:
+            if not n.endswith(".json"):
+                continue
+            rec = read_json(os.path.join(self.paths.forecasts, n))
+            if not isinstance(rec, dict):
+                continue
+            fid = rec.get("forecast_id")
+            if not (isinstance(fid, str) and FORECAST_ID_RE.match(fid)):
+                continue
+            events = [e for e in (rec.get("events") or []) if isinstance(e, dict)]
+            # The DERIVED half. Resolved through the lifecycle owner's anchor table, so
+            # "has this event happened" has exactly one implementation. Absent library
+            # (partial install) → the chain still renders, the column says it cannot.
+            states, divergences, unavailable = {}, [], False
+            if _forecast_lib is None:
+                unavailable = True
+            else:
+                try:
+                    got = _forecast_lib.reality(rec, self.paths.workflow)
+                    states = {r["n"]: r["state"] for r in got["events"]}
+                    divergences = got["divergences"]
+                except Exception:
+                    unavailable = True
+            out.append({
+                "forecast_id": fid,
+                "status": rec.get("status"),
+                "frozen_at": rec.get("frozen_at"),
+                "for": rec.get("for"),
+                "horizon": rec.get("horizon"),
+                "events": [dict(e, state=states.get(e.get("n"))) for e in events],
+                "divergences": divergences,
+                "reality_unavailable": unavailable,
             })
         return out
 
@@ -2206,6 +2293,7 @@ class ReadModel:
                 "note": state.get("note"),
             },
             "parked": self.parked(),
+            "forecasts": self.forecasts(),
             "outbox_pending": self.outbox(),
             "backlog": backlog,
             "recent": self.git_recent(),
@@ -2288,6 +2376,15 @@ INDEX_HTML = """<!doctype html>
   <div id="cp-list" class="empty">none open</div>
 </section>
 
+<!-- The forecast panel is its OWN section, not part of a checkpoint card, because the
+     artifact outlives the question. The card asking "do you approve this chain?" is
+     removed when the loop unparks the ticket; the frozen chain stays here for the life
+     of the change, which is what makes "watch reality unfold against it" possible. -->
+<section id="forecasts">
+  <h2>Forecast chains <span id="fc-count" class="count"></span></h2>
+  <div id="fc-list" class="empty">no forecast for any open change</div>
+</section>
+
 <section id="outward">
   <h2>Pending outward actions <span id="ob-count" class="count"></span></h2>
   <div id="ob-list" class="empty">none queued</div>
@@ -2327,10 +2424,20 @@ INDEX_HTML = """<!doctype html>
       <iframe class="demo-frame" sandbox="allow-scripts allow-forms" title="demo sandbox"></iframe>
       <a class="demo-open" target="_blank" rel="noopener noreferrer">open the demo full-screen ↗</a>
     </div>
+    <!-- A forecast checkpoint shows the chain it is asking about, inline. Filled by the
+         SAME renderChain() the panel below uses — two mount points, one answer to "what
+         does this chain say". -->
+    <div class="chain-wrap" hidden><ol class="chain"></ol><p class="horizon hint"></p></div>
     <ol class="steps" hidden></ol>
     <p class="how-text" hidden></p>
     <div class="row"><span class="deadline"></span></div>
     <div class="tasks" hidden></div>
+    <!-- Only on a forecast card. Says out loud that these inputs are optional, because
+         the stack has no "skippable ask" state and blankness IS the vocabulary — a human
+         who reads them as required would be answering a question nobody asked. -->
+    <p class="prefill-hint hint" hidden>Optional — hand these over now and the loop skips
+      the asking when it gets there. Leave blank and it will ask you at the step itself
+      (either way it still verifies the value works before relying on it).</p>
     <p class="no-creds hint" hidden>This checkpoint hands back a credential, which this
       connection is not allowed to carry. Answer it from the local console, or over an
       end-to-end-encrypted transport.</p>
@@ -2355,6 +2462,41 @@ INDEX_HTML = """<!doctype html>
       <span class="msg"></span>
     </div>
   </article>
+</template>
+
+<!-- A committed forecast, in the panel. Read-only: the verdict form lives on the
+     checkpoint card, and once that is answered this is a record, not a question. -->
+<template id="fc-tpl">
+  <article class="card">
+    <div class="row"><strong class="fc-id mono"></strong><span class="fc-status"></span></div>
+    <p class="fc-what"></p>
+    <!-- A structural divergence: the loop did something this chain never predicted. It
+         does not silently continue — the tail is re-forecast and re-shown at the next
+         scheduler boundary. Said out loud here so the chain below is not read as still
+         current. -->
+    <p class="fc-diverged" hidden></p>
+    <p class="fc-nostate hint" hidden>Reality column unavailable — this install has no
+      forecast lifecycle script. The chain below is what was predicted, not what happened.</p>
+    <ol class="chain"></ol>
+    <p class="horizon hint"></p>
+  </article>
+</template>
+
+<!-- One predicted event. `node` is a real loop.md node by construction — the forecast is
+     a prediction over the existing graph, and check_contracts.py --forecast holds it to
+     that, so this renders a name the routing table really has. -->
+<template id="fc-event-tpl">
+  <li class="event">
+    <div class="row"><span class="ev-n mono"></span><strong class="ev-node mono"></strong>
+      <!-- The DERIVED reality. Four states, and `unknown` is rendered as unknown rather
+           than as "not done": a column that shows the two the same way is a column that
+           lies about what it can see. -->
+      <span class="ev-state" hidden></span></div>
+    <p class="ev-what"></p>
+    <p class="ev-likely hint" hidden></p>
+    <p class="ev-fallback hint" hidden></p>
+    <ul class="ev-branches" hidden></ul>
+  </li>
 </template>
 
 <!-- One row per setup task: its own outcome (a mixed reply routes each item on its own),
@@ -2595,10 +2737,23 @@ function renderSteps(node, how) {
 // payload — everything downstream of it (the store, the declared-set diff, the credential
 // socket boundary) exists to serve what is typed here — and, since `provides[]`, the only
 // shipped producer of `artifacts` too.
+//
+// It serves TWO kinds, and the difference is what the answer means. A `setup` reply is
+// plural — one outcome per task, so a mixed answer ("this key works, that one I could
+// not get") routes each item on its own, and the per-task selects replace the card's
+// single one. A `forecast` reply is singular: the human is judging the CHAIN
+// (approve/changes/reject), and the credential is not the verdict at all — it is the setup
+// elicitation front-loaded, an OPTIONAL payload volunteered early. So the forecast
+// arm keeps the card's outcome select, renders no per-task outcome, and marks its rows
+// `.prefill` rather than `.task` — which is also what routes them through
+// collectVerdict's singular branch, into a top-level `returns`, with no new state and no
+// new outcome enum. Blank is the whole vocabulary for "ask me at the gate": an empty
+// input is simply not front-loaded, and the ordinary within-plan ask stands unchanged.
 function renderTasks(node, cp) {
   const req = cp.request;
   const tasks = req && Array.isArray(req.tasks) ? req.tasks : [];
-  if (cp.kind !== "setup" || !tasks.length) return;
+  const prefill = cp.kind === "forecast";
+  if ((cp.kind !== "setup" && !prefill) || !tasks.length) return;
   const wrap = node.querySelector(".tasks");
   let wantsSecret = false;
   for (const t of tasks) {
@@ -2627,12 +2782,98 @@ function renderTasks(node, cp) {
       pro.querySelector(".avalue").dataset.name = name;
       pbox.append(pro);
     }
+    if (prefill) {
+      // Not a `.task`: collectVerdict keys its plural branch off that class, and a
+      // forecast answer is singular. Renaming the class here is what keeps the two
+      // shapes apart without a second collector to get wrong.
+      const el = row.querySelector(".task");
+      el.className = "prefill";
+      el.querySelector(".toutcome").hidden = true;   // the chain has the outcome, not this
+    }
     wrap.append(row);
   }
   wrap.hidden = false;
-  node.querySelector(".outcome").hidden = true;  // the per-task selects replace it
+  if (prefill) {
+    node.querySelector(".prefill-hint").hidden = false;
+  } else {
+    node.querySelector(".outcome").hidden = true;  // the per-task selects replace it
+  }
   // Never silently drop the inputs: a socket that cannot carry a credential says so.
   if (wantsSecret && !CREDS_OK) node.querySelector(".no-creds").hidden = false;
+}
+
+// The chain, rendered identically wherever it is mounted — the checkpoint card (the
+// question) and the forecast panel (the record). `mount` is the card/panel node; the
+// chain goes into its `.chain`, the blind-spot note into its `.horizon`.
+//
+// The horizon is rendered UNCONDITIONALLY when present, and forecast.py refuses a record
+// without one. A chain that does not say where it stops seeing reads as a complete plan,
+// and execute-discovered work is unforecastable by definition — a silent cap reads as
+// "all clear", which is the one thing this surface must never do.
+function renderChain(mount, events, horizon) {
+  const list = mount.querySelector(".chain");
+  if (!list) return;
+  list.textContent = "";
+  for (const ev of Array.isArray(events) ? events : []) {
+    const row = $("#fc-event-tpl").content.cloneNode(true);
+    row.querySelector(".ev-n").textContent = (ev && ev.n) != null ? String(ev.n) : "";
+    row.querySelector(".ev-node").textContent = (ev && ev.node) || "";
+    row.querySelector(".ev-what").textContent = (ev && ev.what) || "";
+    // Painted only where the derived column actually has an answer. `unknown` is shown
+    // as its own word, never folded in with "pending".
+    const st = row.querySelector(".ev-state");
+    if (ev && ev.state) {
+      st.textContent = ev.state === "open" ? "waiting on you"
+                     : ev.state === "unknown" ? "not tracked" : ev.state;
+      st.className = "ev-state st-" + ev.state;
+      st.hidden = false;
+    }
+    const likely = row.querySelector(".ev-likely");
+    if (ev && ev.likely) { likely.textContent = "likely: " + ev.likely; likely.hidden = false; }
+    const fb = row.querySelector(".ev-fallback");
+    if (ev && ev.fallback) { fb.textContent = "if not: " + ev.fallback; fb.hidden = false; }
+    // Branches are shown only where the HUMAN would do something different — the forecast
+    // deliberately does not unroll every mechanical edge (verify→debug→refine), which
+    // would redraw loop.md per item and drown the signal.
+    const branches = (ev && Array.isArray(ev.branch)) ? ev.branch : [];
+    if (branches.length) {
+      const ul = row.querySelector(".ev-branches");
+      for (const b of branches) {
+        const li = document.createElement("li");
+        li.textContent = ((b && b.if) || "otherwise") + " → " + ((b && b.then) || "");
+        ul.append(li);
+      }
+      ul.hidden = false;
+    }
+    list.append(row);
+  }
+  const h = mount.querySelector(".horizon");
+  if (h && horizon && horizon.note) {
+    h.textContent = "beyond event " + (horizon.beyond ?? "?") + ": " + horizon.note;
+  }
+}
+
+// The panel. Read-only by construction: the verdict form lives on the checkpoint card,
+// and once that is answered this is a record of what was agreed, not a question.
+function renderForecasts(items) {
+  renderList(items, "#fc-list", "#fc-count", "#fc-tpl", (node, fc) => {
+    node.querySelector(".fc-id").textContent = fc.forecast_id || "";
+    node.querySelector(".fc-status").textContent =
+      fc.status === "frozen"
+        ? "frozen" + (fc.frozen_at ? " " + fc.frozen_at : "") + " — reality is measured against this"
+        : (fc.status || "draft") + " — not yet approved";
+    node.querySelector(".fc-what").textContent = (fc.for && fc.for.what) || "";
+    const div = Array.isArray(fc.divergences) ? fc.divergences : [];
+    if (div.length) {
+      const d = node.querySelector(".fc-diverged");
+      d.textContent = "Diverged — the loop reached " +
+        div.map((x) => x.node).join(", ") + ", which this chain never predicted. " +
+        "The tail is re-forecast at the next boundary.";
+      d.hidden = false;
+    }
+    if (fc.reality_unavailable) node.querySelector(".fc-nostate").hidden = false;
+    renderChain(node, fc.events, fc.horizon);
+  }, "no forecast for any open change");
 }
 
 // Deadlines and answer stamps cross the wire as absolute ISO with MICROSECONDS
@@ -2675,7 +2916,32 @@ function deadlineText(cp) {
 
 function collectVerdict(card, notes) {
   const rows = [...card.querySelectorAll(".task")];
-  if (!rows.length) return { outcome: card.querySelector(".outcome").value, notes };
+  if (!rows.length) {
+    // The singular branch: one outcome for the whole checkpoint. A judgment verdict MAY
+    // carry an optional action payload — the forecast's front-loaded pre-fill —
+    // so the same two collectors run here, keyed by the same declared names. The action
+    // BOUNDARY is not moved by this: the value still lands in the store, and the loop
+    // still runs its machine-verify probe at the step that needs it. A key handed over
+    // forty minutes early can still be the wrong key.
+    const v = { outcome: card.querySelector(".outcome").value, notes };
+    const returns = {};
+    let any = false;
+    for (const inp of card.querySelectorAll(".svalue")) {
+      if (!inp.value) continue;                    // blank = "ask me at the gate"
+      returns[inp.dataset.name] = { value: inp.value };
+      any = true;
+    }
+    if (any) v.returns = returns;
+    const artifacts = {};
+    let anyArt = false;
+    for (const inp of card.querySelectorAll(".avalue")) {
+      if (!inp.value) continue;
+      artifacts[inp.dataset.name] = { value: inp.value };
+      anyArt = true;
+    }
+    if (anyArt) v.artifacts = artifacts;
+    return v;
+  }
   return {
     notes,
     tasks: rows.map((r) => {
@@ -2727,6 +2993,14 @@ function renderCheckpoints(items) {
                                        JSON.stringify(req ?? ""));
     renderSteps(node, req && req.how);
     renderTasks(node, cp);
+    // A forecast checkpoint shows the chain it is asking about, inline — the same
+    // renderChain() the panel uses. The chain rides the REQUEST here rather than being
+    // fetched from the committed record: the card is the question as it was asked, and
+    // the panel below is the artifact as it stands.
+    if (cp.kind === "forecast" && req && Array.isArray(req.events)) {
+      renderChain(node, req.events, req.horizon);
+      node.querySelector(".chain-wrap").hidden = false;
+    }
     // A demo checkpoint shows its sandbox inline (look), with the verdict form below it
     // (approve → lock · changes → refine · reject → discuss). The demo id is validated
     // server-side to the served-id shape; encodeURIComponent guards the URL we build.
@@ -2911,6 +3185,7 @@ async function poll() {
     lastSnapshot = snap;
     renderState(snap.state || {});
     renderCheckpoints(snap.parked || []);
+    renderForecasts(snap.forecasts || []);
     renderOutbox(snap.outbox_pending || []);
     renderRequests(snap);
     renderLog(snap.recent || []);
@@ -3058,6 +3333,20 @@ dd { margin:0; }
 .card.is-answered .answered, .card.is-answered .reanswer { opacity:1; }
 .reanswer { display:flex; gap:.5rem; align-items:center; margin-top:.25rem; }
 .reanswer .hint { margin:0; }
+/* The forecast chain. The state badge is the DERIVED reality, and the four states are
+   deliberately distinguishable at a glance: `done` reads settled, `open` is the one that
+   wants you, `pending` is quiet, and `unknown` is visibly NOT a claim — a column that
+   renders "I can't tell" the same as "hasn't happened" is a column that lies. */
+.chain { margin:.35rem 0; padding-left:1.1rem; }
+.chain .event { margin:.3rem 0; }
+.chain .ev-what, .chain .hint { margin:.1rem 0; }
+.ev-state { font-size:.8em; padding:0 .4rem; border-radius:.6rem; border:1px solid var(--line); }
+.ev-state.st-done { color:var(--ok); border-color:var(--ok); }
+.ev-state.st-open { font-weight:600; border-color:var(--fg); }
+.ev-state.st-pending { opacity:.6; }
+.ev-state.st-unknown { opacity:.5; font-style:italic; }
+/* --bad is this page's established attention colour (it is what OVERDUE uses). */
+.fc-diverged { color:var(--bad); font-weight:600; }
 input, select, textarea, button { font:inherit; color:var(--fg); background:transparent;
   border:1px solid var(--line); border-radius:5px; padding:.3rem .5rem; }
 textarea { width:100%; resize:vertical; }
@@ -3178,6 +3467,38 @@ def remote_carries_payload(clean):
     if not isinstance(v, dict):
         return False
     return "tasks" in v or "returns" in v
+
+
+# Checkpoint kinds whose verdict never rides the reduced remote surface, WHATEVER it
+# carries. `remote_carries_payload` above is a shape check and covers the forecast's
+# pre-fill arm for free — but a bare `{outcome: approve}` on a forecast sails straight
+# through it, and that is the dangerous one: an approved forecast is a whole execution
+# plan the agent then follows, so it is MORE authoritative than an opinion, not less.
+# Hence a second, orthogonal gate keyed on the KIND.
+REMOTE_REFUSED_KINDS = ("forecast",)
+
+
+def parked_kind(paths, token):
+    """The checkpoint kind of the parked ticket this token answers, or None.
+
+    The kind is not in the POST body and must not be — a client that could *declare* its
+    own kind could declare its way past the gate. It is read from the parked record, which
+    only the loop writes.
+    """
+    if not isinstance(token, str) or not token:
+        return None
+    try:
+        names = sorted(os.listdir(paths.parked))
+    except OSError:
+        return None
+    for n in names:
+        if not n.endswith(".json"):
+            continue
+        rec = read_json(os.path.join(paths.parked, n))
+        if isinstance(rec, dict) and rec.get("token") == token:
+            cp = rec.get("checkpoint")
+            return cp.get("kind") if isinstance(cp, dict) else None
+    return None
 
 
 # --- the daemon -------------------------------------------------------------
@@ -3728,6 +4049,17 @@ def make_handler(daemon):
                     return self._err(403, "returns-bearing / setup verdicts are "
                                      "loopback-only; deliver this from the local console "
                                      "or over a Tailscale transport")
+                # The second, orthogonal boundary: some kinds are loopback-only however
+                # empty the body is. NOT gated on allow_credentials — this is not about
+                # what the transport can protect, it is about what the answer AUTHORIZES,
+                # and an approved forecast drives the agent.
+                if (self.server.policy.remote
+                        and kind == "verdict"
+                        and parked_kind(daemon.paths, clean.get("token"))
+                        in REMOTE_REFUSED_KINDS):
+                    return self._err(403, "a forecast verdict is loopback-only — an "
+                                     "approved forecast is an execution plan the agent "
+                                     "follows, not an opinion; answer it locally")
                 try:
                     message_id = daemon.inbox.append(kind, clean, sensitive=sensitive)
                 except OSError as exc:

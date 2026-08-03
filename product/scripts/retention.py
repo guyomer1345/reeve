@@ -7,7 +7,7 @@ of the `audit` maintenance item — pure counts / moves / deletes, zero judgment
 The judgment half (the deletion-test over CLAUDE.md + rules/) is a separate model-run
 step, NOT this script.
 
-Three caps, all idempotent (re-running a bounded tree is a no-op):
+The caps, in RUN ORDER, all idempotent (re-running a bounded tree is a no-op):
 
   1. Sessions cap   — per knowledge node, keep the last K `## [date] kind | title`
                       entries on disk; older ones live in git. A one-line marker under
@@ -15,9 +15,15 @@ Three caps, all idempotent (re-running a bounded tree is a no-op):
   2. Decisions GC   — a decision-record whose frontmatter `status: superseded` has its
                       body dropped to git; `docs/decisions/index.md` keeps a tombstone
                       row (id | title | superseded->X | git <sha>).
-  3. Items prune    — a closed item dir `.workflow/items/<id>/` is removed ONLY once
+  3. Forecast prune — a chain-forecast `.workflow/forecasts/<id>.json` is removed on the
+                      SAME `promoted.json` marker that authorizes closing its item dir,
+                      so the committed forecast has the item-dir lifecycle exactly.
+                      Runs BEFORE cap 4, which deletes the marker they share.
+  4. Items prune    — a closed item dir `.workflow/items/<id>/` is removed ONLY once
                       `document` has folded its essence (a `promoted.json` marker). No
                       marker -> skip, so the script can never delete un-promoted memory.
+  5. Demos prune    — a throwaway demo bundle with no open checkpoint pointing at it
+                      (the straggler backstop; the primary delete is the verdict-apply).
 
 The git-log cold-start bound is a READ convention (handoff.base_sha), not an action here.
 Dead-node prune (deleted source -> delete node) is a staleness signal, owned by
@@ -250,6 +256,66 @@ def prune_items(items_dir, dry_run):
     return pruned, skipped
 
 
+# --- cap 3b: chain-forecasts --------------------------------------------------
+
+def _promoted_items(items_dir):
+    """Item ids whose `promoted.json` says `document` has folded their essence."""
+    out = set()
+    try:
+        names = os.listdir(items_dir)
+    except OSError:
+        return out
+    for name in names:
+        try:
+            with open(os.path.join(items_dir, name, "promoted.json"), encoding="utf-8") as fh:
+                if json.load(fh).get("promoted") is True:
+                    out.add(name)
+        except (OSError, ValueError):
+            continue
+    return out
+
+
+def prune_forecasts(forecasts_dir, items_dir, dry_run):
+    """Prune `forecasts/<id>.json` for every item the same marker authorizes closing.
+
+    The forecast is a COMMITTED artifact with the ITEM-DIR lifecycle: committed
+    while the change is open, pruned when it closes, history in git. "Copies the item-dir
+    lifecycle exactly" is meant literally — it keys off the *same* `promoted.json` marker
+    `prune_items` does, so there is one closure fact and one writer for it, not a second
+    signal to keep in step.
+
+    Closure is read POSITIVELY and never inferred from absence. A forecast is written at
+    intake, before the demo and before any item dir exists (a forecast placed after the
+    demo cannot predict the demo checkpoint — one of the very gates it exists to
+    front-load). So a missing item dir is what a brand-new forecast looks like, and
+    "no dir ⇒ closed" would delete every forecast at birth. Returns (pruned, kept).
+
+    Honest ceiling, stated rather than papered over: a forecast for a change that never
+    became an item — an intake abandoned before planning — is never pruned by this. It is
+    the same straggler class as an orphaned demo bundle, and it is left for a human rather
+    than guessed at, because the guess that would collect it is the same guess that would
+    delete a live one.
+    """
+    if not os.path.isdir(forecasts_dir):
+        return [], []
+    promoted = _promoted_items(items_dir)
+    pruned, kept = [], []
+    for name in sorted(os.listdir(forecasts_dir)):
+        if not name.endswith(".json"):
+            continue
+        fid = name[:-5]
+        if fid in promoted:
+            pruned.append(fid)
+            if not dry_run:
+                try:
+                    os.remove(os.path.join(forecasts_dir, name))
+                except OSError:
+                    pass
+        else:
+            kept.append(fid)
+    return pruned, kept
+
+
 # --- cap 4: demo sandboxes ---------------------------------------------------
 
 def prune_demos(demos_dir, parked_dir, dry_run):
@@ -320,6 +386,7 @@ def main(argv=None):
     knowledge_dir = os.path.join(docs, "knowledge")
     decisions_dir = os.path.join(docs, "decisions")
     items_dir = os.path.join(args.workflow_dir, "items")
+    forecasts_dir = os.path.join(args.workflow_dir, "forecasts")
     demos_dir = os.path.join(args.workflow_dir, "demos")
     parked_dir = os.path.join(args.workflow_dir, "parked")
     anchor = git_anchor(args.workflow_dir)
@@ -335,6 +402,12 @@ def main(argv=None):
                         sessions[os.path.relpath(path, docs)] = dropped
 
     gcd = gc_decisions(decisions_dir, anchor, args.dry_run)
+    # BEFORE prune_items, and the order is load-bearing: both read the same
+    # `promoted.json`, and prune_items deletes the dir that holds it. The other way round,
+    # a crash between the two would strand a forecast whose marker no longer exists —
+    # nothing could ever authorize its delete again. This way a crash leaves only the item
+    # dir, which the next audit re-prunes.
+    fc_pruned, fc_kept = prune_forecasts(forecasts_dir, items_dir, args.dry_run)
     pruned, skipped = prune_items(items_dir, args.dry_run)
     demos_pruned, demos_skipped = prune_demos(demos_dir, parked_dir, args.dry_run)
 
@@ -344,6 +417,8 @@ def main(argv=None):
         "anchor": anchor,
         "sessions_archived": sessions,
         "decisions_gcd": gcd,
+        "forecasts_pruned": fc_pruned,
+        "forecasts_kept_open": fc_kept,
         "items_pruned": pruned,
         "items_skipped_unmarked": skipped,
         "demos_pruned": demos_pruned,
@@ -360,6 +435,11 @@ def main(argv=None):
             print(f"    - {node}: {n}")
         print(f"  {verb}GC {len(gcd)} superseded decision(s): {', '.join(gcd) or '-'}")
         print(f"  {verb}prune {len(pruned)} promoted item(s): {', '.join(pruned) or '-'}")
+        print(f"  {verb}prune {len(fc_pruned)} closed-change forecast(s): "
+              f"{', '.join(fc_pruned) or '-'}")
+        if fc_kept:
+            print(f"  kept {len(fc_kept)} forecast(s) whose change is still open: "
+                  f"{', '.join(fc_kept)}")
         if skipped:
             print(f"  skipped {len(skipped)} unmarked item dir(s) (open or not-yet-promoted): "
                   f"{', '.join(skipped)}")

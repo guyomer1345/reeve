@@ -33,7 +33,14 @@ ENUMS = [
         "owner": "product/shared/schemas.md",
         # anchor to the `request` line so we don't grab integrations/issue `kind:`.
         "owner_re": r"request[^\n]*kind:\s*([a-z]+(?:\|[a-z]+)+)",
-        "consumers": ["product/skills/checkpoint/SKILL.md", "docs/design/10-roster.md"],
+        # bus.py is the enum's DECIDER, not just another restatement: `write_park`
+        # refuses any kind outside PARK_KINDS, so a kind the schema declares and the
+        # tuple omits is a checkpoint that can never open — and the omission is
+        # invisible from every prose consumer. Parsed exactly, like the other two
+        # code consumers; the prose ones stay presence-coverage.
+        "consumers": ["product/skills/checkpoint/SKILL.md", "docs/design/10-roster.md",
+                      "product/scripts/bus.py"],
+        "consumer_re": {"product/scripts/bus.py": r"PARK_KINDS\s*=\s*\(([^)]*)\)"},
     },
     {
         "name": "inbox.kind",
