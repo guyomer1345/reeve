@@ -14,7 +14,8 @@ construction record and the shipped package stop sharing a namespace). Paths bel
 - `agents/<name>.md` — leaf worker capabilities
 - `shared/schemas.md` — inter-capability artifact schemas
 - `shared/format.md` — the authoring format every package file follows (D31/D34)
-- `shared/memory-model.md` — the three-tier rule for what the loop may rewrite/change/never-touch (D38)
+- `shared/memory-model.md` — the three-tier rule for what the loop may rewrite/change/never-touch (D38), plus the
+  read/retention + context-budget laws and the **distillation law** every summarising step obeys (D172)
 - `rules/<topic>.md` — thin baseline engineering rules, specialized per project by `/start` (D40)
 - `templates/` — files `/start` installs into a target: `orchestrator-CLAUDE.md`, `loop.md`,
   `settings.json` (loop permission rules: `allow` local / outward via the outbox), and the fixed

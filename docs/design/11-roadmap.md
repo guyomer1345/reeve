@@ -790,10 +790,13 @@ biggest remaining feature — it is the only open item that **harms a user today
   **DRIVEN 2026-08-04 (D170): both residuals D169 logged are CLOSED.** Answer quality is **measured and good** on the
   shipped `claude -p` argv (both designed traps passed; it also flagged a fabrication it did not author), and the
   **200k rotation EXECUTED** — proven by shrinking the threshold and driving it, after the check that `07`'s proposed
-  unit test had **no code seam to test**. The drive found three new defects, all OPEN in `07`: `answer`'s prescribed
-  **step order can double-answer** (rotate clears the idempotency anchor before record — a one-line swap), **rotation
-  launders a fabrication** into the durable handoff (a design question, not a patch), and a **rotated thread renders
-  as a cold start**.
+  unit test had **no code seam to test**. The drive found three new defects, and **all three are FIXED 2026-08-04
+  (D172)**: `answer`'s prescribed **step order could double-answer** (record now precedes rotate, so the anchor is
+  never destroyed before the message is consumed); **rotation laundered a fabrication** into the durable handoff,
+  answered **structurally** — the handoff keeps only what is not re-derivable and carries no project prose answer,
+  under a general **distillation law** stated once in `memory-model.md`; and a **rotated thread rendered as a cold
+  start**, now shown as a handoff. `07` owns what the drive left open — the away path still burns an answer it
+  cannot persist, and its recorded remedy turned out to be the wrong mechanism.
 
 *Everything else stays `[stageable]`/`[later]` and is picked off the by-space list above, not this sequence — the
 living code-map observed layer, the D84 reclassification, the proportional-rigor gate, build-once-per-wave,

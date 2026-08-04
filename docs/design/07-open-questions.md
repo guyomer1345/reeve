@@ -593,35 +593,46 @@ All found by building or driving. None blocks; the first is the one with teeth.
 
 ## Newly open from the Phase-8b DRIVE (2026-08-04 — D170)
 Three defects, all found by driving what a green suite had already passed. The first is a shipped correctness bug.
-- **`answer`'s own prescribed step order can DOUBLE-ANSWER `[bug — one-line fix, unapplied]`.** `SKILL.md` runs
-  **4 append → 5 rotate → 6 `drain.py record`**, but **rotation clears `turns`**, and `turns` carry the idempotency
-  anchor step 2 relies on. A crash in that window leaves the message **unrecorded** *and* the anchor **gone**, so the
-  retry answers it twice — the exact outcome the anchor exists to prevent. The drive's answerer spotted it unprompted
-  and inverted the order. **Fix: swap steps 5 and 6** (record, then rotate). Captured rather than patched because
-  capture is not build.
-- **Rotation LAUNDERS a fabrication into durable memory `[design question, not a patch]`.** The handoff restated a
-  **fabricated** answer as sourced fact, dropping the caveat two earlier runs had raised — and rotation had just
-  cleared the turns holding the evidence. The next session starts primed with the invention as established. The
-  general shape: **a distillation inherits the authority of the record while shedding the doubt attached to its
-  claims.** So the question is what a distillation *owes to claims it can no longer verify* — carry provenance and
-  confidence forward, refuse to summarise an unverifiable claim, or re-check on rotation. Needs a call before a fix.
-- **A rotated thread renders as a COLD START `[small]`.** The Conversation panel shows **"nothing asked yet"** after
-  rotation — byte-identical to a project never asked anything — so the conversation looks **erased** and nothing
-  hints a handoff exists. Not a data problem: `/api/state` already serves `{"active": false, "rotations": 1,
-  "turns": []}`. Render-layer only, and unreachable before D170 because it exists **only after a rotation**.
-- **The away path computes an answer, then discards it, then pays to recompute it `[core-ish]`.** MEASURED on CLI
-  2.1.220: an untrusted workspace does **not** stall — `claude -p` proceeds **read-only**, composes a complete
-  correct answer, and silently fails to persist (`Ignoring 10 permissions.allow entries … not been trusted`). The
-  runner's stdout is `DEVNULL`, so it scores no-progress, backs off, **re-spawns and burns another full answer**, and
-  hard-stops with an alert the human cannot act on. **The write is attempted only after the expensive work.** A
-  cheap **writability probe before answering** turns a silent, repeated loss into one specific alert naming the
-  one-time fix the platform itself prints. (`/start` documents the trust precondition; nothing *detects* it.)
-- **A dead-lettered question renders as "waiting" until the bus GCs it `[small]`.** The Conversation panel joins
-  unanswered inbox questions as pending turns; a question that was drained and dead-lettered keeps showing as
-  waiting until the watermark collects it. That is arguably honest — the human *is* still waiting, and no answer is
-  coming — but "waiting for an answer" overstates it, and the dead-letter surface on `handoff.md` already knows
-  better. Bounded and self-clearing, so it is a wording fix, not a correctness one.
-- **`schemas.md` gave back ~1.1k tokens of the margin D168 won `[watch]`.** It sits at **~19.8k** against the 25 000
-  ceiling after this build. Still comfortable, but the file is now the package's most-appended-to schema doc and the
-  budget gate still does not scan the package's own docs (the residual above), so the next slice that touches it
-  should check the number rather than assume the split solved it permanently.
+**All three are CLOSED 2026-08-04 (D172); the away-path item below stays OPEN with its premise corrected.**
+- **~~`answer`'s own prescribed step order can DOUBLE-ANSWER~~ — CLOSED 2026-08-04 (D172).** Steps 5 and 6 are
+  swapped: **append → record → rotate**. The append→record window the anchor was written for is provably
+  **unchanged** (nothing was inserted into it — asserted, not assumed), and the previously-unsaid half is now
+  written down: **post-rotation the anchor is unreachable and idempotency rests on the drain watermark alone**,
+  which is correct precisely because rotation now runs *after* the record. Guarded mechanically by
+  `test_answer_skill.py` — it parses the numbered steps out of the shipped file and refuses an order that puts a
+  `turns`-clearing step ahead of the record. D172 owns the honest ceiling of that guard.
+- **~~Rotation LAUNDERS a fabrication into durable memory~~ — CLOSED 2026-08-04 (D172), structurally.** The call:
+  the handoff keeps only what is **not re-derivable** and carries **no project prose answer at all** — every answer
+  came from the project's own record by construction, so it is re-derivable, and an answer that is *not*
+  re-derivable is exactly the invented one. Carrying provenance was **rejected on evidence**: the fabricated claim
+  *already carried a citation*, so provenance-forwarding would have made the invention look better-sourced. The
+  general rule — **a distillation may drop, point and quote; it may never restate** — is stated **once** in
+  `memory-model.md § the distillation law`, and `schemas.md § conversation-thread` owns the carry-list.
+- **~~A rotated thread renders as a COLD START~~ — CLOSED 2026-08-04 (D172).** The panel now reads *"conversation
+  handed off (rotation N) — the earlier turns are distilled into thread/handoff.md, and the next question starts
+  fresh from it"*. Verified in real headless Chrome against a genuinely rotated fixture, and covered by tests that
+  run the **real shipped `renderThread`** under node — including the opposite direction, so a project nobody has
+  asked still says "nothing asked yet".
+- **The away path computes an answer, then discards it, then pays to recompute it `[core-ish]` — STILL OPEN, and
+  the remedy named here is the WRONG ONE.** The measurement stands (re-verified: CLI still **2.1.220**): an
+  untrusted workspace does **not** stall — `claude -p` proceeds **read-only**, composes a complete correct answer,
+  and silently fails to persist (`Ignoring 10 permissions.allow entries … not been trusted`). The runner's stdout
+  is `DEVNULL`, so it scores no-progress, backs off, **re-spawns and burns another full answer**, and hard-stops
+  with an alert the human cannot act on. **But "a cheap writability probe" cannot detect this.** The daemon is
+  plain Python with no permission layer, so it writes `.workflow/` perfectly well in an untrusted workspace — the
+  probe would pass every time and never fire. What is actually detectable is a **trust-record read**:
+  `~/.claude.json` → `projects["<abs repo path>"].hasTrustDialogAccepted` (verified present on 2.1.220; 12 of 26
+  tracked projects on this machine are `false`, so the state is real and common). That makes this a different item
+  than the one written here — it reads an **undocumented platform-internal file**, so it must **fail OPEN** on any
+  unreadable/renamed/missing record or a format change would silently stop the runner answering questions at all.
+  Its own slice: it changes the runner's spawn decision, and it needs a drive against a genuinely untrusted
+  workspace to prove the no-spawn plus the actionable alert. (`/start` documents the trust precondition; nothing
+  *detects* it.)
+- **~~A dead-lettered question renders as "waiting" until the bus GCs it~~ — CLOSED 2026-08-04 (D172).** It now
+  renders *"dead-lettered — no answer is coming"*, dimmed and dotted rather than styled as a live question. The
+  **reason** is deliberately not carried into the panel: the "my requests" surface owns it, and a second copy in a
+  second panel is the drift the one-owner rule exists to stop.
+- **`schemas.md` gave back ~1.1k tokens of the margin D168 won `[watch]`.** It sat at ~19.8k after Phase 8b and is
+  **~20.6k** after D172 (ceiling 25 000; ~4.4k of headroom left). Measured by hand, not by the gate — the budget
+  gate still does not scan the package's own docs (the residual above), which is why every slice that touches this
+  file has to check the number rather than assume the split solved it permanently.

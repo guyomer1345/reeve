@@ -4997,3 +4997,91 @@ declaration) rather than **remembered**, which is the only form that survives a 
 (the `guard.sh` push floor), **D130** (the deferred adopted-code-gates hazard this sharpens), **D80** (make the fact
 visible and owned).
 → `07`, `11`. Files: none — design only.
+
+## D172 — the three Phase-8b-drive defects are fixed, and the laundering one is answered STRUCTURALLY: a distillation may drop, point and quote, but never restate **[BUILT 2026-08-04 — closes all three defects `07` logged against D170; the away-path item stays OPEN with its recorded remedy CORRECTED]**
+D170 found three defects by driving what a green suite had passed and captured them rather than patching them. All
+three are now fixed. The middle one was the only genuinely undecided call, and it moved the design.
+
+- **DEFECT 1 (correctness) — the step order is swapped: append → record → rotate.** Rotation clears `turns`, and
+  `turns` carry the idempotency anchor, so the shipped order left a window where a crash destroyed the anchor *and*
+  left the message unrecorded — and the retry answered twice. **Two things were checked rather than assumed.**
+  (a) The swap leaves the **append→record window unchanged** — nothing sits between them, so the anchor still covers
+  exactly the case it was written for; that is now an assertion (`record == append + 1`), not a belief.
+  (b) The half nobody had written down: **post-rotation the anchor is unreachable** (there are no turns) and
+  idempotency rests on the **drain watermark alone**. That is correct *because* the record now precedes the
+  rotation — a rotated message is already consumed and can never come back pending — but unsaid it is exactly the
+  reasoning a future editor re-breaks, so it is in the skill.
+- **…and the mechanical guard is real, with a ceiling stated out loud.** `test_answer_skill.py` parses the numbered
+  steps out of the **real shipped `SKILL.md`** and refuses an order that puts a `turns`-clearing step ahead of the
+  record. **Mutation-tested**: the pre-fix order was re-injected and both ordering assertions fired. Its honest
+  ceiling, recorded so nobody mistakes it for more: **it proves the SPEC still says the right thing; it cannot
+  prove the model FOLLOWS it** — there is no seam between the prose and the behaviour, which is the same no-seam
+  finding D170 hit with rotation. Behaviour is proven by driving, not by this file. One measured correction along
+  the way: matching the step *body* is wrong — step 2 legitimately mentions `drain.py record` while explaining the
+  anchor — so a step is identified by its **bold directive**, not by a substring.
+- **DEFECT 2 (design) — the laundering is answered by REMOVING the payload, not by policing it.** The handoff now
+  keeps only what is **not re-derivable**: the human's turns **verbatim**, open threads, outcomes that landed with a
+  real owner **as pointers**, contradictions **as the two pointers that contradict**, and the rotation count. It
+  carries **no project prose answer at all**. The argument is not taste: `answer` answers from the project's own
+  record **by construction**, so every answer is re-derivable from it — and **an answer that is *not* re-derivable
+  is precisely an invented one**. Dropping the prose therefore discards exactly the hazard and nothing else, and it
+  makes laundering **impossible rather than policed** — the same move D161 makes for the org-mode git boundary.
+  It also *shrinks* the handoff, which is what rotation exists to do.
+- **The evidence killed the obvious alternative.** The real artifact was read, not imagined: the fabricated answer
+  was restated as *"Answered from `docs/decisions/0004-ledger-store.md`…"* — **it already carried a citation** — while
+  the **same file, three paragraphs later**, said `docs/decisions/` was empty. So **carrying provenance forward
+  forwards the FABRICATED provenance** and makes the invention look better-sourced, and **refusing unsourced claims**
+  cannot fire because the claim *appeared* sourced. Only **re-verification** catches it, and it re-reads the record
+  at the exact moment rotation exists to cut per-question cost, with the same model grading itself. The handoff also
+  hand-wrote a "Live state" section that was a **second copy of `parked/`** — the D80 violation `/dispatch` already
+  avoids by *mirroring* — and the carry-list drops that too.
+- **The rule is general and is stated ONCE.** `memory-model.md § the distillation law`: **a distillation may DROP,
+  POINT and QUOTE — it may never RESTATE.** Restating is the move that converts a claim into a fact.
+  **The other summarising surfaces were checked before generalising, and the shape is graded, not uniform** —
+  `# Lessons` distils but drops its source **to git**; `/dispatch`'s `handoff.md` is largely already compliant
+  (it **mirrors** `parked[]` rather than restating it, `base_sha` is a pointer, the drain block is machine-owned)
+  and sits on an intact git/backlog/`parked/`; **`precompact` is not a distillation at all** — it copies
+  `handoff.md` verbatim with a named truncation notice. The thread rotation is **the only place in the package
+  where the distillation becomes the sole surviving copy**, which is why the law is binding there and guidance
+  elsewhere. Deliberately **not** copied into `document`/`dispatch`/`research`: one owner, and they inherit it.
+- **DEFECT 3 (surface) — a rotated thread is a handoff, not a cold start; and a dead-lettered question stops
+  promising an answer.** The panel now reads *"conversation handed off (rotation N) — the earlier turns are
+  distilled into thread/handoff.md, and the next question starts fresh from it"*, and a dead-lettered question
+  renders *"dead-lettered — no answer is coming"*, dimmed and dotted. Both were render-layer only: `rotations` was
+  already on the wire, and the dead-letter flag is computed from the **same drain-block read `requests()` already
+  does** — no new source. The dead-letter **reason** is deliberately left out of the panel: the "my requests"
+  surface owns it. Newly testable, and tested: the real shipped `renderThread` runs under node with a small DOM
+  shim, in **both** directions — a project nobody has asked still says "nothing asked yet".
+- **The away-path item's recorded remedy is WRONG, and checking it is the only reason that is known.** `07` proposed
+  "a cheap **writability probe** before answering". The daemon is plain Python with **no permission layer**, so it
+  writes `.workflow/` fine in an untrusted workspace — the probe passes every time and **never fires**. The
+  detectable precondition is a **trust-record read** (`~/.claude.json` → `projects["<abs path>"]
+  .hasTrustDialogAccepted`, verified present on 2.1.220; **12 of 26** tracked projects on this machine are `false`).
+  That is a different item: it reads an **undocumented platform-internal file**, so it must **fail OPEN** or a
+  format change stops the runner answering questions entirely. Deferred to its own slice — it changes the runner's
+  spawn decision and needs a drive against a genuinely untrusted workspace. **Third time in three phases** that a
+  recorded framing, not the work, was the expensive part (D169's inverted premise, D170's non-existent code seam).
+*Rejected:* **carrying provenance + a confidence flag** and **refusing to distil an unsourced claim** — both defeated
+by the fabricated citation above; **re-verifying on rotation** — the only one that would catch it, at the cost of
+re-reading the record precisely when rotation is trying to save that cost, and with the same model grading itself;
+**a thread-local fix with no general rule** — the shape recurs at every summarising step, and the next one built
+would have rediscovered it; **tightening `/dispatch`'s in-flight-decision clause in this slice** — its source
+survives, so it is guidance not a defect, and the law now covers it without touching the path every session uses.
+*Why it matters:* the residual risk after D170 was not the answering but **the rotation that summarises it**, and
+the fix that survives is the one that leaves nothing to police. Defect 3 also re-earns the render discipline for a
+**twelfth** time, and sharpens it: it was **unreachable until the rotation had run**, which is the argument for
+rendering the state you just *created*, not the state you started from.
+**Verification:** **758 tests** green (743 → 758: +5 skill-order, +4 thread read-model, +6 real-`renderThread`
+under node), 5 meta-gates green. The ordering guard **mutation-tested** by re-injecting the shipped bug. Both render
+states shot in **real headless Chrome** against a *copy* of the rotated fixture (the maintainer's `~/drive-9a` left
+byte-untouched), questions posted through the real `POST /api/question` and dead-lettered through the real
+`drain.py record --dead-letter`. `schemas.md` measured by hand at **~20.6k** of the 25 000 ceiling.
+**Supersedes / corrects:** `07`'s away-path remedy (**a writability probe cannot detect an untrusted workspace**);
+`07`'s three D170 defects (all CLOSED); `schemas.md`'s rotation bullet (it now states the order and the carry-list);
+`05`'s `thread/` layout note (it named the file but not what may go in it).
+**Builds on:** **D170** (the drive that found all three), **D169** (8b), **D93/D108** (drain + watermark — what
+idempotency falls back to), **D80** (one owner; the law is stated once and pointed at), **D38/D61** (the memory
+model this law joins), **D166** (the browser-drive discipline, twelfth payoff), **D161** (structural over policed).
+→ `05`, `07`, `10`, `11`. Files: `product/skills/answer/SKILL.md`, `product/shared/memory-model.md`,
+`product/shared/schemas.md`, `product/scripts/bus.py`, `product/scripts/test_answer_skill.py` (new),
+`product/scripts/test_bus.py`.
