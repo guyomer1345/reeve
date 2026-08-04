@@ -358,11 +358,30 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
 - **Rotation — the thread is cleared and handed off, it is not capped.** Resume **re-sends the accumulated history**,
   so thread length is a *per-message cost*, not merely disk — the one retention arm in this package that governs
   spend rather than bytes. When the estimated context crosses `config.thread.rotate_at_tokens`, the answerer writes a
-  **thread handoff** (`.workflow/thread/handoff.md`) distilling the conversation so far, drops `session_id`, and
-  increments `rotations`; the next question starts a fresh session primed with that handoff. This is the same
+  **thread handoff** (`.workflow/thread/handoff.md`) — distilling the conversation so far **under the carry-list
+  below** — drops `session_id`, clears `turns`, and increments `rotations`; the next question starts a fresh session
+  primed with that handoff. **Rotation happens only after `drain.py record`** (`skills/answer` steps 5→6): clearing
+  `turns` destroys the idempotency anchor, so rotating first opens a window where the message is unrecorded *and*
+  unanchored, and the retry answers twice. This is the same
   disposable-conversation law the orchestrator already runs on (`handoff.md` + rehydrate), applied to the thread —
   and it is deliberately a **separate file**, because `handoff.md` already has two authors (the orchestrator's prose
   and `drain.py`'s machine block) and a third writer on it would break that split.
+- **What the thread handoff may CARRY — it keeps only what is not re-derivable.** Rotation is the one distillation
+  in this package whose source is **destroyed** (the thread is RUNTIME and gitignored, so the cleared `turns` are
+  gone, not archived), which makes `memory-model.md § the distillation law` binding here rather than advisory. The
+  handoff carries exactly: **the human's turns verbatim** (once the watermark GCs the inbox message this is the only
+  record they were ever asked); **open threads** — what an exchange surfaced that nobody filed, so the next session
+  does not re-raise it as new; **outcomes that landed with a real owner, as a POINTER** (backlog id, spec section,
+  decision id, knowledge node) and never a summary of what that owner says; **contradictions in the record as the
+  two pointers that contradict** ("`state.json` says X, `parked/A.json` says Y"), never a verdict on which is right;
+  and **`rotations` plus the number of turns dropped**, so the next session knows it inherited a conversation.
+- **It carries NO project prose answer, and that is the structural part.** Every answer came from this project's own
+  record by construction (`skills/answer` step 3), so it is **re-derivable** — and an answer that is *not*
+  re-derivable is exactly an invented one. Restating answers here would hand the next session the inventions among
+  them with the record's authority and none of the doubt, *after* the turns holding the evidence were cleared —
+  the failure `memory-model.md § the distillation law` records. Dropping the prose makes it impossible rather than
+  policed. A follow-up after a rotation re-derives from the record instead of inheriting a summary: the point, not
+  the cost.
 - **Estimated, not measured.** Token count comes from the shared `chars_per_token` calibration (`config.doc_budget`),
   the same estimator the context-budget law uses — there is no way to read the live session's true count from
   outside it, and a stdlib-only package has no tokenizer.

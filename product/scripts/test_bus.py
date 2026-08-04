@@ -418,6 +418,48 @@ class ThreadReadModel(Tmp):
             json.dump({"kind": "intake", "ask": "build a thing"}, fh)
         self.assertEqual(self.model.thread()["turns"], [])
 
+    def _dead_letter(self, mid, reason="no such checkpoint"):
+        with open(self.paths.handoff, "w") as fh:
+            fh.write("# Handoff\n\nprose\n\n" + bus.render_handoff_block(
+                {"consumed": [], "consumed_through": None,
+                 "dead_letters": [{"message_id": mid, "reason": reason}]}) + "\n")
+
+    def test_a_dead_lettered_question_is_flagged_rather_than_left_looking_pending(self):
+        """It sits on the inbox until the watermark collects it, so it joins as a pending
+        turn — but no answer is coming, and 'waiting for an answer' overstates it."""
+        mid = "20260804T083752.391786Z-cccccccc-1"
+        self._ask(mid, "why postgres?")
+        self._dead_letter(mid)
+        turn = self.model.thread()["turns"][0]
+        self.assertTrue(turn["pending"])
+        self.assertTrue(turn["dead"])
+
+    def test_a_genuinely_waiting_question_is_not_flagged_dead(self):
+        """The other direction, so the flag cannot silently become always-on: a live
+        question with an unrelated dead-letter on the block stays plain pending."""
+        self._ask("20260804T083752.391786Z-dddddddd-1", "why postgres?")
+        self._dead_letter("20260804T083752.391786Z-eeeeeeee-9")
+        turn = self.model.thread()["turns"][0]
+        self.assertTrue(turn["pending"])
+        self.assertFalse(turn["dead"])
+
+    def test_an_answered_turn_carries_the_flag_too_and_it_is_false(self):
+        """The field must exist on every turn, or the page has to test for undefined."""
+        self._write({"session_id": "s", "rotations": 0, "turns": [
+            {"message_id": "m1", "role": "human", "text": "q",
+             "at": "2026-08-04T08:00:00Z"}]})
+        self.assertFalse(self.model.thread()["turns"][0]["dead"])
+
+    def test_a_rotated_thread_reports_its_rotations_with_no_turns(self):
+        """The data half of the cold-start defect. The page already had everything it
+        needed to tell a handed-off conversation from a project nobody has ever asked —
+        `rotations` was on the wire — and rendered the wrong string anyway."""
+        self._write({"session_id": None, "rotations": 1, "turns": []})
+        th = self.model.thread()
+        self.assertEqual(th["turns"], [])
+        self.assertFalse(th["active"])
+        self.assertEqual(th["rotations"], 1)
+
 
 class ReadModel(Tmp):
     def setUp(self):
@@ -3321,6 +3363,94 @@ class QuestionKind(unittest.TestCase):
         """An unanswered question is as stuck as an unconsumed verdict — that is the
         whole reason the console stops being write-only."""
         self.assertIn("question", bus.RUNNER_KINDS)
+
+
+# A DOM shim for the CONVERSATION panel. Deliberately not the card shim above: that one
+# models `.card` lookups for renderCheckpoints, and renderThread does something simpler
+# and different — it builds a tree with createElement/append. Both run the REAL shipped
+# function; neither re-implements it.
+_THREAD_SHIM = """
+function mkNode(tag) {
+  return { tag, className: "", textContent: "", kids: [],
+           append(...ns) { this.kids.push(...ns); } };
+}
+const NODES = {};
+function $(sel) { return NODES[sel] || (NODES[sel] = mkNode(sel)); }
+const document = { createElement: mkNode };
+// Flattened visible text, in render order — what a human actually reads off the panel.
+function seen(n) {
+  return [n.textContent].concat(n.kids.map(seen)).filter(Boolean).join(" | ");
+}
+"""
+
+
+class ConsoleConversationRender(unittest.TestCase):
+    """The Conversation panel's own render, run for real under node.
+
+    Both defects here were invisible to every mechanical test and to reading the code:
+    one is only reachable AFTER a rotation has run, the other only while a dead-letter is
+    still on the inbox. They were found by rendering the state the drive had just created.
+    """
+
+    def _render(self, th):
+        node = _node()
+        if not node:
+            self.skipTest("node is not installed")
+        harness = "\n".join([
+            _THREAD_SHIM,
+            _js_function("humanGap"),
+            _js_function("gapSeconds"),
+            _js_function("renderThread"),
+            "renderThread(%s);" % json.dumps(th),
+            'console.log(JSON.stringify({text: seen($("#th-list")), '
+            'cls: $("#th-list").className, count: $("#th-count").textContent}));',
+        ])
+        out = subprocess.run([node, "-e", harness], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        return json.loads(out.stdout)
+
+    def test_a_project_never_asked_anything_still_says_so(self):
+        """The case that must not regress while fixing the one it is confused with."""
+        self.assertEqual(self._render({"turns": [], "rotations": 0, "active": False})["text"],
+                         "nothing asked yet")
+
+    def test_a_live_thread_with_no_turns_yet_is_unchanged(self):
+        self.assertEqual(self._render({"turns": [], "rotations": 0, "active": True})["text"],
+                         "no turns yet")
+
+    def test_a_ROTATED_thread_does_not_render_as_a_cold_start(self):
+        """The defect: six exchanges, then a rotation, and the panel was byte-identical to
+        a project nobody has ever asked — the conversation looked ERASED, with nothing
+        hinting a handoff existed."""
+        got = self._render({"turns": [], "rotations": 1, "active": False})["text"]
+        self.assertNotIn("nothing asked yet", got)
+        self.assertIn("handed off", got)
+        self.assertIn("rotation 1", got)
+        # Says where it went, or "handed off" is just a nicer way of saying erased.
+        self.assertIn("thread/handoff.md", got)
+
+    def test_a_waiting_question_still_says_it_is_waiting(self):
+        got = self._render({"rotations": 0, "active": True, "turns": [
+            {"message_id": "m1", "role": "human", "text": "why postgres?",
+             "at": None, "pending": True, "dead": False}]})
+        self.assertIn("waiting for an answer", got["text"])
+
+    def test_a_DEAD_LETTERED_question_stops_promising_an_answer(self):
+        """It renders until the watermark collects it. 'Waiting' is a promise nothing is
+        going to keep."""
+        got = self._render({"rotations": 0, "active": True, "turns": [
+            {"message_id": "m1", "role": "human", "text": "why postgres?",
+             "at": None, "pending": True, "dead": True}]})
+        self.assertNotIn("waiting for an answer", got["text"])
+        self.assertIn("no answer is coming", got["text"])
+
+    def test_an_answered_turn_carries_neither_marker(self):
+        got = self._render({"rotations": 0, "active": True, "turns": [
+            {"message_id": "m1", "role": "project", "text": "because concurrency",
+             "at": None, "pending": False, "dead": False}]})
+        self.assertNotIn("waiting", got["text"])
+        self.assertNotIn("no answer is coming", got["text"])
+        self.assertIn("because concurrency", got["text"])
 
 
 if __name__ == "__main__":

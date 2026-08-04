@@ -2255,13 +2255,29 @@ class ReadModel:
         # already owns and the thread it already reads, and joins them for display only —
         # the `answer` skill remains the sole author of a durable turn.
         answered = {t.get("message_id") for t in turns}
-        turns = turns + [t for t in self._pending_questions()
-                         if t["message_id"] not in answered]
+        # A question that was drained and DEAD-LETTERED still sits on the inbox until the
+        # watermark collects it, so it joins below as a pending turn — but it is not
+        # pending in any sense the human cares about: no answer is coming. "Waiting for an
+        # answer" overstates it, and the drain block already knows better. This is the same
+        # read `requests()` performs, so it adds no source — only the flag the panel needs
+        # to say the true thing. The REASON is deliberately not carried: it has an owner
+        # (the "my requests" surface publishes it), and a second copy in a second panel is
+        # exactly the drift the one-owner rule exists to stop.
+        dead = {d.get("message_id") for d in
+                (read_handoff_block(self.paths.handoff).get("dead_letters") or [])
+                if isinstance(d, dict)}
+        pending = []
+        for t in self._pending_questions():
+            if t["message_id"] in answered:
+                continue
+            pending.append(dict(t, dead=True) if t["message_id"] in dead else t)
+        turns = turns + pending
         shown = turns[-cap:]
         return {
             "turns": [{"message_id": t.get("message_id"), "role": t.get("role"),
                        "text": t.get("text"), "at": t.get("at"),
-                       "pending": bool(t.get("pending"))} for t in shown],
+                       "pending": bool(t.get("pending")),
+                       "dead": bool(t.get("dead"))} for t in shown],
             "rotations": rec.get("rotations") or 0,
             # Whether a conversation is live at all — a fresh thread has no session yet,
             # and the page says "no conversation yet" rather than drawing an empty box.
@@ -3294,7 +3310,19 @@ function renderThread(th) {
   $("#th-count").textContent = turns.length ? "(" + turns.length + ")" : "";
   if (!turns.length) {
     list.className = "empty";
-    list.textContent = th.active ? "no turns yet" : "nothing asked yet";
+    // A ROTATED thread is empty for a completely different reason than a new one, and
+    // saying "nothing asked yet" to someone who just had six exchanges reads as ERASED.
+    // Found by rendering the state the drive had just created, not the state it started
+    // from: this string is unreachable until a rotation has actually run. `rotations` was
+    // already on the wire — the page had everything it needed and said the wrong thing
+    // anyway, which is why this is a render defect and not a data one.
+    if (th.rotations > 0) {
+      list.textContent = "conversation handed off (rotation " + th.rotations
+        + ") — the earlier turns are distilled into thread/handoff.md, and the next "
+        + "question starts fresh from it";
+    } else {
+      list.textContent = th.active ? "no turns yet" : "nothing asked yet";
+    }
     return;
   }
   list.className = "";
@@ -3307,7 +3335,7 @@ function renderThread(th) {
   for (const t of turns) {
     const wrap = document.createElement("div");
     wrap.className = "turn" + (t.role === "human" ? " is-human" : "")
-      + (t.pending ? " is-pending" : "");
+      + (t.pending && !t.dead ? " is-pending" : "") + (t.dead ? " is-dead" : "");
     const who = document.createElement("div");
     who.className = "who";
     const gap = gapSeconds(t.at);
@@ -3315,8 +3343,12 @@ function renderThread(th) {
       + (gap === null ? (t.at ? " · " + t.at : "") : " · " + humanGap(gap) + " ago")
       // Says what is true, not what is coming. The answer may wait for a boundary or a
       // relaunch, so "waiting for an answer" is honest where "answering…" would imply a
-      // process that may not even be running.
-      + (t.pending ? " · waiting for an answer" : "");
+      // process that may not even be running. A DEAD-LETTERED question is the one case
+      // where it stops being honest — the human is still waiting, but nothing is coming,
+      // and it keeps rendering until the watermark collects it. Why it failed has an
+      // owner (the "my requests" surface); this only stops the panel promising an answer.
+      + (t.dead ? " · dead-lettered — no answer is coming"
+                : (t.pending ? " · waiting for an answer" : ""));
     const text = document.createElement("p");
     text.className = "text";
     text.textContent = t.text || "";
@@ -3612,6 +3644,11 @@ label { display:inline-flex; align-items:center; gap:.4rem; }
 /* A waiting turn lifts out of the dim default rather than introducing a colour: the
    page has no `--warn` and a hardcoded hex would not follow the dark-mode switch. */
 .turn.is-pending .who { color:var(--fg); }
+/* Dead-lettered: dimmed, with the turn's solid rule broken to a dotted one, so it reads
+   as CLOSED rather than as one more question in the queue. It is not an error state —
+   nothing is broken now — so it is not `bad`; it is a turn that will never get a reply. */
+.turn.is-dead { border-left-style:dotted; opacity:.72; }
+.turn.is-dead .who { color:var(--dim); }
 .turn .who { font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); }
 .turn .text { white-space:pre-wrap; margin:.15rem 0 0; }
 #th-list .older { color:var(--dim); font-size:.8rem; font-style:italic; margin-bottom:.5rem; }

@@ -56,6 +56,31 @@ git as before. Two things are load-bearing and both are easy to get wrong:
   `# Sessions` is the terminal section and its region runs to EOF once entries begin, so a `## Lessons` nested
   under it would be parsed as a *session entry* and could be dropped by the very cap it was written to survive.
 
+## The distillation law
+Every summarising step in this package — the `audit` item's `# Lessons` pass above, `/dispatch`'s `handoff.md`,
+the thread rotation in `answer` — replaces a long record with a short one. The hazard is not size, it is
+**authority**: a distillation inherits the standing of the record it replaces while **shedding the doubt attached
+to the individual claims inside it**. Measured, not theorised — a thread handoff restated a *fabricated* answer as
+sourced fact, dropped the caveat two earlier turns had raised against it, and contradicted itself three paragraphs
+later; the turns holding the evidence had just been cleared by the same rotation.
+
+**A distillation may DROP, POINT and QUOTE. It may never RESTATE.**
+- **Drop** whatever is re-derivable from a record that still exists. Re-derivation is cheap and honest; a summary
+  of it is neither — and a claim that is *not* re-derivable from the record is precisely an invented one.
+- **Point** at an owner — a file, an id, a section, a sha — and at most what it *says*, in a form one read settles.
+  Two pointers that contradict each other are a legitimate carry; your conclusion about which is right is not.
+- **Quote** the human verbatim. Their own words are the one thing no other record holds.
+- **Never restate** a conclusion in your own voice. That is the move that turns a claim into a fact, and it is the
+  only one of the four that can launder an invention into durable memory.
+
+**Its force is graded by what happens to the source.** Where the source survives the distillation — `# Lessons`
+drops its raw entry to *git*, `handoff.md` sits on an intact git/backlog/`parked/` and **mirrors** the
+machine-owned parts rather than restating them — the law is guidance and a bad distillation is recoverable. Where
+the source is **destroyed** it is binding and structural: the conversation thread is RUNTIME and gitignored, so
+rotation is the one place in this package where the distillation becomes the *only* surviving copy.
+`shared/schemas.md § conversation-thread` states what that handoff may carry, and that list is a floor, not an
+example.
+
 ## The context-budget law
 The retention law above bounds the **append-only** tier. Everything else a session reads — the brief, the
 routing graph, the spec, a rule, a knowledge node — was bounded only by the claim above. **`check_doc_budget.py`**

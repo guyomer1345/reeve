@@ -32,6 +32,12 @@ At a boundary drain, when `drain.py list` shows a pending `kind: question`. Two 
    where the idempotency anchor lives.
 2. **Skip anything already answered.** A turn already carrying this `message_id` means a previous run appended
    the reply and died before `drain.py record` — the answer stands, so record it and move on. Never answer twice.
+   **The anchor covers exactly one window — *append* (4) to *record* (5) — and nothing else.** After a rotation
+   the thread has **no turns**, so the anchor is unreachable and idempotency rests on the **drain watermark
+   alone**. That is correct, because rotation runs only *after* the record (6): a rotated message is already
+   consumed and can never come back pending. It is also why no step that clears `turns` may ever be moved ahead
+   of step 5 — doing so leaves the message unrecorded *and* unanchored at the same time, and the retry answers
+   it twice.
 3. **Answer from the project's own record, not from general knowledge.** The question is about *this* project.
    Cite where the answer came from — a node, a decision id, a spec section, a commit. If the record does not
    say, **say that it does not say**: an invented answer about your own project is worse than none, because
@@ -39,12 +45,24 @@ At a boundary drain, when `drain.py list` shows a pending `kind: question`. Two 
    finding — offer to file it, do not file it unasked.
 4. **Append the turns** to `.workflow/thread/thread.json` — the human's question and your reply, each stamped
    with the source `message_id` — and record the `session_id` this ran under so the next question resumes it.
-5. **Rotate if the thread is over budget.** Estimate the thread's context with `config.doc_budget.chars_per_token`;
-   if it exceeds `config.thread.rotate_at_tokens`, write `.workflow/thread/handoff.md` distilling the
-   conversation, clear `session_id`, and increment `rotations`. The next question starts fresh from that
-   handoff. This is the orchestrator's own disposable-conversation law applied to the thread — resume re-sends
-   the whole history, so length is a per-question *cost*, not just disk.
-6. **`drain.py record`** the message ids, exactly as any other kind.
+5. **`drain.py record`** the message ids, exactly as any other kind. **Record before you rotate, always.**
+   Rotation clears `turns`, and the turns carry step 2's anchor — so rotating first opens a crash window in which
+   the message is unrecorded *and* the anchor is destroyed, and the retry answers it a second time, the one
+   outcome the anchor exists to prevent. Recording first cannot lose an answer: a crash after this point costs at
+   most a **deferred rotation**, which the next question performs because the thread is still over budget.
+6. **Rotate if the thread is over budget.** Estimate the thread's context with `config.doc_budget.chars_per_token`;
+   if it exceeds `config.thread.rotate_at_tokens`, write `.workflow/thread/handoff.md`, clear `session_id` and
+   `turns`, and increment `rotations`. The next question starts fresh from that handoff. This is the
+   orchestrator's own disposable-conversation law applied to the thread — resume re-sends the whole history, so
+   length is a per-question *cost*, not just disk.
+   **Write the handoff to the carry-list in `shared/schemas.md § conversation-thread`, which is a floor, not an
+   example: drop, point and quote — never restate** (`shared/memory-model.md § the distillation law`). Keep the
+   human's turns verbatim, the open threads, the pointers to outcomes that landed with a real owner, and any
+   contradiction stated as the two pointers that contradict. Carry **none of your own prose answers**: you
+   answered from this project's record (step 3), so they are re-derivable from it — and an answer that is *not*
+   re-derivable is exactly an invented one. This is the only distillation here whose source is **destroyed**
+   rather than archived, so what you restate becomes the next session's established fact with no evidence left
+   to check it against.
 
 ## Rules
 - **Never promote, plan, execute, or edit code.** If answering surfaces real work, name it and let the human
