@@ -18,3 +18,10 @@ __pycache__/
 # so it must not be committed. Any SHARED setting for this repo belongs in a
 # tracked .claude/settings.json instead.
 .claude/settings.local.json
+
+# Claude Code worktrees. `EnterWorktree` puts an isolated CHECKOUT OF THIS REPO at
+# `.claude/worktrees/<name>/`, which git does not ignore on its own — so a `git add -A`
+# in the main checkout stages an entire copy of the repo into itself. Caught by a
+# `git status` showing a bare `?? .claude/` after the phase-9-capture worktree existed;
+# nothing had committed it yet, and this is what stops the first one that would.
+.claude/worktrees/
