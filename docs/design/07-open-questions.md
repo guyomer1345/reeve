@@ -482,8 +482,9 @@ so hop B reads the resolved key from `installed_plugins.json` instead. Anything 
 cannot assume plugin-scoped environment — the general form is worth remembering.
 
 ## Newly designed — Phase 9 (D159–D163, 2026-08-03) — sub-questions deferred to build
-Three capabilities were designed from a maintainer conversation (owners: `11` Phase 9 + D159–D163); **9a is now
-built** (D163) and its sub-questions below are closed. A fourth ask — a
+**All three capabilities' sub-questions are now closed** — 9a's by its build (D163), the context-budget law's by
+D167, and org mode's **in design** by D171 (2026-08-04). **9c remains UNBUILT and still build-last behind its own
+drive**: the calls are settled, the evidence is not. A fourth ask — a
 console **config tab** — was **DROPPED** (D161): writing `config.json` from the browser makes the bus a second writer
 (D93 violation), switching a project's git topology is a migration not a setting, and its "change credentials over
 Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away case is Tailscale-only). What stays open
@@ -512,11 +513,22 @@ Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away ca
     *honest* (D163's fourth state exists precisely so "I can't tell" never renders as "did not happen"), but it is
     thin, and if a real chain's reality column comes back mostly blank the fix is a **genuine anchor per node**, not
     a looser probe.
-- **Org mode (D161)** — (1) **the review-bundle format** (branch / `format-patch` / squashed diff) — the one net-new
-  capability, no producer exists today; (2) confirm **ingest gates run read-only** on adopted company code (the
-  D130-deferred "does adopted code pass its own gates" hazard, now sharper — you must NOT run a company's full suite on
-  ingest); (3) the private tree's **archive-to-git default is local-only** (the governance caveat — derived company IP
-  on personal infra), a backup remote a deliberate maintainer act.
+- **Org mode (D161) — all three SETTLED in design 2026-08-04 (D171, owner); 9c still unbuilt.**
+  (1) **The review-bundle format is a PER-ITEM SQUASHED DIFF** + a metadata sidecar kept *outside* the diff — the
+  human is the author by construction (which is what "user and user only, enforced structurally" asks for), no loop
+  commit messages cross, and the unit matches the loop's own: **one item → one bundle → one human commit**. A branch
+  was rejected because the path of least resistance (`git push`) is the wrong act; `format-patch` survives as a
+  possible opt-in for large multi-commit work, never the default.
+  (2) **RE-ANCHORED — the hazard is the COMMIT gate, not `ingest`.** `ingest` runs no gates at all today, so the
+  question as phrased was nearly a no-op. `/start` brownfield **adopts** the project's formatter/linter/typechecker/
+  test into `checks.env`, and `checks.sh --check` runs them **repo-wide** from the `commit` skill *and* git's
+  `pre-commit` hook — so **every loop commit** would run the company's suite on personal infra. `checks.env` is
+  `source`d and fixers run via `eval`, so `TEST="npm test"` on an unknown repo is **arbitrary code execution**. The
+  rule is therefore *never execute anything out of the checkout*. **An empty `checks.env` does not work** — it
+  deadlocks org mode at its first commit (the fail-closed backstop), so org mode needs a **third declared state**:
+  deliberately unwired, coverage gates only. `codemap.py` is **verified static**, so the code map stays safe.
+  (3) **Archive-to-git stays local-only, and becomes VISIBLE** — an explicit acknowledgement key in `config.org` plus
+  a console badge whenever the private tree has a remote, so the governance caveat is a recorded fact, not a sentence.
 - **The context-budget law (D160) — CLOSED by the build (D167, owner, 2026-08-03; 9b is BUILT).** The defaults were
   derived by measuring, and measuring forced a call D160 had not foreseen: the budget is **two-tier per role**
   (hard fails `checks.sh`, advisory schedules a trim) because the package's own always-loaded templates are
@@ -563,18 +575,47 @@ Small, all found by building or driving rather than by reasoning, and none block
 
 ## Newly open from the Phase-8b build (2026-08-04 — D169)
 All found by building or driving. None blocks; the first is the one with teeth.
-- **The thread ROTATION is specified and wired but never executed `[core-ish]`.** `config.thread.rotate_at_tokens`
-  (200 000) is in the schema, the `answer` skill states the procedure, and the estimator reuses
-  `doc_budget.chars_per_token` — but rotation runs **inside `answer` at drain time**, so unlike the socket boundary
-  (a real 404) and the runner's prompt choice (asserted against the exec'd argv) **nothing mechanically proves it**.
-  It needs a real conversation to cross 200k. Until then the failure mode is silent and expensive: a thread that
-  never rotates simply costs more every question, and resume re-sends the history, so it degrades gradually rather
-  than breaking. A cheap partial: a unit test over the estimate-and-decide half, leaving only the write unproven.
-- **Answer QUALITY is unmeasured — no real project has been asked a real question `[expected]`.** The `answer`
-  skill's whole value is that it replies from *this project's* record and says so when the record does not say. The
-  build proves the message reaches it and the reply renders; it proves nothing about whether the answer is right or
-  whether "the record does not decide this" fires when it should. This is the same shape as the standing 9a note
-  (no real project has forecast a real change) and wants the same fix: a real drive, not a test.
+- **~~The thread ROTATION is specified and wired but never executed~~ — CLOSED 2026-08-04 (D170): it EXECUTED.**
+  Proven by shrinking `config.thread.rotate_at_tokens` in the fixture and driving a real question, which exercises
+  the **whole** path (estimate → decide → distil → write → clear → increment), not a part of it. Asserted
+  mechanically: `session_id` `None`, `rotations: 1`, `turns: 0`, `thread/handoff.md` written. **The "cheap partial"
+  proposed here was based on a false premise and is recorded because the check is the lesson:** there is **no
+  estimate-and-decide half in code** to unit-test — `rotate_at_tokens` appears only in `answer/SKILL.md` prose and
+  the two schema docs, and `bus.py` merely *displays* `rotations`. The whole rotation is model behaviour with **no
+  seam**. Driving it was both cheaper and total.
+- **~~Answer QUALITY is unmeasured~~ — CLOSED 2026-08-04 (D170): measured on the shipped path, and good.** Four
+  uncontaminated runs (the real `flock … claude -p "$RUNNER_ANSWER_PROMPT"` argv, so the answering context is cold
+  and the away-path is exercised at the same time). Both designed traps passed — a debug report that **exists** but
+  holds only the placeholder `root cause` drew "the record does not say" plus an enumeration of where it looked, and
+  an undecided TTL drew "undecided, deliberately" citing the forecast branch. It also flagged a **fabrication it did
+  not author** in existing thread history, and found two unplanted record inconsistencies without repairing either.
+  D170 owns the detail.
+
+## Newly open from the Phase-8b DRIVE (2026-08-04 — D170)
+Three defects, all found by driving what a green suite had already passed. The first is a shipped correctness bug.
+- **`answer`'s own prescribed step order can DOUBLE-ANSWER `[bug — one-line fix, unapplied]`.** `SKILL.md` runs
+  **4 append → 5 rotate → 6 `drain.py record`**, but **rotation clears `turns`**, and `turns` carry the idempotency
+  anchor step 2 relies on. A crash in that window leaves the message **unrecorded** *and* the anchor **gone**, so the
+  retry answers it twice — the exact outcome the anchor exists to prevent. The drive's answerer spotted it unprompted
+  and inverted the order. **Fix: swap steps 5 and 6** (record, then rotate). Captured rather than patched because
+  capture is not build.
+- **Rotation LAUNDERS a fabrication into durable memory `[design question, not a patch]`.** The handoff restated a
+  **fabricated** answer as sourced fact, dropping the caveat two earlier runs had raised — and rotation had just
+  cleared the turns holding the evidence. The next session starts primed with the invention as established. The
+  general shape: **a distillation inherits the authority of the record while shedding the doubt attached to its
+  claims.** So the question is what a distillation *owes to claims it can no longer verify* — carry provenance and
+  confidence forward, refuse to summarise an unverifiable claim, or re-check on rotation. Needs a call before a fix.
+- **A rotated thread renders as a COLD START `[small]`.** The Conversation panel shows **"nothing asked yet"** after
+  rotation — byte-identical to a project never asked anything — so the conversation looks **erased** and nothing
+  hints a handoff exists. Not a data problem: `/api/state` already serves `{"active": false, "rotations": 1,
+  "turns": []}`. Render-layer only, and unreachable before D170 because it exists **only after a rotation**.
+- **The away path computes an answer, then discards it, then pays to recompute it `[core-ish]`.** MEASURED on CLI
+  2.1.220: an untrusted workspace does **not** stall — `claude -p` proceeds **read-only**, composes a complete
+  correct answer, and silently fails to persist (`Ignoring 10 permissions.allow entries … not been trusted`). The
+  runner's stdout is `DEVNULL`, so it scores no-progress, backs off, **re-spawns and burns another full answer**, and
+  hard-stops with an alert the human cannot act on. **The write is attempted only after the expensive work.** A
+  cheap **writability probe before answering** turns a silent, repeated loss into one specific alert naming the
+  one-time fix the platform itself prints. (`/start` documents the trust precondition; nothing *detects* it.)
 - **A dead-lettered question renders as "waiting" until the bus GCs it `[small]`.** The Conversation panel joins
   unanswered inbox questions as pending turns; a question that was drained and dead-lettered keeps showing as
   waiting until the watermark collects it. That is arguably honest — the human *is* still waiting, and no answer is

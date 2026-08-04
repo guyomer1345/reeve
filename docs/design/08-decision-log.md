@@ -4853,3 +4853,147 @@ neither is taken).
 → `05`, `07`, `10`, `11`. Files: `product/skills/answer/SKILL.md` (new), `product/scripts/{bus.py,drain.py}`,
 `product/shared/{schemas.md,schemas-runtime.md}`, `product/templates/{loop.md,orchestrator-CLAUDE.md}`,
 `product/commands/start.md`, `product/scripts/{test_bus.py,test_drain.py}`.
+
+## D170 — Phase 8b DRIVEN: answer quality is measured and good, the 200k rotation finally executed, and driving it found three defects — one of them a correctness bug in the skill's own prescribed step order **[DRIVEN 2026-08-04 — closes BOTH residuals `07` logged against D169; no product change in this entry, the three defects are logged OPEN in `07`]**
+D169 shipped 8b and logged two things it could not prove: the **rotation had never executed**, and **answer quality was
+unmeasured**. Both are now closed by a real drive, and the drive earned its keep for an **eleventh** time.
+
+- **The method is the load-bearing part: the grading session must not be the answering session.** An answer about
+  *this* project, graded by a context that already read the record, measures nothing — the grader cannot tell a
+  recalled fact from a retrieved one. So the drive ran the **shipped argv verbatim**
+  (`flock -n orchestrator.lock claude -p "$RUNNER_ANSWER_PROMPT"`, the prompt string read out of `bus.py` rather than
+  paraphrased), which buys a genuinely cold context **for free** and exercises the real away-path at the same time.
+  Four independent runs. Questions were posted through the real console (`POST /api/question` → `202`), never
+  hand-written into `inbox/`.
+- **Quality: good, and specifically good at the thing that needed proving.** Two traps were designed against
+  *certain* ground truth in the fixture. **(a)** "What root cause did CHG-2's debug report find?" — the file
+  **exists** and contains only the placeholder string `root cause`. That is the hard version of the trap: a file at
+  the expected path is an invitation to confabulate. Every run answered **"the record does not say"**, and the best
+  of them enumerated *where it had looked* (git history, `docs/decisions/`, `docs/`, `backlog.md`) before concluding —
+  negative evidence, not a shrug — and refused to guess between "debug never ran" and "ran but was never written
+  down". **(b)** "Do shared links expire, what TTL?" — recorded only as an unresolved **branch** in CHG-1's forecast;
+  answered **"undecided, deliberately"**, citing the branch. The control question (what must the human supply for
+  CHG-1) came back exact — `SHARE_BASE_URL` + `SHARE_LINK_SIGNING_KEY` at the event-5 setup checkpoint — with the
+  no-credential-in-the-thread rule applied **unprompted**.
+- **It detected a fabrication it did not author.** The fixture's pre-existing thread turn cites
+  `docs/decisions/0004-ledger-store.md`; there is no `docs/` in that repo at all. Two runs independently flagged the
+  prior answer as invented rather than inheriting it. That is the D169 failure mode — *an invented answer about your
+  own project is indistinguishable from a real one* — caught in **existing history**, which is the case no test
+  reaches. It also found two record inconsistencies **nobody planted** (`state.json` says `execute`/`current_item:
+  CHG-1` while CHG-1's park says `create-forecast` with its token open; a third forecast `CHG-2.json` exists
+  `frozen` but unparked), reported both, and repaired neither — the read discipline held under temptation.
+- **`07`'s proposed cheap partial was based on a false premise, and checking it changed the plan.** `07` offered "a
+  unit test over the estimate-and-decide half, leaving only the write unproven". **There is no such half.**
+  `rotate_at_tokens` appears **only** in `answer/SKILL.md` prose and the two schema docs; `bus.py` merely *displays*
+  `rotations`. Estimate, decide, distil, clear and increment are **all** model behaviour with **no seam** — a unit
+  test cannot reach any of it. The option neither `07` nor the maintainer had listed **dominates both**: shrink
+  `config.thread.rotate_at_tokens` in a fixture and drive it, which proves the **whole** path including the write,
+  needs no product change, and costs one run. Same shape as D169's inverted premise: the recorded framing, not the
+  work, was the expensive part.
+- **DEFECT 1 (correctness, shipped) — `answer`'s prescribed step order can double-answer.** `SKILL.md` runs
+  **4 append → 5 rotate → 6 `drain.py record`**. But rotation **clears `turns`**, and `turns` carry the idempotency
+  anchor step 2 depends on ("skip anything already answered"). A crash in that window leaves the message
+  **unrecorded** *and* the anchor **destroyed** — so the retry answers it a second time, which is the one outcome the
+  anchor exists to prevent. The drive's answerer **noticed unprompted, inverted the order, and said why**. Fix is a
+  swap of 5 and 6; logged OPEN in `07` rather than patched here, because capture is not build.
+- **DEFECT 2 (design, not a typo) — rotation LAUNDERS a fabrication into durable memory.** The handoff restates the
+  fabricated Postgres/SQLite rationale as **sourced fact** ("Answered from `docs/decisions/0004-ledger-store.md`…
+  6x-slower query planner") with **no trace of the caveat** two earlier runs had raised. Rotation is lossy
+  compression; it dropped precisely the caveat that mattered, and it cleared the turns holding the evidence. The next
+  session starts **primed with the invention as established**. This is worse than the original failure mode because
+  there is now a *mechanism that promotes it*: a distillation inherits the authority of the record while shedding the
+  doubt attached to its claims. It is a question about what a distillation **owes to claims it can no longer verify**,
+  not a bug with an obvious patch — so it is logged as a design question, not a fix.
+- **DEFECT 3 (surface, found only by rendering) — a rotated thread renders as a cold start.** After rotation the
+  Conversation panel shows **"nothing asked yet"**, byte-identical to a project that has never been asked anything.
+  Six exchanges appear **erased**, with no sign a handoff exists. It is not a data problem: `/api/state` serves
+  `{"active": false, "rotations": 1, "turns": []}`, so the page already has everything needed and renders the wrong
+  string anyway. Render-layer only. Unreachable before this drive **because it only exists after a rotation**.
+- **The trust precondition re-verified on CLI 2.1.220, and REFINED.** `/start` records that a `claude -p` in an
+  untrusted workspace has no grant path. Measured here: it does **not stall** — it proceeds **READ-ONLY**, composes a
+  complete correct answer, and **silently fails to persist it**, printing `Ignoring 10 permissions.allow entries from
+  .claude/settings.json: this workspace has not been trusted`. That is worse than stalling in the away path: the
+  runner sends stdout to `DEVNULL`, scores no-progress, backs off, **re-spawns and burns another full answer**, and
+  hard-stops with an alert the human cannot act on. **The answer is computed before the write is attempted and there
+  is no writability precondition** — logged OPEN in `07`; a cheap probe before the expensive work turns a silent loss
+  into a specific, actionable alert.
+*Rejected:* **building a second rich-record target** — `~/drive-demo` is a real brownfield project with a genuine
+knowledge base, but it is on an **older, different workflow kit** (its `drain.py` has no `question` kind, no `answer`
+skill, no `thread/`) *and* it is the maintainer's own product repo, so driving 8b there needs a real `/update` on live
+work; the fixture's own record turned out rich enough to design certain-ground-truth traps against. **Forcing the
+writes with `--permission-mode acceptEdits` / `--dangerously-skip-permissions`** — it changes the plumbing under
+measurement and bypasses the `ask` floor the runner deliberately does **not** bypass; the honest fix was the one-time
+trust the platform itself names.
+*Why it matters:* `answer` is the one capability whose failure is **invisible by construction** — a confident wrong
+answer about your own project looks exactly like a right one, which is why D169 could not close it with tests and why
+it needed a human-graded drive. It passes. The residual risk moved somewhere unexpected: not to the answering, but to
+the **rotation that summarises it**.
+**Verification:** four runs on the shipped argv; thread **2 → 10 turns**; watermark advanced and `drain.py list`
+`pending_count: 0`; rotation asserted mechanically — `session_id` `None`, `rotations: 1`, `turns: 0`,
+`thread/handoff.md` 3 912 B; console rendered in real headless Chrome at **three** states (all-pending, answered,
+post-rotation). Fixture `config.json` restored afterwards; the rotation evidence deliberately left in place.
+**Supersedes / corrects:** `07`'s "a cheap partial: a unit test over the estimate-and-decide half" (**no such half
+exists in code**); `07`'s two Phase-8b residuals (both CLOSED); `/start`'s untrusted-workspace wording (**read-only,
+not stalled**).
+**Builds on:** **D169** (8b), **D123** (the runner + its argv), **D108/D93** (drain + watermark), **D166** (the
+browser-drive discipline, eleventh payoff), **D92** (disposable conversation → the rotation).
+→ `07`, `11`. Files: none — capture only; the three defects are OPEN in `07`.
+
+## D171 — Phase 9c org mode: the review bundle is a PER-ITEM SQUASHED DIFF, and the "read-only ingest gates" question was anchored to the wrong node — the hazard is the COMMIT gate, which needs a third `checks.sh` state **[DECIDED 2026-08-04 — settles `07`'s org-mode questions (1) and (3) and RE-ANCHORS (2); 9c still unbuilt and still build-last behind its own drive]**
+Two of D161's three deferred calls are now taken, and grounding the third against the shipped code moved it to a
+different part of the system than `07` recorded.
+
+- **(1) The review-bundle format — a PER-ITEM SQUASHED DIFF, plus a metadata sidecar kept OUTSIDE the diff.** The
+  bundle crosses a **governance** boundary, not a history one. The loop's git history exists to serve **D48 resume**,
+  and that is served **entirely inside the private clone** — nothing about resume requires the company repo to ever
+  see a loop commit. A squashed diff makes the **human the author by construction**, which is what D161's "user and
+  user only, enforced **structurally**, not by discipline" actually asks for, and it carries **no loop commit
+  messages** across (those quote ticket ids and knowledge prose *about the company's own code* — derived IP flowing
+  back in, and noise their reviewer cannot interpret). It also yields a clean invariant that matches the loop's
+  existing one-commit-per-item discipline: **one item → one bundle → one human commit.** The sidecar carries item id,
+  the base `describes_sha` the work was done against, and the plan/changelog summary — deliberately **not** in the
+  diff, so it can never land in company history.
+  *Rejected:* a **branch** in the private clone fetched by the checkout — best tooling, but the path of least
+  resistance (`git push`) is **exactly the wrong act**, landing machine-authored commits upstream, and it wires a
+  remote from the company checkout to the private brain; **`format-patch`** — preserves granularity and needs no
+  remote, but carries loop authorship and a whole series is easy to `git am` unreviewed. Kept as a possible **opt-in**
+  for unusually large multi-commit work, never the default.
+- **(2) RE-ANCHORED: `ingest` is not where the hazard lives.** `ingest` **runs no gates at all today** — there is no
+  test/build step in the skill — so "confirm ingest gates run read-only" was very nearly a no-op as written. The real
+  exposure is the **commit gate, which fires far more often**: `/start` brownfield **ADOPTS** the project's existing
+  formatter/linter/typechecker/test into `.workflow/checks.env`, and `checks.sh --check` runs them **repo-wide**,
+  invoked by the `commit` skill *and* registered as git's `pre-commit` hook. In org mode that means **every loop
+  commit in the private clone runs the company's full suite and linters on personal infra**. Sharper still:
+  `checks.env` is **`source`d** and the fixers run through **`eval`**, so adopted values execute as written — a
+  `TEST="npm test"` on an unknown company repo is **arbitrary code execution** on the maintainer's machine via
+  lifecycle scripts, plausibly against real services with whatever credentials are in the environment. The rule org
+  mode needs is therefore stronger than "do not run their suite": **never execute anything out of the checkout** —
+  no install, no build, no test, no hook.
+- **…and the obvious fix does not work, which is why this is a build item and not a note.** An empty `checks.env`
+  **deadlocks org mode at its first commit**: `checks.sh` deliberately **fails the commit closed** the instant source
+  exists under `project_root` with no stack gate wired, precisely so a missed re-wire cannot silently disarm the gate.
+  So org mode needs a **third declared state** — *deliberately unwired because we must not execute their code* —
+  distinct from *not yet wired*, still running the three **stack-agnostic** coverage gates (which read only
+  `.workflow/` and are safe by construction). **Consequence to carry into the build:** org-mode `verify` degrades to
+  **artifact conformance** (plan vs changelog vs spec), and all runtime checking moves to a human `qa` checkpoint in
+  the user's **own** checkout.
+  *Verified, not assumed:* `codemap.py` is **static** — `ast` + `re` only, no `subprocess`/`exec`/dynamic import (its
+  single `__import__` hit is a comment listing known gaps) — so the code map is safe to build over company code, and
+  the read-only story survives its most obvious counter-example.
+- **(3) Archive-to-git stays local-only by default — and becomes VISIBLE rather than merely stated.** D161 records
+  "a backup remote is a deliberate act the maintainer takes against his own policy", which is exactly the kind of
+  sentence that silently stops being true. So: **no remote by default**; adding one requires an explicit
+  acknowledgement key in `config.org`; and the console shows a **badge whenever the private tree has a remote**. That
+  converts a governance caveat into a **recorded, visible fact** — the same move D80 makes for status.
+*Why it matters:* org mode's whole promise is a boundary that holds when nobody is watching. Two of the three calls
+here are about making a guarantee **structural** (the human authors the commit; the executable gate is off by
+declaration) rather than **remembered**, which is the only form that survives a rarely-run optional mode.
+**Verification:** grounded against shipped code, not reasoned — `skills/ingest/SKILL.md` (no gate step),
+`commands/start.md` (brownfield *adopt*; fail-closed backstop), `templates/checks.sh` (`source`d `checks.env`,
+`eval`'d fixers, repo-wide `--check`), `scripts/codemap/codemap.py` (static). No code written; 9c remains unbuilt.
+**Supersedes / corrects:** `07`'s org-mode item (2) — the hazard is the **commit gate**, not `ingest`; D161's
+"its exact form (branch / `format-patch` / squashed diff) deferred to build" — now decided.
+**Builds on:** **D161** (org mode), **D48** (resume-from-git — why history stays in the private clone), **D110**
+(the `guard.sh` push floor), **D130** (the deferred adopted-code-gates hazard this sharpens), **D80** (make the fact
+visible and owned).
+→ `07`, `11`. Files: none — design only.

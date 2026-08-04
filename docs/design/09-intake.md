@@ -201,5 +201,8 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
   demo's spec edits, it fires **pre-plan**. Front-loads D97's setup *elicitation*, never its verify probe. Owner: **D159**.
 - **Org mode** — **[DESIGNED — D161, `11` Phase 9c; unbuilt]:** a third intake mode beside greenfield/brownfield for a
   company product the maintainer does not own — **org-brownfield is `ingest` minus footprint** (never edits the
-  company `CLAUDE.md`, ingest gates run read-only, `create-issue` is local-only), over a private-tree brain with
-  `project_root` = the external checkout. Owner: **D161**.
+  company `CLAUDE.md`, `create-issue` is local-only, **nothing out of the checkout is ever executed**), over a
+  private-tree brain with `project_root` = the external checkout. **Note (D171, 2026-08-04):** the execution hazard
+  is **not** in `ingest`, which runs no gates at all — it is the **commit gate**, where the adopted `checks.env`
+  would run the company's own suite on every loop commit. Owner: **D161**; the re-anchoring and the required third
+  `checks.sh` state: **D171**.

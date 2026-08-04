@@ -787,6 +787,13 @@ biggest remaining feature — it is the only open item that **harms a user today
   "chat" and the reason is the finding that inverted the premise:** the *request* arm was already built end-to-end
   (intake → ticket → "my requests"), so the whole substance of 8b was the **question** arm, which had no
   capability at all. The browser drive caught two shell defects a green suite missed — see D169.
+  **DRIVEN 2026-08-04 (D170): both residuals D169 logged are CLOSED.** Answer quality is **measured and good** on the
+  shipped `claude -p` argv (both designed traps passed; it also flagged a fabrication it did not author), and the
+  **200k rotation EXECUTED** — proven by shrinking the threshold and driving it, after the check that `07`'s proposed
+  unit test had **no code seam to test**. The drive found three new defects, all OPEN in `07`: `answer`'s prescribed
+  **step order can double-answer** (rotate clears the idempotency anchor before record — a one-line swap), **rotation
+  launders a fabrication** into the durable handoff (a design question, not a patch), and a **rotated thread renders
+  as a cold start**.
 
 *Everything else stays `[stageable]`/`[later]` and is picked off the by-space list above, not this sequence — the
 living code-map observed layer, the D84 reclassification, the proportional-rigor gate, build-once-per-wave,
@@ -868,7 +875,12 @@ that is the through-line and the reason none is large. Capture is design-only; t
   **human-only** git boundary (the loop writes no company-visible surface — not `main`, not the tracker, not the
   hooks). Coworker drift re-aligns via a `describes_sha` stamp read off `FETCH_HEAD` — **org-align is existing `align`
   with a different anchor**, not new machinery. Mostly **brownfield-minus-footprint** (reuses `ingest`/codemap/reconcile)
-  plus one net-new **review-bundle producer** (form deferred to build). **Zero prior multi-repo/multi-committer
+  plus one net-new **review-bundle producer** — its form **decided 2026-08-04 (D171): a per-item squashed diff** with
+  a metadata sidecar outside the diff, so the human authors the commit by construction and no loop commit message
+  crosses (branch rejected; `format-patch` an opt-in, never the default). D171 also **re-anchors** the read-only
+  question from `ingest` (which runs no gates) to the **commit gate**, where `checks.sh` would run the company's
+  adopted suite on every loop commit — needing a **third declared `checks.sh` state**, since an empty `checks.env`
+  fails the commit closed. **Zero prior multi-repo/multi-committer
   evidence**, so it is gated on its own drive (a real public repo at a pinned SHA + its own later commits replayed as
   coworker drift → assert pristine/no-push/drift-detected/no-leak). Full call + the org-brownfield delta list + the
   governance caveat: **D161** (owner). **[stageable — DESIGNED; unbuilt; build last]**
