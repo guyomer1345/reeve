@@ -99,6 +99,42 @@ if is_git commit; then
   [ "$vrc" -eq 0 ] || block "${vmsg:-verify-before-commit could not run (python3?). Failing closed.}"
 fi
 
+# --- org mode: giving the private tree a push path is an ACKNOWLEDGED act, or none ---
+# Org mode's tree concentrates DERIVED IP about a product the operator does not own. Zero
+# footprint on their repo is not the same as compliance with their data policy, so the
+# default is no remote at all, and adding one is a deliberate recorded choice rather than a
+# backup preference. This gates the ACT; the console badges the STATE for as long as a push
+# path exists, so a remote added out of band still shows.
+#
+# Fail-CLOSED on the read, like the push floor below: if the config cannot be read, `org`
+# reads absent and this gate simply does not apply -- which is correct, because a project
+# that is not in org mode must never be blocked from managing its own remotes.
+if is_git remote; then
+  org_state="$(python3 -c '
+import json
+try:
+    c = json.load(open(".workflow/config.json"))
+    o = c.get("org")
+except Exception:
+    raise SystemExit(0)
+if not isinstance(o, dict):
+    raise SystemExit(0)
+print("org")
+print("ack" if o.get("archive_remote_ack") else "")
+' 2>/dev/null || true)"
+  if [ "$(printf '%s' "$org_state" | sed -n 1p)" = "org" ] \
+     && [ -z "$(printf '%s' "$org_state" | sed -n 2p)" ]; then
+    case "$hay" in
+      *"remote add"*|*"remote set-url"*|*"remote rename"*)
+        block "org mode: this private tree holds derived IP about a product you do not own, so it has no push path by default.
+  Giving it one is a governance decision, not a backup setting. Record it first — set
+  \`org.archive_remote_ack\` in .workflow/config.json to the reason — and the console will
+  show a standing badge naming the remote for as long as it exists."
+        ;;
+    esac
+  fi
+fi
+
 # --- push floor: never move a protected branch, never push a secret ---
 if is_git push; then
   # The refspec cannot be read out of a raw JSON payload — refuse rather than guess.

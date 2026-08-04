@@ -134,3 +134,56 @@ def test_only_real_json_true_lowers_the_floor(tmp_path, truthy):
     rc, _ = _run(root, "git push origin main",
                  config={"guard": {"allow_protected_push": truthy}})
     assert rc == BLOCKED
+
+
+# --- org mode: a push path for the private tree is an acknowledged act, or none ------
+# The tree holds derived IP about a product the operator does not own, so "no remote" is
+# the default and adding one is a governance decision. The guard gates the ACT; the console
+# badges the STATE, so a remote added out of band is still visible.
+
+ORG = {"project_root": ".", "org": {"checkout": "/home/dev/work/acme"}}
+ORG_ACK = {"project_root": ".",
+           "org": {"checkout": "/home/dev/work/acme",
+                   "archive_remote_ack": "personal offsite backup, cleared 2026-08-04"}}
+
+
+@pytest.mark.parametrize("cmd", [
+    "git remote add archive git@example.com:me/brain.git",
+    "git remote set-url archive git@example.com:me/brain.git",
+    "git remote rename origin archive",
+])
+def test_org_mode_blocks_giving_the_private_tree_a_push_path(tmp_path, cmd):
+    root = _repo(tmp_path)
+    rc, err = _run(root, cmd, config=ORG)
+    assert rc == BLOCKED
+    assert "archive_remote_ack" in err
+
+
+def test_the_acknowledgement_key_permits_it(tmp_path):
+    root = _repo(tmp_path)
+    rc, _ = _run(root, "git remote add archive git@example.com:me/brain.git", config=ORG_ACK)
+    assert rc == ALLOWED
+
+
+def test_reading_remotes_is_never_blocked(tmp_path):
+    # `git remote -v` is how the badge itself reads the state; gating a read would be
+    # both useless and self-defeating.
+    root = _repo(tmp_path)
+    rc, _ = _run(root, "git remote -v", config=ORG)
+    assert rc == ALLOWED
+
+
+def test_outside_org_mode_remotes_are_the_projects_own_business(tmp_path):
+    """The gate must not fire on an ordinary project — it owns its repo and its remotes."""
+    root = _repo(tmp_path)
+    rc, _ = _run(root, "git remote add origin git@example.com:me/mine.git", config={})
+    assert rc == ALLOWED
+
+
+def test_a_malformed_config_does_not_invent_an_org_gate(tmp_path):
+    # Fails OPEN here, unlike the push floor, and deliberately: a project that is NOT in org
+    # mode must never be blocked from managing its own remotes by an unreadable config.
+    root = _repo(tmp_path)
+    rc, _ = _run(root, "git remote add origin git@example.com:me/mine.git",
+                 raw_config="{not json")
+    assert rc == ALLOWED

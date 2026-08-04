@@ -23,7 +23,8 @@ them is the trap:
 - **Not every commit.** The per-commit teeth are the mechanical gates (`checks.sh --check` + the commit hook).
 
 ## Inputs
-- The **last-scan anchor** (`.workflow/align/anchor.json`: `base_sha`, the carried findings register, and
+- The **last-scan anchor** (`.workflow/align/anchor.json`: `base_sha`, `describes_sha` (org mode only — see
+  *Org mode* below), the carried findings register, and
   `cleared_demo_items[]` — item ids the approved-demo lens has already read and found clean). The cleared set is
   there because the register dedups **findings**, and a clean read produces none: without it, every item that passes
   is re-read on every scan forever, which is a budget leak in the one pass that is budget-bounded.
@@ -119,9 +120,34 @@ them is the trap:
 - **Detection, not authority.** The scan proposes; it never rewrites the spec or a decision inline. A locked
   contradiction routes as a high-severity ticket; the loop/maintainer resolves it.
 
+## Org mode — a second anchor, not a second skill
+In org mode the tree is a private clone of a product the operator does not own, so drift arrives from a
+direction the ordinary scan cannot see: **other people push to the upstream.** That is still drift, and it is
+still this skill — it needs one more anchor and one more diff base, and **nothing else**. If you find yourself
+writing new machinery here, stop: this is `align` with a different base.
+
+- **`describes_sha`** — the upstream commit the current knowledge *describes*. Stamped into `anchor.json` at the
+  end of every org-mode scan, alongside `base_sha`. The two answer different questions and neither substitutes
+  for the other: `base_sha` is "how far have **we** moved", `describes_sha` is "how far has **the product**
+  moved underneath us".
+- **Fetch read-only, then compare.** `git fetch` (never pull, never merge — the clone has no push path and must
+  gain no automatic write path either), then `git rev-list --count <describes_sha>..FETCH_HEAD`. Non-zero is
+  coworker drift.
+- **Scope is the union**, and both halves must be in it: `git diff <base_sha>..HEAD` (our own work, the ordinary
+  case) ∪ `git diff <describes_sha>..FETCH_HEAD` (theirs). A coworker's push is then just the ordinary drift
+  case with a bigger diff — already budget-capped and already honestly truncated, so it needs no new policy.
+- **A non-trivial upstream conflict is the HUMAN's, always.** If their changes and ours touch the same surface,
+  raise a `checkpoint` and stop — never an autonomous merge, never a rebase. Detection is not resolution, and
+  the human is applying the bundle into their own checkout anyway, which is where a real conflict has to be
+  settled. Recording it as a finding and moving on would be the failure mode: it reads as handled.
+- **Stamp last, and only on a completed scan.** A scan that halted or was truncated must leave `describes_sha`
+  where it was — stamping it early would silently mark unread upstream commits as read, which is the one error
+  this anchor exists to make impossible. **Absent `describes_sha`** (the first org scan) → treat the whole
+  upstream as undescribed and scope from the clone's own merge-base, rather than skipping the upstream half.
+
 ## Output
-The updated findings register + the routed tickets + the new scan anchor (`.workflow/align/anchor.json`), and a
-one-screen summary of what was scoped, found, and deferred.
+The updated findings register + the routed tickets + the new scan anchor (`.workflow/align/anchor.json`, carrying
+`describes_sha` in org mode), and a one-screen summary of what was scoped, found, and deferred.
 
 ## Route
 → `commit` (the mechanical auto-fixes + the new anchor). Each *semantic* finding leaves as a `create-issue`

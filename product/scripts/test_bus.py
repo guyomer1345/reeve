@@ -3608,5 +3608,80 @@ class ConsoleConversationRender(unittest.TestCase):
         self.assertIn("because concurrency", got["text"])
 
 
+
+# --- org mode: the archive-remote badge -------------------------------------
+class OrgArchiveRemoteBadge(Tmp):
+    """The private tree concentrates DERIVED IP about a product the operator does not
+    own, and "it has somewhere to push" is exactly the fact that stops being true
+    quietly. So it is rendered, not recorded in prose — and read from `git remote`
+    rather than from config, because the hazard is the remote that is actually there."""
+
+    def _brain(self, org=None, remotes=()):
+        w = mkworkflow(self.root)
+        cfg = {"project_root": "."}
+        if org is not None:
+            cfg["org"] = org
+        with open(os.path.join(w, "config.json"), "w") as fh:
+            json.dump(cfg, fh)
+        repo = os.path.dirname(w)
+        subprocess.run(["git", "init", "-q", "-b", "main", repo], check=True)
+        for name, url in remotes:
+            subprocess.run(["git", "-C", repo, "remote", "add", name, url], check=True)
+            if url == bus.NO_PUSH:
+                pass
+        return bus.ReadModel(bus.Paths(w))
+
+    def test_absent_org_key_renders_nothing(self):
+        # An ordinary project pays one null check and shows no badge at all.
+        rm = self._brain(org=None, remotes=[("origin", "git@example.com:me/mine.git")])
+        self.assertIsNone(rm.org())
+
+    def test_a_fetch_only_origin_is_not_an_archive_remote(self):
+        """The clone keeps `origin` so `align` has an anchor, with its push URL set to
+        `no_push`. Badging that would cry wolf on every correctly-configured brain."""
+        w = mkworkflow(self.root)
+        with open(os.path.join(w, "config.json"), "w") as fh:
+            json.dump({"project_root": ".", "org": {}}, fh)
+        repo = os.path.dirname(w)
+        subprocess.run(["git", "init", "-q", "-b", "main", repo], check=True)
+        subprocess.run(["git", "-C", repo, "remote", "add", "origin",
+                        "git@example.com:acme/product.git"], check=True)
+        subprocess.run(["git", "-C", repo, "remote", "set-url", "--push", "origin",
+                        bus.NO_PUSH], check=True)
+        self.assertEqual(bus.ReadModel(bus.Paths(w)).org()["push_remotes"], [])
+
+    def test_a_real_push_remote_is_reported_with_its_acknowledgement(self):
+        rm = self._brain(org={"archive_remote_ack": "offsite backup, cleared 2026-08-04"},
+                         remotes=[("archive", "git@example.com:me/brain.git")])
+        got = rm.org()
+        self.assertEqual(got["push_remotes"], ["archive"])
+        self.assertTrue(got["acknowledged"])
+        self.assertIn("offsite", got["ack_reason"])
+
+    def test_a_push_remote_with_no_acknowledgement_is_reported_as_such(self):
+        """Added outside the guard that requires an acknowledgement — a different fact
+        from an acknowledged one, so it must not render as the same badge."""
+        rm = self._brain(org={}, remotes=[("archive", "git@example.com:me/brain.git")])
+        got = rm.org()
+        self.assertEqual(got["push_remotes"], ["archive"])
+        self.assertFalse(got["acknowledged"])
+        self.assertIsNone(got["ack_reason"])
+
+    def test_an_unreadable_git_reports_unknown_rather_than_none(self):
+        """`none` on a failed read is the one answer that could be wrong in the direction
+        that matters, so the badge says `unknown` instead."""
+        w = mkworkflow(self.root)
+        with open(os.path.join(w, "config.json"), "w") as fh:
+            json.dump({"project_root": ".", "org": {}}, fh)
+        rm = bus.ReadModel(bus.Paths(w))
+        rm.paths.repo = os.path.join(self.root, "does-not-exist")
+        self.assertIsNone(rm.org()["push_remotes"])
+
+    def test_the_badge_rides_the_polled_snapshot(self):
+        # The console reads one synthesized document; a block absent from it cannot render.
+        rm = self._brain(org={}, remotes=[("archive", "git@example.com:me/brain.git")])
+        self.assertIn("org", rm.snapshot())
+
+
 if __name__ == "__main__":
     unittest.main()

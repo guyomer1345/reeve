@@ -82,6 +82,10 @@ MAX_BODY = 64 * 1024          # generous for a verdict; refuse anything larger
 SOCKET_TIMEOUT = 10           # seconds a worker will wait on a slow client
 DEFAULT_IDLE_TIMEOUT = 72 * 3600
 GIT_CACHE_TTL = 10            # seconds; the poll runs every few seconds
+# The push URL org mode's `/start` sets on the fetched-from origin. Git's own idiom for
+# "fetch here, never push here": every form of `git push` dies on a fatal before a network
+# is touched, while `git fetch`/`FETCH_HEAD` keep working so `align` still has its anchor.
+NO_PUSH = "no_push"
 RECENT_COMMITS = 10
 TOKEN_HEADER = "X-Bus-Token"  # a custom header: forces the CSRF-defeating preflight
 HEALTH_TIMEOUT = 3
@@ -2216,6 +2220,7 @@ class ReadModel:
     def __init__(self, paths):
         self.paths = paths
         self._git_cache = (0.0, [])
+        self._org_cache = (0.0, None)
         # Its own cache rather than the daemon's: the read-model is constructed
         # standalone in tests and by any caller that wants a snapshot, and re-reading
         # config.json on every poll to find one integer would be the wrong trade. The
@@ -2519,10 +2524,59 @@ class ReadModel:
         except OSError:
             return []
 
+    def org(self):
+        """Org mode's standing badge: does this private tree have anywhere to PUSH?
+
+        Org mode concentrates DERIVED IP about someone else's proprietary code — knowledge
+        nodes describing their architecture, decision records about their internals — on
+        personal infrastructure. "Zero footprint on their repo" is not "compliant with their
+        data policy", and the honest limit was recorded as a sentence. A sentence is exactly
+        the kind of thing that silently stops being true, so it is rendered instead.
+
+        The fetch-only `origin` a clone keeps so `align` has an anchor is NOT an archive
+        remote: its push URL is `no_push`. Anything with a real push URL is one, and it is
+        badged for as long as it exists — read from `git remote`, never from config, because
+        the hazard is the remote that is actually THERE, not the one someone declared.
+        """
+        cfg = self.config.get() or {}
+        if "org" not in cfg:
+            return None
+        age, cached = self._org_cache
+        if (time.time() - age) < GIT_CACHE_TTL and cached is not None:
+            return cached
+        # Unknown is not "none". Saying "no remote" on a failed read is the one answer that
+        # could be wrong in the direction that matters -- and the failure that actually
+        # happens is a NON-ZERO EXIT with empty stdout (a missing or non-git repo path), not
+        # an exception. Guarding only the exception left the wrong answer reachable by the
+        # ordinary route; the return code is the real signal.
+        remotes = []
+        try:
+            proc = subprocess.run(
+                ["git", "-C", self.paths.repo, "remote", "-v"],
+                capture_output=True, text=True, timeout=5)
+            if proc.returncode != 0:
+                remotes = None
+            else:
+                for line in (proc.stdout or "").splitlines():
+                    parts = line.split()
+                    if len(parts) >= 3 and parts[2] == "(push)" and parts[1] != NO_PUSH:
+                        remotes.append(parts[0])
+        except (OSError, subprocess.SubprocessError):
+            remotes = None
+        ack = (cfg.get("org") or {}).get("archive_remote_ack")
+        out = {
+            "push_remotes": sorted(set(remotes)) if remotes is not None else None,
+            "acknowledged": bool(ack),
+            "ack_reason": ack or None,
+        }
+        self._org_cache = (time.time(), out)
+        return out
+
     def snapshot(self):
         state = read_json(self.paths.state) or {}
         backlog = read_text(self.paths.backlog)
         return {
+            "org": self.org(),
             "generated_at": now_iso(),
             "state": {
                 "status": state.get("status"),
@@ -2593,6 +2647,7 @@ INDEX_HTML = """<!doctype html>
   <h1>loop console</h1>
   <span id="conn" class="pill">connecting</span>
   <span id="mode" class="pill" hidden></span>
+  <span id="org-remote" class="pill" hidden title=""></span>
 </header>
 
 <section id="pairing" hidden>
@@ -2874,6 +2929,43 @@ function setConn(text, ok) {
   const el = $("#conn");
   el.textContent = text;
   el.className = "pill" + (ok ? " ok" : " bad");
+}
+
+// Org mode's standing badge. Absent org key -> nothing renders at all, so this costs an
+// ordinary project exactly one null check.
+//
+// It is a BADGE rather than a warning banner on purpose: the state it reports is one the
+// operator may have chosen deliberately, and a modal that must be dismissed teaches people
+// to dismiss it. What it must never do is be silent — this tree holds derived IP about
+// someone else's code, and "it has somewhere to push" is the fact that stops being true
+// quietly.
+function renderOrgRemote(org) {
+  const pill = $("#org-remote");
+  if (!org) { pill.hidden = true; return; }
+  if (org.push_remotes === null) {
+    // Could not read `git remote`. Unknown is reported as unknown; claiming "none" here is
+    // the one answer that could be wrong in the direction that matters.
+    pill.textContent = "archive remote: unknown";
+    pill.className = "pill bad";
+    pill.title = "could not read `git remote` in the private tree";
+    pill.hidden = false;
+    return;
+  }
+  if (!org.push_remotes.length) { pill.hidden = true; return; }
+  const names = org.push_remotes.join(", ");
+  pill.hidden = false;
+  if (org.acknowledged) {
+    pill.textContent = "archive remote: " + names;
+    pill.className = "pill warn";
+    pill.title = "acknowledged — " + org.ack_reason;
+  } else {
+    // A push path with no acknowledgement means it was added outside the gate that requires
+    // one, so the badge says so rather than treating the two states as the same fact.
+    pill.textContent = "archive remote: " + names + " (UNACKNOWLEDGED)";
+    pill.className = "pill bad";
+    pill.title = "this private tree can push derived IP to " + names
+      + ", and org.archive_remote_ack is not set";
+  }
 }
 
 function renderState(s) {
@@ -3505,6 +3597,7 @@ async function poll() {
     const snap = await res.json();
     lastSnapshot = snap;
     renderState(snap.state || {});
+    renderOrgRemote(snap.org);
     renderCheckpoints(snap.parked || []);
     renderForecasts(snap.forecasts || []);
     renderThread(snap.thread || {});
@@ -3633,6 +3726,9 @@ h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.08em; color:var(
 .pill { font-size:.75rem; padding:.15rem .5rem; border-radius:999px; border:1px solid var(--line); color:var(--dim); }
 .pill.ok { color:var(--ok); border-color:var(--ok); }
 .pill.bad { color:var(--bad); border-color:var(--bad); }
+/* Acknowledged-but-present: a recorded choice, not a fault. Distinct from `bad` so the two
+   states never read as one — the whole point of the badge is that they are different. */
+.pill.warn { color:var(--warn, #b8860b); border-color:var(--warn, #b8860b); }
 .count { color:var(--dim); font-weight:400; }
 .empty { color:var(--dim); font-style:italic; }
 dl { display:grid; grid-template-columns:auto 1fr; gap:.25rem 1rem; margin:0; }
