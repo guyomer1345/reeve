@@ -121,15 +121,25 @@ resolves here — the name is the anchor, and the two files are one schema.*
     `~/.claude` auth. **Never `--dangerously-skip-permissions`** — that would bypass the settings `ask` floor
     (deploy/network); `guard.sh` still gates it. The resume prompt forces the boundary drain rather than
     relying on the "drive only if state.json shows an active run" guard.
-  - **Trust precondition (MEASURED):** a `claude -p` in a workspace Claude Code has not trusted **ignores
-    `settings.json`'s allowlist** and stalls, so the loop can't run its own tools. `/start` establishes it by
-    recording `projects["<abs path>"].hasTrustDialogAccepted: true` in `~/.claude.json` (the manual path for when
-    the WSL trust dialog does not render — equivalent to accepting it); the daemon **surfaces** an untrusted
-    workspace in `status` (a warning, never a spawn gate — a misread must not silently disable the runner).
+  - **Trust precondition (MEASURED) — a SPAWN GATE.** A `claude -p` in a workspace Claude Code has not
+    trusted **ignores `settings.json`'s allowlist** and then proceeds **read-only**: it composes a complete, correct
+    answer, silently fails to persist a byte of it, and **exits 0 in seconds**. It does *not* hang, so the stall
+    timeout below never engages — the launch scores no-progress and the away path burns `RUNNER_MAX_ATTEMPTS` full
+    answers before an unactionable hard-stop. So the runner **refuses to spawn** into one and fires **one** alert
+    naming the fix. `/start` establishes trust by recording `projects["<abs path>"].hasTrustDialogAccepted: true`
+    in `~/.claude.json` (the manual path for when the WSL trust dialog does not render — equivalent to accepting
+    it), so a properly-started project is trusted well before the runner could fire.
+    - **The read is exact-path and fails OPEN.** Trust does **not** inherit from a trusted parent (MEASURED), and
+      `claude -p` does **not** create a project record — so an **absent** entry is the *ordinary* untrusted case,
+      not an unknown one. Absence may only be read as untrusted while the file still proves it speaks the schema
+      (it parsed, `projects` is a dict, some entry still carries the flag); if that probe fails, the answer is
+      *unknown* and the runner spawns exactly as before. This reads an **undocumented platform-internal file**, and
+      a format change must never be the reason a human's questions stop being answered.
   - **Crash-loop + stall safety.** A relaunch that exits **without advancing the watermark** backs off (doubling) and,
     after a cap, **hard-stops and fires an away alert** — closing the notifier's deferred thrash/crash alert arm. A relaunch
-    that **hangs without draining** (an inert/untrusted `claude`) is killed after a stall timeout and scored the same
-    way, so it can't pin the runner in-flight forever. A relaunch that *drains* is doing real work and runs freely.
+    that **hangs without draining** is killed after a stall timeout and scored the same
+    way, so it can't pin the runner in-flight forever. (That timeout covers a *hung* launch only — an untrusted one
+    exits cleanly and never reaches it, which is why trust is gated up front, above.) A relaunch that *drains* is doing real work and runs freely.
   - **WSL:** the runner is the overnight mechanism, but the daemon hosting it dies with the last terminal unless
     `.wslconfig` sets `vmIdleTimeout=-1` — surfaced in `status`, never implied.
 - `remote` — opt-in remote (phone) access, read by the daemon: `{ enabled, transport: access | tailscale, port?,

@@ -687,6 +687,12 @@ class Runner(Tmp):
         self.bin = os.path.join(self.root, "bin")
         os.makedirs(self.bin, exist_ok=True)
         self._env("BUS_CLAUDE_BIN", None)  # set per test
+        # The runner refuses to spawn into a workspace Claude Code has not been trusted in
+        # (MEASURED: such a launch composes an answer it cannot persist, then exits 0). Every
+        # test below means a TRUSTED workspace unless it says otherwise — declared here, so
+        # these never read the developer's real ~/.claude.json and never depend on a temp
+        # directory happening to be absent from it.
+        self._trust(True)
 
     def tearDown(self):
         j = self.d.runner
@@ -705,6 +711,21 @@ class Runner(Tmp):
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
+
+    def _trust(self, trusted):
+        """Point the trust read at a config we own. `True`/`False` write that verdict for
+        this repo; `None` writes a structurally VALID record that simply has no entry for it
+        — the ordinary never-opened-interactively case, which is what the real platform
+        leaves behind (MEASURED: `claude -p` does not create a project record). The unrelated
+        entry keeps the schema-health probe satisfied in every case."""
+        cfgdir = os.path.join(self.root, "claudecfg")
+        os.makedirs(cfgdir, exist_ok=True)
+        projects = {"/some/other/project": {"hasTrustDialogAccepted": True}}
+        if trusted is not None:
+            projects[self.paths.repo] = {"hasTrustDialogAccepted": bool(trusted)}
+        with open(os.path.join(cfgdir, ".claude.json"), "w") as fh:
+            json.dump({"projects": projects}, fh)
+        self._env("CLAUDE_CONFIG_DIR", cfgdir)
 
     def _config(self, enabled=True, url=None):
         cfg = {"runner": {"enabled": enabled}}
@@ -927,9 +948,11 @@ class Runner(Tmp):
         self.assertEqual(self.d.runner.consecutive_noprogress, 0)
 
     def test_an_inert_launch_is_killed_by_the_stall_timeout(self):
-        """A hung launch (an untrusted `claude` that never drains) must not pin the runner
-        in-flight forever. With no watermark advance past the stall window, it is killed
-        and scored as no-progress — the same path a crash takes."""
+        """A genuinely HUNG launch must not pin the runner in-flight forever. With no
+        watermark advance past the stall window, it is killed and scored as no-progress —
+        the same path a crash takes. (This timeout was once believed to cover the untrusted
+        workspace too; it does not, and cannot — an untrusted `claude` exits 0 in seconds
+        rather than hanging, so it never reaches this branch. That is the trust gate's job.)"""
         self._config()
         self._pending()
         path = os.path.join(self.bin, "claude-hang")
@@ -947,11 +970,143 @@ class Runner(Tmp):
         self.assertIsNone(self.d.runner.launched, "inert launch was not killed")
         self.assertEqual(self.d.runner.consecutive_noprogress, 1)
 
+    # -- the trust gate --
+    def _raw_trust(self, obj):
+        """Write an arbitrary trust-record SHAPE, for the fail-open cases. `None` writes no
+        file at all."""
+        cfgdir = os.path.join(self.root, "claudecfg-raw")
+        os.makedirs(cfgdir, exist_ok=True)
+        p = os.path.join(cfgdir, ".claude.json")
+        if obj is None:
+            if os.path.exists(p):
+                os.remove(p)
+        else:
+            with open(p, "w") as fh:
+                json.dump(obj, fh)
+        self._env("CLAUDE_CONFIG_DIR", cfgdir)
+
+    def test_an_untrusted_workspace_refuses_to_spawn_and_alerts_once(self):
+        """MEASURED on CLI 2.1.220: `claude -p` in an untrusted workspace does NOT stall. It
+        discards the settings allowlist, proceeds read-only, composes a complete answer it
+        cannot persist, and exits 0 within seconds. Nothing downstream can tell that apart
+        from a crash, so the away path used to burn RUNNER_MAX_ATTEMPTS full answers before a
+        hard-stop whose alert named no fix. Refuse the spawn instead — and say it ONCE."""
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url)
+        self._pending("question")
+        self._stub("drain")
+        self._trust(False)
+        for _ in range(3):
+            self.d.runner.tick(self.d)
+            self.assertIsNone(self.d.runner.launched,
+                              "the runner spawned into an untrusted workspace")
+        alerts = [r for r in sink.received if r["body"].get("event") == "loop-stall"]
+        self.assertEqual(len(alerts), 1, "the untrusted alert is ONE event, not a stream")
+        # …and this is NOT the crash-loop path: nothing was burned and nothing latched.
+        self.assertEqual(self.d.runner.consecutive_noprogress, 0)
+        self.assertFalse(self.d.runner.hard_stopped)
+
+    def test_the_untrusted_alert_names_the_fix_the_human_can_actually_perform(self):
+        """The payoff of this gate is the ALERT, not the skip. The old hard-stop told a human
+        the loop had stopped and nothing they could do about it; this one must name both
+        remedies the platform itself prints — including the manual flag, because the trust
+        dialog does not render in some WSL terminals."""
+        sink = _Sink()
+        self.addCleanup(sink.stop)
+        self._config(url=sink.url)
+        self._pending("question")
+        self._trust(False)
+        self.d.runner.tick(self.d)
+        text = [r for r in sink.received
+                if r["body"].get("event") == "loop-stall"][0]["body"]["text"]
+        self.assertIn(self.paths.repo, text, "the alert must name WHICH directory")
+        self.assertIn("accept the trust dialog", text)
+        self.assertIn("hasTrustDialogAccepted", text, "no manual fix for a WSL terminal")
+        self.assertIn(bus.claude_config_path(), text, "the manual fix names no file to edit")
+
+    def test_an_ABSENT_trust_record_counts_as_untrusted(self):
+        """The crux. MEASURED: `claude -p` does NOT create a project record, so a project
+        never opened interactively has no entry at all — absence is the ORDINARY instance of
+        this bug, not an exotic one. Reading it as "unknown" is exactly what left the older
+        warning unable to fire on the common case."""
+        self._config()
+        self._pending("question")
+        self._stub("drain")
+        self._trust(None)                       # structurally valid, no entry for this repo
+        self.assertIs(bus.workspace_trusted(self.paths.repo), False)
+        self.d.runner.tick(self.d)
+        self.assertIsNone(self.d.runner.launched)
+
+    def test_an_unreadable_trust_record_FAILS_OPEN_and_still_spawns(self):
+        """This reads an undocumented platform-internal file. If it is missing or is not
+        JSON at all, the answer is "unknown" and the runner must behave exactly as it did
+        before the gate existed — a format change must never be the reason a human's
+        questions stop being answered."""
+        self._config()
+        self._pending("question")
+        self._stub("drain")
+        for shape in (None, [], {"projects": "not-a-dict"}):
+            self._raw_trust(shape)
+            self.assertIsNone(bus.workspace_trusted(self.paths.repo),
+                              "%r should read as UNKNOWN, not untrusted" % (shape,))
+        self.d.runner.tick(self.d)
+        self.assertIsNotNone(self.d.runner.launched, "fail-open did not spawn")
+
+    def test_a_RESHAPED_trust_record_FAILS_OPEN_and_still_spawns(self):
+        """The subtle half of failing open. A `projects` map that parsed fine but in which
+        NOTHING carries `hasTrustDialogAccepted` means the platform renamed the flag — and
+        then "this repo has no such key" proves nothing. Absence may only be read as
+        untrusted while the file still demonstrably speaks the schema."""
+        self._config()
+        self._pending("question")
+        self._stub("drain")
+        self._raw_trust({"projects": {"/a": {"someOtherFlagEntirely": True},
+                                      "/b": {"allowedTools": []}}})
+        self.assertIsNone(bus.workspace_trusted(self.paths.repo))
+        self.d.runner.tick(self.d)
+        self.assertIsNotNone(self.d.runner.launched, "a renamed flag stopped the runner")
+
+    def test_granting_trust_re_arms_the_runner_with_no_restart(self):
+        """The gate is a live read, not a latch. The moment the human does the thing the
+        alert asked for, the runner must resume on its own — otherwise the remedy would
+        require a daemon restart nobody was told about."""
+        self._config()
+        self._pending("verdict")
+        self._stub("drain")
+        self._trust(False)
+        self.d.runner.tick(self.d)
+        self.assertIsNone(self.d.runner.launched)
+        self.assertTrue(self.d.runner.trust_alerted)
+        self._trust(True)                                  # the human accepts the dialog
+        self.d.runner.tick(self.d)
+        self.assertIsNotNone(self.d.runner.launched, "granting trust did not re-arm")
+        self.assertFalse(self.d.runner.trust_alerted, "the alert did not re-arm for later")
+
+    def test_an_untrusted_runner_does_not_pin_the_daemon_open(self):
+        """An untrusted workspace is not something to WAIT on — no amount of time fixes it,
+        and the human action that does starts a session which ensures the daemon anyway.
+        Voting busy forever would pin a daemon on a condition that never resolves itself."""
+        self._config()
+        self._pending("verdict")
+        self._trust(False)
+        self.assertTrue(self.d.runner.is_idle(self.d))
+        self._trust(True)
+        self.assertFalse(self.d.runner.is_idle(self.d), "a trusted resume must hold it open")
+
+    def test_trust_is_exact_path_with_no_parent_inheritance(self):
+        """MEASURED: a fresh directory under a `true`-recorded PARENT is still untrusted, so
+        there is no ancestor chain to walk. Guarded because the tempting "inherit from a
+        trusted parent" reading would silently un-gate the common case."""
+        parent = os.path.dirname(self.paths.repo.rstrip("/"))
+        self._raw_trust({"projects": {parent: {"hasTrustDialogAccepted": True}}})
+        self.assertIs(bus.workspace_trusted(self.paths.repo), False)
+
     def test_readiness_shape(self):
         self._config()
         r = self.d.runner.readiness(self.d)
         for k in ("enabled", "in_flight", "consecutive_noprogress", "hard_stopped", "wsl",
-                  "workspace_trusted"):
+                  "repo", "workspace_trusted"):
             self.assertIn(k, r)
         self.assertTrue(r["enabled"])
 

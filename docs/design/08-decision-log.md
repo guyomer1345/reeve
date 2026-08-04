@@ -5085,3 +5085,61 @@ model this law joins), **D166** (the browser-drive discipline, twelfth payoff), 
 → `05`, `07`, `10`, `11`. Files: `product/skills/answer/SKILL.md`, `product/shared/memory-model.md`,
 `product/shared/schemas.md`, `product/scripts/bus.py`, `product/scripts/test_answer_skill.py` (new),
 `product/scripts/test_bus.py`.
+
+## D173 — the away path refuses to spawn into a workspace it cannot save its work in, and the trust read that decides it is exact-path, absence-aware, and fails open **[BUILT 2026-08-04 — closes `07`'s away-path item; REVERSES the D123 residual that declined this gate]**
+**The call:** the runner **blocks the spawn** when the workspace reads untrusted, and fires **one** away alert naming
+the exact fix the platform itself prints — including the manual flag, because the trust dialog does not render in
+some WSL terminals. It is a live read, not a latch: granting trust re-arms the runner with no restart.
+**Why this reverses D123's residual (b).** That call — "a *warning* in `status`, not a spawn-block … the
+stall-timeout is the real backstop" — was sound reasoning on a **false premise**, and the premise was checked before
+building rather than after. **MEASURED on CLI 2.1.220:** an untrusted `claude -p` does **not** hang. It discards the
+allowlist (`Ignoring N permissions.allow entries … has not been trusted`), proceeds **read-only**, composes a
+complete correct answer, fails to persist a byte, and **exits 0 in seconds**. `RUNNER_STALL_TIMEOUT` only reaps a
+launch still *running*, so it is never reached: the launch scores no-progress and the away path burns
+`RUNNER_MAX_ATTEMPTS` **full answers** before an unactionable hard-stop. **Blocking cannot lose work that survives
+today — that path already ends stopped.** It only stops sooner, for free, and says something the human can act on.
+**Two recorded framings were wrong, and measurement caught both before any code.**
+- **D172 said the signal was `hasTrustDialogAccepted: false` ("12 of 26 tracked projects").** The count was real but
+  it is **not the signal**. `claude -p` does **not create** a project record (measured: two untrusted runs, both
+  directories still absent afterwards), so the *ordinary* untrusted case — never opened interactively — has **no
+  entry at all**. The predicate is **not `True`**. This also means the `status` and `/start` warnings that already
+  shipped, both keyed on `is False`, **could not fire on the common instance of the bug they warned about**.
+- **`07` feared trust might inherit from a trusted parent** (a false negative would silently stop answering). It
+  does not: a fresh directory under a `true`-recorded parent is **still untrusted** (measured), so trust is
+  **exact-path** and there is no ancestor chain to walk. `realpath` is consulted only for a *trusting* answer,
+  because erring toward trusted is the fail-open direction.
+**Fail-open lives on the READ, not in the absence of a gate.** This parses an **undocumented platform-internal
+file**, so absence may be read as untrusted only while a **schema-health probe** proves the file still speaks the
+format (it parsed, `projects` is a dict, some entry still carries the flag). Unreadable, renamed or reshaped ⇒
+**unknown** ⇒ spawn exactly as before. A format change must never be why a human's questions stop being answered.
+*Rejected:* **keeping it warning-only** — the warning could not fire on the common case, and the burn continues;
+**spawn-once-then-stop** — still pays a full answer to learn something a file read already knows, and the cost it
+saves is the fifth burn, not the first; **`is False` only** — the narrowest predicate, and measurably blind to the
+ordinary case; **inheriting trust from a trusted ancestor** — measured not to be how the platform behaves, and it
+would have silently un-gated the very case this exists for; **hard-stopping** rather than declining — a hard-stop
+would need a restart after the human does what the alert asked, and the whole point is that it self-heals.
+*Why it matters:* `/start` already writes the trust flag, so a properly-started project is trusted long before the
+runner could fire — this gate is for the projects that *aren't* (started before that step, a failed write, a moved
+repo path), and those are exactly the ones nobody is watching. It also makes an **untrusted daemon go idle** rather
+than pin itself open on a condition no amount of waiting resolves. **Fourth phase running** in which a recorded
+framing, not the work, was the expensive part (D169's inverted premise, D170's non-existent code seam, D172's
+writability probe that cannot fire — and now D172's own corrected remedy, half right).
+**Verification:** **801 tests** green (793 → 801: +8 covering no-spawn/alert-once, the actionable alert text, absence
+as untrusted, exact-path-no-inheritance, both fail-open arms, re-arm-on-trust, and the idle vote), 5 meta-gates
+green. The gate is **mutation-tested** three ways — disabling it, restoring the old absent⇒unknown predicate, and
+deleting the schema-health probe each fail exactly the tests that own them. **DRIVEN** against a genuinely untrusted
+workspace with the **real** `claude` on `PATH` (no stub — a failed gate would have burned a real answer) and the
+**real** `~/.claude.json`: no `flock -n claude` process spawned, exactly one away alert off a real loopback webhook,
+the question still queued. The drive also caught a **render defect the unit tests could not** — `status` printed the
+placeholder `projects["<this repo>"]`, unactionable precisely where a human reads it; the repo path now rides in
+`readiness()` so the surface names the exact key. (A first drive at 12s proved nothing and was fixed, not believed:
+the janitor ticks at 30s, so the runner had not run.)
+**Supersedes / corrects:** **D123 residual (b)** (the gate is now built, and its stated backstop was inert);
+**D172's remedy** (right file, wrong predicate — `not True`, not `is False`); `01`, `11` and `schemas-runtime.md`
+(all three said an untrusted `claude` *stalls*; it exits 0); `07`'s parent-inheritance worry (measured unfounded).
+**Builds on:** **D172** (which named the file to read), **D123** (the runner this gates), **D94** (the daemon
+hosting it), **D101** (the away-alert taxonomy this reuses), **D80** (one owner — the trust read and the alert
+share `claude_config_path()`), **D166** (the render discipline, thirteenth payoff — and again it was the state we
+*created*, an untrusted workspace, that showed the defect).
+→ `01`, `07`, `11`. Files: `product/scripts/bus.py`, `product/scripts/test_bus.py`,
+`product/shared/schemas-runtime.md`.

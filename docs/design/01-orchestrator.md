@@ -83,8 +83,8 @@ agents hitting build tools cause lock contention).
       **separate answer-only prompt** and a batch with one drivable message keeps the resume prompt (D169) — and
       guards against a crash-storm: a
       relaunch that doesn't advance the watermark backs off → hard-stops → **fires the away alert** (closing D120's
-      deferred thrash arm), and one that *hangs* (an untrusted `claude` ignores the allowlist and stalls — measured) is
-      killed by a stall timeout. The launched loop cold-starts and **drains** (D117) to apply the durable verdict —
+      deferred thrash arm), and one that *hangs* is killed by a stall timeout. An **untrusted workspace is gated up
+      front** (D173) rather than left to that timeout: it does not hang — it answers, cannot persist, and exits 0. The launched loop cold-starts and **drains** (D117) to apply the durable verdict —
       driven end-to-end on a real model.
 
 ## The macro-loop **[DECIDED — spine in `10`; driver above]**

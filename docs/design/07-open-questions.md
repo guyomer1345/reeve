@@ -147,8 +147,11 @@ Deliberately deferred — known unknowns, to close during build or later.
   Driven end-to-end on a real model: the runner-spawned `claude` drains a durable verdict and advances the watermark.
   *Residuals now tracked here:* (a) the **bare-`claude` bypass** — a human who enables the runner but starts bare
   `claude` is invisible to it (D109-consistent operator responsibility, documented not fenced); (b) an **up-front
-  trust gate** was deliberately NOT built — an untrusted workspace is a *warning* in `status`, not a spawn-block, so
-  a misread can't silently disable the runner (the stall-timeout is the real backstop); (c) a possible **`/start`-time
+  trust gate** was deliberately NOT built — **REVERSED and BUILT (D173)**: that call rested on "the stall-timeout is
+  the real backstop", and the backstop was **measured inert** (an untrusted `claude -p` answers and exits 0, so it
+  never reaches a timeout that only reaps a launch still *running*). The gate now blocks the spawn and alerts once;
+  the "a misread must not silently disable the runner" worry survives as the **fail-open rule on the read**, not as
+  the absence of a gate; (c) a possible **`/start`-time
   nudge** when `config.runner` is on but the current session doesn't hold the lock (it cannot retro-acquire, so a
   nudge is the ceiling) — a fast-follow, not built. Auth (subscription vs API key) confirmed: it runs on the user's
   own `~/.claude`.
@@ -593,7 +596,8 @@ All found by building or driving. None blocks; the first is the one with teeth.
 
 ## Newly open from the Phase-8b DRIVE (2026-08-04 — D170)
 Three defects, all found by driving what a green suite had already passed. The first is a shipped correctness bug.
-**All three are CLOSED 2026-08-04 (D172); the away-path item below stays OPEN with its premise corrected.**
+**All three are CLOSED 2026-08-04 (D172); the away-path item below is CLOSED 2026-08-04 (D173), after measurement
+corrected the remedy D172 had recorded for it.**
 - **~~`answer`'s own prescribed step order can DOUBLE-ANSWER~~ — CLOSED 2026-08-04 (D172).** Steps 5 and 6 are
   swapped: **append → record → rotate**. The append→record window the anchor was written for is provably
   **unchanged** (nothing was inserted into it — asserted, not assumed), and the previously-unsaid half is now
@@ -613,21 +617,19 @@ Three defects, all found by driving what a green suite had already passed. The f
   fresh from it"*. Verified in real headless Chrome against a genuinely rotated fixture, and covered by tests that
   run the **real shipped `renderThread`** under node — including the opposite direction, so a project nobody has
   asked still says "nothing asked yet".
-- **The away path computes an answer, then discards it, then pays to recompute it `[core-ish]` — STILL OPEN, and
-  the remedy named here is the WRONG ONE.** The measurement stands (re-verified: CLI still **2.1.220**): an
-  untrusted workspace does **not** stall — `claude -p` proceeds **read-only**, composes a complete correct answer,
-  and silently fails to persist (`Ignoring 10 permissions.allow entries … not been trusted`). The runner's stdout
-  is `DEVNULL`, so it scores no-progress, backs off, **re-spawns and burns another full answer**, and hard-stops
-  with an alert the human cannot act on. **But "a cheap writability probe" cannot detect this.** The daemon is
-  plain Python with no permission layer, so it writes `.workflow/` perfectly well in an untrusted workspace — the
-  probe would pass every time and never fire. What is actually detectable is a **trust-record read**:
-  `~/.claude.json` → `projects["<abs repo path>"].hasTrustDialogAccepted` (verified present on 2.1.220; 12 of 26
-  tracked projects on this machine are `false`, so the state is real and common). That makes this a different item
-  than the one written here — it reads an **undocumented platform-internal file**, so it must **fail OPEN** on any
-  unreadable/renamed/missing record or a format change would silently stop the runner answering questions at all.
-  Its own slice: it changes the runner's spawn decision, and it needs a drive against a genuinely untrusted
-  workspace to prove the no-spawn plus the actionable alert. (`/start` documents the trust precondition; nothing
-  *detects* it.)
+- **~~The away path computes an answer, then discards it, then pays to recompute it~~ — CLOSED 2026-08-04 (D173).**
+  The runner now **refuses to spawn** into an untrusted workspace and fires **one** alert naming the fix the
+  platform itself prints. Two things recorded here were wrong and were corrected by measurement before building:
+  - the **`is False` predicate was too narrow**. `claude -p` does **not create** a project record, so the ordinary
+    untrusted case — a project never opened interactively — has **no entry at all**. The "12 of 26 are `false`"
+    figure was real but was not the signal; the signal is **not `True`**, and the older `status`/`/start` warnings
+    (which keyed on `is False`) could not fire on the common case they existed to warn about.
+  - the fear of **parent-dir inheritance** was unfounded: a fresh directory under a `true`-recorded parent is still
+    untrusted (MEASURED), so trust is **exact-path** and there is no ancestor chain to walk.
+  Fail-open is preserved where it belongs — on the read, not by omitting the gate: absence counts as untrusted only
+  while a **schema-health probe** shows the file still speaks the format, and any unreadable/renamed/reshaped record
+  returns *unknown* and spawns as before. Driven against a genuinely untrusted workspace with the **real** `claude`
+  on `PATH` and the **real** `~/.claude.json`: no spawn, one actionable alert, the question left queued.
 - **~~A dead-lettered question renders as "waiting" until the bus GCs it~~ — CLOSED 2026-08-04 (D172).** It now
   renders *"dead-lettered — no answer is coming"*, dimmed and dotted rather than styled as a live question. The
   **reason** is deliberately not carried into the panel: the "my requests" surface owns it, and a second copy in a

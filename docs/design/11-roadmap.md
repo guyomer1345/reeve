@@ -555,7 +555,9 @@ and this one spawned a REAL `claude`:** the obvious liveness mechanism — a `/p
 measured **unsound** (Claude Code runs a constellation of claude-named helper processes sharing the repo cwd), forcing
 a *published* `flock` marker and the `loop.sh` launcher (real orchestrator-side scope, exactly as predicted); and the
 drive surfaced a mechanism wrong only when run — an **untrusted workspace makes `claude -p` ignore the settings
-allowlist and stall**, which no static read shows, and which drove a stall-timeout the crash-only design lacked. The
+allowlist**, which no static read shows, and which drove a stall-timeout the crash-only design lacked. (The "and
+then it stalls" half of that reading was **wrong, and corrected by D173**: it answers and exits 0, so the stall
+timeout never fires and the trust read had to become a spawn gate.) The
 resume path was **driven end-to-end on a real model** (a runner-spawned `claude` drained a durable verdict and advanced
 the watermark), not reasoned. **The Phase-5 Wave-1 drive held it a seventh time — the first *whole loop* on the
 *installed* plugin (D128):** three findings, two of them **silent safety-gate defeats** — `checks.sh --check` passes a
@@ -795,8 +797,10 @@ biggest remaining feature — it is the only open item that **harms a user today
   never destroyed before the message is consumed); **rotation laundered a fabrication** into the durable handoff,
   answered **structurally** — the handoff keeps only what is not re-derivable and carries no project prose answer,
   under a general **distillation law** stated once in `memory-model.md`; and a **rotated thread rendered as a cold
-  start**, now shown as a handoff. `07` owns what the drive left open — the away path still burns an answer it
-  cannot persist, and its recorded remedy turned out to be the wrong mechanism.
+  start**, now shown as a handoff. The last thing the drive left open — the away path burning an answer it cannot
+  persist — is **CLOSED (D173)**: the runner now refuses to spawn into an untrusted workspace and alerts once with
+  the fix, after measurement corrected the remedy twice over (the detectable signal is a trust-record read, and the
+  predicate is *not `True`*, since the platform writes no record at all for a project never opened interactively).
 
 *Everything else stays `[stageable]`/`[later]` and is picked off the by-space list above, not this sequence — the
 living code-map observed layer, the D84 reclassification, the proportional-rigor gate, build-once-per-wave,

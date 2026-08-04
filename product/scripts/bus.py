@@ -512,28 +512,59 @@ def is_wsl():
     return _IS_WSL
 
 
+def claude_config_path():
+    """Where the platform keeps its per-project trust records. One owner: the trust read
+    and the alert that names the manual fix must not disagree about the path."""
+    return os.path.join(os.path.expanduser(
+        os.environ.get("CLAUDE_CONFIG_DIR", "~")), ".claude.json")
+
+
 def workspace_trusted(repo):
     """Best-effort read of whether Claude Code trusts this workspace — True / False, or
-    None when it cannot be determined.
+    None when it genuinely cannot be determined.
 
-    MEASURED: a headless `claude -p` in an UNtrusted workspace ignores the settings.json
-    allowlist entirely ("Ignoring N permissions.allow entries … not trusted"), so a
-    relaunched loop cannot run its own tools and simply stalls. In practice `/start` is run
-    interactively and accepts the trust dialog, so a real project is trusted by the time
-    the runner could fire — but a project with `runner.enabled` set and trust never granted
-    would spawn inert sessions, and that is worth SAYING. This is a warning signal only,
-    never a spawn gate: a format change here must not silently disable the runner (the
-    stall-timeout is the real backstop for an inert launch)."""
-    cfgpath = os.path.join(os.path.expanduser(
-        os.environ.get("CLAUDE_CONFIG_DIR", "~")), ".claude.json")
-    data = read_json(cfgpath)
+    MEASURED on CLI 2.1.220: a headless `claude -p` in an UNtrusted workspace discards the
+    settings.json allowlist outright ("Ignoring N permissions.allow entries … has not been
+    trusted") and then proceeds READ-ONLY — it composes a complete answer and silently
+    fails to persist it, exiting 0 within seconds. It does NOT hang. So the runner's stall
+    timeout, which only reaps a launch that is still RUNNING, never engages: the launch is
+    scored no-progress and the away path burns RUNNER_MAX_ATTEMPTS full answers before a
+    hard-stop the human cannot act on. That measurement is why this is a spawn gate and no
+    longer only a warning — the earlier call rested on the stall timeout being the backstop,
+    and it is not one for this failure.
+
+    TRUST IS EXACT-PATH — MEASURED: a fresh directory under a `true`-recorded parent is
+    still untrusted, so there is no inheritance to walk. `realpath` is consulted as well
+    because the record keys off the cwd the platform was launched in, and only a TRUSTING
+    answer is taken from it — erring toward "trusted" is the fail-open direction.
+
+    ABSENT IS UNTRUSTED, not unknown — MEASURED: `claude -p` does not create a project
+    record, so a project never opened interactively has no entry at all. Reading absence as
+    "unknown" is precisely what left the old warning unable to fire on the ordinary case.
+
+    FAILS OPEN on the file itself. This reads an UNDOCUMENTED platform-internal file, so
+    "no record for this repo" may only be read as untrusted while the file still proves it
+    speaks the schema: it parsed, `projects` is a dict, and some entry still carries
+    `hasTrustDialogAccepted`. If that probe fails — unreadable, renamed, reshaped — the
+    answer is None and every caller must treat it as trusted, because a format change that
+    silently stopped the runner answering questions would be worse than the bug caught here.
+    """
+    data = read_json(claude_config_path())
     if not isinstance(data, dict):
         return None
     proj = data.get("projects")
-    entry = proj.get(repo) if isinstance(proj, dict) else None
-    if not isinstance(entry, dict) or "hasTrustDialogAccepted" not in entry:
+    if not isinstance(proj, dict):
         return None
-    return bool(entry["hasTrustDialogAccepted"])
+    # The schema-health probe. Absence only means "never trusted" while the file is still
+    # demonstrably a trust record; otherwise we are reading a shape that has moved under us.
+    if not any(isinstance(v, dict) and "hasTrustDialogAccepted" in v
+               for v in proj.values()):
+        return None
+    for key in (repo, os.path.realpath(repo)):
+        entry = proj.get(key)
+        if isinstance(entry, dict) and entry.get("hasTrustDialogAccepted"):
+            return True
+    return False
 
 
 def probe_mode_bits(root):
@@ -1919,6 +1950,7 @@ class RunnerJob(Job):
         self.hard_stopped = False
         self.last_launch_at = None
         self.last_error = None
+        self.trust_alerted = False    # the untrusted-workspace alert is ONE event, not a stream
 
     # -- config --
     def _enabled(self):
@@ -1962,6 +1994,41 @@ class RunnerJob(Job):
         finally:
             os.close(fd)
 
+    def _trust_blocked(self, daemon):
+        """Refuse to spawn into a workspace Claude Code has not been trusted in.
+
+        MEASURED (see `workspace_trusted`): such a launch is not inert — it reads the
+        project, composes a complete correct answer, cannot persist a byte of it, and exits
+        0. Nothing downstream can tell that apart from a crash, so it scores no-progress,
+        backs off and re-spawns, and burns RUNNER_MAX_ATTEMPTS full answers before a
+        hard-stop whose alert names no fix. Blocking cannot lose work that survives today:
+        that path already ends stopped. It only stops sooner, for free, and says the one
+        thing that helps.
+
+        Only a CONFIDENT False blocks. None — the trust record could not be read as a trust
+        record at all — spawns exactly as before, because an undocumented file changing
+        shape must never be the reason questions stop being answered."""
+        if workspace_trusted(self.paths.repo) is not False:
+            self.trust_alerted = False   # re-arm, so a later un-trust alerts again
+            return False
+        if not self.trust_alerted:
+            self.trust_alerted = True
+            text = ("Loop blocked: Claude Code has not been trusted in %s, so a relaunched "
+                    "loop would silently discard this project's permission allowlist and "
+                    "lose the work it does. No relaunch will be attempted until that is "
+                    "fixed. Fix it once, either way: run `claude` interactively in that "
+                    "directory and accept the trust dialog, or — if the dialog does not "
+                    "render, as in some WSL terminals — set "
+                    "projects[\"%s\"].hasTrustDialogAccepted: true in %s. "
+                    "The runner resumes on its own once trusted; nothing else is needed."
+                    % (self.paths.repo, self.paths.repo, claude_config_path()))
+            log("runner: workspace NOT trusted — refusing to spawn (alerting once)")
+            self.last_error = "workspace not trusted by Claude Code"
+            if self.notifier is not None:
+                self.notifier.deliver_event(daemon, "loop-stall", text,
+                                            {"workspace_trusted": False})
+        return True
+
     # -- the tick --
     def tick(self, daemon):
         if not self._enabled():
@@ -1988,6 +2055,11 @@ class RunnerJob(Job):
         # 2. Only spawn for work that would actually advance the loop.
         pending = self._applicable(daemon)
         if not pending:
+            return
+        # 2b. …and only into a workspace that can actually KEEP the result. Checked after
+        # `pending` on purpose: a workspace nobody has trusted is only worth alerting about
+        # once there is work that would really have been burned by it.
+        if self._trust_blocked(daemon):
             return
         # 3. Never alongside a live orchestrator.
         if self._orchestrator_live(daemon):
@@ -2102,6 +2174,12 @@ class RunnerJob(Job):
             return True
         if self.launched is not None and self.launched.poll() is None:
             return False
+        # An untrusted workspace is not something to WAIT on: no amount of time fixes it,
+        # and the human action that does (a `claude` session in that directory) ensures the
+        # daemon anyway. Read live rather than off `trust_alerted`, so granting trust
+        # re-arms the runner without a restart.
+        if workspace_trusted(self.paths.repo) is False:
+            return True
         return not (self._applicable(daemon) and not self._orchestrator_live(daemon))
 
     def idle_reason(self, daemon):
@@ -2118,6 +2196,11 @@ class RunnerJob(Job):
                 "consecutive_noprogress": self.consecutive_noprogress,
                 "hard_stopped": self.hard_stopped,
                 "last_error": self.last_error, "wsl": is_wsl(),
+                # The repo path rides along so `status` can name the EXACT key a human
+                # must set. Rendered once against a real untrusted workspace, the
+                # placeholder it replaced ("<this repo>") was the one unactionable thing
+                # left on the surface.
+                "repo": self.paths.repo,
                 "workspace_trusted": workspace_trusted(self.paths.repo)}
 
 
@@ -4007,8 +4090,10 @@ class Daemon:
         if self.runner._enabled() and workspace_trusted(self.paths.repo) is False:
             self.warn("runner is enabled but this workspace is not trusted by Claude Code: "
                       "a relaunched `claude` would ignore .claude/settings.json's allowlist "
-                      "and stall, so nothing would resume. Run /start (or `claude`) "
-                      "interactively here once and accept the trust dialog.")
+                      "and lose everything it does, so the runner will REFUSE to relaunch. "
+                      "Run /start (or `claude`) interactively here once and accept the trust "
+                      "dialog, or set projects[\"%s\"].hasTrustDialogAccepted: true in %s."
+                      % (self.paths.repo, claude_config_path()))
         if not self.notifier.readiness()["webhook"]:
             self.warn("no away webhook configured (config.notify.webhook.url): there "
                       "is no away alerting — a human must poll the console.")
@@ -4597,14 +4682,19 @@ def main(argv=None):
         if runner.get("enabled"):
             state = ("HARD-STOPPED — a human must intervene" if runner.get("hard_stopped")
                      else "relaunch in flight" if runner.get("in_flight")
+                     else "BLOCKED — workspace not trusted"
+                     if runner.get("workspace_trusted") is False
                      else "armed")
             print("  runner: enabled (%s)" % state)
             if runner.get("consecutive_noprogress"):
                 print("  runner NO-PROGRESS: %d relaunch(es) in a row (%s)"
                       % (runner["consecutive_noprogress"], runner.get("last_error")))
             if runner.get("workspace_trusted") is False:
-                print("  runner WARNING: workspace NOT trusted — a relaunch would ignore "
-                      "the allowlist and stall; run /start interactively once to trust it")
+                print("  runner BLOCKED: workspace NOT trusted — a relaunch would ignore "
+                      "the allowlist and lose its work, so none will be attempted. Run "
+                      "`claude` interactively here once and accept the trust dialog, or set "
+                      "projects[\"%s\"].hasTrustDialogAccepted: true in %s"
+                      % (runner.get("repo", "<this repo>"), claude_config_path()))
             if runner.get("wsl"):
                 print("  runner WARNING: WSL kills the daemon with the last terminal — "
                       "no overnight resume unless .wslconfig vmIdleTimeout=-1")
