@@ -416,10 +416,11 @@ The website+demo design decomposes into five clusters; the dependency spine is *
 
 **Phase 5 — pre-test hardening (D126). COMPLETE** (as are Phases 6 and 7 below); this paragraph is the
 historical framing of *why it opened*, not a live "next slice" pointer — it read as one for four phases after
-Phase 5 closed. **The live pointer is `### Phase 8` below** (opened D155): its release-discipline half
-(**8a**) is BUILT (D165) and **8b — the interaction-model rework — is the next slice**. **`### Phase 9`
-(D159–D163):** `9a` is BUILT and browser-driven (D163 + D166) and `9b` is BUILT (D167); **`9c` (org mode) is all
-that remains**, and it is deliberately last, behind its own drive. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
+Phase 5 closed. **`### Phase 8` (opened D155) is now COMPLETE** — both halves: **8a** BUILT (D165) and **8b —
+the interaction-model rework — BUILT + browser-driven 2026-08-04 (D169, `ad9d910`)**. **The live pointer is
+therefore `### Phase 9` below** (D159–D163): `9a` is BUILT and browser-driven (D163 + D166) and `9b` is BUILT
+(D167); **`9c` (org mode) is all that remains**, and it is deliberately last, behind its own drive — which makes
+it the only `[core]`-adjacent slice still standing. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
 the release surface D125), but "release-ready" was a *build-completeness* claim: the whole **install → `/start` →
 loop** runtime has **never been driven end-to-end once** (every Phase-3 increment was driven in isolation; the only
 prior loop run — D52 — was a pre-D66 throwaway that *simulated* dispatch). A pre-first-run audit (two independent
@@ -734,7 +735,7 @@ a park→verdict→unpark cycle and a `/rebind` on a real clone whose toolchain 
 probe did exactly what they were designed to do; the declared-secret diff did not, and its finding is open in `07`.
 One high-severity bug came out of it (the forged end marker) and one stated residual was retracted as never real.
 
-### Phase 8 — Release discipline, then the interaction-model rework **[opened D155; 8a re-designed D164 and BUILT 2026-08-03 (D165, `540d0e0`); 8b is NEXT and is all that remains]**
+### Phase 8 — Release discipline, then the interaction-model rework **[opened D155; 8a re-designed D164 and BUILT 2026-08-03 (D165, `540d0e0`); 8b BUILT + browser-driven 2026-08-04 (D169, `ad9d910`). COMPLETE]**
 Phases 1–7 are complete and the package has a **real installed consumer**. The successor is therefore not the
 biggest remaining feature — it is the only open item that **harms a user today**, and it was measured, not feared.
 - **8a — a stale install cannot learn it is stale (D151) — `[core]`. RE-DESIGNED 2026-08-03 (D164, owner);
@@ -774,23 +775,25 @@ biggest remaining feature — it is the only open item that **harms a user today
   superseded: one detector, two anchors. That also sharpens why 8a leads: the user harmed by a stale install
   **today** is the maintainer, so this is first a correctness argument about the project's own evidence — a drive
   that silently runs commits-old code and reports it as HEAD — and only second a user-facing one.
-- **8b — the interaction-model rework** (browser-primary async chat — `07`) — **`[core]`, sequenced second,
-  deliberately; NOW THE LIVE POINTER, since 8a is BUILT.** Its blocker has cleared (D132 parked it behind a proper
-  re-drive; D138 ran one), so this is a scheduling call, not a dependency: shipping a large new surface onto a fleet
-  that cannot learn it is stale multiplies the exact problem 8a exists to fix. Do 8a first — it is small — then
-  build this on a fleet that can actually receive it. **Three build constraints were researched 2026-08-04 and live
-  in `07` (owner)** — the Agent SDK's persistent-session client is closed to us (stdlib-only), the master rule is
-  looser than D132's "the daemon never calls Claude" (a *local* spawn is clean, as the D123 runner already is), and
-  the WSL daemon-mortality precondition is a **one-line user opt-in**, not an engineering blocker. **Three calls stay
-  open** (thread storage class · question-vs-work classification · loopback-only), and it has a **surface**, so it
-  gets a browser drive before it is called done — the discipline that caught both 9a defects (D166).
+- **8b — the interaction-model rework** (browser-primary conversation — `07`) — **`[core]`, sequenced second,
+  deliberately. BUILT + browser-driven 2026-08-04 (D169, `ad9d910`) — DONE.** Its blocker had cleared (D132 parked
+  it behind a proper re-drive; D138 ran one), so the sequencing was a scheduling call, not a dependency: shipping a
+  large new surface onto a fleet that cannot learn it is stale multiplies the exact problem 8a exists to fix. **The
+  three researched constraints held** and none was re-derived (`07` owns them). **The three open calls closed at
+  design, before code** (D169): the thread is **RUNTIME**, the **human** splits question from request at the
+  console, and chat is **loopback-only**. What shipped: a `question` inbox kind sorted last, the **`answer` skill**
+  (the one net-new capability, a `loop.md` side-door), `.workflow/thread/` RUNTIME + pinned, the runner's trigger
+  set extended with a **separate answer-only prompt**, and a Conversation panel. **The scope was smaller than
+  "chat" and the reason is the finding that inverted the premise:** the *request* arm was already built end-to-end
+  (intake → ticket → "my requests"), so the whole substance of 8b was the **question** arm, which had no
+  capability at all. The browser drive caught two shell defects a green suite missed — see D169.
 
 *Everything else stays `[stageable]`/`[later]` and is picked off the by-space list above, not this sequence — the
 living code-map observed layer, the D84 reclassification, the proportional-rigor gate, build-once-per-wave,
 model/effort routing, the project-map tab, and the project-state view (still the self-hosting prerequisite it has
 been since 2026-06-30).*
 
-### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[DESIGNED 2026-08-03 — D159–D163. 9a BUILT + browser-driven 2026-08-03 (D163; D166 closed its render residual and fixed two shell defects); 9b BUILT 2026-08-03 (D167); **9c is all that remains**. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. The D164 sequence `8a → drive 9a → 9b` is COMPLETE]**
+### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[DESIGNED 2026-08-03 — D159–D163. NOW THE LIVE POINTER, since Phase 8 completed 2026-08-04 (D169). 9a BUILT + browser-driven 2026-08-03 (D163; D166 closed its render residual and fixed two shell defects); 9b BUILT 2026-08-03 (D167); **9c is all that remains**. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. The D164 sequence `8a → drive 9a → 9b` is COMPLETE]**
 Born from a design conversation on four maintainer asks (the fourth — a console config tab — was **dropped**, D161;
 its "change credentials over Cloudflare" arm violated D112). All three build **ON** existing machinery, not beside it —
 that is the through-line and the reason none is large. Capture is design-only; the deep-doc edits ride each build.
@@ -935,10 +938,9 @@ the shape the code actually produces. **That finding is CLOSED by D147**, which 
 one: `returns` had **no producer** — the console's verdict form posted `{outcome, notes}` only, against a D99 spec
 that named `returns`/`tasks[]`/steps/deep-links, so D122's Tailscale credential arm had been guarding a payload
 nothing could emit. `returns` is now a declared name-keyed map, the console gained the setup form (increment 3b),
-and the matcher went exact. **`### Phase 8` (D155) is what comes next** — release discipline (a released install
-cannot currently learn it is stale) ahead of the interaction-model rework, because shipping a new surface onto a
-fleet that cannot receive fixes multiplies the problem. **`### Phase 9` (D159–D163)** then adds three new capabilities
-— the chain-forecast, the context-budget law, and org mode — all **designed 2026-08-03**, each built ON existing
-machinery. **9a is BUILT** (D163, by hand, same day; self-hosting split off as a later experiment on a clone); **9b
-and 9c are unbuilt**, and where they sit vs Phase 8 stays an open call. Beyond those, everything is
-`[stageable]`/`[later]`.
+and the matcher went exact. **`### Phase 8` (D155) is COMPLETE** — release discipline (D165) ahead of the
+interaction-model rework (D169), because shipping a new surface onto a fleet that cannot receive fixes multiplies
+the problem. **`### Phase 9` (D159–D163)** adds three new capabilities — the chain-forecast, the context-budget
+law, and org mode — all **designed 2026-08-03**, each built ON existing machinery. **9a is BUILT** (D163, by hand,
+same day; self-hosting split off as a later experiment on a clone) and **9b is BUILT** (D167); **`9c` (org mode) is
+the only one left** and is the live pointer. Beyond it, everything is `[stageable]`/`[later]`.

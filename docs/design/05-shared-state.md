@@ -65,7 +65,7 @@ static class (the page, its assets, the demo bundle) is marked `bus:static`. (2)
 **commands**: the bus returns `202 Accepted` + a `Location` ticket and appends the message to the **inbox**; the
 orchestrator consumes it at a scheduler boundary; any result surfaces via orchestrator-written state the console
 re-reads by ticket (Async Request-Reply). **The orchestrator is never an HTTP responder** (D90) — a synchronous
-request→orchestrator→response path cannot exist. Messages are **one typed inbox** — `kind: verdict|intake|control|release` —
+request→orchestrator→response path cannot exist. Messages are **one typed inbox** — `kind: verdict|intake|control|release|question` —
 single-consumer, idempotent, single-shot. File-watching stays **rejected for control-flow** (fragile, races); an
 optional inotify/SSE signal only ever means "re-read", never carries the load.
 - **`verdict`** resumes a parked ticket via `claude --resume <id> -p "<verdict>"` (D90); the checkpoint `token`

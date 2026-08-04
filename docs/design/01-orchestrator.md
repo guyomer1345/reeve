@@ -79,7 +79,9 @@ agents hitting build tools cause lock contention).
       paths hold the lock explicitly: a human via the shipped **`loop.sh`** launcher, a runner-launched `claude -p` via
       `flock` itself. The runner spawns `flock -n orchestrator.lock claude -p "<resume prompt>"` (detached, DEVNULL,
       cwd = launch root, **no** `--dangerously-skip-permissions` so the `ask` floor + `guard.sh` still gate it), fires
-      only for a pending `verdict`/`intake` (never a lone `control`/`release`), and guards against a crash-storm: a
+      only for a pending `verdict`/`intake`/`question` (never a lone `control`/`release`) — a `question` spawns a
+      **separate answer-only prompt** and a batch with one drivable message keeps the resume prompt (D169) — and
+      guards against a crash-storm: a
       relaunch that doesn't advance the watermark backs off → hard-stops → **fires the away alert** (closing D120's
       deferred thrash arm), and one that *hangs* (an untrusted `claude` ignores the allowlist and stalls — measured) is
       killed by a stall timeout. The launched loop cold-starts and **drains** (D117) to apply the durable verdict —

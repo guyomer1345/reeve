@@ -245,9 +245,12 @@ Deliberately deferred — known unknowns, to close during build or later.
   (sibling of `/start`, interactive-only) · **package owns `.claude/settings.json`** (user owns `settings.local.json`)
   · **record the install-set** → remove only proven orphans (flag-only when unrecorded) · **unify greenfield onto the
   sentinel-marked block**. Build sequenced **after the Phase-6 re-drive** (two small `/start` tweaks ride it).
-- **Interaction-model expectation vs the locked terminal/bus split (D132) — surfaced 2026-07-20; maintainer's call
-  now MADE (2026-07-26): he wants browser-primary conversation; async-chat is the frontrunner; build DEFERRED behind
-  a proper re-drive.** D132 ruled the first-onboarding confusion a *surfacing* defect and reaffirmed the lock (D93
+- **~~Interaction-model expectation vs the locked terminal/bus split (D132)~~ — CLOSED 2026-08-04 (D169): 8b is
+  BUILT + browser-driven (`ad9d910`), and Phase 8 is complete. The history below is kept because it owns the three
+  researched build constraints (which held) and records an error in scale worth not re-making; the resolution of all
+  three open calls is at the end of this entry.** *Surfaced 2026-07-20; maintainer's call
+  MADE (2026-07-26): he wants browser-primary conversation; async-chat was the frontrunner; build DEFERRED behind
+  a proper re-drive.* D132 ruled the first-onboarding confusion a *surfacing* defect and reaffirmed the lock (D93
   dialogue = terminal, bus = requests + bounded clarifications; D99 console = read-only cockpit + contact-UX; the
   orchestrator is a batch consumer — a browser chat would sit in Claude's request path, D3). Pressed on the open
   sliver, the maintainer confirmed he genuinely wants to **talk to the project and get responses through the
@@ -287,11 +290,36 @@ Deliberately deferred — known unknowns, to close during build or later.
     "Carried not solved" means the package does not solve it *for* you. A first pass of this analysis read it as a
     blocker and proposed deferring 8b behind fixing it; that was **wrong in scale** and is recorded here so the next
     session does not re-make the error.
-  **Three calls remain genuinely open and are the design conversation a build must have first:** the conversation
-  thread's storage class (committed vs RUNTIME, and its retention); **who classifies a message as question-vs-work,
-  and when** (a question wants the knowledge base, a request is already served by intake — if that split is real, a
-  large part of "chat" may not need the loop to reply at all); and whether chat rides the **loopback socket only**
-  (D112 — a forged chat message is agent control, exactly as a forged verdict is).
+  **All three remaining calls are CLOSED by the build (D169, 2026-08-04; 8b is BUILT + browser-driven, `ad9d910`).**
+  They were settled in design, before code, as this entry demanded:
+  - **Storage — RUNTIME, not committed.** A committed transcript is a **second copy of every decision it contains**
+    (a straight D80 violation — the spec, backlog and decision record already own those facts), and the argument
+    for committing collapsed on a finding: the conversation Claude actually resumes lives in **its own session
+    file**, machine-local and cwd-keyed, so committing buys a readable log and **not** a resumable conversation.
+    Durable outcomes land with their existing owner. Retention is the odd one out in this package — it governs
+    **spend, not bytes** (resume re-sends the thread), so the knob is a **rotation** at
+    `config.thread.rotate_at_tokens` (default 200 000, owner's call) that hands off and starts a fresh session,
+    which is D92's disposable-conversation law applied to the thread.
+  - **Classification — the HUMAN, at the console.** Two affordances, no model in the routing path. **The premise in
+    the paragraph above was INVERTED, and that is the finding that sized the whole slice:** "a question wants the
+    knowledge base" assumed a knowledge-base *query* capability existed. It did not — all 18 shipped skills
+    *write* the KB or read it as input to work, and **nothing answered a human's question**. So the *request* arm
+    was the one already served end-to-end (intake → ticket → "my requests"), and the **question arm was the entire
+    net-new substance of 8b**. Pressure-testing also found a **third** bucket the two-way split hid: *status*
+    ("is the deploy done?"), which the cockpit already answers for free with no spawn at all — deliberately given
+    no new affordance.
+  - **Loopback-only — yes, and it cost no code.** `REMOTE_KINDS` is a *positive* allowlist, so a new kind is
+    loopback-only by default; the call was to decline to relax it, pinned by a test. A question is run into
+    `claude -p` verbatim, so it clears the D112 "authoritative prompt" bar **more easily than a forged verdict** —
+    a verdict's `notes` is free text bolted to a bounded decision, a question IS the whole prompt. The console
+    *reads* the conversation remotely (a read is what Socket A serves) and the **composer** is loopback-only.
+    If it ever goes remote it rides the **Tailscale-only** carve-out, never a TLS-terminating proxy.
+  **One constraint above is CORRECTED by measurement (D169):** the WSL opt-in is one line *in general* but **not on
+  this machine** — there is no `.wslconfig`, and `pid1` is `init(Ubuntu)` with **no systemd**, so the
+  `loginctl enable-linger` arm requires enabling systemd in `/etc/wsl.conf` plus a `wsl --shutdown` first. The
+  `.wslconfig vmIdleTimeout=-1` arm is still genuinely one line. **Neither is taken**, so until one is, an `Ask`
+  with no live loop waits for a terminal. Still owner-accepted, still not an engineering blocker — the daemon
+  warns about it on boot.
 - **Phase-6 re-drive follow-ups (D138, 2026-07-27) — three package findings LOGGED, not yet fixed.** The
   re-drive confirmed D131/D132/D133/D134 and fixed the sharp one (the `verify_check.py` bootstrap-commit
   contradiction, in-commit), leaving three: (1) **mid-flow human questions** — the bootstrap interrupted the human
@@ -532,3 +560,27 @@ Small, all found by building or driving rather than by reasoning, and none block
   two files can actually reach 1k without losing the routing table — if they cannot, the advisory is the wrong
   number rather than the trim being overdue, and the honest fix is to move the target, not to carry a permanent
   ticket.
+
+## Newly open from the Phase-8b build (2026-08-04 — D169)
+All found by building or driving. None blocks; the first is the one with teeth.
+- **The thread ROTATION is specified and wired but never executed `[core-ish]`.** `config.thread.rotate_at_tokens`
+  (200 000) is in the schema, the `answer` skill states the procedure, and the estimator reuses
+  `doc_budget.chars_per_token` — but rotation runs **inside `answer` at drain time**, so unlike the socket boundary
+  (a real 404) and the runner's prompt choice (asserted against the exec'd argv) **nothing mechanically proves it**.
+  It needs a real conversation to cross 200k. Until then the failure mode is silent and expensive: a thread that
+  never rotates simply costs more every question, and resume re-sends the history, so it degrades gradually rather
+  than breaking. A cheap partial: a unit test over the estimate-and-decide half, leaving only the write unproven.
+- **Answer QUALITY is unmeasured — no real project has been asked a real question `[expected]`.** The `answer`
+  skill's whole value is that it replies from *this project's* record and says so when the record does not say. The
+  build proves the message reaches it and the reply renders; it proves nothing about whether the answer is right or
+  whether "the record does not decide this" fires when it should. This is the same shape as the standing 9a note
+  (no real project has forecast a real change) and wants the same fix: a real drive, not a test.
+- **A dead-lettered question renders as "waiting" until the bus GCs it `[small]`.** The Conversation panel joins
+  unanswered inbox questions as pending turns; a question that was drained and dead-lettered keeps showing as
+  waiting until the watermark collects it. That is arguably honest — the human *is* still waiting, and no answer is
+  coming — but "waiting for an answer" overstates it, and the dead-letter surface on `handoff.md` already knows
+  better. Bounded and self-clearing, so it is a wording fix, not a correctness one.
+- **`schemas.md` gave back ~1.1k tokens of the margin D168 won `[watch]`.** It sits at **~19.8k** against the 25 000
+  ceiling after this build. Still comfortable, but the file is now the package's most-appended-to schema doc and the
+  budget gate still does not scan the package's own docs (the residual above), so the next slice that touches it
+  should check the number rather than assume the split solved it permanently.

@@ -4766,3 +4766,90 @@ fact), **D129** (derive from the artifact), **D163** (the crash class + the one-
 `product/shared/{schemas.md,memory-model.md}`, `product/scripts/{check_doc_budget.py,check_contracts.py}`,
 `scripts/check_enum_coherence.py`, `product/scripts/test_{check_doc_budget,check_contracts}.py`,
 `scripts/test_check_enum_coherence.py`.
+
+## D169 — Phase 8b BUILT: the console stops being write-only. A question becomes a typed kind, answering becomes a skill, and the premise that sized the slice was inverted **[DECIDED + BUILT 2026-08-04 (`ad9d910`) — closes the three calls `07` left open; Phase 8 COMPLETE; browser-driven, and the drive found two defects a green suite missed]**
+The interaction-model rework D132 deferred and D138 unblocked. The three researched constraints held and none was
+re-derived; the three open calls were settled **in design, before code**, as `07` demanded.
+- **The finding that sized the whole slice — the premise was backwards.** `07` framed it as "a question wants the
+  knowledge base; a request is already served by intake", implying the question arm was cheap. Checked against the
+  shipped roster: **all 18 skills either write the KB or read it as input to work, and nothing answered a human's
+  question.** So the *request* arm was the one already complete end-to-end (D99 intake form → `202` + ticket →
+  D108 drain → "my requests"), and the **question arm was the entire net-new substance of 8b**. That makes the
+  slice both smaller than "chat" and concentrated: one capability, `answer`, carries all of the risk. Pressure-
+  testing surfaced a **third bucket** the two-way split hid — *status* ("is the deploy done?") — which the cockpit
+  already answers with no spawn at all, and which was therefore deliberately given **no new affordance**.
+- **Call 1 — the thread is RUNTIME, not committed.** Two precedents pulled opposite ways (`inbox/` RUNTIME vs
+  `forecasts/` COMMITTED), and D162's committed-forecast reasoning looked like it transferred. It does not, twice
+  over. **(a)** A forecast is machine-generated and its safety is a *linted invariant*; a thread is arbitrary human
+  prose, and free text cannot be linted for secrets — committing it is a new leak surface in a repo with a leak
+  gate. **(b)** The decisive one: the conversation Claude actually resumes lives in **its own session file**,
+  machine-local and cwd-keyed, so committing the thread buys a **readable log and not a resumable conversation** —
+  a machine move ends the conversation either way. And a committed transcript is **by construction a second copy of
+  every decision it contains**, which is a straight **D80** violation: the spec, backlog and decision record already
+  own those facts. So: RUNTIME + pinned (it crosses the process boundary exactly as `outbox/` does), durable
+  outcomes land with their existing owner.
+- **Retention here governs SPEND, not bytes — the one arm in this package that does.** `--resume` re-sends the
+  accumulated history, so thread length is priced *per question*, unlike `demos/`/`forecasts/`/`items/`, which
+  bound disk. So the knob is a **rotation**, not a cap: at `config.thread.rotate_at_tokens` (200 000, the owner's
+  number) the thread writes its own handoff, drops `session_id` and starts fresh — **D92's disposable-conversation
+  law applied to the thread**. Its handoff is a **separate file** by necessity: `handoff.md` already has two authors
+  (the orchestrator's prose, `drain.py`'s machine block) and a third writer would break exactly the split that makes
+  it work.
+- **Call 2 — the HUMAN classifies, at the console.** Two affordances, no model in the routing path. The split is
+  structural, not taxonomic: **who is blocked differs.** A request queues and the human walks away; a question is
+  worthless unless an answer arrives. Rejected: classify-at-drain (classification would only happen when a loop is
+  live, so a 2am question pays a cold start merely to be *routed*, and a misfiled request comes back as chat rather
+  than a ticket) and a daemon-side classifier (the master-rule objection no longer bites, but it buys a model call
+  to rediscover what the human already knew). Making the human choose also makes **cost honest** — an Ask spawns
+  Claude, a Request is free until the loop picks it up.
+- **Call 3 — loopback-only, and declining cost no code.** `REMOTE_KINDS` is a **positive** allowlist, so a new kind
+  is loopback-only unless someone writes it in. A question is run into `claude -p` verbatim, so it clears **D112**'s
+  authoritative-prompt bar *more easily than a forged verdict*: `notes` is free text bolted to a bounded decision, a
+  question **is** the whole prompt. The conversation is **readable** remotely (a read is precisely what Socket A
+  serves) and the **composer** is not — the panel says why instead of offering a control that would 404. Any future
+  remote path rides the **Tailscale-only** carve-out, never a TLS-terminating proxy. Pinned by a test so a future
+  kind cannot be waved through by forgetting the line exists.
+- **Who spawns the answerer — the daemon, and D132's wording was already false.** "The daemon never calls Claude"
+  has not described the shipped system since the D123 runner, which spawns `flock -n orchestrator.lock claude -p`
+  on the user's own auth. So the runner's trigger set simply gains `question`; the architecture does not change.
+  What *is* new is a **separate `RUNNER_ANSWER_PROMPT`** — kept distinct rather than folded into the resume prompt
+  behind a conditional, because the failure mode of getting it wrong is **a session that starts building unattended
+  because somebody asked it a question**. A batch containing one drivable message keeps the resume prompt (the loop
+  drains every kind at its boundary, answering on the way past); questions-only gets answer-and-stop. Asserted
+  against the **argv actually exec'd**, not the branch that chose it.
+- **`question` sorts LAST at the boundary, and `answer` is a side-door.** It is the only kind that changes no build
+  state, so answering must never sit in front of resuming a parked ticket. `answer` has no `loop.md` node because it
+  has no edge — declared a side-door, which took the contract linter's advisory to zero.
+- **The browser drive earned its keep for a TENTH time — the D147/D156 shape held again: the logic was fine and both
+  defects were in the interaction shell.** **(1)** A posted question was **invisible until answered** — the POST
+  returned `202`, the box cleared, and the panel showed nothing; on a cold start that is minutes of a human
+  wondering whether anything received them. Every mechanical test passed straight through it. Fix: the read-model
+  **joins unanswered inbox questions into the view** as pending turns marked *waiting for an answer* — display only,
+  reading two files it already reads, so `answer` remains the thread's single writer. **(2)** Writing the test for
+  that fix exposed a second: the **absent-thread early return skipped the merge**, so the *first question a project
+  is ever asked* — the one case that matters most — would also have rendered as nothing. The panel also reuses the
+  page's own `humanGap` rather than printing a raw ISO (the 9a residual) and puts each hint **before** its input
+  (the other one).
+- **Rejected / not built:** a per-thread list with switching (no stated need, and thread-switching UI is cost
+  without a user); a "answering…" progress state (nothing streams, and the answer may wait on a boundary or a
+  relaunch, so *"waiting for an answer"* is what is actually true); a status affordance (the cockpit has it).
+*Why it matters:* every human message to this system was previously a **command with no reply channel** — a result
+surfaced as state, by ticket. The master rule forbids a hosted program in Claude's request path; it never forbade
+the project answering a question locally, and the distinction is what makes "talk to the project through the
+website" buildable without overturning D3.
+**Verification:** 778 tests (from 721) + 5 gates green; end-to-end against a live daemon on the 9a drive target
+(`POST /api/question` → `202` → durable inbox record → `drain.py list` classifies and sorts it last); rendered in
+real headless Chrome in **both light and dark** mode. **Left unproven and logged in `07`:** the 200k **rotation**
+executes inside `answer` at drain time and no test crosses the threshold, and **answer quality** is unmeasured —
+no real project has been asked a real question.
+**Supersedes / corrects:** **D132**'s "the daemon never calls Claude" (already false in the shipped system, now
+stated); `07`'s "a question wants the knowledge base" premise (inverted — there was no KB query capability); and
+`07`'s "one-line WSL opt-in" **as it applies to this machine** (no `.wslconfig`, and `pid1` is `init(Ubuntu)` with
+no systemd, so the `enable-linger` arm needs systemd enabled first — the `vmIdleTimeout` arm is still one line, and
+neither is taken).
+**Builds on:** **D93/D108** (the typed inbox + consumed-set, reused unchanged), **D123** (the runner), **D112**
+(the remote boundary), **D99** (the console + "my requests"), **D92** (disposable conversation → the rotation),
+**D80** (why a committed transcript is a second owner), **D166** (the browser-drive discipline).
+→ `05`, `07`, `10`, `11`. Files: `product/skills/answer/SKILL.md` (new), `product/scripts/{bus.py,drain.py}`,
+`product/shared/{schemas.md,schemas-runtime.md}`, `product/templates/{loop.md,orchestrator-CLAUDE.md}`,
+`product/commands/start.md`, `product/scripts/{test_bus.py,test_drain.py}`.

@@ -10,9 +10,15 @@ orchestrator only via the local bus + files — never by routing Claude.
   trust — is owned by `05`; the console side is only a **client** of it.
 - **Two mechanisms (D93):** the console **reads** live state synchronously from the files the bus serves
   (`state.json` + the knowledge base), and **commands** are async — a POST gets `202 Accepted` + a ticket, lands in
-  the durable **typed inbox** (`verdict|intake|control|release`), and the orchestrator consumes it at a boundary. **The
+  the durable **typed inbox** (`verdict|intake|control|release|question`), and the orchestrator consumes it at a boundary. **The
   orchestrator never responds synchronously** (D90), so the console is a state-reader + command-sender, **not a
   chat**; a result surfaces as state the console re-reads by ticket.
+- **"Not a chat" survives 8b, and the distinction is worth keeping straight (D169).** The console now carries a
+  **Conversation** panel where a `question` gets **prose** back — but nothing about the transport changed: the
+  question rides the same typed inbox, gets the same `202` + ticket, and the answer is **durable state the page
+  re-reads on its poll**, written by the `answer` skill at a boundary. There is still no synchronous response and
+  no stream. It is asynchronous correspondence, not chat, and the panel says *"waiting for an answer"* rather than
+  *"answering…"* precisely so the surface never implies a liveness it does not have.
 - **Verdict delivery (D90/D91):** a verdict POSTs → durable inbox keyed by the checkpoint **token** → the parked
   orchestrator matches it at a boundary and resumes via `claude --resume`.
 
@@ -143,7 +149,7 @@ checkpoint verdict + status away from the terminal).
   `kind: release` POST), and the **"my requests" view** — each POST returns `202` + a `Location` ticket saved to
   `localStorage`; the view is the polled state *filtered* by those ticket ids, so `pending→consumed→resolved` is
   legible with **no new endpoint**. This is what keeps the async, not-a-chat model (D93) usable instead of a void.
-  **As built:** `POST /api/{verdict,intake,control,release}` → validate (a bad message is refused with a reason at
+  **As built:** `POST /api/{verdict,intake,control,release,question}` → validate (a bad message is refused with a reason at
   POST time, while a caller is still listening — once it is on the inbox the only reader is a batch consumer that
   can answer nobody) → atomic append → `202` + `Location: /api/requests/<message_id>`. **The ticket IS the
   `message_id`** (D119) — no second id — and "my requests" resolves off the **per-kind effect anchors D108 already
