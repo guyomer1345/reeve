@@ -56,7 +56,19 @@ After `document`, per completed phase/item.
   outside-the-loop backstop.
 - Bookkeeping rides the **planned** commit: the backlog item's done-flip and the `handoff.md` rewrite happen
   **before** it (after any prerequisite-repair commit), so the completing commit captures them. `close-issue`
-  is the only post-commit tail step.
+  is the only post-commit tail step — **except in org mode**, below.
+- **Org mode — the commit is not the hand-off; the BUNDLE is.** These commits live in a private clone with no
+  push path, so they serve resume and nothing else. After committing, produce the item's review bundle:
+  ```bash
+  python3 .claude/scripts/review_bundle.py build <item-id>
+  ```
+  One item → one squashed diff → one commit the **human** authors, in their own checkout. Report what it prints
+  verbatim: it names the files that cross and the upstream commit the work descends from. If it **REFUSES**,
+  that is the boundary working — do not hand-edit the diff and do not work around it. The two refusals that
+  mean something are a brain path in the output (the exclusion did not hold) and a loop reference written into
+  one of the owner's own files (a comment citing `.workflow/…`, which is derived-IP plumbing their reviewer
+  cannot interpret) — fix the *cause*, then rebuild. `close-issue` stays local-only here: never the owner's
+  tracker.
 
 ## Output
 A commit — the checkpoint marker. Its `Closes:` trailer names the issue that `close-issue` then closes.

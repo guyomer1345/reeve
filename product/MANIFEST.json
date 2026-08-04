@@ -28,6 +28,7 @@
     { "src": "scripts/check_demo_bundle.py", "dest": ".claude/scripts/check_demo_bundle.py" },
     { "src": "scripts/check_doc_budget.py", "dest": ".claude/scripts/check_doc_budget.py" },
     { "src": "scripts/forecast.py", "dest": ".claude/scripts/forecast.py" },
+    { "src": "scripts/review_bundle.py", "dest": ".claude/scripts/review_bundle.py" },
     { "src": "scripts/codemap", "dest": ".claude/scripts/codemap" },
     { "src": "scripts/statusline.py", "dest": ".claude/scripts/statusline.py" },
     { "src": "scripts/update_reconcile.py", "dest": ".claude/scripts/update_reconcile.py" },

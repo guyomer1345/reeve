@@ -100,6 +100,8 @@ loop's normal `state.json` takes over when the motion ends.
    approved. All three are **committed** when they appear (the gitignore below is an allowlist of runtime paths,
    so a new durable file is committed by default — which is the right default for a ledger).
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
+   `bundles/` (org mode's review bundles — regenerable from git at any time, so they are a hand-off artifact
+   rather than a record; the history they summarise is already committed), 
    `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,
    `checks.env`, `codemap.sh`, `handoff.md`, `backlog.md`, `items/`, and `docs/`) are committed. **`secrets/` holds live
