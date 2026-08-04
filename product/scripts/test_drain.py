@@ -69,6 +69,18 @@ class Drain(unittest.TestCase):
         self.assertEqual([e["kind"] for e in out["pending"]],
                          ["control", "verdict", "intake", "release"])
 
+    def test_a_question_applies_last_however_early_it_arrived(self):
+        """A question changes no build state, so answering it must never sit in front of
+        resuming a parked ticket: the human waiting on prose is waiting, the loop waiting
+        on a verdict is stopped. The question here is the OLDEST message, so age alone
+        would have put it first."""
+        self.msg(ID_A, "question", question="why postgres?")
+        self.msg(ID_B, "intake")
+        self.msg(ID_C, "verdict", token="t", verdict={"outcome": "approve"})
+        out = drain.cmd_list(self.paths, None)
+        self.assertEqual([e["kind"] for e in out["pending"]],
+                         ["verdict", "intake", "question"])
+
     def test_two_of_a_kind_apply_oldest_first(self):
         self.msg(ID_C, "verdict", token="c", verdict={"outcome": "approve"})
         self.msg(ID_B, "verdict", token="b", verdict={"outcome": "reject"})

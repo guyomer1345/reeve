@@ -47,7 +47,8 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `document:audit` | retention pass done (changes staged) | `commit` |
 | `align` | scan done (tickets filed via `create-issue`, fixes staged, anchor written) | `commit` |
 
-Side doors (callable from anywhere): `create-issue` → backlog · `research` (service).
+Side doors (callable from anywhere): `create-issue` → backlog · `research` (service) · `answer` (entered from
+the boundary drain, never from a node — a question advances nothing, so it has no edge).
 
 ## Scheduler boundary — the inbox drain
 Between items (and before any pick) the orchestrator **drains `.workflow/inbox/`** — the console's typed
@@ -55,7 +56,7 @@ messages to the loop. This is **plain control-flow, not a node**: no skill runs 
 appears nowhere in the table above. Order within one boundary:
 
 `drain (skip already-consumed ids) → apply control → resume a ready-parked ticket (oldest verdict first, +aging)
-→ promote intake → start-new → fire release → sleep`
+→ promote intake → start-new → fire release → answer questions → sleep`
 
 What each kind does at the boundary, and the anchor that makes a repeat a no-op:
 - **verdict** — resumes the parked ticket whose `token` matches; an unknown or already-closed token → dead-letter
@@ -68,6 +69,10 @@ What each kind does at the boundary, and the anchor that makes a repeat a no-op:
   so control ops are required to be idempotent.
 - **release** — fires the named `outbox/` entries through `guard.sh`. *Anchor:* the entry's status (already fired
   → skip).
+- **question** — run `answer`: reply from this project's own record and append the turn to
+  `.workflow/thread/thread.json`. *Anchor:* that turn's source message id (a reply already carrying it → skip).
+  **Last, and it advances nothing** — a question is a read, so it never delays a parked resume or a promotion,
+  and it must never be promoted into the backlog on its own.
 
 A parked ticket resumes **only** via this drain. The consumer **never deletes** an inbox file (the bus owns that
 directory and collects consumed messages itself).

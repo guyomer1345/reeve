@@ -90,7 +90,17 @@ WEBHOOK_TIMEOUT = 5           # seconds; an away-alert POST must never pin the j
 TOAST_TIMEOUT = 5            # seconds; a desktop toast is best-effort, never blocking
 BACKOFF_BASE = 30            # seconds; a failing away channel backs off, doubling from here
 DEFAULT_REMOTE_PORT = 8799   # the fixed loopback port the remote socket binds; operator-overridable
-REMOTE_KINDS = ("verdict",)  # Socket A's positive POST allowlist — everything else is loopback-only
+# Socket A's positive POST allowlist — everything else is loopback-only. `question` is
+# deliberately NOT here and the omission is load-bearing: a question is run into
+# `claude -p` verbatim, so POST access to it is arbitrary authoritative instructions into
+# an autonomous code agent. That is the same bar a forged verdict has to clear, and a
+# question clears it more easily — a verdict's `notes` is free text attached to a bounded
+# decision, while a question IS the whole prompt. A positive allowlist means declining
+# costs nothing; `test_bus.py` pins it so a future kind cannot be waved through by
+# forgetting this line exists.
+REMOTE_KINDS = ("verdict",)
+DEFAULT_THREAD_ROTATE_TOKENS = 200000  # estimated thread context before it hands off and rotates
+DEFAULT_THREAD_MAX_TURNS = 50          # turns the console panel renders; the rest wait on disk
 
 # --- the demo static class --------------------------------------------------
 # A throwaway create-demo sandbox served under /demo/<id>/. It joins the token-free
@@ -152,7 +162,13 @@ except Exception:                                             # pragma: no cover
 # lone control (pause/resume/reprioritize) has nothing to drive if the loop is gone, and
 # release is loopback-only — by construction a human was present to approve it, so it is
 # not an away-resume case (excluded for MVP).
-RUNNER_KINDS = ("verdict", "intake")
+#
+# `question` is the one member that advances no build state at all. It is here anyway,
+# and for the reason the away channel exists: an unanswered question is exactly as stuck
+# as an unconsumed verdict, and a console that can only take questions while a terminal
+# happens to be open is the write-only surface this slice exists to fix. It spawns a
+# DIFFERENT prompt (below) — answering is not driving.
+RUNNER_KINDS = ("verdict", "intake", "question")
 RUNNER_MAX_ATTEMPTS = 5      # consecutive no-progress relaunches before a hard-stop + alert
 RUNNER_BACKOFF_BASE = 30     # seconds; a crash-looping relaunch backs off, doubling from here
 RUNNER_BACKOFF_CAP = 1800    # seconds; the backoff ceiling (30 min)
@@ -177,6 +193,21 @@ RUNNER_RESUME_PROMPT = (
     "message, `drain.py record`), which resumes any parked ticket whose verdict has "
     "arrived, then continue the loop from .workflow/loop.md until you park or run out of "
     "ready work, and write the handoff."
+)
+# The prompt for a relaunch whose ONLY applicable work is a question. Answering is not
+# driving: this session must not pick up the build loop, plan anything, or touch code —
+# it reads, answers, and exits. Kept separate from RUNNER_RESUME_PROMPT rather than
+# folded into it with a conditional, because the failure mode of getting this wrong is a
+# session that starts building unattended because somebody asked it a question.
+RUNNER_ANSWER_PROMPT = (
+    "You are the disciplined-builder orchestrator, relaunched by the console daemon's "
+    "relaunch-runner for ONE purpose: a human has asked a question through the console "
+    "and is waiting for an answer. Run the `answer` skill now — it lists the pending "
+    "`question` messages with `drain.py list`, answers each from this project's own "
+    "knowledge base, spec and decision record, appends the reply to the conversation "
+    "thread, and records the messages with `drain.py record`. Do NOT start, resume or "
+    "advance the build loop, do NOT plan or modify any code, and do NOT promote the "
+    "question into the backlog — a question is a read. Answer, then stop."
 )
 
 
@@ -290,6 +321,17 @@ class Paths:
         # death, so it never goes stale (unlike a pidfile). Pinned for co-location with the
         # rest of the runtime tree, not for correctness — flock is sound on the WSL 9p mount.
         self.orchestrator_lock = os.path.join(self.runtime, "orchestrator.lock")
+        # The conversation thread — the human's questions and the project's prose answers.
+        # RUNTIME and pinned, for the reason `outbox/` is: it crosses the process boundary
+        # (the orchestrator or a runner-spawned answerer writes it, the bus reads it for
+        # the console panel), so a torn read is a real risk and rename-atomicity is not
+        # optional. NOT committed, and deliberately: a committed transcript would be a
+        # second copy of every decision it contains, and the conversation Claude actually
+        # resumes lives in its own session file — machine-local and cwd-keyed — so
+        # committing this would buy a readable log, not a resumable conversation.
+        self.thread = os.path.join(self.runtime, "thread")
+        self.thread_file = os.path.join(self.thread, "thread.json")
+        self.thread_handoff = os.path.join(self.thread, "handoff.md")
         # committed half (always on the repo mount, never relocated)
         self.handoff = os.path.join(self.workflow, "handoff.md")
         self.backlog = os.path.join(self.workflow, "backlog.md")
@@ -1181,6 +1223,13 @@ def validate(kind, body):
             clean["node_ids"] = nodes
         return clean, False
 
+    if kind == "question":
+        # The sibling of `intake`, split at the console by the HUMAN rather than
+        # classified by a model: a question wants prose back, a request wants a ticket.
+        # Deliberately a bare string — a question carries no token, no ids and no
+        # payload, which is also why nothing here can ever be `sensitive`.
+        return {"question": _req_str(body, "question")}, False
+
     if kind == "control":
         op = body.get("op")
         if op not in CONTROL_OPS:
@@ -1958,7 +2007,14 @@ class RunnerJob(Job):
         # never fire those unattended. guard.sh still fires regardless. Detached
         # into its own session with DEVNULL stdio; cwd = the launch root, so it loads the
         # project's CLAUDE.md + .claude/settings.json; auth = the daemon's inherited ~/.claude.
-        cmd = ["flock", "-n", lock, self._claude_bin(), "-p", RUNNER_RESUME_PROMPT]
+        # Which prompt depends on what is actually waiting. A relaunch whose applicable
+        # work is questions ONLY must answer and stop — anything else would have a human
+        # asking "why did we pick Postgres?" and getting an unattended build. The moment
+        # one drivable message is in the batch the resume prompt wins: the loop drains
+        # every kind at its boundary, so the questions are answered on the way past.
+        answer_only = all(p.get("kind") == "question" for p in pending)
+        prompt = RUNNER_ANSWER_PROMPT if answer_only else RUNNER_RESUME_PROMPT
+        cmd = ["flock", "-n", lock, self._claude_bin(), "-p", prompt]
         try:
             self.launched = subprocess.Popen(
                 cmd, cwd=self.paths.repo, start_new_session=True,
@@ -1969,8 +2025,9 @@ class RunnerJob(Job):
             self._noprogress(daemon, "spawn failed: %s" % exc)
             return
         self.last_launch_at = time.time()
-        log("runner: relaunched the loop (pid %d) for %d applicable message(s)"
-            % (self.launched.pid, len(pending)))
+        log("runner: relaunched %s (pid %d) for %d applicable message(s)"
+            % ("to answer a question" if answer_only else "the loop",
+               self.launched.pid, len(pending)))
 
     def _drained_since_launch(self):
         """Has the in-flight launch advanced the watermark past where it started? The loop
@@ -2076,6 +2133,12 @@ class ReadModel:
     def __init__(self, paths):
         self.paths = paths
         self._git_cache = (0.0, [])
+        # Its own cache rather than the daemon's: the read-model is constructed
+        # standalone in tests and by any caller that wants a snapshot, and re-reading
+        # config.json on every poll to find one integer would be the wrong trade. The
+        # cache is mtime-gated, so a knob edited on a running project still lands within
+        # a poll.
+        self.config = ConfigCache(paths.config)
 
     def git_recent(self):
         age, cached = self._git_cache
@@ -2151,6 +2214,84 @@ class ReadModel:
                 "demo_id": demo_id,
                 "forecast_id": forecast_id,
             })
+        return out
+
+    def thread(self):
+        """The conversation thread, for the console's thread panel.
+
+        A read like every other one here: the bus never writes this file — the
+        orchestrator (or a runner-spawned answerer) owns it, single-writer, exactly as
+        it owns `outbox/`. An unreadable thread never raises: the panel is a view, and a
+        torn read self-heals on the next poll.
+
+        Two sources, joined for display only: the durable turns `answer` has written, plus
+        the questions sitting unanswered on the inbox. A question is therefore visible
+        from the moment it is accepted, which is the whole difference between a
+        conversation and a form that swallows what you type.
+
+        Only the last `max_turns_rendered` turns cross the wire. The rest stay on disk
+        until rotation folds them into the thread handoff — the panel is a conversation
+        view, not an archive browser, and the snapshot is re-sent on every poll.
+        """
+        # A missing or torn thread file is not an early return: the very first question
+        # a project is ever asked arrives BEFORE any thread exists, so returning empty
+        # here would make the one case that matters most — "I just asked my first
+        # question" — render as nothing at all.
+        rec = read_json(self.paths.thread_file)
+        if not isinstance(rec, dict):
+            rec = {}
+        turns = [t for t in (rec.get("turns") or []) if isinstance(t, dict)]
+        cfg = self.config.get().get("thread")
+        cap = DEFAULT_THREAD_MAX_TURNS
+        if isinstance(cfg, dict) and isinstance(cfg.get("max_turns_rendered"), int):
+            cap = max(1, cfg["max_turns_rendered"])
+        # Merge in questions that have been ASKED but not yet answered. Without this the
+        # conversation is silent between the POST and the reply — the box clears, nothing
+        # appears, and with a cold start that is minutes of a human wondering whether
+        # anything received their question. Found by rendering the page, not by reading
+        # it: every mechanical test passed while the panel showed nothing.
+        #
+        # This does NOT make the bus a second writer of the thread. It reads the inbox it
+        # already owns and the thread it already reads, and joins them for display only —
+        # the `answer` skill remains the sole author of a durable turn.
+        answered = {t.get("message_id") for t in turns}
+        turns = turns + [t for t in self._pending_questions()
+                         if t["message_id"] not in answered]
+        shown = turns[-cap:]
+        return {
+            "turns": [{"message_id": t.get("message_id"), "role": t.get("role"),
+                       "text": t.get("text"), "at": t.get("at"),
+                       "pending": bool(t.get("pending"))} for t in shown],
+            "rotations": rec.get("rotations") or 0,
+            # Whether a conversation is live at all — a fresh thread has no session yet,
+            # and the page says "no conversation yet" rather than drawing an empty box.
+            "active": bool(rec.get("session_id")),
+            "truncated": len(turns) - len(shown),
+        }
+
+    def _pending_questions(self):
+        """Asked-but-unanswered questions, oldest first, as provisional human turns.
+
+        Read straight off the inbox — the same durable record the drain works from, so
+        the panel cannot claim a question the loop will not see. A question that was
+        drained but never answered keeps showing as waiting, which is the honest
+        rendering: the human is in fact still waiting.
+        """
+        out = []
+        try:
+            names = sorted(n for n in os.listdir(self.paths.inbox)
+                           if n.endswith(".json"))
+        except OSError:
+            return out
+        for n in names:
+            body = read_json(os.path.join(self.paths.inbox, n))
+            if not isinstance(body, dict) or body.get("kind") != "question":
+                continue
+            q = body.get("question")
+            if not isinstance(q, str):
+                continue
+            out.append({"message_id": n[:-5], "role": "human", "text": q,
+                        "at": body.get("received_at"), "pending": True})
         return out
 
     def forecasts(self):
@@ -2293,6 +2434,7 @@ class ReadModel:
                 "note": state.get("note"),
             },
             "parked": self.parked(),
+            "thread": self.thread(),
             "forecasts": self.forecasts(),
             "outbox_pending": self.outbox(),
             "backlog": backlog,
@@ -2394,9 +2536,28 @@ INDEX_HTML = """<!doctype html>
   </div>
 </section>
 
+<section id="conversation">
+  <h2>Conversation <span id="th-count" class="count"></span></h2>
+  <div id="th-list" class="empty">nothing asked yet</div>
+  <div id="q-compose">
+    <p class="hint">Ask about this project — how something works, why a decision was made, where
+      something lives. You get prose back, not a ticket. To ask for work instead, use
+      <strong>Request work</strong> below.</p>
+    <textarea id="q-text" rows="3" placeholder="What would you like to know?"></textarea>
+    <div class="row">
+      <button id="q-send" type="button">Ask</button>
+      <span id="q-msg" class="msg"></span>
+    </div>
+  </div>
+  <p id="q-remote-note" class="hint" hidden>Reading only from here — a question is run into the
+    agent as an instruction, so it is asked from the local console.</p>
+</section>
+
 <section id="ask">
   <h2>Request work</h2>
-  <textarea id="ask-text" rows="3" placeholder="What needs doing? It lands in the backlog through triage, not straight onto the queue."></textarea>
+  <p class="hint">Ask for something to be built or changed. It lands in the backlog through
+    triage, not straight onto the queue, and you track it under <strong>My requests</strong>.</p>
+  <textarea id="ask-text" rows="3" placeholder="What needs doing?"></textarea>
   <div class="row">
     <button id="ask-send" type="button">Send request</button>
     <span id="ask-msg" class="msg"></span>
@@ -3119,6 +3280,51 @@ function renderOutbox(items) {
   $("#ob-actions").hidden = REMOTE || !items.length;
 }
 
+// The conversation. Built with textContent like every other list here — a turn carries
+// free human prose AND model output, which is the last text on this page that should
+// ever reach innerHTML.
+//
+// It uses the page's own humanGap rather than printing the raw stamp: the forecast panel
+// shipped a raw ISO next to a card that humanized the same kind of fact, and one page
+// should not be of two minds about what a timestamp looks like.
+function renderThread(th) {
+  const list = $("#th-list");
+  const turns = th.turns || [];
+  list.textContent = "";
+  $("#th-count").textContent = turns.length ? "(" + turns.length + ")" : "";
+  if (!turns.length) {
+    list.className = "empty";
+    list.textContent = th.active ? "no turns yet" : "nothing asked yet";
+    return;
+  }
+  list.className = "";
+  if (th.truncated > 0) {
+    const older = document.createElement("p");
+    older.className = "older";
+    older.textContent = th.truncated + " earlier turn(s) not shown";
+    list.append(older);
+  }
+  for (const t of turns) {
+    const wrap = document.createElement("div");
+    wrap.className = "turn" + (t.role === "human" ? " is-human" : "")
+      + (t.pending ? " is-pending" : "");
+    const who = document.createElement("div");
+    who.className = "who";
+    const gap = gapSeconds(t.at);
+    who.textContent = (t.role === "human" ? "you" : "project")
+      + (gap === null ? (t.at ? " · " + t.at : "") : " · " + humanGap(gap) + " ago")
+      // Says what is true, not what is coming. The answer may wait for a boundary or a
+      // relaunch, so "waiting for an answer" is honest where "answering…" would imply a
+      // process that may not even be running.
+      + (t.pending ? " · waiting for an answer" : "");
+    const text = document.createElement("p");
+    text.className = "text";
+    text.textContent = t.text || "";
+    wrap.append(who, text);
+    list.append(wrap);
+  }
+}
+
 function renderLog(items) {
   const log = $("#log");
   log.textContent = "";
@@ -3186,6 +3392,7 @@ async function poll() {
     renderState(snap.state || {});
     renderCheckpoints(snap.parked || []);
     renderForecasts(snap.forecasts || []);
+    renderThread(snap.thread || {});
     renderOutbox(snap.outbox_pending || []);
     renderRequests(snap);
     renderLog(snap.recent || []);
@@ -3194,6 +3401,25 @@ async function poll() {
     setConn("daemon unreachable", false);
   }
 }
+
+$("#q-send").addEventListener("click", async () => {
+  const box = $("#q-text");
+  const msg = $("#q-msg");
+  const question = box.value.trim();
+  if (!question) { flash(msg, "type a question first", false); return; }
+  try {
+    const r = await send("question", { question });
+    // Remembered like any other ticket, so "my requests" can resolve it: a question is
+    // an inbox message with a `202` and a Location, exactly as an intake is.
+    remember(r.ticket, "question", question);
+    box.value = "";
+    // Deliberately not "answering…". Nothing is streaming and the answer may wait for a
+    // boundary or a relaunch, so the honest wording is that it was received.
+    flash(msg, "asked — the answer appears above when the project has read it", true);
+  } catch (e) {
+    flash(msg, String(e.message || e), false);
+  }
+});
 
 $("#ask-send").addEventListener("click", async () => {
   const box = $("#ask-text");
@@ -3253,6 +3479,12 @@ function setupMode() {
     // Not part of A's surface: intake posts and outward release are loopback-only.
     $("#ask").hidden = true;
     $("#pairing").hidden = true;
+    // The conversation SPLITS here rather than hiding whole. Reading it is a read, and
+    // reads are exactly what Socket A serves; ASKING is not — the question becomes an
+    // authoritative prompt, so the composer is loopback-only and the panel says so
+    // instead of offering a control that would 404.
+    $("#q-compose").hidden = true;
+    $("#q-remote-note").hidden = false;
   } else {
     initPairing();
   }
@@ -3368,6 +3600,22 @@ label { display:inline-flex; align-items:center; gap:.4rem; }
 .hint { color:var(--dim); font-size:.85rem; margin:.25rem 0 .5rem; }
 #pair-url { word-break:break-all; padding:.4rem .5rem; border:1px solid var(--line);
   border-radius:5px; margin-bottom:.5rem; }
+/* The hint sits BEFORE its input, deliberately. The forecast panel shipped a credential
+   hint rendered AFTER the boxes it qualified, so a human met the inputs before the
+   sentence telling them what the inputs were for; two affordances that differ only in
+   what comes back must not repeat that. */
+.hint { color:var(--dim); font-size:.85rem; margin:.35rem 0 .4rem; }
+/* A turn is a plain block, not a chat bubble: this is a durable record the console
+   renders, not a live-typing surface, and bubbles would promise streaming we do not do. */
+.turn { border-left:2px solid var(--line); padding:.15rem 0 .15rem .6rem; margin-bottom:.5rem; }
+.turn.is-human { border-left-color:var(--dim); }
+/* A waiting turn lifts out of the dim default rather than introducing a colour: the
+   page has no `--warn` and a hardcoded hex would not follow the dark-mode switch. */
+.turn.is-pending .who { color:var(--fg); }
+.turn .who { font-size:.75rem; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); }
+.turn .text { white-space:pre-wrap; margin:.15rem 0 0; }
+#th-list .older { color:var(--dim); font-size:.8rem; font-style:italic; margin-bottom:.5rem; }
+#conversation .row { margin-top:.5rem; display:flex; gap:.75rem; }
 #ask .row, #ob-actions { margin-top:.5rem; display:flex; gap:.75rem;
   align-items:center; justify-content:flex-start; }
 #rq-list .card .row { gap:.75rem; }
@@ -4109,7 +4357,7 @@ def make_handler(daemon):
     return Handler
 
 
-KINDS = ("verdict", "intake", "control", "release")
+KINDS = ("verdict", "intake", "control", "release", "question")
 
 
 def resolve_request(index, ticket):

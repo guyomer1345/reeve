@@ -10,7 +10,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   read→place→advance algorithm, the resume model (`state.json` / `handoff.md` / git), and the autonomous
   **permission model** (broad-allow + `ask` outward + `guard.sh`) — **dogfood-validated** end-to-end, zero
   local prompts after trust (D46–D58).
-- **Space 2 — Roster + contracts.** 18 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
+- **Space 2 — Roster + contracts.** 19 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
   the **D36–D45 skill-body deltas** authored (`prioritize` waves · `execute` divergence tiers +
   refuse-destructive · `planner` risk_class+backup + decision-coverage gate · `adjudicate`
   conjunction-of-signals · `commit` secret-scan) + the prerequisite-repair two-commit carve-out and
@@ -594,7 +594,7 @@ end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote 
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, model/effort routing,
 packaging, the state-view, **and the D84 skill→agent reclassification** (`execute` +
 `create-demo` → leaf agents: the file moves, agent-format rewrites, orchestrator dispatch-by-kind wiring, and the
-`18 skills + 2 agents` → `15 + 4` count update — a dedicated session; **the loop has now run (D128), so this is no
+`19 skills + 2 agents` → `16 + 4` count update — a dedicated session; **the loop has now run (D128), so this is no
 longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 

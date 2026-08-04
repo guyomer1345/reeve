@@ -259,7 +259,7 @@ the loop can't reach: `setup` — the verdict is "I did it" + a returned artifac
   reads as authoritative would report answered checkpoints as open forever.
 
 ## inbox-message  · appended to the inbox by the bus when the console POSTs · *`.workflow/inbox/<ts>-<uuid>-<pid>.json`; append-only, durable (atomic write+rename), at-least-once; RUNTIME, kept on a native filesystem*
-Every console→orchestrator message is **typed** — `kind: verdict|intake|control|release` — one uniform durable
+Every console→orchestrator message is **typed** — `kind: verdict|intake|control|release|question` — one uniform durable
 transport, dispatched at a scheduler boundary **by kind**. **Single consumer** (the one orchestrator) → no `processing/`
 claim-by-rename needed; matched **idempotently, single-shot** (duplicate → no-op). The bus returns `202 Accepted` +
 a `Location` ticket at POST time; any result surfaces via orchestrator-written state the console re-reads by ticket —
@@ -327,6 +327,45 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
   outbox entry's `status` — an entry already `executed` is skipped, so a re-applied release is a no-op. (The
   *message* dedups here; an external side-effect with no natural idempotency — `issue-create` — carries its own
   key on the outbox entry.)
+- **`kind: question`** — `{ question }` — a human **asks the project something** and wants prose back, as opposed to
+  `intake`, which asks the project to *do* something and wants a ticket back. The two are separated **at the console
+  by the human**, not classified by a model: the human already knows which one they meant, and every automatic scheme
+  pays a cold start to rediscover it. The orchestrator answers from the knowledge base, the spec and the decision
+  record (the `answer` skill) and appends the reply to the **conversation-thread** below. **Anchor:** the thread turn
+  **stamps the source `message_id`**, and a re-applied question finds a reply already carrying it → no-op. Same shape
+  as `intake`'s promotion stamp, and it is what makes the crash window between *append* and `drain.py record` safe.
+  **It is the only kind that changes no build state**, which is why it sorts LAST at a boundary — answering must
+  never delay resuming a parked ticket or promoting an item. **Loopback-only** (absent from the bus's remote
+  allowlist): the reply path runs the question into `claude -p`, so a question *is* an authoritative prompt — the
+  same reason a forecast verdict never rides the remote surface, and strictly sharper, because a verdict's `notes` is
+  free text bolted to a bounded decision while a question is the whole prompt.
+
+## conversation-thread  · appended by the orchestrator (or a runner-spawned answerer) when a `question` is drained, read by the bus for the console's thread panel · *`.workflow/thread/thread.json`; RUNTIME, gitignored, atomic write, kept on a native filesystem*
+- `{ session_id, turns: [{ message_id, role: human|project, text, at, session_id }], rotations: N }` — one rolling
+  conversation, oldest turn first. `role: human` is the question as POSTed; `role: project` is the answer. Every turn
+  carries the `message_id` of the question that produced it, which is both the idempotency anchor and the key the
+  console's "my requests" surface correlates on — the same id the `202` handed back.
+- **RUNTIME, not committed, and the reason is not size.** A committed transcript would be a **second copy of every
+  decision it contains**, and the decision record, the spec and the backlog already own those facts — so the thread
+  keeps the *conversation* and durable outcomes land with their existing owner (a backlog item, a spec edit, a
+  knowledge node). The transcript is a **render**, not the state: the conversation Claude actually resumes lives in
+  its own session file, which is machine-local and keyed to the launch directory. Committing the thread would
+  therefore buy a readable log and **not** a resumable conversation — a machine move ends the conversation either
+  way. Free human prose is also unlintable for secrets, unlike the machine-generated `forecast` record that is
+  committed precisely because its safety *is* checkable.
+- **`session_id` is the load-bearing field.** Each answer runs `claude -p --resume <session_id>` so follow-ups work;
+  a fresh thread has none and the first answer establishes it.
+- **Rotation — the thread is cleared and handed off, it is not capped.** Resume **re-sends the accumulated history**,
+  so thread length is a *per-message cost*, not merely disk — the one retention arm in this package that governs
+  spend rather than bytes. When the estimated context crosses `config.thread.rotate_at_tokens`, the answerer writes a
+  **thread handoff** (`.workflow/thread/handoff.md`) distilling the conversation so far, drops `session_id`, and
+  increments `rotations`; the next question starts a fresh session primed with that handoff. This is the same
+  disposable-conversation law the orchestrator already runs on (`handoff.md` + rehydrate), applied to the thread —
+  and it is deliberately a **separate file**, because `handoff.md` already has two authors (the orchestrator's prose
+  and `drain.py`'s machine block) and a third writer on it would break that split.
+- **Estimated, not measured.** Token count comes from the shared `chars_per_token` calibration (`config.doc_budget`),
+  the same estimator the context-budget law uses — there is no way to read the live session's true count from
+  outside it, and a stdlib-only package has no tokenizer.
 
 ## refine-ledger  · written by `create-demo` on every regeneration, enforced by `check_demo_bundle.py` · *`.workflow/demos/<item-id>/.refine.json`; RUNTIME, gitignored, lives and dies with its bundle; a dotfile so the daemon never serves it*
 - `{ round: N, rounds: [{ round, spec_ref: { path, sha256 }, note? }] }` — `round` is the count of regenerations

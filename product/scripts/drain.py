@@ -47,8 +47,11 @@ from bus import (MESSAGE_ID_RE, Paths, atomic_write, empty_block,  # noqa: E402
 # The order is not a preference. Control first, because a reprioritize must be honored
 # by the pick this boundary is about to make. Verdicts next, because resuming parked
 # work outranks starting new work. Intake before release only so a promoted item exists
-# before anything fires against it.
-KIND_ORDER = ("control", "verdict", "intake", "release")
+# before anything fires against it. Question LAST, and for the same kind of reason: it is
+# the only kind that changes no build state, so answering it must never sit in front of
+# resuming a parked ticket — a human waiting on an answer is waiting on prose, while a
+# loop waiting on a verdict is stopped.
+KIND_ORDER = ("control", "verdict", "intake", "release", "question")
 
 # handoff.md is read whole by every cold start, so the dead-letter surface has to be
 # bounded like everything else on it. It is NOT pruned by the watermark, though: a

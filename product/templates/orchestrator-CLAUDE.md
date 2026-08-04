@@ -40,6 +40,11 @@ don't carry the graph in your head.
    - `intake` — promote into `backlog.md` through triage, stamping the message's id into the new
      item's `source`. If an item already carries that id, it's already promoted: skip it.
    - `release` — fire each named `outbox/` entry (skip any already `executed`).
+   - `question` — run the **`answer`** skill: reply from this project's own knowledge base, spec and
+     decision record, and append the turn to `.workflow/thread/thread.json`. A reply already carrying
+     that message id means it is answered: skip it. **A question is a read** — it is applied last, it
+     advances nothing, and it is never promoted into the backlog. If it is plainly a work request in
+     the wrong box, say so in the answer and let the human re-send it as a request.
 
    **Then record what you applied:**
    `python3 .claude/scripts/drain.py record --applied <id> [<id>...] [--dead-letter <id>="why"]`
@@ -150,6 +155,7 @@ ticket automatically; otherwise a human restarts. Either way the new session res
 | `.workflow/items/<id>/` | per-item plan / changelog / verdict / debug-report (planner mkdirs on demand; pruned closed in audit) | committed |
 | `<project_root>/docs/decisions/` | decision records / ADRs (global) | append-only |
 | `.workflow/outbox/` | pending outward-action queue (push/issue/deploy awaiting a console `release`) | runtime, gitignored |
+| `.workflow/thread/` | the console conversation — questions asked and answered (`answer` writes, the bus reads) | runtime, gitignored |
 | `<project_root>/` | the product code | — |
 | `<project_root>/docs/` | spec · architecture.md · knowledge code-map | stable · generated + append-only `# Sessions` |
 | `.claude/skills/` · `.claude/agents/` · `.claude/commands/` | the capability package | stable |

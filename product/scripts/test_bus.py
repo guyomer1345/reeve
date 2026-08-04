@@ -305,6 +305,120 @@ class MeasuredInvariants(Tmp):
 
 
 # --- the read model ---------------------------------------------------------
+class ThreadReadModel(Tmp):
+    """The conversation panel's read. The bus never writes this file — `answer` owns it,
+    single-writer, exactly as the orchestrator owns outbox/ — so every case here is about
+    reading something another process may be mid-write on."""
+
+    def setUp(self):
+        super().setUp()
+        self.w = mkworkflow(self.root)
+        self.paths = bus.Paths(self.w)
+        self.model = bus.ReadModel(self.paths)
+
+    def _write(self, rec):
+        os.makedirs(self.paths.thread, exist_ok=True)
+        with open(self.paths.thread_file, "w") as fh:
+            json.dump(rec, fh)
+
+    def _turns(self, n):
+        return [{"message_id": "m%d" % i, "role": "human" if i % 2 else "project",
+                 "text": "t%d" % i, "at": "2026-08-04T10:00:00Z"} for i in range(n)]
+
+    def test_absent_thread_is_an_empty_conversation_not_an_error(self):
+        th = self.model.thread()
+        self.assertEqual(th["turns"], [])
+        self.assertFalse(th["active"])
+
+    def test_a_corrupt_thread_costs_the_panel_not_the_console(self):
+        """A torn read must self-heal on the next poll, never take the daemon down —
+        the daemon is the only always-alive process."""
+        os.makedirs(self.paths.thread, exist_ok=True)
+        with open(self.paths.thread_file, "w") as fh:
+            fh.write('{"turns": [{"role":')      # half a write
+        self.assertEqual(self.model.thread()["turns"], [])
+
+    def test_turns_render_with_their_role_and_stamp(self):
+        self._write({"session_id": "s-1", "turns": self._turns(2), "rotations": 0})
+        th = self.model.thread()
+        self.assertEqual([t["role"] for t in th["turns"]], ["project", "human"])
+        self.assertTrue(th["active"])
+
+    def test_a_thread_with_no_session_is_not_active_yet(self):
+        """A fresh thread has no session until the first answer establishes one; the page
+        says 'nothing asked yet' rather than drawing an empty conversation."""
+        self._write({"turns": [], "rotations": 0})
+        self.assertFalse(self.model.thread()["active"])
+
+    def test_only_the_last_n_turns_cross_the_wire(self):
+        """The snapshot is re-sent on every poll, so an unbounded thread would grow the
+        poll forever. The rest stay on disk until rotation folds them into the handoff."""
+        self._write({"session_id": "s", "turns": self._turns(120), "rotations": 1})
+        th = self.model.thread()
+        self.assertEqual(len(th["turns"]), bus.DEFAULT_THREAD_MAX_TURNS)
+        self.assertEqual(th["truncated"], 120 - bus.DEFAULT_THREAD_MAX_TURNS)
+        # the LAST turns, not the first — a conversation reads forward
+        self.assertEqual(th["turns"][-1]["text"], "t119")
+
+    def test_the_render_cap_is_configurable(self):
+        with open(os.path.join(self.w, "config.json"), "w") as fh:
+            json.dump({"thread": {"max_turns_rendered": 3}}, fh)
+        self._write({"session_id": "s", "turns": self._turns(10), "rotations": 0})
+        self.assertEqual(len(self.model.thread()["turns"]), 3)
+
+    def test_the_thread_is_in_the_snapshot(self):
+        self._write({"session_id": "s", "turns": self._turns(2), "rotations": 0})
+        self.assertIn("thread", self.model.snapshot())
+
+    # -- the asked-but-unanswered merge (found by rendering the page) --
+    def _ask(self, mid, text="why postgres?"):
+        with open(os.path.join(self.paths.inbox, mid + ".json"), "w") as fh:
+            json.dump({"kind": "question", "question": text,
+                       "received_at": "2026-08-04T08:37:52Z"}, fh)
+
+    def test_an_asked_question_shows_before_it_is_answered(self):
+        """The defect a browser render caught and every mechanical test missed: the POST
+        succeeded, the box cleared, and the conversation showed NOTHING until the answer
+        landed — minutes of silence on a cold start."""
+        self._ask("20260804T083752.391786Z-aaaaaaaa-1")
+        th = self.model.thread()
+        self.assertEqual(len(th["turns"]), 1)
+        self.assertEqual(th["turns"][0]["role"], "human")
+        self.assertTrue(th["turns"][0]["pending"])
+
+    def test_an_answered_question_is_not_shown_twice(self):
+        """The other half. The inbox keeps a consumed message until the bus GCs it on the
+        watermark, so a naive merge would render every answered question a second time —
+        which is exactly the double-draw class of defect the last phase shipped."""
+        mid = "20260804T083752.391786Z-aaaaaaaa-1"
+        self._ask(mid)
+        self._write({"session_id": "s", "rotations": 0, "turns": [
+            {"message_id": mid, "role": "human", "text": "why postgres?",
+             "at": "2026-08-04T08:37:52Z"},
+            {"message_id": mid, "role": "project", "text": "because concurrency",
+             "at": "2026-08-04T08:39:10Z"}]})
+        th = self.model.thread()
+        self.assertEqual(len(th["turns"]), 2)
+        self.assertEqual([t["role"] for t in th["turns"]], ["human", "project"])
+        self.assertFalse(any(t["pending"] for t in th["turns"]))
+
+    def test_pending_questions_sort_after_the_answered_conversation(self):
+        """A conversation reads forward: what is still waiting is the newest thing in it."""
+        self._write({"session_id": "s", "rotations": 0, "turns": [
+            {"message_id": "old", "role": "human", "text": "q1", "at": "2026-08-04T08:00:00Z"},
+            {"message_id": "old", "role": "project", "text": "a1", "at": "2026-08-04T08:01:00Z"}]})
+        self._ask("20260804T083752.391786Z-aaaaaaaa-1", "q2")
+        th = self.model.thread()
+        self.assertEqual([t["text"] for t in th["turns"]], ["q1", "a1", "q2"])
+
+    def test_a_non_question_message_never_enters_the_conversation(self):
+        """An intake is a request, not a question — it belongs to 'my requests'."""
+        with open(os.path.join(self.paths.inbox,
+                               "20260804T083752.391786Z-bbbbbbbb-1.json"), "w") as fh:
+            json.dump({"kind": "intake", "ask": "build a thing"}, fh)
+        self.assertEqual(self.model.thread()["turns"], [])
+
+
 class ReadModel(Tmp):
     def setUp(self):
         super().setUp()
@@ -559,11 +673,37 @@ class Runner(Tmp):
 
     def _pending(self, kind="verdict", mid=None):
         mid = mid or self.VID
-        body = ({"kind": "verdict", "token": "cp1",
-                 "verdict": {"outcome": "approve"}} if kind == "verdict"
-                else {"kind": kind, "ask": "x"})
+        if kind == "verdict":
+            body = {"kind": "verdict", "token": "cp1", "verdict": {"outcome": "approve"}}
+        elif kind == "question":
+            body = {"kind": "question", "question": "why postgres?"}
+        else:
+            body = {"kind": kind, "ask": "x"}
         with open(os.path.join(self.paths.inbox, mid + ".json"), "w") as fh:
             json.dump(body, fh)
+
+    def _argv_stub(self):
+        """A fake `claude` that records the argv it was launched with and exits.
+
+        The prompt is the only thing separating "answer this question and stop" from
+        "drive the build loop unattended", so it is checked against what was actually
+        exec'd rather than against the branch that chose it.
+        """
+        dump = os.path.join(self.root, "argv.json")
+        path = os.path.join(self.bin, "claude-argv")
+        with open(path, "w") as fh:
+            fh.write("#!/usr/bin/env python3\n"
+                     "import sys, json\n"
+                     "json.dump(sys.argv, open(%r, 'w'))\n" % dump)
+        os.chmod(path, 0o755)
+        self._env("BUS_CLAUDE_BIN", path)
+        return dump
+
+    def _launched_prompt(self, dump):
+        self._reap()
+        with open(dump) as fh:
+            argv = json.load(fh)
+        return argv[argv.index("-p") + 1]
 
     def _stub(self, mode):
         """A fake `claude`. `drain` = a loop that consumes the inbox (progress); `crash` =
@@ -601,6 +741,35 @@ class Runner(Tmp):
         self._pending()
         self.d.runner.tick(self.d)
         self.assertIsNone(self.d.runner.launched)
+
+    def test_a_lone_question_spawns_the_ANSWER_prompt(self):
+        """The whole point of the away channel, extended to questions: an unanswered
+        question is as stuck as an unconsumed verdict."""
+        self._config()
+        self._pending("question")
+        dump = self._argv_stub()
+        self.d.runner.tick(self.d)
+        self.assertIsNotNone(self.d.runner.launched)
+        self.assertEqual(self._launched_prompt(dump), bus.RUNNER_ANSWER_PROMPT)
+
+    def test_the_answer_prompt_forbids_driving_the_loop(self):
+        """The sharp failure mode is a human asking a question and getting an
+        unattended build, so the prohibition is pinned in the prompt text itself."""
+        p = bus.RUNNER_ANSWER_PROMPT.lower()
+        self.assertIn("answer", p)
+        self.assertIn("do not", p)
+        self.assertNotIn("continue the loop", p)
+
+    def test_one_drivable_message_wins_the_resume_prompt(self):
+        """A mixed batch is a build relaunch that answers on the way past — the loop
+        drains every kind at its boundary, so a question in the batch must not downgrade
+        a verdict into answer-and-stop."""
+        self._config()
+        self._pending("verdict", mid=self.VID)
+        self._pending("question", mid="20260716T120001.000001Z-bbbbbbbb-1")
+        dump = self._argv_stub()
+        self.d.runner.tick(self.d)
+        self.assertEqual(self._launched_prompt(dump), bus.RUNNER_RESUME_PROMPT)
 
     def test_a_lone_control_is_not_applicable(self):
         self._config()
@@ -3098,6 +3267,60 @@ class RemoteSocketTailscale(RemoteSocket):
                                  body={"token": "cp1",
                                        "verdict": {"tasks": [{"outcome": "approve"}]}})
         self.assertEqual(code, 202, body)
+
+    def test_a_question_does_not_exist_on_the_remote_surface(self):
+        """The loopback-only call, proven at the socket rather than asserted in a comment.
+
+        A question is run into `claude -p` verbatim, so POST access to it is arbitrary
+        authoritative instruction into an autonomous agent — the bar a forged verdict has
+        to clear, cleared more easily, because a verdict's notes ride a bounded decision
+        while a question IS the prompt. 404 and not 403: the surface does not have it.
+        """
+        code, body, _ = self.req(self.rport, "/api/question", method="POST",
+                                 token="remote-token-A",
+                                 body={"question": "why postgres?"})
+        self.assertEqual(code, 404, body)
+
+    def test_the_same_question_is_accepted_on_loopback(self):
+        """The other half — otherwise the test above would pass on a broken endpoint."""
+        code, body, _ = self.req(self.bport, "/api/question", method="POST",
+                                 token="loopback-token-B",
+                                 body={"question": "why postgres?"})
+        self.assertEqual(code, 202, body)
+
+    def test_the_remote_allowlist_is_still_verdict_only(self):
+        """Pins the decision itself. A future kind added to KINDS reaches the remote
+        surface only by being added HERE, which is a line somebody has to write on
+        purpose — this test is what makes forgetting it visible."""
+        self.assertEqual(bus.REMOTE_KINDS, ("verdict",))
+        self.assertNotIn("question", bus.REMOTE_KINDS)
+
+
+class QuestionKind(unittest.TestCase):
+    """The `question` inbox kind — the read-side sibling of `intake`."""
+
+    def test_it_is_a_kind_the_bus_accepts(self):
+        clean, sensitive = bus.validate("question", {"question": "why postgres?"})
+        self.assertEqual(clean, {"question": "why postgres?"})
+        # A question carries no token, no ids and no payload, so it can never be
+        # sensitive — and a `returns` smuggled alongside it is simply not carried.
+        self.assertFalse(sensitive)
+
+    def test_an_empty_question_is_refused(self):
+        for bad in ({}, {"question": ""}, {"question": "   "}, {"question": 7}):
+            with self.assertRaises(bus.Invalid):
+                bus.validate("question", bad)
+
+    def test_it_carries_nothing_but_the_question(self):
+        """No pass-through: a caller cannot smuggle a token or a returns map in."""
+        clean, _ = bus.validate("question", {"question": "q", "token": "cp1",
+                                             "returns": {"K": {"value": "v"}}})
+        self.assertEqual(clean, {"question": "q"})
+
+    def test_the_runner_will_spawn_for_one(self):
+        """An unanswered question is as stuck as an unconsumed verdict — that is the
+        whole reason the console stops being write-only."""
+        self.assertIn("question", bus.RUNNER_KINDS)
 
 
 if __name__ == "__main__":

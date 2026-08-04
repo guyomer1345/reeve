@@ -76,6 +76,7 @@ overlap into one adjudicator.
 | create-issue | skill | capture a problem/idea → backlog + GitHub issue | `skills/create-issue` |
 | close-issue | skill | close the GitHub issue a completed item resolved (commit tail) | `skills/close-issue` |
 | align | skill | periodic spec↔code reconciliation scan (mechanical always-whole + scoped semantic) | `skills/align` |
+| answer | skill *(side door — entered from the boundary drain)* | answer a human's question from the project's own record → the conversation thread | `skills/answer` |
 
 ## Loop order (the spine)
 `.workflow/loop.md` is the **authoritative** routing graph (D80); this is the summary spine. Edges added in the

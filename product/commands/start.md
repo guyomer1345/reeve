@@ -92,14 +92,14 @@ loop's normal `state.json` takes over when the motion ends.
    approved. All three are **committed** when they appear (the gitignore below is an allowlist of runtime paths,
    so a new durable file is committed by default — which is the right default for a ledger).
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
-   `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, and the per-ticket worktrees (created at runtime by the
+   `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,
    `checks.env`, `codemap.sh`, `handoff.md`, `backlog.md`, `items/`, and `docs/`) are committed. **`secrets/` holds live
    credentials** a human hands over at a setup checkpoint — it must be gitignored *and* live on a filesystem that
    honours `0600`; it is never swept by the retention pass.
 3. **Place the runtime tree on a filesystem that can hold it.** Check the mount under the launch root. The
    atomicity- and mode-sensitive runtime paths (`state.json`, `bus.json`, `bus.lock`, `orchestrator.lock`, `alerts.json`, `parked/`,
-   `inbox/`, `outbox/`, `secrets/`, `remote_token`) need a **local** filesystem: on a network-style or Windows-interop mount, `rename` is not
+   `inbox/`, `outbox/`, `thread/`, `secrets/`, `remote_token`) need a **local** filesystem: on a network-style or Windows-interop mount, `rename` is not
    reliably atomic and — the one that bites silently — **a file created `0600` can come back world-readable with no
    error at all**, which would leave the console's capability token and any stored credential readable by other
    users on the machine.

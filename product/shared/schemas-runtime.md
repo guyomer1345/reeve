@@ -60,6 +60,13 @@ resolves here — the name is the anchor, and the two files are one schema.*
 - `demo` — the demo-sandbox knob read by `create-demo`: `max_refine_rounds` (the cap on demo regenerations
   before the refine loop stops auto-proceeding and **escalates to a live `discuss`**). Absent → shipped default
   (`max_refine_rounds` 3).
+- `thread` — the conversation-thread knobs read by the `answer` skill (`schemas.md § conversation-thread`):
+  `rotate_at_tokens` (the estimated context past which the thread hands off and starts a fresh session) and
+  `max_turns_rendered` (how many turns the console panel shows; the rest stay on disk until rotation). Absent →
+  shipped defaults (`rotate_at_tokens` 200000, `max_turns_rendered` 50). **Decoupled from `retention` and
+  `doc_budget`, and it is the odd one out on purpose:** every other retention knob bounds *bytes on disk*, while
+  this one bounds *spend* — `--resume` re-sends the whole thread on every message, so length is priced per
+  question. It borrows `doc_budget.chars_per_token` as its estimator rather than declaring a second divisor.
 - `checkpoint` — the park-deadline knobs, **read by the console daemon** (the only always-alive process, so the
   only one that can own a timer): `deadline_hours` (the orchestrator stamps an *absolute* `deadline` onto the
   parked record as *now + this*; once passed, the daemon escalates — a **deadline never auto-proceeds**, it only
