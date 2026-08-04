@@ -118,6 +118,10 @@ to run, so the leaf skills stay in their lane. It is a positive fast-path: `chec
 closed** whenever source exists under `project_root` with no stack gate wired, so skipping this step cannot silently
 disarm the gate — it stops the loop loudly until the stack is wired.
 
+**Skip this entirely when `checks.env` sets `STACK_GATE_NONE`** — a tree whose code must never be executed here is
+*declared*, not unwired, and is already transitioned. Wiring commands into it re-arms `eval` on foreign code; the
+runner refuses them and reports the conflict, so the attempt is noise, not a fix.
+
 ## Maintenance items
 `prioritize` injects a **maintenance item** on a threshold (§ `prioritize`): a *retention/size* threshold →
 `document:audit` (bound the append-only tier); a *drift* threshold → `align` (reconcile spec/decisions/promises

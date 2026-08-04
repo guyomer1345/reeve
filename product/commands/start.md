@@ -318,7 +318,10 @@ loop's normal `state.json` takes over when the motion ends.
      lock**: the orchestrator re-runs it the moment `decision-engineer` resolves the stack (see `.workflow/loop.md`
      → *Stack-wiring at tech_stack lock*). Until then `checks.sh --check` **fails the commit closed** the instant
      source lands under `project_root` with no stack gate wired — so a missed re-run cannot silently disarm the
-     gate, it stops the loop loudly instead.
+     gate, it stops the loop loudly instead. (That backstop reads `git ls-files -- <project_root>`, so it only
+     reaches a `project_root` **inside this repo**; keeping the two in one repo is a precondition of the gate,
+     not an incidental layout choice. A tree that must never have its code executed here declares that instead —
+     `STACK_GATE_NONE` below — rather than leaving the gate unwired.)
    - **Seed the rules.** Copy the package baseline `${CLAUDE_PLUGIN_ROOT}/rules/*.md` → **`<project_root>/rules/`**. When the
      stack is known, rewrite each `— enforced by: <mechanism>` tag with the
      project's *concrete* tool (e.g. `formatter` → `prettier`/`black`/`gofmt`), so the agent reads real commands.
@@ -342,9 +345,18 @@ loop's normal `state.json` takes over when the motion ends.
        item's staged file list in `--fix`, so `commit` scopes fixers to staged files, never a repo-wide sweep);
      - `FMT_CHECK` / `LINT` / `TYPECHECK` / `TEST` — the repo-wide `--check` gates (each carries its own path;
        omit `TYPECHECK` for a language with no typechecker).
+     - `STACK_GATE_NONE` — a **reason string**, and the *third* stack-gate state. There are three, not two:
+       **wired**, **not yet wired** (all unset — the backstop below), and **declared none**. Set it only for a
+       tree whose code must never be executed on this machine; the runner then executes **nothing** from
+       `checks.env` in either mode, prints the reason on every run, and keeps the stack-agnostic coverage gates
+       running. Because the values are `source`d and the fixers `eval`'d, a later re-wire would be arbitrary code
+       execution — so the declaration **wins over any command set alongside it** and reports the conflict rather
+       than obeying it. Do **not** reach for it to quiet a red gate; that is the not-yet-wired state, and it is
+       loud on purpose.
      **Greenfield with no stack yet writes an empty (coverage-only) `checks.env` now and fills these at
      `tech_stack` lock** (the stack-wiring step above); the `checks.sh` backstop fails the commit closed if source
-     lands before then. Both files are committed. `--check` also runs the three stack-agnostic coverage gates over every open item —
+     lands before then. Both files are committed — which is what lets a `STACK_GATE_NONE` declaration travel with
+     the repo instead of quietly lapsing on the next machine. `--check` also runs the three stack-agnostic coverage gates over every open item —
      a load-bearing promise with no resolvable / boundary test, an `artifact` criterion with no `discharge`, or a
      governing decision mapped to no step fails the commit (the mechanical plan-coverage gates; teeth, not advice).
    - **Register the git backstop.** Install `pre-commit.sh` (copied to `.claude/hooks/` in step 4) as git's

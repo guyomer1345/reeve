@@ -50,7 +50,8 @@ if [ -f "$runner" ]; then
   # later, at the moment it actually matters, and visibly to `claude -p`.
   bash "$runner" --check || block "mechanical checks failed. Run the commit skill (auto-fixes) or 'bash $runner --fix', then re-stage.
   If the check COMMANDS themselves could not run (not found / no such module), this machine never got the toolchain that
-  '.workflow/checks.env' names — it is gitignored and does not travel between machines. Install it, or run /rebind."
+  '.workflow/checks.env' names — the file is committed and travels, but the tools it names are machine-local and do not.
+  Install them, or run /rebind."
 fi
 
 exit 0

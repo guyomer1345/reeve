@@ -160,6 +160,77 @@ def test_check_allows_source_once_stack_gate_wired(tmp_path):
     assert r.returncode == 0, r.stderr
 
 
+def test_backstop_no_ops_when_project_root_is_outside_the_repo(tmp_path):
+    """The backstop's REACH, pinned as a regression. `git ls-files -- <abs path outside the
+    repo>` exits 128 with empty stdout (the 2>/dev/null swallows the fatal), so the gate
+    silently no-ops rather than blocking. This is the shipped, intended limit — and it is the
+    reason org mode keeps the brain and the code in ONE repo (project_root ".") instead of
+    pointing project_root at a tree elsewhere on the machine. If this test ever starts
+    failing, the backstop grew reach and that topology constraint can be revisited."""
+    outside = tmp_path.parent / (tmp_path.name + "-outside")
+    outside.mkdir()
+    (outside / "mod.py").write_text("def add(a, b):\n    return a + b\n")
+    root = _git_project(tmp_path, "", {"README.md": "# spec\n"})
+    (root / ".workflow" / "config.json").write_text(json.dumps({"project_root": str(outside)}))
+    r = _run(root, "--check")
+    assert r.returncode == 0, r.stderr
+    assert "no stack gate" not in r.stderr
+
+
+def test_not_yet_wired_block_points_at_the_third_state(tmp_path):
+    # The two states are told apart by the operator, so the loud one has to name the other.
+    root = _git_project(tmp_path, "", {"mod.py": "def add(a, b):\n    return a + b\n"})
+    r = _run(root, "--check")
+    assert r.returncode != 0
+    assert "STACK_GATE_NONE" in r.stderr
+
+
+# --- state 3: the stack gate is off BY DECLARATION -------------------------------------
+NONE_DECL = 'STACK_GATE_NONE="org mode: never execute anything out of the checkout"\n'
+
+
+def test_declared_none_passes_with_source_present(tmp_path):
+    """The deadlock this state exists to break: source under project_root and no stack gate
+    is state 2 (block), but the same tree with a declaration is state 3 (proceed). Without
+    this, org mode's first commit could never be made."""
+    root = _git_project(tmp_path, NONE_DECL, {"mod.py": "def add(a, b):\n    return a + b\n"})
+    r = _run(root, "--check")
+    assert r.returncode == 0, r.stderr
+    assert "DECLARED NONE" in r.stderr
+    assert "never execute anything out of the checkout" in r.stderr   # the reason, every run
+
+
+def test_declared_none_still_runs_the_coverage_gates(tmp_path):
+    # Declaring the EXECUTABLE gate off must not disarm the stack-agnostic ones.
+    bad = {"decisions": [{"id": "D-001", "steps": []}]}
+    root = _project(tmp_path, NONE_DECL, bad)
+    r = _run(root, "--check")
+    assert r.returncode != 0, "the declaration must only cover checks.env, not the coverage gates"
+
+
+def test_declared_none_refuses_to_execute_a_wired_check_command(tmp_path):
+    """The structural half: a later re-wire (a re-run of /start's brownfield stack adoption)
+    must not silently re-arm arbitrary code execution. The declaration wins, and says so."""
+    root = _project(tmp_path, "")
+    (root / ".workflow" / "checks.env").write_text(
+        NONE_DECL + f'TEST="touch {root / "EXECUTED"}"\n')
+    r = _run(root, "--check")
+    assert r.returncode == 0, r.stderr
+    assert not (root / "EXECUTED").exists(), "a declared-none tree executed a checks.env command"
+    assert "REFUSED" in r.stderr and "TEST" in r.stderr
+
+
+def test_declared_none_refuses_the_fixers_too(tmp_path):
+    # FMT_FIX/LINT_FIX are `eval`'d exactly like the --check commands, so --fix is the same hole.
+    root = _project(tmp_path, "")
+    (root / ".workflow" / "checks.env").write_text(
+        NONE_DECL + f'FMT_FIX="touch {root / "FIXED"}"\n')
+    r = _run(root, "--fix", "a.py")
+    assert r.returncode == 0, r.stderr
+    assert not (root / "FIXED").exists(), "a declared-none tree ran a fixer"
+    assert "DECLARED NONE" in r.stderr
+
+
 def test_fix_passes_staged_files_to_fixer(tmp_path):
     # A logging stub stands in for the formatter; prove the file list reaches it verbatim.
     root = _project(tmp_path, "")

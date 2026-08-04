@@ -99,8 +99,8 @@ The runner does the arithmetic. What the loss *means* needs a conversation.
    `bash .workflow/checks.sh --check` from the repo root — the exact command, cwd and shell the pre-commit hook
    uses — and reports `bindable: YES|NO`. On **NO** the project is correctly bound and *still cannot commit*: the
    gate is the loop's floor and the hook blocks on it. That is the class the portability audit never enumerated —
-   the durable half is portable, but the toolchain `.workflow/checks.env` names is machine-local, gitignored, and
-   correctly did not travel. **The probe reports an observable and does not diagnose it**, so read the tail it
+   the durable half is portable, but the toolchain `.workflow/checks.env` names is machine-local and correctly did
+   not travel — the file itself is committed and arrived fine; the tools it names are what is missing. **The probe reports an observable and does not diagnose it**, so read the tail it
    prints: commands that cannot *run* (not found, no such module) mean the stack is missing on this machine;
    commands that run and *fail* mean something is genuinely red. Say which one you think it is and why, and
    **say plainly if you cannot fix it here** — on a mount that cannot `chmod` (Windows-interop, some network
