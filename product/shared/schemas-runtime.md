@@ -11,7 +11,16 @@ convention in `shared/memory-model.md`. A reference of the form `schemas.md § <
 resolves here — the name is the anchor, and the two files are one schema.*
 
 ## config.json  · written once by `/start`, read on demand · *rewrite-in-place · static after init (committed)*
-- `project_root` — `./project` (greenfield) | `.` (brownfield); makes code-touching skills path-agnostic
+- `project_root` — `./project` (greenfield) | `.` (brownfield **and org**); makes code-touching skills path-agnostic
+- `docs_root` — where the workflow's **derived** docs live (`docs/spec.md`, `docs/architecture.md`,
+  `docs/knowledge/`, `docs/decisions/`, `rules/`). Absent → **`project_root`**, which is every mode but org, so
+  the split is invisible unless a mode asks for it. **Org mode sets `.workflow`**, and the reason is the leak
+  boundary rather than tidiness: there the tree *is* a clone of a repo the workflow does not own, which very
+  likely already has its own `docs/` — writing derived IP about proprietary code into it would both clobber the
+  owner's files and reduce the review bundle's exclusion list from two directories to a per-file list that has to
+  stay correct forever. Namespaced, the brain owns exactly **`.workflow/` + `.claude/`** and nothing else, so the
+  exclusion is structural. Adopted as its **own key with its own owner** rather than overloading `project_root`,
+  which would then mean "where the code is" to one reader and "where the docs are" to another.
 - `workflow_version` — the installed package version, stamped by `/start` step 7 and restamped by every
   `/update`; the migration key `/update` diffs against (an install that cannot say which snapshot it holds
   cannot be migrated). Equal old/new ⇒ a **no-op** update; **absent** ⇒ unknown-old ⇒ full reconcile +
@@ -176,6 +185,27 @@ resolves here — the name is the anchor, and the two files are one schema.*
     out-of-band `git push` that bypassed the outgoing-range secret scan entirely. Making it an explicit,
     committed, default-OFF config key is strictly safer than the workaround it was producing. The floor still
     defaults ON, so a fresh `/start` is unchanged.
+- `org` — **org mode. Its PRESENCE is the mode; absent ⇒ wholly inert**, and there is deliberately **no
+  `enabled` flag**. That is the one place this key breaks the shape `runner`/`remote` use, and the break is the
+  point: switching a live project's git topology is a **migration, not a setting**, so the mode is chosen once at
+  `/start` and a config edit must never be able to flip it. Org mode runs the workflow against a product the
+  operator does **not own** — the tree is a private clone with no push path to the owner, and the operator's own
+  checkout of that product is a **separate directory the workflow never reads or writes at all**.
+  - `checkout` — absolute path to the operator's own checkout, recorded so the bundle hand-off can name it
+    concretely (`cd <checkout> && git apply …`). **Never read from and never written to** — it is a string for a
+    human-facing message, not a second working tree. Absent → the hand-off names the bundle and lets the human
+    place it.
+  - `archive_remote_ack` — a **reason string** acknowledging that the private tree has been given a remote.
+    Absent (the default) → **no remote is permitted**, because the tree concentrates derived IP about someone
+    else's proprietary code and pushing it anywhere is a governance act, not a backup preference. Present → the
+    remote is allowed *and the console shows a standing badge for as long as one is configured*, so the
+    acknowledgement is a visible recorded fact rather than a sentence someone once read.
+  - **What the mode changes** is subtraction, not new machinery: `docs_root` namespaces the brain (above); the
+    brief goes to **`.claude/CLAUDE.md`** so the owner's root `CLAUDE.md` is never written (it is still read, as
+    the ingest intent-seed); `checks.env` declares `STACK_GATE_NONE`, because the tree's own code must never be
+    executed here; `create-issue`/`close-issue` stay **local-only** (never the owner's tracker); no hooks, no
+    installs and no `.gitignore` edits reach the owner's checkout; and `verify` degrades to **artifact
+    conformance**, with all runtime checking moved to a human `qa` checkpoint in the operator's own checkout.
 
 ## runtime.json  · written by `rebind.py` (`bind` at `/start` step 3, `apply` at `/rebind`), read by every process that touches a runtime path · *`.workflow/runtime.json`; RUNTIME, gitignored, atomic write; deliberately NOT on a native filesystem — it is the pointer TO it*
 - `{ runtime_root }` — an absolute path. The workflow tree spans **two filesystems** whenever the repo lives on a

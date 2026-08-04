@@ -164,6 +164,14 @@ def _read_json(path, default=None):
 
 
 def budgets(project_root):
+    """-> (budget knobs, project_root, docs_root).
+
+    `docs_root` is a SEPARATE path from `project_root`, defaulting to it. They are the same
+    everywhere except org mode, where the workflow's tree IS a clone of a repo it does not own:
+    the derived docs cannot sit at the repo root beside the owner's own `docs/`, so they are
+    namespaced under `.workflow/`. Two named roots, each with one owner, rather than one
+    `project_root` that quietly means two things depending on who is reading it.
+    """
     cfg = _read_json(os.path.join(project_root, CONFIG_REL), {}) or {}
     out = dict(DEFAULTS)
     got = cfg.get("doc_budget")
@@ -171,7 +179,8 @@ def budgets(project_root):
         for k, v in got.items():
             if k in out and isinstance(v, (int, float)) and v > 0:
                 out[k] = v
-    return out, (cfg.get("project_root") or ".")
+    proot = cfg.get("project_root") or "."
+    return out, proot, (cfg.get("docs_root") or proot), ("org" in cfg)
 
 
 def estimate_tokens(text, chars_per_token):
@@ -185,7 +194,7 @@ def estimate_tokens(text, chars_per_token):
     return int(math.ceil(len(text) / float(cpt)))
 
 
-def workflow_docs(project_root, proot):
+def workflow_docs(project_root, proot, droot=None, org=False):
     """(role, path) for every doc the workflow owns and a session can be made to read.
 
     The VOLATILE tier is deliberately ABSENT -- `state.json` and `handoff.md` are rewritten in
@@ -194,9 +203,23 @@ def workflow_docs(project_root, proot):
     and the two would drift.
     """
     p = (lambda *a: os.path.join(project_root, *a))
-    d = (lambda *a: os.path.join(project_root, proot, *a))
+    d = (lambda *a: os.path.join(project_root, droot if droot is not None else proot, *a))
     out = []
-    for path in (p("CLAUDE.md"), p(".workflow", "loop.md")):
+    # `.claude/CLAUDE.md` is the platform's OTHER project-instructions location and loads at the
+    # same scope as the root file (verified against the shipped docs, not assumed). Org mode puts
+    # the brief there so the owner's own root `CLAUDE.md` is never written -- but it is budgeted
+    # in every mode, because a brief that loads every turn costs the same wherever it is filed.
+    #
+    # In ORG mode the root `CLAUDE.md` belongs to the repo's owner, so it is NOT scanned. This is
+    # not tidiness: the hard tier FAILS a commit and its only remedy is to trim the file, which
+    # org mode forbids -- a company brief over `always_hard` would deadlock every commit behind a
+    # gate no one here is allowed to satisfy. Its context cost is real but it is theirs, in the
+    # same class as the size of their code; this gate's scope is what the WORKFLOW owns, which is
+    # exactly what it says when it reports "workflow-owned doc(s)".
+    always = [p(".claude", "CLAUDE.md"), p(".workflow", "loop.md")]
+    if not org:
+        always.insert(0, p("CLAUDE.md"))
+    for path in always:
         if os.path.isfile(path):
             out.append((ALWAYS, path))
     patterns = [
@@ -240,9 +263,9 @@ def workflow_docs(project_root, proot):
 
 
 def scan(project_root):
-    b, proot = budgets(project_root)
+    b, proot, droot, org = budgets(project_root)
     rows = []
-    for role, path in workflow_docs(project_root, proot):
+    for role, path in workflow_docs(project_root, proot, droot, org):
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:
                 text = fh.read()

@@ -1,6 +1,6 @@
 ---
-description: Bootstrap the disciplined-builder workflow in this project and become the orchestrator. Auto-detects greenfield (empty) vs brownfield (existing code), scaffolds workflow state, and hands off to building the spec (greenfield) or ingesting the existing code (brownfield).
-argument-hint: "[greenfield|brownfield]  (optional — auto-detected if omitted)"
+description: Bootstrap the disciplined-builder workflow in this project and become the orchestrator. Auto-detects greenfield (empty) vs brownfield (existing code), scaffolds workflow state, and hands off to building the spec (greenfield) or ingesting the existing code (brownfield). A third mode, org, is asked for explicitly and never detected — it runs the workflow against a product you do not own, from a private clone with no push path, leaving your own checkout untouched.
+argument-hint: "[greenfield|brownfield]  (optional — auto-detected)  |  org <repo-url-or-path>  (never auto-detected)"
 ---
 
 # /start — bootstrap the workflow (the `init` capability)
@@ -44,6 +44,11 @@ built-in Claude Code command.
 - Else pick the mode: `$ARGUMENTS` if given, otherwise **detect** — existing source files present →
   **brownfield**; empty (or package only) → **greenfield**. **Confirm the detected mode with the user**
   before proceeding (mis-classifying is costly).
+- **`org` is never detected — only asked for**, as `/start org <repo-url-or-path>`. It is the mode for a product
+  the operator does **not own**, and nothing on disk distinguishes "my repo" from "my employer's" — guessing
+  wrong in either direction is the expensive error (a false org mode cripples an ordinary project's gates; a
+  missed one puts derived IP where it must never go). It also **cannot be switched into later**: it changes the
+  repository topology, so it is a migration, not a setting. See §3a.
 - **`/start` is interactive-only.** The install (step 4) writes into `.claude/`, which Claude Code guards **above**
   the settings allowlist — trust and a `Write`/`Bash` allow do *not* waive it, so a non-interactive session
   (`claude -p`, the relaunch-runner) has no grant path and silently skips those writes. Run `/start` in an
@@ -51,7 +56,7 @@ built-in Claude Code command.
   **refuses to commit a hollow scaffold** if they did not. (The relaunch-runner never runs `/start` — it only
   resumes an already-initialised project — so this constraint does not touch away-autonomy.)
 
-## 1. Shared steps (both modes)
+## 1. Shared steps (all modes)
 **Progress is visible from the first minute.** At every stage boundary of this motion (each numbered step here,
 and each `ingest` stage on brownfield), publish `.workflow/state.json` (atomic write-temp → rename) as
 `{"status": "building", "phase": "bootstrap", "node": "start:<step>", "note": "<one human-readable line, e.g.
@@ -77,8 +82,11 @@ loop's normal `state.json` takes over when the motion ends.
      handoff.md        # durable resume anchor          (committed)
      backlog.md        # live OPEN queue (issues + roadmap; closed leave) (committed)
      outbox/           # RUNTIME — pending outward-action queue (push/issue awaiting a console release); add to .gitignore
-   <project_root>/     # the product (greenfield: project/ ; brownfield: repo root)
-     llms.txt          # thin agent entry point → docs/knowledge/  (committed)
+   <project_root>/     # the product (greenfield: project/ ; brownfield + org: repo root)
+   <docs_root>/        # where the DERIVED docs below live. = project_root everywhere except
+                       # ORG, where it is .workflow/ — the tree is a clone of a repo we do not
+                       # own, so nothing derived may sit at its root (§3a)
+     llms.txt          # thin agent entry point → docs/knowledge/  (committed; omitted in org)
      rules/            # engineering rules — specialized baseline, subtree-overridable (committed)
      docs/             # docs-root — durable product knowledge
        spec.md         # product spec — ONE file (discuss fills this)  (committed)
@@ -131,8 +139,9 @@ loop's normal `state.json` takes over when the motion ends.
    **`${CLAUDE_PLUGIN_ROOT}`** and the project root at **`${CLAUDE_PROJECT_DIR}`** (both substituted in this
    command). Always copy *out* of the plugin into the project — never invoke a shipped script in place, because
    `${CLAUDE_PLUGIN_ROOT}` is replaced on every plugin update.
-   - **Orchestrator brief** (the driver). **In both modes the brief goes into the root `CLAUDE.md` wrapped in
-     the managed-block markers** — `shared/schemas.md` owns the exact strings:
+   - **Orchestrator brief** (the driver). **The brief is always the filled template wrapped in the managed-block
+     markers**; only its FILE differs by mode (root `CLAUDE.md`, except org — see below) — `shared/schemas.md`
+     owns the exact strings:
      ```
      <!-- dev-autonomous-workflow:brief:begin -->
      <!-- managed block: /update replaces everything between these markers. Put project notes OUTSIDE them. -->
@@ -148,6 +157,11 @@ loop's normal `state.json` takes over when the motion ends.
      - **brownfield:** the product stays at the repo root; wrap that same filled template in the markers and
        **append** it to the *existing* root `CLAUDE.md` (never clobber — idempotent via the markers); read
        that existing `CLAUDE.md` as a **primary ingest source**; set `project_root: .`.
+     - **org:** the same wrapped template goes to **`.claude/CLAUDE.md`**, never the root file. That path is a
+       first-class project-instructions location — Claude Code loads it at project scope alongside a root
+       `CLAUDE.md`, and *concatenates* rather than overriding — so the brief still loads every session while the
+       owner's own root `CLAUDE.md` stays **byte-untouched**. It is still read as a primary ingest source; it is
+       simply never written. Set `project_root: .` and `docs_root: .workflow` (§3a).
    - Copy `${CLAUDE_PLUGIN_ROOT}/templates/loop.md` → **`.workflow/loop.md`** and write
      **`.workflow/config.json`** (`project_root` + run config).
    - **Capture any pre-existing statusline *before* the copy (composition — never clobber).** The template
@@ -462,6 +476,44 @@ loop's normal `state.json` takes over when the motion ends.
   the bootstrap window into feature work.
 - The session that consumes the reconcile verdict flips the ledger to **`bootstrap: complete`** and hands to
   the normal loop.
+
+## 3a. Org (a product you do not own)  — brownfield minus footprint
+Invoked only as **`/start org <repo-url-or-path>`**, from an **empty directory** — the *brain*. Everything the
+workflow knows lives here; the operator's own checkout of that product is a different directory this workflow
+never reads and never writes. Run the shared steps as for **brownfield**, with these deltas — all of them
+subtractions, which is why this mode is cheap to build and expensive to get wrong.
+
+- **Clone into the brain, then remove the push path.** `git clone <upstream> .` into the empty brain, then
+  **`git remote set-url --push origin no_push`**. Fetch keeps working (`align` needs `FETCH_HEAD`); every form of
+  `git push` — bare, explicit, or `--all` — dies on a fatal before it reaches a network. This is git's own
+  mechanism, not a policy we enforce. It is the **second** line, not the first: `guard.sh`'s protected-branch
+  floor is absolute in org mode and must not be lowered by `allow_protected_push` here.
+  - **Refuse to bootstrap into a non-empty directory.** The brain must be the clone; laying it over an existing
+    tree is how the two get confused.
+- **Namespace everything derived** — `docs_root: .workflow` (schema in `shared/schemas-runtime.md`). Spec,
+  architecture, knowledge, decisions and `rules/` go under `.workflow/`; no `llms.txt` at the root. The brain
+  therefore owns exactly **`.workflow/` + `.claude/`** and touches nothing else, which is what makes the review
+  bundle's exclusion list two entries long instead of a per-file list that must stay correct forever. Do **not**
+  adopt or write the repo's own `docs/` — read it, like any other source.
+- **Declare the stack gate off.** Write `STACK_GATE_NONE` into `.workflow/checks.env` with the reason, and wire
+  **no** `FMT_*`/`LINT*`/`TYPECHECK`/`TEST`. This is not a shortcut: `checks.env` is `source`d and its fixers
+  `eval`'d, so adopting a stack command out of a repo you do not own is arbitrary code execution on this machine,
+  plausibly against live services. **Never execute anything out of this tree** — no install, no build, no test,
+  no hook of theirs. Skip the whole *wire the enforcers* half of step 6 (no `.editorconfig`, no CI workflow, no
+  formatter config written into their repo); the stack-agnostic coverage gates still run and still have teeth.
+- **Never write a company-visible surface.** No `.gitignore` edit, no git hooks installed into the clone's
+  worktree beyond our own `.claude/hooks/` wiring, no adoption of the repo's secrets, and
+  **`create-issue`/`close-issue` stay local-only** — never `gh issue` against the owner's tracker. The tracker is
+  the sharpest side-door precisely because it is reachable from anywhere and looks harmless.
+- **Then run `ingest` exactly as brownfield does** — the code map is safe to build over code you do not own
+  (`codemap.py` is static: `ast` + `re`, no `subprocess`, no `exec`, no dynamic import), and the reconstructed
+  spec lands under `docs_root`. The reconcile checkpoint is unchanged.
+- **`verify` degrades to artifact conformance** (plan vs changelog vs spec). Nothing runs, so nothing runtime can
+  be checked here; that check moves to a human `qa` checkpoint in the operator's **own** checkout. State this
+  plainly at bootstrap rather than letting a thinner `verify` be discovered later.
+- **Record `org` in `.workflow/config.json`** (`checkout`, optionally; `archive_remote_ack` only if the operator
+  is deliberately giving the brain a remote). Its presence *is* the mode — there is no toggle, and a later config
+  edit must never be able to flip a project into or out of it.
 
 ## Expand later
 - Additional **code-map language arms** — Python (`ast`), **JS/TS** (tsconfig resolver), **Go**, **Java**, and

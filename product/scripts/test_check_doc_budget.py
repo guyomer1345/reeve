@@ -21,9 +21,13 @@ SCRIPT = os.path.join(HERE, "check_doc_budget.py")
 
 # ---------------------------------------------------------------- fixtures
 
-def _project(root, project_root=".", doc_budget=None):
+def _project(root, project_root=".", doc_budget=None, docs_root=None, org=None):
     os.makedirs(os.path.join(root, ".workflow"), exist_ok=True)
     cfg = {"project_root": project_root}
+    if docs_root is not None:
+        cfg["docs_root"] = docs_root
+    if org is not None:
+        cfg["org"] = org
     if doc_budget is not None:
         cfg["doc_budget"] = doc_budget
     with open(os.path.join(root, ".workflow", "config.json"), "w") as fh:
@@ -96,6 +100,61 @@ def test_a_nested_project_root_is_honoured(tmp_path):
     root = _project(tmp_path, project_root="./project")
     _write(root, "project/docs/spec.md", tokens=100)
     assert "project/docs/spec.md" in _tiers(_scan(root))
+
+
+def test_docs_root_defaults_to_project_root(tmp_path):
+    # The only safe default: every existing project ships no `docs_root`, so the split must be
+    # invisible unless a mode asks for it.
+    root = _project(tmp_path, project_root="./project")
+    _write(root, "project/docs/spec.md", tokens=100)
+    assert "project/docs/spec.md" in _tiers(_scan(root))
+
+
+def test_docs_root_splits_the_derived_docs_off_project_root(tmp_path):
+    """Org mode: the tree IS a clone of a repo the workflow does not own, so the derived docs
+    are namespaced under `.workflow/` and the owner's own `docs/` at the root is NOT ours to
+    budget, read or write. Both facts are asserted, because the second is the leak boundary."""
+    root = _project(tmp_path, project_root=".", docs_root=".workflow")
+    _write(root, ".workflow/docs/spec.md", tokens=100)
+    _write(root, ".workflow/rules/style.md", tokens=50)
+    _write(root, "docs/spec.md", tokens=100)          # the COMPANY's own doc, same name
+    paths = _tiers(_scan(root))
+    assert ".workflow/docs/spec.md" in paths
+    assert ".workflow/rules/style.md" in paths
+    assert "docs/spec.md" not in paths, "the owner's own docs must never be scanned as ours"
+
+
+def test_a_brief_in_dot_claude_is_budgeted_as_always_loaded(tmp_path):
+    """`.claude/CLAUDE.md` is the platform's other project-instructions location and loads at
+    the same scope as the root file, so it costs the same rent — in every mode, not just org."""
+    root = _project(tmp_path)
+    _write(root, ".claude/CLAUDE.md", tokens=4200)     # past always_hard (4000)
+    res = _scan(root)
+    roles = {r["path"]: r["role"] for r in res["files"]}
+    assert roles[".claude/CLAUDE.md"] == db.ALWAYS
+    assert _tiers(res)[".claude/CLAUDE.md"] == "over"
+
+
+def test_a_foreign_root_claude_md_cannot_block_a_commit_in_org_mode(tmp_path):
+    """Found by RENDERING an org-shaped brain, not by reading the code. The owner's root
+    `CLAUDE.md` is always-loaded, so it was scanned — but the hard tier FAILS the commit and its
+    only remedy is trimming a file org mode forbids us to touch. A big company brief would have
+    deadlocked every commit behind a gate nobody here is allowed to satisfy."""
+    root = _project(tmp_path, docs_root=".workflow", org={"checkout": "/home/dev/work/acme"})
+    _write(root, "CLAUDE.md", tokens=9000)             # theirs, far past always_hard
+    _write(root, ".claude/CLAUDE.md", tokens=500)      # ours
+    res = _scan(root)
+    paths = _tiers(res)
+    assert "CLAUDE.md" not in paths, "the owner's brief is not ours to budget"
+    assert paths[".claude/CLAUDE.md"] == "ok"
+    assert res["over"] == []
+
+
+def test_the_same_oversized_brief_still_blocks_outside_org_mode(tmp_path):
+    # The exemption is org-only. Without it the gate must keep its teeth on our own brief.
+    root = _project(tmp_path)
+    _write(root, "CLAUDE.md", tokens=9000)
+    assert _tiers(_scan(root))["CLAUDE.md"] == "over"
 
 
 def test_the_volatile_tier_is_deliberately_out_of_scope(tmp_path):
@@ -199,8 +258,8 @@ def test_a_malformed_config_falls_back_to_the_shipped_defaults(tmp_path):
     os.makedirs(os.path.join(tmp_path, ".workflow"))
     with open(os.path.join(tmp_path, ".workflow", "config.json"), "w") as fh:
         fh.write("{not json")
-    b, proot = db.budgets(str(tmp_path))
-    assert b == db.DEFAULTS and proot == "."
+    b, proot, droot, org = db.budgets(str(tmp_path))
+    assert b == db.DEFAULTS and proot == "." and droot == "." and org is False
 
 
 def test_runs_as_a_subprocess_the_way_checks_sh_calls_it(tmp_path):
