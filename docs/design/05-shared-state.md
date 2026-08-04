@@ -7,7 +7,9 @@ doesn't grow ad hoc.
 
 ## The comms bus **[DECIDED — D90/D91 + D93/D94/D95]**
 A **local HTTP loopback service** (the website's backend) is the message channel. Its contract closes on four
-pieces — **ownership · protocol · lifecycle · trust** (message + `bus.json` schemas live in `shared/schemas.md`).
+pieces — **ownership · protocol · lifecycle · trust** (the message schema lives in `shared/schemas.md`; `bus.json`
+moved to its live sibling `shared/schemas-runtime.md` at the D168 split — `schemas.md § bus.json` still resolves,
+the section name is the anchor).
 
 **Ownership — a single-writer partition, zero co-written files (D93).** Each file has exactly one writer process:
 the **orchestrator** solely writes `state.json` / `handoff.md` / `backlog.md` / `parked/` / `items/` + git; the

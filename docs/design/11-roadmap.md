@@ -630,7 +630,8 @@ lifecycle.
   `ingest`/`start.md` state plainly that the motion ends the context window at the park.
   **[ctx — BUILT (D134); RE-DRIVEN (D138)]**
 - **Version-stamped installs (D135)** — `/start` step 7 writes `workflow_version` into
-  `.workflow/config.json`; `schemas.md` owns the field. **Since 8a it is the commit SHA, not a semver**: D164
+  `.workflow/config.json`; `schemas-runtime.md` owns the field (the `config.json` section moved there at the D168
+  split). **Since 8a it is the commit SHA, not a semver**: D164
   deleted `version` from `plugin.json` so the platform keys delivery on the commit, and D165 built the four-rung
   resolver that reads it. **[fwd — BUILT (D135); the stamp became a SHA in 8a (D164/D165)]**
 - **`/update` — BUILT (D139)** — constraints pinned by D135 (regenerate `[G]`/`graph.json` under the new schema ·
@@ -651,7 +652,8 @@ lifecycle.
   live in the statusline (the one surface the running token count reaches). **BUILT 2026-07-26** (`product/**`):
   `scripts/statusline.py` (composes over a `/start`-captured `statusline.delegate`, never clobbers), `commands/dispatch.md`,
   `hooks/session_start.py` (SessionStart `clear` → re-inject `handoff.md`), `hooks/precompact.py` (both `manual`+`auto`,
-  never blocks); `config.context.warn_pct` + `statusline.delegate` own their `schemas.md`; 20 governor tests + full
+  never blocks); `config.context.warn_pct` + `statusline.delegate` are owned by `schemas-runtime.md` (both moved
+  there at the D168 split); 20 governor tests + full
   321-test suite + 5 meta-gates green. **[ctx — BUILT (D136); CYCLE DRIVEN 2026-08-02 (D151) — banner → `/dispatch` (a real `claude -p`; both machine blocks preserved byte for byte) → `SessionStart(clear)` rehydrate → a fresh session resumed from the anchor alone and carried a decision that had existed only in the pre-clear conversation]**
 
 **Sequence (set 2026-07-26) — COMPLETE.** Build the governor (D136) **[BUILT 2026-07-26]** → forced-reinstall the
@@ -773,10 +775,15 @@ biggest remaining feature — it is the only open item that **harms a user today
   **today** is the maintainer, so this is first a correctness argument about the project's own evidence — a drive
   that silently runs commits-old code and reports it as HEAD — and only second a user-facing one.
 - **8b — the interaction-model rework** (browser-primary async chat — `07`) — **`[core]`, sequenced second,
-  deliberately.** Its blocker has cleared (D132 parked it behind a proper re-drive; D138 ran one), so this is a
-  scheduling call, not a dependency: shipping a large new surface onto a fleet that cannot learn it is stale
-  multiplies the exact problem 8a exists to fix. Do 8a first — it is small — then build this on a fleet that can
-  actually receive it.
+  deliberately; NOW THE LIVE POINTER, since 8a is BUILT.** Its blocker has cleared (D132 parked it behind a proper
+  re-drive; D138 ran one), so this is a scheduling call, not a dependency: shipping a large new surface onto a fleet
+  that cannot learn it is stale multiplies the exact problem 8a exists to fix. Do 8a first — it is small — then
+  build this on a fleet that can actually receive it. **Three build constraints were researched 2026-08-04 and live
+  in `07` (owner)** — the Agent SDK's persistent-session client is closed to us (stdlib-only), the master rule is
+  looser than D132's "the daemon never calls Claude" (a *local* spawn is clean, as the D123 runner already is), and
+  the WSL daemon-mortality precondition is a **one-line user opt-in**, not an engineering blocker. **Three calls stay
+  open** (thread storage class · question-vs-work classification · loopback-only), and it has a **surface**, so it
+  gets a browser drive before it is called done — the discipline that caught both 9a defects (D166).
 
 *Everything else stays `[stageable]`/`[later]` and is picked off the by-space list above, not this sequence — the
 living code-map observed layer, the D84 reclassification, the proportional-rigor gate, build-once-per-wave,
@@ -839,8 +846,18 @@ that is the through-line and the reason none is large. Capture is design-only; t
     (`shared/schemas.md` owner) · the `doc-budget` maintenance item in `prioritize` + `loop.md` · the context-budget
     law and the **split-and-pointer** convention in `memory-model.md` · distil-before-cap in `document`'s audit mode,
     with `# Lessons` **top-level and before `# Sessions`** (nested under it, the cap would eat it — proven both ways).
-    **First real customer, and it is ours:** `product/shared/schemas.md` measures **28 519 tokens**, already past the
-    hard wall in a shipped file the package names as its schema owner (`07`, tracked debt).
+    **First real customer, and it is ours:** `product/shared/schemas.md` measured **28 520 tokens**, already past the
+    hard wall in a shipped file the package names as its schema owner.
+  - **The first customer is now SPLIT — D168, 2026-08-04 (`b4e2c25`).** `schemas.md` 28 520 → **18 670 tok**, with
+    the runtime substrate in a live sibling `shared/schemas-runtime.md` (**10 832 tok**); all 33 sections preserved,
+    diffed section-by-section. Executing the convention found two things reasoning had not: it needed a **second
+    marker form** (D167's `@ <sha>` assumes the detail is *frozen in git*; this detail is a **live sibling** still
+    being edited), and the pointer had to become **machine-followable** — two shipped consumers parse `schemas.md`
+    whole, and the split line could not dodge them because the native-FS headers *are* the moved half. Measured both
+    ways: the meta-gate hard-fails with 5 false errors, the contract linter loses `generic`/`slack` from its
+    kind-union — **both loud, in opposite directions, so not the silent-defeat class** (a first draft claimed it was;
+    the measurement refuted it). Also closed a gap in 9b's own gate: the sizer prescribed a remedy whose output fell
+    outside its glob, so a **detail file is now budgeted as its own row**, always on-demand. **[BUILT 2026-08-04]**
 - **9c — org mode (D161) `[stageable — BUILD LAST, behind its own drive]`.** A **third `/start` mode** (`config.org`;
   absent ⇒ inert) for a company product the maintainer does not own: a **private-tree brain** (all machinery + derived
   + intent) over a **byte-pristine, zero-footprint** company checkout, `project_root` = an absolute path, a

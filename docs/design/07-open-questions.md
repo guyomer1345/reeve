@@ -264,6 +264,34 @@ Deliberately deferred — known unknowns, to close during build or later.
   conversational replies on an unverified progress/intake layer is the "reasoned, not driven" trap. Revisit
   immediately after the re-drive (roadmap Phase-6 sequence). *(True sync streaming chat stays off the table — it
   requires the daemon to become a Claude proxy, overturning the founding premise.)*
+  **The re-drive HAPPENED (D138, 2026-07-27), so the deferral has expired and 8b is the Phase-8 live pointer.**
+  **Three constraints researched 2026-08-04 against live docs, before any build — none of them a decision, all of
+  them things a build must not re-derive:**
+  - **The persistent-conversation route is CLOSED.** The Agent SDK's `ClaudeSDKClient` is exactly "a long-lived
+    process accepting new input across turns", but it is a third-party dependency and this package is **stdlib-only
+    by construction** (the same rule that killed a pip tokenizer in D167). So async chat is a `claude -p --resume
+    <session-id>` subprocess per message, as the D123 runner already does. The lever is `--resume` plus prompt
+    caching, **not** process persistence, and per-message cost grows with thread length because resume re-sends the
+    accumulated history. Sessions are `cwd`-keyed on disk (`~/.claude/projects/<encoded-cwd>/<id>.jsonl`) and local
+    to the machine — a resume from the wrong directory silently starts a *fresh* session.
+  - **The master rule is looser than D132's phrasing.** `00`'s rule prohibits a **hosted** program that injects into
+    or routes the Claude session *on behalf of users*; everything local is clean. D132's "the daemon never calls
+    Claude" is therefore stricter than the rule requires — a **local** daemon spawning a **local** CLI on the user's
+    own auth is exactly what the D123 runner does today. This does not overturn D3; it removes an option D132's
+    wording had foreclosed, and the reply mechanism should be chosen on cost and liveness, not on a rule that does
+    not actually bite.
+  - **The WSL precondition is a one-line opt-in, NOT an open engineering problem.** The bus daemon dies ~8s after the
+    last terminal closes (D94), which would leave a browser-primary surface with nothing to talk to whenever the
+    human is away — but D94 records the caveat as **owner-accepted** with two documented upgrades (`loginctl
+    enable-linger`, `.wslconfig vmIdleTimeout=-1`), and D123 already **surfaces it in `status`, never implied**.
+    "Carried not solved" means the package does not solve it *for* you. A first pass of this analysis read it as a
+    blocker and proposed deferring 8b behind fixing it; that was **wrong in scale** and is recorded here so the next
+    session does not re-make the error.
+  **Three calls remain genuinely open and are the design conversation a build must have first:** the conversation
+  thread's storage class (committed vs RUNTIME, and its retention); **who classifies a message as question-vs-work,
+  and when** (a question wants the knowledge base, a request is already served by intake — if that split is real, a
+  large part of "chat" may not need the loop to reply at all); and whether chat rides the **loopback socket only**
+  (D112 — a forged chat message is agent control, exactly as a forged verdict is).
 - **Phase-6 re-drive follow-ups (D138, 2026-07-27) — three package findings LOGGED, not yet fixed.** The
   re-drive confirmed D131/D132/D133/D134 and fixed the sharp one (the `verify_check.py` bootstrap-commit
   contradiction, in-commit), leaving three: (1) **mid-flow human questions** — the bootstrap interrupted the human
@@ -479,15 +507,19 @@ Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away ca
 
 ## Newly open from the Phase-8a / 9a-drive / 9b builds (2026-08-03 — D165 / D166 / D167)
 Small, all found by building or driving rather than by reasoning, and none blocking.
-- **`product/shared/schemas.md` is already past the hard wall — 28 519 tokens `[core]`.** 9b's own gate says a file
-  over the 25 000-token Read ceiling **cannot be loaded in one call**, and this is a *shipped* file that the whole
-  package names as the owner of every schema. It is therefore the **split-and-pointer arm's first real customer**,
-  and it is ours. Two things make it more than a chore: the gate ships scanning a *target project's* docs, so it
-  would never have flagged this by itself (the package's own docs have no gate — deliberately, since D164 had just
-  deleted a meta-gate, but worth revisiting); and this repo's `CLAUDE.md` tells every session to ground itself in
-  `08-decision-log.md` (~179k tokens) and `11-roadmap.md` (~31k), i.e. **the grounding instruction points at files
-  that cannot be read in one call**. The remedy is the one 9b prescribes — a lean current-state file plus an
-  archived-detail file with a head marker — and this repo already does it by hand for the roadmap/git split.
+- **~~`product/shared/schemas.md` is past the hard wall~~ — RESOLVED 2026-08-04 (D168).** Split into a survivor
+  (18 670 tok) plus the live sibling `shared/schemas-runtime.md` (10 832 tok); the convention gained a second marker
+  form and a machine-followable pointer. **Two residuals from it stay open, and both outlived the fix:**
+  - **The package's own docs still have no budget gate `[small]`.** `check_doc_budget.py` ships scanning a *target
+    project's* docs, so it would never have flagged `schemas.md` by itself — `07` did, by hand. Deliberate as far as
+    it goes (D164 had just *deleted* a meta-gate, and adding one back needs a better reason than symmetry), but the
+    asymmetry is now load-bearing: the package is the only tree that has actually crossed the wall.
+  - **This repo's grounding instruction points at files no session can read `[core-ish]`.** `CLAUDE.md` tells every
+    session to ground itself in `08-decision-log.md` (**~186k tokens**) and `11-roadmap.md` (**~32k**) — both past
+    the 25 000-token Read ceiling, so the instruction is literally unfollowable and every session silently
+    substitutes targeted greps (this one did). Now the **next split-and-pointer customer**, and unlike `schemas.md`
+    it is meta-repo-only, so it never touches the ship boundary. The roadmap/git split this repo already does by
+    hand is the shape.
 - **`--project-root` means two different things in two shipped scripts `[small]`.** In `update_reconcile.py` it is
   the **repo** root; in `retention.py` it is the **product** root (`./project` on greenfield), with `--workflow-dir`
   carrying the repo-relative part. Both are internally coherent and documented, and renaming a shipped flag is a

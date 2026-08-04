@@ -4694,3 +4694,75 @@ while `update_reconcile.py`'s means the **repo** root — one flag name, two mea
 → `05`, `06`, `product/shared/{memory-model,schemas}.md`, `11`, `07`. Files: `product/scripts/check_doc_budget.py`
 (new), `product/templates/{checks.sh,loop.md}`, `product/skills/{prioritize,document}/SKILL.md`,
 `product/MANIFEST.json`, `product/scripts/test_{check_doc_budget,retention_lessons,checks_runner}.py`.
+
+## D168 — `schemas.md` SPLIT: the split-and-pointer arm's first real customer forces a second marker form, a machine-followable pointer, and a budget on the detail file the remedy produces **[BUILT 2026-08-04 (`b4e2c25`) — exercises D167's convention; not a new law, the first *execution* of one]**
+D167 shipped the split-and-pointer remedy as prose and a marker string that nothing parsed. `07` then recorded the
+first customer, and it was ours: **`product/shared/schemas.md` measured 28 520 tokens** — past the 25 000-token Read
+ceiling, in a *shipped* file the whole package names as the owner of every schema. The failure it causes is not
+hypothetical: D130 measured `ingest` burning its turn budget hunting formats across five files and **running out
+before parking its blocking checkpoint**, which is precisely why `schemas.md` was made the single owner. The owner
+then grew past the wall, so the same failure was recurring one layer up.
+
+**Call — split at the loop-artifacts / runtime-substrate line.** The survivor keeps what a *skill* produces and
+consumes (spec, plan, changelog, verdict, checkpoint, parked-ticket, inbox-message, forecast, outbox, handoff,
+state — **18 670 tokens**); the new **`product/shared/schemas-runtime.md`** takes the records the package's own
+*processes* own, written and read by `/start`, `/update`, `rebind.py`, the bus daemon and the `SessionStart` hook and
+never authored by a skill as work (`config.json`, `runtime.json`, `.workflow-runtime`, `install-set.json`, the
+orchestrator-brief managed block, `statusline.delegate`, `bus.lock`, `orchestrator.lock`, `bus.json`, `remote_token`,
+`alerts.json`, the session-start warn-once markers — **10 832 tokens**). All 33 sections preserved, verified
+section-by-section against `HEAD`, not by eye. `shared/` never installs into a target, so the sibling ships with the
+plugin exactly as the survivor does.
+
+**A SECOND MARKER FORM, because the convention assumed the detail was dead.** D167's marker mirrored retention's
+Sessions marker and carried `@ <sha>` — right for content **frozen in git**. The first real customer splits into a
+**LIVE SIBLING** still being edited, where a sha is stale at the next edit and sends a reader to git for a file
+sitting beside them. So the convention now has two forms, and the difference is semantic, not cosmetic: an archived
+target is *expected* to be absent from disk, a live-sibling target that is absent is a fault worth reporting.
+
+**The pointer must be MACHINE-followable, and choosing the split line could not avoid it.** Two shipped consumers
+parse `schemas.md` whole, and the attempt to dodge them by picking a different line fails on inspection: the
+runtime-substrate half is exactly where the `kept on a native filesystem` headers live. Both readers were **measured
+against the real split rather than reasoned about**, and both break **loudly, in opposite directions** — the
+meta-gate's native-FS rule (R2) hard-fails with **five** false "the layout pins a path no schema header claims"
+errors, while the contract linter's `kind:` union silently loses `generic` and `slack` and then reports legitimate
+uses as *novel* kinds. **Neither goes quiet, so this is NOT the silent-gate-defeat class (D129)** — a first draft of
+this entry and of the code comments claimed it was, and the measurement refuted it. The honest finding is smaller and
+still decisive: the split was **not viable** without teaching the parsers. `read_with_splits` lives in
+`check_doc_budget.py`, which already owns the marker string, for the reason that file states — a marker with two
+spellings is a marker nothing can find.
+
+**The remedy was producing a file the gate then stopped watching.** `check_doc_budget.py`'s scan is a fixed glob
+(`docs/spec.md`, `rules/**`, `docs/knowledge/**`, …). A `docs/spec-detail.md` produced by the split it prescribes
+falls **outside** that glob, so the detail half could grow straight back through the wall unseen and the second split
+would have nowhere to land. Detail files are now scanned as their **own row**, always **on-demand** whatever the
+referrer was — detail broken out of an always-loaded file is by definition no longer read every turn, which is the
+point of that remedy. **The sizer still does not follow the pointer**: the survivor is under the wall *because* the
+detail moved out, and a sizer that re-added the bytes would report the split as having achieved nothing. Two readers
+of one file, two correct answers.
+
+**The resolver DEGRADES, it does not crash.** `check_contracts.py` imports a sibling script, and that suite exists
+because this script once **died in every product repo** (D163). A partial copy now reads the survivor and *says* the
+split went unfollowed, and stays silent when nothing is split.
+
+*Rejected:* **hand-tuning the split line to keep every parser input in the survivor** (measured impossible — the
+native-FS headers are the moved half, and it would leave only ~4k tokens movable, not enough for headroom);
+**copying the marker regex into the meta-gate** (a second spelling of a compatibility contract — the exact defect
+that gate exists to catch, so it borrows the parser instead); **a hard import** (reintroduces the D163 crash class);
+**making the sizer follow the pointer** (would report every split as achieving nothing); **rewriting the 37
+`schemas.md §` references across 22 files** (the reference form resolves across both halves by design — the section
+name is the anchor; rewriting them is churn that buys nothing); **stamping `@ <sha>` on the live sibling** (a lie at
+the next edit).
+
+*Evidence:* measured, not reasoned — original 28 520 tok → 18 670 + 10 832; a section-set diff against `HEAD` showing
+33 sections in, 33 out, zero bodies changed; the R2 counterfactual run both ways (**5 errors survivor-only → 0
+following**); the enum-union counterfactual (`generic`, `slack` lost survivor-only) reproduced end-to-end as a
+subprocess, with and without the resolver beside the script; the leak gate catching a `D129` reference this entry's
+own drafting had leaked into a shipped file. **756 pytest (+15)**, all five meta-gates green (no-spec-refs `8 shipped
+paths`, status-coherence, enum-coherence, contract linter `0 advisory`, release boundary **58 shipped files / 20
+install entries**). Reuses/relates **D167** (the convention + the gate), **D160** (the law), **D80** (one owner per
+fact), **D129** (derive from the artifact), **D163** (the crash class + the one-owner-for-a-marker rule), **D130**
+(the format-hunt this prevents), **D125** (the ship boundary).
+→ `05`, `07`, `11`, `product/shared/memory-model.md`. Files: `product/shared/schemas-runtime.md` (new),
+`product/shared/{schemas.md,memory-model.md}`, `product/scripts/{check_doc_budget.py,check_contracts.py}`,
+`scripts/check_enum_coherence.py`, `product/scripts/test_{check_doc_budget,check_contracts}.py`,
+`scripts/test_check_enum_coherence.py`.
