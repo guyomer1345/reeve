@@ -1,21 +1,48 @@
 ---
 name: verify
-description: Check that built artifacts conform to what was asked — plan vs changelog, and whether the spec intent and the plan's acceptance criteria were met. Operates on artifacts, not runtime behaviour. Use after execute; on failure, hand off to debug.
+description: Check that built artifacts conform to what was asked — the plan against the changelog against the tree's real diff, and whether the spec intent and the plan's acceptance criteria were met. Operates on artifacts, not runtime behaviour. Use after execute; on failure, hand off to debug.
 ---
 
 # Verify — artifact conformance ({asked} vs {done})
 
-Core principle: an `adjudicate` specialization — gather the two views (what was *asked*, what was *done*),
-judge conformance, gate on confidence. Conformance on **artifacts only**; runtime behaviour is `debug`'s
-job and live-app confirmation is `checkpoint`'s.
+Core principle: an `adjudicate` specialization — gather the views (what was *asked*, what was *claimed*, what
+was *actually changed*), judge conformance, gate on confidence. Conformance on **artifacts only**; runtime
+behaviour is `debug`'s job and live-app confirmation is `checkpoint`'s.
 
 ## Inputs
 - `plan` — the asked-for changes + `acceptance_criteria`, each tagged `gate: artifact | human-qa`.
-- `changelog` — what `execute` recorded doing.
+- `changelog` — what `execute` **recorded** doing. A self-report: treat it as a claim, never as the change.
+- `diff` — what the tree **actually** changed, read from git (below). The independent view; the changelog is
+  checked *against* it, not trusted in place of it.
 - `spec` — the intent the plan serves.
 
+### Reading the real change
+The changelog is written by the same step that made the change, so on its own it cannot catch an omission or a
+mis-record. Read the actual file set first — **the diff is an artifact, so this stays inside the artifact-only
+rule; you are reading git's record, not running the code**:
+
+```sh
+git rev-parse --verify -q HEAD >/dev/null \
+  && git diff HEAD --name-status \
+  || git ls-files --cached --stage            # no commits yet (bootstrap): everything tracked is new
+git ls-files --others --exclude-standard      # NEW files — untracked, so the line above cannot see them
+```
+
+**Both commands are required.** `git diff HEAD` covers staged *and* unstaged changes to tracked files but is
+**blind to a newly created file**, which is untracked until something stages it — and a new file is the most
+likely thing for a changelog to under-report. Checking only the first command yields a check that passes for
+the wrong reason. In org mode the brain *is* the clone, so these run against the brain's own tree as normal.
+
 ## Workflow — three checks
-1. **Plan ↔ changelog:** the changes the `plan` asked for match the changes the `changelog` records.
+1. **Plan ↔ changelog ↔ diff:** the changes the `plan` asked for match what the `changelog` records **and** what
+   the tree actually shows. Three divergences, each a hard fail (all are demonstrable — you can name the file):
+   - **Under-report** — a path in the diff that the changelog never mentions. Silent scope creep, or a change
+     the author did not realize they made. The most dangerous of the three, and the one only this check finds.
+   - **Over-report** — the changelog claims a change no diff entry supports. The work was not done, or was lost.
+   - **Off-plan** — a path in the diff that no plan step asked for. Not automatically wrong (a plan may license
+     incidental edits), but it must be *accounted for*, not merely present.
+   Judgment stays with you: matching prose to paths is not mechanical, and a changelog may legitimately describe
+   one logical change spanning several files. **Set-level absence is the signal; wording is not.**
 2. **Intent met:** the `spec` intent and the plan's **`artifact`-gated** `acceptance_criteria` are reflected
    and actually achieved (the definition-of-done gate). For each `artifact` criterion, its **`discharge` must
    have produced a signal** — a criterion whose named check did not run or did not pass is **not met**; `verify`
@@ -30,13 +57,16 @@ Lean: for small changes, judge directly without fanning out workers.
 
 ## Rules
 - **The verdict is artifact-only** — `verify` never *judges* runtime behaviour (`debug`'s job) or confirms the
-  live app (`checkpoint`'s). It **may drive the affected flow to observe which edges fire** for the living
-  code-map's observed layer, but strictly as a pure observer — what it observes never feeds the
-  conformance verdict.
+  live app (`checkpoint`'s), and it does not **run** the flow either. It reads artifacts.
+  *(An earlier wording licensed `verify` to drive the affected flow as a pure observer, to feed a durable
+  observed layer of the code map. That layer is not built — nothing in the package produces or consumes it — so
+  the licence had no consumer and sat in tension with this very rule. It is removed rather than left dormant. If
+  the observed layer is ever built, grant the licence again deliberately, against the real capture mechanism.)*
 - Never pass/fail a `human-qa`-gated criterion; those are confirmed by a `checkpoint` (kind=qa), not here.
 - **A `fail` gates only with a deterministic signal behind it** — a failing test, a type/lint violation, a
-  plan↔changelog mismatch, **or an `artifact` criterion whose `discharge` produced no signal** (a hard fail,
-  never a silent pass). A criterion↔artifact contradiction the model can **demonstrate** (point at the
+  plan↔changelog↔diff mismatch, **or an `artifact` criterion whose `discharge` produced no signal** (a hard
+  fail, never a silent pass). A changelog↔diff divergence is always such a signal: the offending path is
+  nameable, which makes it structural rather than suspected. A criterion↔artifact contradiction the model can **demonstrate** (point at the
   offending artifact) is itself such a signal — a *structural* mismatch, hard fail. Only a mismatch the model
   can merely *infer/suspect*, with nothing to point at, stays advisory (low confidence), not a hard fail.
 

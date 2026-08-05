@@ -37,13 +37,18 @@ its resolver, not its parser. Ships five precise arms + the floor:
 More precise arms (C++, …) plug into the same contract: a new arm is a `class Arm` with
 `extensions`, `index()`, and `edges()` — the driver below is untouched.
 
-Standing rule — BIAS PRECISION over recall for the static arms. A fabricated edge is sticky:
-nothing the loop does can retract it (runtime observation only ADDS missed edges — "not
-exercised" != "not a dependency"), so a false positive persists and misleads blast-radius /
-orchestration reads forever. A missed edge self-heals: the durable observed layer accretes the
-recall the arms leave on the table where the code is actually exercised. So when a channel
-measures noisy, tighten toward precision (a type-position anchor, stricter matching) and accept
-the recall loss — e.g. the C# arm filters member-access tokens out of its type channels.
+Standing rule — BIAS PRECISION over recall for the static arms. The two error directions are
+NOT symmetric. A fabricated edge is sticky: nothing in the shipped system retracts it, so a
+false positive persists and misleads blast-radius / orchestration reads forever. A missed edge
+is merely absent — it costs recall on one read, and it comes back the moment the arm improves
+or a regeneration sees more. So when a channel measures noisy, tighten toward precision (a
+type-position anchor, stricter matching) and accept the recall loss — e.g. the C# arm filters
+member-access tokens out of its type channels.
+
+(This rule used to be justified by a durable *observed* layer accreting the recall the arms
+leave on the table. No such layer is built — there is no producer, no schema and no consumer
+anywhere in the package — so the justification is stated above on its own terms, which is where
+it was always load-bearing. Do not re-introduce the claim without the code.)
 
 Rust (`mod`) and PHP (`require`) stay on the tier-0 floor deliberately: the floor's relative /
 sibling resolution is the sound subset, and a precise arm is built only when a real repo needs
