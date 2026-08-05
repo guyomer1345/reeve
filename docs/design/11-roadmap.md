@@ -41,8 +41,15 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   (`config.runner.enabled`), and it retires D92's manual-`/clear` stopgap. **BUILT 2026-07-19 (D123)** as Phase-3
   increment 6 — the `orchestrator.lock` liveness marker + the `loop.sh` launcher; driven end-to-end on a real model.
   **[core — DONE]**
-- **Model + effort routing** — per-task model/effort map (graph-maintenance cheap, planning expensive). **[later]**
-- **Arbiter input contract** — decide a batch in dependency order vs one at a time. **[later]**
+- **Model + effort routing** — per-task model/effort map (graph-maintenance cheap, planning expensive). Premise
+  re-checked 2026-08-05 (D175) and **intact but unbuilt**: no `model:` frontmatter exists on any shipped agent or
+  skill, so everything inherits the session model today. Stays deferred — it is a cost optimization with no
+  correctness claim behind it, and nothing in the tree asserts otherwise. **[later]**
+- ~~**Arbiter input contract** — decide a batch in dependency order vs one at a time.~~ **RETIRED as a line item
+  (D175, 2026-08-05): the component does not exist.** `grep -rn 'arbiter'` over `product/` and `10-roster.md` is
+  **empty** — the name died into `adjudicate` (the base compare-realities procedure) and `decision-engineer`. The
+  *substance* — batch-vs-one-at-a-time ordering — is `prioritize`'s live concern, which already emits independent
+  parallel-safe items; if it needs a contract, it gets one there, under its own name. **[retired]**
 
 ### Space 2 — Skills & agents  *(roster closed; bodies still v1)*
 - **The D36–D45 skill-body deltas** — **DONE** (authored 2026-07-01; D66 added the prerequisite-repair
@@ -60,7 +67,16 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   the human), escalating to `decision-engineer` at that tier. The D68 **impact lens is the mechanical floor**
   (auto-escalate high-blast-radius touches), the alignment scan the backstop; `decision-record` gains
   `predicted_outcome` (rationale, checked opportunistically — **no back-eval stage**). Formalizes the
-  engineering-feasibility pass; **no new agent** (answers the old "engineer agent?" slot). **[stageable]**
+  engineering-feasibility pass; **no new agent** (answers the old "engineer agent?" slot). *(That clause is why the
+  separate "engineering-feasibility pass" line item in Space 4 is retired as a duplicate — D175.)*
+  **DEFERRED OUT of Phase 10 with a written trigger (D175, 2026-08-05).** Not a blank slate: `grep -rn
+  'proportional\|rigor' product/` returns **one** hit — `skills/create-forecast/SKILL.md`, where D162 shipped a
+  narrower *skill-owned forecast gate* and recorded that a later universal triage would **subsume** it. So the case
+  that actually fires today is already covered. A universal triage over **every** `planner` output is a phase-sized
+  capability, not a cleanup item, and folding it into a truth-in-shipping phase would make that phase a backlog with
+  a new name. **Promotion trigger — promote when a SECOND narrow gate wants the same triage**; at that point the
+  duplication is real rather than hypothetical, and the triage has two callers to be designed against instead of
+  one. **[stageable — deferred past Phase 10 on a trigger, D175]**
 
 ### Space 3 — Website / console + bus  *(role decided; unbuilt — NOT merely "later")*
 - **The console + bus are ONE component, built in increments (D113 — replaces the old "C1 read-only console → C2
@@ -144,8 +160,13 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   (impact-lens sizing, directory clusters, semantic zoom); static skeleton + a reserved **flow-overlay** layer
   (runtime differential capture — a direction, mechanism OPEN), and a **node→ticket** intake action (D69-triaged).
   Structural face of the project-state view. Stageable read-only atop C1; overlay + capture need later arms.
-  Plus **remote control** = opt-in phone access — **now a two-socket split behind a declared identity transport
-  (D112: Cloudflare Access | Tailscale), not the old unauthed warning-only tunnel** (which was unbuildable). **[stageable; overlay later]**
+  ~~Plus **remote control** = opt-in phone access — a two-socket split behind a declared identity transport
+  (D112: Cloudflare Access | Tailscale), not the old unauthed warning-only tunnel.~~ **The remote half is BUILT and
+  this line was stale (corrected D175, 2026-08-05): D122 shipped it as Phase-3 increment 5** — `scripts/bus.py`
+  carries the two-socket split, the fixed remote port, the "Pair a phone" surface, the stable (not per-boot) remote
+  credential, and A's verdict-only POST allowlist. Only the **project-map tab** remains unbuilt here, and its cost
+  is understated: the console is a flat list of `<section>`s with **no tab machinery at all**, so the first cost is
+  inventing navigation, not drawing a map. Stays deferred on that basis. **[stageable — remote half DONE (D122); tab + overlay later]**
 - **Open design** — **CLOSED (D99–D101):** the console model + screen list (map = **tab**, not home, not the first
   cut) + snapshot-poll refresh + the contact-UX (verdict/intake forms + a "my requests" surface) (D99); the stack —
   a stdlib-Python detached daemon + a zero-build CSP-clean page (D100); the two-event notification taxonomy (D101).
@@ -174,8 +195,11 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   spec `integrations[]` + execute-discovered; qa=D30, demo=D22 gate, reconcile=ingest), the verb-enum verdict +
   plural machine-verified setup gate, and the MVP help set (contextual steps + verified deep-links + breadcrumbs;
   screenshots/screen-share/agent-automation deferred). **[done]**
-- **Engineering-feasibility pass** — the spike that de-risks the technical unknowns the demo deliberately
-  skips (`09`). **[stageable]**
+- ~~**Engineering-feasibility pass** — the spike that de-risks the technical unknowns the demo deliberately
+  skips (`09`).~~ **RETIRED as a separate line item (D175, 2026-08-05) — it is a DUPLICATE.** The proportional-rigor
+  gate entry in Space 2 already says, in its own words, that D69 "**Formalizes the engineering-feasibility pass**".
+  Same work, listed twice at two places. It travels with that entry, which is itself **deferred with a promotion
+  trigger** (below). **[retired — folded into the D69 proportional-rigor gate]**
 - **Automated testing · test-from-anywhere · paid device/QA platform** — designed-for, not built. **[later]**
 - **`artifacts` has a producer — `request.tasks[].provides[]` (D152 residual, closed by D156).** The non-credential
   half of the `returns` split shipped declared, validated and unproducible: the console's setup form rendered one
@@ -218,7 +242,11 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   (`.workflow/outbox/`, retiring the D60 `checkpoints/`), **not** a checkpoint; `guard.sh` floor + a coarse
   `config.outward` allow|ask allowlist (standing pre-auth); the loop defers + continues, a console `kind: release`
   batch-approval drains it (state-bound, TTL'd, no ledger). Build rides Phase 3 (with the bus). **[core — designed; build Phase 3]**
-- **Symbol-level knowledge paths** — the seam left in Space-6 granularity. **[later]**
+- **Symbol-level knowledge paths** — the seam left in Space-6 granularity. Premise re-checked 2026-08-05 (D175) and
+  **intact**: edges are file-level throughout, and `shared/schemas.md`'s `## Key symbols` is an explicitly *optional
+  extractive aid*, not a resolved symbol graph — so the seam is real and genuinely unbuilt. Stays deferred on size:
+  it is an engine-level change to `codemap.py`'s arm contract, not a gap between claim and behaviour, so it is out
+  of Phase 10's spine on scope rather than on doubt. **[later]**
 
 ### Space 6 — Knowledge generation & ingest
 - **Knowledge generation** — **DESIGNED (D68, pressure-tested on a real repo):** a **single multi-language code-map engine** (`scripts/codemap/codemap.py`, shipped whole over pluggable arms —
@@ -243,7 +271,14 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   incremental; impl rides Phase-2/3 (D70). **When built, revisit the `verify` observation charter (D83):** the
   skill now licenses `verify` to *drive* a flow as a pure observer, verdict-still-artifact-only — a wording
   reconciliation today, to be made concrete against the real capture mechanism when the observed layer lands.
-  **[core — arm build thread closed (D77/D79, all 5 measured); living-graph observed layer build next (D78), then the D83 charter revisit]**
+  **Tier settled 2026-08-05 (D175), against the shipped tree — it was tagged `[core — build next]` here while listed
+  `[stageable]`/`[later]` twice below, in the doc that OWNS tier (D80).** `graph.observed.json` occurs in `06`, `11`
+  and `08` and **nowhere in `product/`**: there is no producer, no schema and no consumer, and "build next" had been
+  stale since Phase 2/3 closed. It is **`[stageable]`**, and the D83 charter revisit stays parked with it. What
+  D175 *does* schedule is the separable defect this exposed — **two shipped files assert the layer as if it existed**
+  (`scripts/codemap/codemap.py` rests its precision-bias rule on it; `skills/verify/SKILL.md` licenses an observer
+  for it), which is a live over-claim whether or not the layer is ever built. See **Phase 10a**.
+  **[stageable — arm build thread closed (D77/D79, all 5 measured); observed layer + the D83 charter revisit both parked (D78/D83, tier settled D175)]**
 - **Brownfield ingest** — **DESIGNED (D68); the `ingest` skill is AUTHORED** (`skills/ingest/SKILL.md`). A thin
   `ingest` skill over existing leaves (`research` *gathers* → `ingest` *synthesizes* the spec → reconciliation
   `checkpoint`; `document` authors the durable `why`/Sessions later, **not** during ingest — no new agent) that
@@ -277,13 +312,18 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   invariant re-run** — the *late* backstop, not the gate (the per-commit teeth stay the promise-coverage +
   boundary/property tests). **Validated** by re-finding the pressure-test register (G2/G4/S3, 0 false positives)
   on the surface it scopes; the semantic layer's own validation rides Phase 2/3 (no built product yet). Relates
-  to the project-state view + self-hosting. **Tier-2/3 drift defense added (D89):** a meta-repo
+  to the project-state view (~~+ self-hosting~~ — **dropped, D175**; the project-state view relation stands and is
+  now Phase 10c). **Tier-2/3 drift defense added (D89):** a meta-repo
   `check_enum_coherence.py` (enum + registry coherence, per-commit, beside `check-status-coherence.sh`) + the
   full-surface `align` cold-audit adopted as a phase-boundary ritual; the `adjudicate` contract-linter
   false-positive fixed (0 advisories).
   **[core — skill + mechanical layer BUILT (D81); semantic layer validated Phase 2/3]**
 
-### Cross-cutting — packaging, validation, self-hosting
+### Cross-cutting — packaging, validation
+*(Was "packaging, validation, self-hosting" — **self-hosting is DROPPED (D175, 2026-08-05)**: driving this project's
+own implementation with the product is not the right thing for this repo. **Dogfood-validation is untouched and
+stays** — driving the product against throwaway or foreign repos as evidence (D52, D125, `scripts/drive-org-mode.sh`)
+is this repo's entire evidence discipline. Two different words; only the first is gone.)*
 - **Packaging/distribution** — **plugin packaging BUILT (D125):** the repo is its own marketplace
   (`.claude-plugin/marketplace.json`, `source: ./product`), the plugin root is `product/` with a minimal
   `plugin.json`, and **`product/MANIFEST.json`** is the single ship boundary the leak gate, `/start` install, and
@@ -295,14 +335,29 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   "Home" path dropped), and the skill `description:` fields were scrubbed of construction vocabulary — validated +
   installed + release-built, all gates + the full suite green after the move. Full record: D125 (`07` fork CLOSED).
   **[DONE — D125]**
-- **Validation gaps** — real orchestrator→agent **dispatch** ✅ **validated (D128, real-model loop)**; `@import`-survives-`/compact`;
-  whether `verify` samples the real `git diff` vs trusts the `changelog` (#8); **shipped bash glue assumes a
-  bash interpreter on the target OS — unverified on native Windows (D89; the D71 split stands, no refactor)**. **[stageable]**
-- **Commitment-status storage** — where locked/provisional/unspecified is recorded (spec vs node
-  frontmatter, `09`). **[stageable]**
+- **Validation gaps** — real orchestrator→agent **dispatch** ✅ **validated (D128, real-model loop)**. **Re-checked
+  against the shipped tree 2026-08-05 (D175); the three residuals split three ways:**
+  - ~~`@import`-survives-`/compact`~~ — **RETIRED, premise moot.** `grep -rn '@import' product/` is **empty**;
+    `templates/orchestrator-CLAUDE.md` reaches its files by explicit *Read* instructions, not imports. The gap was
+    recorded against a wiring the package does not use.
+  - **Whether `verify` samples the real `git diff` vs trusts the `changelog` (#8)** — **real, still open, and now
+    cheap.** `skills/verify/SKILL.md` still reads plan↔changelog only, while `hooks/verify_check.py` already runs
+    `git diff --cached`: the machinery exists and is simply not wired to the verdict. **Scheduled — Phase 10a.**
+  - **Shipped bash glue assumes a bash interpreter on the target OS — unverified on native Windows** (D89; the D71
+    split stands, no refactor). Real and untouched. **Scheduled — Phase 10b.**
+  **[stageable → the two live halves are scheduled into Phase 10 (D175)]**
+- **Commitment-status storage** — ~~where locked/provisional/unspecified is recorded (spec **vs** node
+  frontmatter, `09`)~~. **The recorded fork is ALREADY ANSWERED and the question is stale as worded (D175):** the
+  tree shipped **both** — `shared/schemas.md` tags `commitment` per spec element *and* carries it in knowledge-node
+  frontmatter. The live residual is a different question, and a D80 one: whether dual-carriage has a declared owner
+  with the second copy *derived*, or is two owners for one fact. **Scheduled as that question — Phase 10a.**
 - **Project-state view (user-raised)** — a synthesized "where is this project" surface (done · how it
-  connects · what's left); likely **generated** (a `status` skill / console screen). Prereq for
-  **self-hosting** this project with itself. **[stageable]**
+  connects · what's left); likely **generated** (a `status` skill / console screen). ~~Prereq for **self-hosting**
+  this project with itself.~~ **Re-argued and re-aimed (D175):** its only recorded justification was the
+  self-hosting prereq, which is dropped — but `07`'s original 2026-06-30 entry carries an *independent* one (the
+  gap is felt reading a project, and "bites harder on code projects"). It survives on that, and is built **for a
+  TARGET project**, not to read this repo's own construction record — which is also the only form dogfooding can
+  validate. **Scheduled — Phase 10c.**
 - **Framework version-update skill (user-raised)** — `/update` pulls the latest public-repo package +
   **migrates** schema/format changes (not a blind overwrite). Follow-on to packaging. **Promoted into Phase 6
   (D135)** — the first real out-of-tree install now exists and will go stale; constraints pinned (version-stamped
@@ -420,9 +475,11 @@ Phase 5 closed. **`### Phase 8` (opened D155) is now COMPLETE** — both halves:
 the interaction-model rework — BUILT + browser-driven 2026-08-04 (D169, `ad9d910`)**. **`### Phase 9` is now
 COMPLETE too** (D159–D163): `9a` BUILT + browser-driven (D163 + D166), `9b` BUILT (D167), and **`9c` (org mode)
 BUILT + DRIVEN 2026-08-05 (D174, `3816b62`→`1ad7707`)** behind the exit-gate drive it was always held behind.
-**There is therefore NO live phase pointer — Phase 9 was the last phase.** What remains is the by-space
-`[stageable]`/`[later]` list below, which is a menu, not a sequence: nothing on it is a phase, and nothing on it
-is gating. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
+**`### Phase 10` (opened D175, 2026-08-05) is the live pointer** — see the section below. Phase 9 closed with no
+successor because the remainder read as a menu rather than a sequence; **that was a description of the plan, not a
+finding**, and D175 supersedes it by *deciding* to sequence the remainder. What forced the decision was dropping
+self-hosting (D175), which was the only candidate spine the menu had. Phase 10's spine is **truth-in-shipping**:
+close the gap between what the tree *claims* and what it *does*. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
 the release surface D125), but "release-ready" was a *build-completeness* claim: the whole **install → `/start` →
 loop** runtime has **never been driven end-to-end once** (every Phase-3 increment was driven in isolation; the only
 prior loop run — D52 — was a pre-D66 throwaway that *simulated* dispatch). A pre-first-run audit (two independent
@@ -804,12 +861,14 @@ biggest remaining feature — it is the only open item that **harms a user today
   the fix, after measurement corrected the remedy twice over (the detectable signal is a trust-record read, and the
   predicate is *not `True`*, since the platform writes no record at all for a project never opened interactively).
 
-*Everything else stays `[stageable]`/`[later]` and is picked off the by-space list above, not this sequence — the
+*Everything else stayed `[stageable]`/`[later]` and was picked off the by-space list above, not this sequence — the
 living code-map observed layer, the D84 reclassification, the proportional-rigor gate, build-once-per-wave,
-model/effort routing, the project-map tab, and the project-state view (still the self-hosting prerequisite it has
-been since 2026-06-30).*
+model/effort routing, the project-map tab, and the project-state view (then still framed as the self-hosting
+prerequisite it had been since 2026-06-30). **Superseded 2026-08-05 (D175):** self-hosting is dropped, so the
+project-state view is re-argued on the product's own merits and scheduled as **Phase 10c**; the rest of that list
+is now split by D175 into what Phase 10 sequences and what stays deferred, each with a stated reason.*
 
-### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[COMPLETE 2026-08-05 — D159–D163 designed; 9a BUILT + browser-driven 2026-08-03 (D163; D166 closed its render residual and fixed two shell defects); 9b BUILT 2026-08-03 (D167); 9c BUILT + DRIVEN 2026-08-05 (D174) behind its own exit gate — 27/27 against a real foreign repo. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. The D164 sequence `8a → drive 9a → 9b` is COMPLETE. **This was the LAST phase** — what follows the phase list is the by-space `[stageable]`/`[later]` menu, not a Phase 10]**
+### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[COMPLETE 2026-08-05 — D159–D163 designed; 9a BUILT + browser-driven 2026-08-03 (D163; D166 closed its render residual and fixed two shell defects); 9b BUILT 2026-08-03 (D167); 9c BUILT + DRIVEN 2026-08-05 (D174) behind its own exit gate — 27/27 against a real foreign repo. Built BY HAND — and **self-hosting is now DROPPED outright (D175)**, not the "separate later experiment on a clone" this header used to promise. The D164 sequence `8a → drive 9a → 9b` is COMPLETE. **Phase 9 was the last phase as PLANNED; D175 opened `### Phase 10` over the remainder** — the "no Phase 10" claim this header carried was a description of the plan then, superseded by decision, not corrected as an error]**
 Born from a design conversation on four maintainer asks (the fourth — a console config tab — was **dropped**, D161;
 its "change credentials over Cloudflare" arm violated D112). All three build **ON** existing machinery, not beside it —
 that is the through-line and the reason none is large. Capture is design-only; the deep-doc edits ride each build.
@@ -909,8 +968,53 @@ first and every later drive is trustworthy by construction, and **the 9a browser
 test**, closing 9a's never-rendered `#fc-list` residual in the same pass. **The dogfooding half of that call was MADE for
 9a: it was built BY HAND** (2026-08-03), and self-hosting the workflow on itself is a **separate later experiment on
 a clone**, deliberately not entangled with shipping the feature. That kept 9a off the `[stageable]` project-state
-view it would otherwise have waited on, and keeps the first self-hosting run from having to debug a brand-new
-capability at the same time.
+view it would otherwise have waited on. *(**The clone experiment never happened and is now cancelled — D175 drops
+self-hosting outright.** The half of this call that was about not entangling a first run with a new capability was
+right and is kept; the half that deferred a run is moot, because there is no run.)*
+
+### Phase 10 — Truth-in-shipping: close the gap between what the tree CLAIMS and what it DOES **[OPEN 2026-08-05 — D175. The live phase pointer. Opened over the by-space remainder AFTER a premise re-check of all ten candidates; six of the ten were stale, so this phase corrects the RECORD as well as the product]**
+Phase 9 was the last phase *as planned*, and the remainder was described as "a menu, not a sequence". D175 reverses
+that **by decision, not by finding an error** — and the reversal was forced by the other one: **self-hosting is
+dropped**, which was the only spine the menu had. So the spine had to be found rather than assumed, and the
+premise-check found it: **six of ten candidates were stale in the same direction — the tree asserts things nothing
+produces or checks.** That is the theme, and it is honest rather than imposed. It also explains the unusual shape of
+this phase: **more of it is correction than construction**, and the corrections are already applied above.
+
+*Scoping rule this phase is held to: `[later]` means deliberately deferred, and a phase that swallows the whole
+backlog is a backlog with a new name. Four candidates are deferred with stated reasons, and each carries what would
+promote it.*
+
+- **10a — the over-claims.** Three shipped assertions with nothing behind them. **[core]**
+  - **The observed layer.** `scripts/codemap/codemap.py` rests its standing *precision-over-recall* rule on the
+    layer ("a missed edge self-heals: the durable observed layer accretes the recall the arms leave on the table"),
+    and `skills/verify/SKILL.md` licenses `verify` to drive flows as a pure observer *for* it. `graph.observed.json`
+    exists in **no product code**. **Retract both claims** — the precision bias is right on its own terms (a
+    fabricated edge is sticky and unretractable) and does not need a layer that does not exist to justify it.
+    Do **not** build the layer; its tier is settled `[stageable]` above.
+  - **`verify` #8.** The skill claims artifact conformance while reading only plan↔changelog. Wire the verdict to
+    sample the real staged diff — `hooks/verify_check.py` already runs `git diff --cached`, so this is a wiring job.
+  - **Commitment dual-carriage.** `shared/schemas.md` carries `commitment` in the spec *and* in node frontmatter.
+    Settle it under D80: one declared owner with the second copy **derived**, or an explicit statement that
+    dual-carriage is deliberate and why. Today it is neither.
+- **10b — the portability claim.** Shipped bash glue claims a target-OS interpreter it has never been tested against
+  (**D89**): `pre-commit.sh`, `guard.sh`, `checks.sh`, `codemap.sh`, `loop.sh`. **Verify on native Windows** — not
+  WSL, which is the environment every prior drive used and the one that hides this. Carries the **D58 first-launch
+  trust-UX doc** with it (the weakest fit to the spine — a missing doc, not a false claim — taken in as cheap and
+  adjacent, not because it belongs). **[core]**
+- **10c — the project-state view.** The synthesized "where is this project" surface (done · how it connects ·
+  what's left), **generated**, not hand-maintained (D38). Re-argued after losing its self-hosting premise: `07`'s
+  original 2026-06-30 entry carries an independent justification that survives. **Built for a TARGET project** —
+  it may not be built to read this repo's own `docs/design/`, which is both the D125 boundary and the only form
+  dogfooding can validate. **A surface: it gets a render before it is called done.** **[stageable → scheduled]**
+
+**Deferred, each with its trigger:** the **proportional-rigor triage** (promote on a *second* narrow gate wanting it
+— D162's forecast gate covers today's case) · the **project-map tab** (the console has no tab machinery; inventing
+navigation is the real first cost) · **model + effort routing** (a cost optimization with no correctness claim) ·
+**symbol-level knowledge paths** (an engine-level change to the arm contract — out on scope, not on doubt) ·
+**automated testing / device-QA platform** (unchanged `[later]`).
+**Retired outright:** the *engineering-feasibility pass* (a duplicate of the D69 triage, by this doc's own wording) ·
+the *arbiter input contract* (the component exists nowhere; its substance is `prioritize`'s) · *`@import`-survives-
+`/compact`* (the package uses no imports).
 
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
@@ -970,6 +1074,7 @@ and the matcher went exact. **`### Phase 8` (D155) is COMPLETE** — release dis
 interaction-model rework (D169), because shipping a new surface onto a fleet that cannot receive fixes multiplies
 the problem. **`### Phase 9` (D159–D163)** adds three new capabilities — the chain-forecast, the context-budget
 law, and org mode — all **designed 2026-08-03**, each built ON existing machinery. **9a is BUILT** (D163, by hand,
-same day; self-hosting split off as a later experiment on a clone), **9b is BUILT** (D167), and **`9c` (org mode) is
-BUILT + DRIVEN** (D174, 2026-08-05) — so **Phase 9 is COMPLETE and it was the last phase**. There is no live phase
-pointer; everything beyond is the by-space `[stageable]`/`[later]` menu.
+same day; self-hosting was split off as a later experiment on a clone — and is now **DROPPED**, D175), **9b is BUILT**
+(D167), and **`9c` (org mode) is BUILT + DRIVEN** (D174, 2026-08-05) — so **Phase 9 is COMPLETE**. It was the last
+phase *as planned*; **`### Phase 10` (D175, 2026-08-05) is now the live pointer**, sequencing the part of the
+by-space `[stageable]`/`[later]` menu that survived a premise re-check.

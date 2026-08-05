@@ -5144,7 +5144,7 @@ share `claude_config_path()`), **D166** (the render discipline, thirteenth payof
 → `01`, `07`, `11`. Files: `product/scripts/bus.py`, `product/scripts/test_bus.py`,
 `product/shared/schemas-runtime.md`.
 
-## D174 — Phase 9c org mode BUILT and DRIVEN: the brain IS the clone, the derived tree is namespaced, and the boundary is verified rather than applied **[BUILT + DRIVEN 2026-08-05 — six increments, `3816b62`→`1ad7707`; 835 tests (801→835), 5 meta-gates green, exit-gate drive 27/27. CLOSES Phase 9, and with it the last phase on the roadmap. CORRECTS D161's `project_root` and re-grounds D171's deadlock premise]**
+## D174 — Phase 9c org mode BUILT and DRIVEN: the brain IS the clone, the derived tree is namespaced, and the boundary is verified rather than applied **[BUILT + DRIVEN 2026-08-05 — six increments, `3816b62`→`1ad7707`; 835 tests (801→835), 5 meta-gates green, exit-gate drive 27/27. CLOSES Phase 9, and with it the last phase on the roadmap. CORRECTS D161's `project_root` and re-grounds D171's deadlock premise. ⚠ THE "LAST PHASE" CLAUSE IS SUPERSEDED BY D175 (2026-08-05, same day): it was accurate as a description of the plan then, and D175 **decided** to sequence the remainder as **Phase 10** — a scope reversal, not a correction of this entry. Everything else here stands]**
 Org mode was the last unbuilt slice and the one with **zero prior multi-repo / multi-committer evidence**. Two of the
 three things that cost time were, again, **recorded framings rather than the work** — which is now five phases running
 (D169's inverted premise, D170's non-existent seam, D172's probe that could not fire, D173's predicate, and these).
@@ -5236,3 +5236,97 @@ caveat a visible fact), **D166** (render the state you created), **D68** (brownf
 `product/commands/rebind.md`, `product/hooks/{guard.sh,pre-commit.sh}`, `product/skills/{commit,align}/SKILL.md`,
 `product/shared/schemas-runtime.md`, `product/scripts/{review_bundle.py,check_doc_budget.py,bus.py}`,
 `product/MANIFEST.json`, `scripts/drive-org-mode.sh`, + tests.
+
+## D175 — Self-hosting is DROPPED, and Phase 10 opens over the remainder with a spine the premise-check found rather than one imposed: truth-in-shipping **[DECIDED 2026-08-05 — two deliberate REVERSALS of what `11` asserted the same day, plus a scope decision. Re-checks all ten by-space candidates against the shipped tree: SIX are stale. Closes `07`'s dogfooding call and its project-state-view framing; settles the observed layer's two-tier conflict inside `11`]**
+Phase 9 closed as the last phase, and `11` said so in three places: *no live phase pointer*, *this was the LAST
+phase*, *a menu, not a sequence*. Those were **true as a description of the plan**, and this entry does not correct
+them as errors — it **supersedes them by decision**. Two reversals, and the first forces the second.
+
+- **(1) SELF-HOSTING IS DROPPED — "not the right thing for this repo."** Not deferred, not "a later experiment on a
+  clone" (which is how D162/D163 parked it and `11`'s Phase 9 header still promised); **cancelled.** Driving this
+  project's own implementation with the product is out. **The distinction this repo has always drawn is load-bearing
+  and only ONE side moves: *self-hosting* (drive THIS project with the product) is dropped; *dogfood-validation*
+  (drive the product against throwaway or foreign repos as EVIDENCE — D52, D125, `drive-org-mode.sh` vs
+  pallets/click) is UNTOUCHED and is the entire evidence discipline of this repo.** The maintainer confirmed he
+  intends to keep dogfooding whenever needed. Every sweep of the first word had to stop at the second, and four
+  sites that name the second (`10-roster` D52, `11`'s Space-1 line, `00-vision`'s D125 note, `03-website`'s console
+  MVP) were checked and **left byte-untouched**.
+- **(2) PHASE 10 OPENS — because dropping self-hosting removed the only spine the menu had.** With it gone the theme
+  could not be assumed, so it was **found by checking premises**, and the finding *is* the theme: **six of the ten
+  candidates were stale in the same direction — the tree asserts things nothing produces or checks.** Hence
+  **truth-in-shipping: close the gap between what the tree CLAIMS and what it DOES.** Its unusual shape follows
+  honestly from that — **more of Phase 10 is correction than construction**, and it corrects the *record* as well as
+  the product. **10a** the over-claims · **10b** the portability claim (D89 native-Windows + the D58 trust-UX doc,
+  admitted as the weakest fit) · **10c** the project-state view.
+- **(3) THE OBSERVED LAYER'S TWO-TIER CONFLICT IS SETTLED — and it was hiding a real defect.** `11` tagged it
+  `**[core — build next (D78)]**` in one place and listed it `[stageable]`/`[later]` in two others — **same item,
+  two tiers, in the doc that OWNS tier (D80)**; the coherence gate misses it because it checks tag *location*, not
+  tag *agreement*. Settled against the shipped tree: `graph.observed.json` occurs in `06`, `11`, `08` and **nowhere
+  in `product/`** — no producer, no schema, no consumer — and "build next" had been stale since Phase 2/3 closed.
+  **Tier: `[stageable]`**, D83's charter revisit parked with it. But the check surfaced a **separable, live defect
+  that exists whether or not the layer is ever built: two SHIPPED files assert it as real.** `codemap.py` rests its
+  standing precision-over-recall rule on the layer accreting the missed recall, and `verify/SKILL.md` licenses
+  `verify` to drive flows as a pure observer *for* it. **Retract both claims (10a); do not build the layer.** The
+  precision bias is right on its own terms — a fabricated edge is sticky and unretractable — and needs no
+  nonexistent layer to justify it.
+- **(4) THE PROJECT-STATE VIEW SURVIVES, on a different argument, and is RE-AIMED.** `11` called it "the
+  self-hosting prerequisite" since 2026-06-30, and that justification evaporated with (1). It was NOT rescheduled on
+  inertia: `07`'s original entry carries an **independent** reason — the gap is felt reading a project and "bites
+  harder on code projects" — which survives untouched. **Consequence, and it is the substantive half: it is built
+  for a TARGET project**, not to read this repo's own `docs/design/`. That is forced twice over — by D125's product
+  boundary, and because a meta-only tool cannot be dogfooded and so would get no evidence discipline at all.
+- **(5) FOUR CANDIDATES RETIRED as line items — their premises did not rot, they were never real, or the work
+  shipped.** ~~*Engineering-feasibility pass*~~ — a **duplicate**: the D69 entry says in its own words that it
+  "Formalizes the engineering-feasibility pass". ~~*Arbiter input contract*~~ — `grep -rn 'arbiter'` over
+  `product/` and `10-roster.md` is **empty**; the name died into `adjudicate`/`decision-engineer`, and the substance
+  is `prioritize`'s. ~~*`@import`-survives-`/compact`*~~ — `grep -rn '@import' product/` is **empty**;
+  `orchestrator-CLAUDE.md` reaches its files by explicit *Read* instructions. ~~*Remote control*~~ — **BUILT**, and
+  the roadmap had gone stale: D122 shipped the two-socket split in Phase-3 increment 5 (fixed remote port, "Pair a
+  phone", stable remote credential, A's verdict-only POST allowlist). The *project-map tab* is what actually
+  remains, and its cost was understated — the console is a flat `<section>` list with **no tab machinery at all**.
+- **(6) COMMITMENT STORAGE: the question was already answered, so it is RE-ASKED as the D80 one.** "Spec **vs** node
+  frontmatter" read as an open fork for two months; the tree shipped **both** (`schemas.md` tags it per spec element
+  *and* carries it in node frontmatter). Live question: is the node copy **derived** (one owner, a projection) or
+  independently authored (**two owners for one fact**)? It matters because `align` classifies drift *by* commitment
+  and `document` reads it — a silent divergence mis-routes drift instead of failing loudly. → `07`, 10a.
+- **(7) THE BIGGEST CANDIDATE IS DEFERRED, WITH A TRIGGER — a phase that swallows the backlog is a backlog with a
+  new name.** The D69 proportional-rigor triage stays out: D162 already shipped the narrower skill-owned **forecast
+  gate** (`grep -rn 'proportional\|rigor' product/` returns exactly **one** hit) covering the case that fires today,
+  and a universal triage over every `planner` output is phase-sized. **Trigger: promote on a SECOND narrow gate
+  wanting the same triage** — then the duplication is real rather than hypothetical, and the triage has two callers
+  to be designed against instead of one. Same discipline applied to the project-map tab, model/effort routing,
+  symbol-level paths and the device/QA platform: **each deferral carries a stated reason and what would promote it.**
+
+*Rejected:* keeping "no Phase 10" and picking items off a menu (leaves the remainder unsequenced and unargued — the
+condition that let six items rot in the first place); **"credible on someone else's machine"** as the spine (the
+tempting theme, and it got *weaker* not sharper — D112, its third leg, turned out already BUILT as D122, leaving
+D89 + the D58 doc, and the observed-layer and `verify` defects unhomed); **inventing a feature theme** to make the
+phase look tidy; opening Phase 10 as an unthemed cleanup (available and honest, but the premise-check had already
+produced a real spine, so settling for none would have thrown it away); building the observed layer to make the two
+shipped claims true (the layer is `[stageable]` on its own merits and the claims are the defect — making a false
+claim true is the expensive way to stop it being false); dropping the project-state view with self-hosting (its
+independent justification survives, and was never withdrawn); scheduling it to read *this* repo's docs (breaks D125
+and cannot be dogfooded); folding the D69 triage in (would dominate the phase).
+*Verified, not assumed — every scheduling call was grepped against the shipped tree first:* `graph.observed.json`
+absent from `product/`; `arbiter` absent from `product/` and the roster; `@import` absent from `product/`; `model:`
+frontmatter absent from every shipped agent and skill (so model/effort routing is genuinely unbuilt); `bus.py`
+carries the pairing surface and remote socket (so remote control is genuinely built); `hooks/verify_check.py`
+already runs `git diff --cached` while `skills/verify/SKILL.md` reads only plan↔changelog (so #8 is real *and*
+cheap); `schemas.md` carries `commitment` in both places; `## Key symbols` is an optional extractive aid, so the
+symbol-level seam is real. State at capture: `5887279`, **835 tests**, 5 meta-gates green.
+**The standing lesson did not weaken — this is the seventh consecutive slice where the recorded FRAMING, not the
+work, was the expensive part** (D169's inverted premise · D170's non-existent seam · D172's probe that could not
+fire · D173's predicate that could never fire · D174's incoherent topology *and* inverted gate reason · and now
+**six of ten candidates stale at once**). Two of the six had rotted so far that the thing they named does not exist.
+The operational rule this hardens: **an item whose premise has rotted gets re-designed or dropped, never scheduled
+on its original wording** — and the check is a grep of the shipped tree, not a re-reading of the doc.
+**Supersedes / corrects:** **D162/D163** (the "separate later experiment on a clone" is cancelled, not pending);
+**D78/D83** (tier settled `[stageable]`; the charter revisit parked with it); **D69** (deferred with a trigger; its
+"formalizes the engineering-feasibility pass" clause retires that duplicate line item). Historical entries that cite
+self-hosting as a *motivation* (**D63**, **D70**, **D121**, **D155**) are left unedited — they record what was true
+when made; this entry is the correction.
+**Builds on:** **D80** (one owner per fact — the tier conflict, the commitment question, and the sweep itself),
+**D125** (the product boundary that aims 10c at a target project), **D52** (dogfood-validation, explicitly kept),
+**D166** (render the state you created — binding on 10c), **D122** (already-built remote control), **D162**
+(the forecast gate the deferred triage would subsume).
+→ `07`, `11`. Files: `docs/design/11-roadmap.md`, `docs/design/07-open-questions.md`.

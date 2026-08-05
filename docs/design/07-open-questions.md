@@ -216,8 +216,11 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Project-state view (`03`/`05`/`06`) — user-raised 2026-06-30.** No single synthesized "where is this
   project" surface — *what's done · how the pieces connect · what's left*. The data exists but is scattered
   (`00–11` + `08` decisions + this register + `handoff.md` + `backlog.md` + the `docs/knowledge/` graph). The user
-  feels the gap **in this spec project itself**, and it bites harder on code projects — and it's a prerequisite
-  for eventually **self-hosting** (driving this project's development with this project). Likely a **generated**
+  feels the gap **in this spec project itself**, and it bites harder on code projects — ~~and it's a prerequisite
+  for eventually **self-hosting**~~. **SCHEDULED 2026-08-05 as Phase 10c (D175), on the FIRST of those two reasons
+  only:** self-hosting is dropped, so the prereq argument is gone, but "the gap is felt reading a project, and it
+  bites harder on code projects" is independent and survives. **Consequence — it is built for a TARGET project**,
+  not to read this repo's `docs/design/` (the D125 boundary; also the only form dogfooding can validate). Likely a **generated**
   view (D38 — not a hand-maintained doc that rots): a `status`/`map` skill or a console screen synthesizing
   roadmap + backlog + decisions + graph on demand. **The `graph.json` cluster map (D70) is its "how the pieces
   connect" face** — the structural half of this surface.
@@ -230,7 +233,8 @@ Deliberately deferred — known unknowns, to close during build or later.
   **distilled-package** arm was rejected — a sync seam + lost dogfooding, the exact drift this project exists to
   kill (the construction record IS the workflow's own output). Full record: D125. **Still open (below):** the
   **framework version-update skill** (keeping *installed* copies fresh — promoted into Phase 6, D135) and the
-  **project-state view** (self-hosting prereq); `/start`'s full bootstrap runtime has since been **driven
+  **project-state view** (no longer a self-hosting prereq — re-argued and scheduled as Phase 10c, D175);
+  `/start`'s full bootstrap runtime has since been **driven
   (D128/D130) and lived (2026-07-20)** — the experience findings are the tracked **Phase 6** slice (D131–D135, `11`).
 - **Framework version-update skill (`10`, D57) — user-raised 2026-06-30.** The package is now a **public
   repo**; consuming projects install a snapshot (`.claude/` skills/agents/commands + `templates`/`shared`/
@@ -543,12 +547,17 @@ Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away ca
   `ondemand_advisory` 15000. The estimator is calibrated on this repo's own paging failure (85 083 chars at the 25k
   ceiling ⇒ ≤3.40 chars/token), which **kills `chars/4`**. `K`/threshold tuning stays folded into the retention
   `K` open above; Sessions **distillation is no longer deferred** (`memory-model.md`).
-- **Cross-cutting — the dogfooding call: HALF CLOSED (D162, 2026-08-03).** **9a was built BY HAND** (D163, same day),
-  and self-hosting the workflow on itself is a **separate later experiment on a clone** — so 9a never waited on the
-  **project-state view** (still `[stageable]`, the self-hosting prerequisite since 2026-06-30), and the first
-  self-hosting run will not also be debugging a brand-new capability. **The sequencing decision vs Phase 8 is now
-  CLOSED (D164): `8a → drive 9a → 9b`** — a stale install corrupts the evidence of every drive after it, so 8a leads
-  and the 9a browser drive doubles as 8a's exit test. **Still open:** whether 9b/9c self-host.
+- **Cross-cutting — the dogfooding call: ~~HALF CLOSED (D162)~~ FULLY CLOSED 2026-08-05 (D175), by DECISION rather
+  than by build.** **9a was built BY HAND** (D163), and self-hosting was then held as "a separate later experiment
+  on a clone". **That experiment is cancelled: self-hosting is DROPPED — driving this project's own implementation
+  with the product is not the right thing for this repo.** So the last question here — *whether 9b/9c self-host* —
+  is answered **no**, and so is the general case; it is not deferred, it is closed. **The sequencing decision vs
+  Phase 8 stays CLOSED (D164): `8a → drive 9a → 9b`.**
+  **⚠ Read the boundary exactly — this repo uses two words and only one is dropped.** *Self-hosting* = driving
+  **this** project's development with the product → **dropped**. *Dogfood-validation* = driving the product against
+  throwaway or foreign repos as **evidence** (D52, D125, `scripts/drive-org-mode.sh` vs pallets/click) → **kept
+  intact — it is the entire evidence discipline of this repo**, and the maintainer confirmed he intends to keep
+  dogfooding whenever needed. Do not sweep the second when reading a reference to the first.
 
 ## Newly open from the Phase-8a / 9a-drive / 9b builds (2026-08-03 — D165 / D166 / D167)
 Small, all found by building or driving rather than by reasoning, and none blocking.
@@ -640,3 +649,29 @@ corrected the remedy D172 had recorded for it.**
   **~20.6k** after D172 (ceiling 25 000; ~4.4k of headroom left). Measured by hand, not by the gate — the budget
   gate still does not scan the package's own docs (the residual above), which is why every slice that touches this
   file has to check the number rather than assume the split solved it permanently.
+
+## Newly open from the Phase-10 scoping premise re-check (2026-08-05 — D175)
+Only the genuine **design question** is filed here; the rest of the re-check produced *work items* (owned by `11`'s
+Phase 10) and *corrections* (already applied to `11`). Six of the ten candidates were stale — the standing lesson is
+now seven phases old and did not weaken.
+- **Where does `commitment` actually live — one owner, or two? `[open — Phase 10a]`** The recorded question was
+  "spec **vs** node frontmatter", read for two months as an open fork. **It is stale as worded: the tree shipped
+  both.** `shared/schemas.md` tags `commitment` ∈ `{locked, provisional, unspecified}` per spec element *and* lists
+  it in knowledge-node frontmatter beside `seeded_by`. The live question is a **D80** one, and sharper: is the node
+  copy **derived** from the spec (one owner, a projection — fine), or independently authored (two owners for one
+  fact — the exact drift D80 exists to stop)? `align` classifies drift *by* commitment and `document` reads it, so
+  a silent divergence between the two copies would mis-route drift rather than fail loudly. **Decide the owner, then
+  make the second copy provably derived or delete it.**
+- **The observed-layer over-claim is scheduled, not open** — `codemap.py` and `verify/SKILL.md` both assert
+  `graph.observed.json`, which no product code produces. The *layer's* tier is settled `[stageable]` (D175); the
+  *claims* are retracted in Phase 10a. Filed here only so the next reader does not re-open the tier.
+- **`11-roadmap.md` is ~37.5k tokens — 1.5× the 25k Read ceiling, and it is the CANONICAL STATUS doc `[watch]`.**
+  Measured by hand at D175 capture (119 932 chars ÷ 3.2); it was ~34k before this phase and this capture added
+  ~3.5k. The doc every reader is told to ground on **cannot be read whole**, so grounding is grep-shaped by
+  necessity — which is exactly the condition that let six by-space items rot unnoticed until D175 grepped them.
+  D168's `schemas.md` precedent is the obvious remedy (split off a live sibling, leave a survivor + a
+  machine-followable pointer), and the natural seam here is **live status vs the historical phase record**, which
+  is most of the file's bulk. **Not scheduled into Phase 10** — it is doc surgery on the one doc Phase 10 is
+  actively editing, and doing both at once would make the diff unreviewable. Revisit at Phase 10's close.
+  *(This register: **21.4k**, +0.5k here, ~3.6k of headroom. Still measured by hand — the budget gate does not
+  scan the package's own docs.)*
