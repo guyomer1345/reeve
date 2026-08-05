@@ -5330,3 +5330,100 @@ when made; this entry is the correction.
 **D166** (render the state you created — binding on 10c), **D122** (already-built remote control), **D162**
 (the forecast gate the deferred triage would subsume).
 → `07`, `11`. Files: `docs/design/11-roadmap.md`, `docs/design/07-open-questions.md`.
+
+## D176 — Phase 10 BUILT: three shipped claims retracted or made true, the portability claim measured rather than assumed, and "where is this project" answered by a generated view **[BUILT 2026-08-05 — three increments, `1d52783`→`5b0d09b`+; 853 tests (835→853), 5 meta-gates green, release boundary clean. CLOSES Phase 10 and `07`'s commitment question. ONE RESIDUAL STATED, NOT HIDDEN: native-Windows execution under Git-Bash is unverified]**
+D175 opened Phase 10 on the thesis that **the tree asserts things nothing produces or checks**. Building it
+found the thesis was, if anything, understated: the commitment question re-asked as a two-owner problem turned
+out to have **no owners at all**, which is a *fourth* instance of the same defect in one phase.
+
+- **(1) 10a — the observed layer, retracted in both shipped files.** `codemap.py` rested its standing
+  precision-over-recall rule on a durable observed layer accreting the missed recall; `verify/SKILL.md` licensed
+  `verify` to **drive the affected flow** as a pure observer to feed it. Neither can be honoured — no producer,
+  no schema, no consumer. The precision rule is restated on its own terms (**the two error directions are not
+  symmetric**: a fabricated edge is sticky and unretractable, a missed one is merely absent and returns when the
+  arm improves), which is where it was always load-bearing. Removing `verify`'s licence also resolved a **latent
+  contradiction** the retraction exposed rather than created: the licence let a skill whose first rule is
+  *artifact-only* take a runtime action.
+- **(2) 10a — `verify` reads the real diff.** The changelog is written by the step that made the change, so
+  alone it cannot catch an omission; `verify` now gathers a third view and is genuinely `adjudicate`-shaped —
+  **asked** (plan) vs **claimed** (changelog) vs **actual** (diff) — with under-report / over-report / off-plan
+  each a hard fail, because each names a file and is therefore demonstrable rather than suspected. **Two git
+  reads are required and both were verified by measurement, not reasoning:** `git diff HEAD` is **blind to a
+  newly created file** (untracked until staged — and a new file is the likeliest thing for a changelog to
+  under-report), and it is **fatal on a repo with no commits**. A check running only the first command would
+  have passed for the wrong reason.
+- **(3) 10a — `commitment` on nodes was a field a DECISION HAD ALREADY REFUSED, and the sweep is what found it.**
+  D175 re-asked this as a D80 two-owner question. The build first found it was a **phantom field** — `graph.json`
+  is structural and has no commitment to supply, the seeder emits `path`/`type`/`lang`/`tier`/both signals and
+  never one, and **nothing anywhere reads a commitment off a node**. Then the blast-radius sweep found the sharper
+  fact: **D106 settled this in Phase 2**, in terms that name this exact thing — *"the spec is the sole owner …
+  **nodes never store a commitment value**"*, with node frontmatter listed under its **Rejected** line as "a
+  second copy — D80 violation; regen-clobber; N-way fan-out of one fact". So `shared/schemas.md` shipped a field
+  its own decision had refused, and cited that schema as *evidence* for the opposite call. Deleted, and the
+  deletion is now justified by D106 rather than merely by the field's uselessness.
+  **The record carried the same contradiction: `11` recorded D106's closure ("E1 … spec-inline, never node
+  frontmatter") AND listed "Commitment-status storage — spec vs node frontmatter" as `[stageable]`/open.** Same
+  fact, two states, in the doc that owns it — **structurally identical to the observed-layer two-tier conflict
+  D175 settled**, and the third such conflict found in this phase. This is why the sweep is not optional: the
+  build alone would have deleted the field for a true but weaker reason and left both stale entries standing.
+- **(4) 10b — the portability claim MEASURED, and the fail-closed design survived a state it never anticipated.**
+  On the stock Windows PATH, `python3` is the **Microsoft Store stub** — a 2-byte execution alias, empty stdout,
+  advert on stderr, **exit 49** — which is neither "python3 present" nor the "python3 absent" the hooks were
+  written against. It holds anyway, for two independent reasons: empty stdout trips `guard.sh`'s raw-payload
+  fallback, and the non-zero status trips verify-before-commit in both hooks. **The first measurement said exit
+  0**, which would have been a *silent bypass of verify-before-commit*; that reading came from `%errorlevel%`
+  expanding at cmd.exe **parse** time, before python ran. Re-measured from bash: 49. Also measured: `bash` on the
+  stock PATH is the **WSL launcher** (`uname -s` = Linux), so "bash on Windows" silently means a different
+  filesystem view.
+- **(5) 10b — the one real defect: `loop.sh` misdiagnosed a MISSING `flock` as lock CONTENTION.** Git for Windows
+  ships no `flock`, so it exits 127 and `if ! flock -n 9` inverted that straight into the "an orchestrator
+  already holds the lock" branch — sending the operator to hunt a session that does not exist, on a machine where
+  the launcher can never work. `flock` is now probed separately. **The safety posture is deliberately unchanged**
+  — still refuses to start, because two orchestrators clobbering one `.workflow/` is the hazard the file exists
+  to prevent; only the diagnosis changed. **The first test harness was falsely green** (its stub PATH still
+  resolved `/usr/bin/flock`, so it proved nothing), so the suite carries a guard asserting the harness can
+  actually hide `flock`, and was mutation-tested against the pre-fix script to confirm it fails.
+- **(6) 10b — D58's trust-UX residual closed.** `shared/trust-model.md`: broad-local vs ask-on-outward and why
+  broad-allow is deliberate (an enumerated safelist is defeated by `cd x && cmd` chaining, so it invites trust it
+  has not earned), precedence, workspace trust and why `/start` records it, the hook floor that survives bypass,
+  and honest limits. The **README carried no permissions content at all**, which for a package asking for broad
+  local allow is a transparency gap; it now points at the doc.
+- **(7) 10c — the project-state view, as a GENERATED read.** A `status` **skill** over `scripts/project_state.py`.
+  **Chosen over a console screen** because D99 scoped the console as a supervision cockpit *and not a project
+  explorer*, and `bus.py` knows nothing of `docs/`, `spec.md` or `graph.json` — teaching it would push explorer
+  concerns into the cockpit. Split deliberately: the **script settles only what a machine can settle exactly**
+  (counts, frontmatter, path resolution, centrality ranking) and the **skill narrates**, which is what makes the
+  narration checkable — every number has a file behind it. It **writes nothing**: a stored status doc is stale at
+  the next commit and is then believed, which is worse than none. Two properties are load-bearing and tested:
+  **`missing` and `zero` render differently** (a brownfield repo before `ingest` legitimately has no spec, and
+  reporting "0 features" there is a lie dressed as data), and the **`docs_root` split is honoured**, without
+  which `status` would read the OWNER's spec in org mode — the one boundary org mode exists to hold.
+
+*Rejected:* building the observed layer to make its two claims true (making a false claim true is the expensive
+way to stop it being false; the layer is `[stageable]` on its own merits); leaving `verify`'s observer licence
+dormant "in case" (a dormant licence with no consumer is the same defect, deferred); keeping `commitment` on
+nodes as a derived projection (there is nothing to derive it *from*); a console screen for 10c (D99's boundary,
+plus `bus.py` would have to learn the docs tree); a `status` skill that WRITES a status file (D38 — the rot this
+capability exists to replace); changing `loop.sh` to proceed without a lock when `flock` is missing (trades the
+duplicate-orchestrator hazard for convenience); installing Git for Windows to close 10b (a system change on the
+maintainer's machine, not mine to make).
+*Verified, not assumed:* `git diff HEAD` misses untracked files and is fatal with no HEAD (both driven);
+Store-stub `python3` exits **49** with empty stdout (re-measured after a cmd.exe parse-time artefact gave a
+wrong 0); stock-PATH `bash` reports `uname -s` = Linux; the pre-fix `loop.sh` really does print "already holds"
+when `flock` is absent (mutation-tested); the `status` render was exercised against a populated fixture **and**
+against its degraded paths (no spec / no map / no git / no state / malformed JSON) before being called done.
+**Fourteen defects across seven phases have now been found by rendering or driving the state we CREATED rather
+than by reading code** — this phase adds the falsely-green flock harness and the falsely-green exit code.
+**Residual, deliberately not papered over:** 10b is **not closed for native Windows**. Git for Windows is not
+installed here, so execution under its bash — the interpreter that actually runs a git hook on a Windows dev box
+— is unverified. Worse than unverified in one place: `loop.sh` now *correctly* refuses under Git-Bash, which
+means **the launcher cannot start a loop there at all**, and a good error message may not be the right answer.
+Logged in `07` with what would close it.
+**Supersedes / corrects:** **D78/D83** (the observed layer's two shipped claims retracted; the layer and the
+charter revisit stay parked); **D58** (its trust-UX residual is closed); **D89** (its native-Windows gap is
+*narrowed by measurement*, not closed). **Builds on:** **D175** (the scope this executes), **D80** (one owner —
+`commitment`), **D99** (the cockpit/explorer boundary that chose 10c's form), **D38** (generated, never stored),
+**D166** (render the state you created), **D174** (`docs_root`, which 10c must honour).
+→ `07`, `10`, `11`. Files: `product/scripts/{codemap/codemap.py,loop.sh,project_state.py}`,
+`product/skills/{verify,status}/SKILL.md`, `product/shared/{schemas.md,trust-model.md}`,
+`product/templates/loop.md`, `product/commands/start.md`, `product/MANIFEST.json`, `README.md`, + tests.

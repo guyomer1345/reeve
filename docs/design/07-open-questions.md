@@ -654,7 +654,15 @@ corrected the remedy D172 had recorded for it.**
 Only the genuine **design question** is filed here; the rest of the re-check produced *work items* (owned by `11`'s
 Phase 10) and *corrections* (already applied to `11`). Six of the ten candidates were stale — the standing lesson is
 now seven phases old and did not weaken.
-- **Where does `commitment` actually live — one owner, or two? `[open — Phase 10a]`** The recorded question was
+- **~~Where does `commitment` actually live — one owner, or two?~~ CLOSED 2026-08-05 (D176) — it was neither.**
+  The build found the node field had **no producer and no consumer**: `graph.json` is structural and has no
+  commitment to supply, the seeder emits `path`/`type`/`lang`/`tier`/both signals and never a commitment, and
+  nothing anywhere reads one off a node. So there was no second owner to reconcile — only a phantom field. **Then
+  the sweep found it was worse: D106 had already decided this in Phase 2** — *"the spec is the sole owner … nodes
+  never store a commitment value"*, with node frontmatter under its **Rejected** line as a D80 violation — and
+  `schemas.md` shipped the refused field anyway, while citing that schema as evidence for the opposite call. The
+  field is **deleted** and the spec element confirmed sole owner. *(Original framing below, kept because the
+  re-ask is what found it.)* The recorded question was
   "spec **vs** node frontmatter", read for two months as an open fork. **It is stale as worded: the tree shipped
   both.** `shared/schemas.md` tags `commitment` ∈ `{locked, provisional, unspecified}` per spec element *and* lists
   it in knowledge-node frontmatter beside `seeded_by`. The live question is a **D80** one, and sharper: is the node
@@ -675,3 +683,19 @@ now seven phases old and did not weaken.
   actively editing, and doing both at once would make the diff unreviewable. Revisit at Phase 10's close.
   *(This register: **21.4k**, +0.5k here, ~3.6k of headroom. Still measured by hand — the budget gate does not
   scan the package's own docs.)*
+
+## Newly open from the Phase-10 BUILD (2026-08-05 — D176)
+- **Native Windows is still UNVERIFIED where it matters most `[open — the 10b residual]`.** What was measured on
+  the stock Windows PATH: `python3` is the Microsoft Store stub (empty stdout, advert on stderr, **exit 49**) and
+  `bash` is the WSL launcher (`uname -s` = Linux). Both fail-closed paths hold against the stub. What was **not**
+  measured, and is the realistic case: execution under **Git for Windows' bash**, which is what actually runs a
+  git hook on a Windows dev box. It is not installed on this machine and installing it is a system change, so the
+  question stands. **What would close it:** a Windows box with Git for Windows, running `/start` → a commit
+  (exercising `pre-commit.sh` + `guard.sh` + `checks.sh`) and `loop.sh`. Concrete known hazards to check there:
+  CRLF on the shipped `.sh` files, and `flock`'s absence (now correctly *diagnosed*, but the launcher still
+  refuses — meaning **`loop.sh` cannot start a loop under Git-Bash at all**, which may deserve a real fallback
+  rather than a good error message).
+- **The contract linter reads only the FIRST line of `loop.md`'s "Side doors" paragraph `[small]`.** Adding
+  `status` on a continuation line left it unrouted, and the linter caught it as an advisory — so it is not
+  silent, but the layout constraint is invisible in the file. A comment now warns the next editor. The parser
+  could take the whole paragraph instead; not done because the gate already reports the failure it would prevent.

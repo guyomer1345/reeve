@@ -10,7 +10,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   read→place→advance algorithm, the resume model (`state.json` / `handoff.md` / git), and the autonomous
   **permission model** (broad-allow + `ask` outward + `guard.sh`) — **dogfood-validated** end-to-end, zero
   local prompts after trust (D46–D58).
-- **Space 2 — Roster + contracts.** 19 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
+- **Space 2 — Roster + contracts.** 20 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
   the **D36–D45 skill-body deltas** authored (`prioritize` waves · `execute` divergence tiers +
   refuse-destructive · `planner` risk_class+backup + decision-coverage gate · `adjudicate`
   conjunction-of-signals · `commit` secret-scan) + the prerequisite-repair two-commit carve-out and
@@ -346,11 +346,14 @@ is this repo's entire evidence discipline. Two different words; only the first i
   - **Shipped bash glue assumes a bash interpreter on the target OS — unverified on native Windows** (D89; the D71
     split stands, no refactor). Real and untouched. **Scheduled — Phase 10b.**
   **[stageable → the two live halves are scheduled into Phase 10 (D175)]**
-- **Commitment-status storage** — ~~where locked/provisional/unspecified is recorded (spec **vs** node
-  frontmatter, `09`)~~. **The recorded fork is ALREADY ANSWERED and the question is stale as worded (D175):** the
-  tree shipped **both** — `shared/schemas.md` tags `commitment` per spec element *and* carries it in knowledge-node
-  frontmatter. The live residual is a different question, and a D80 one: whether dual-carriage has a declared owner
-  with the second copy *derived*, or is two owners for one fact. **Scheduled as that question — Phase 10a.**
+- ~~**Commitment-status storage** — where locked/provisional/unspecified is recorded (spec **vs** node
+  frontmatter, `09`).~~ **CLOSED — and it was never open: D106 decided it in Phase 2** (*"the spec is the sole
+  owner … nodes never store a commitment value"*, with node frontmatter under its **Rejected** line). **This
+  entry contradicted the E1 line 100-odd lines below it, which records that same D106 closure — same fact, two
+  states, in the doc that OWNS it** (the third such conflict this phase; see the observed layer above). Meanwhile
+  `shared/schemas.md` had shipped the refused node field anyway. **Field deleted, spec confirmed sole owner —
+  D176 (Phase 10a).** *(D175 scheduled this as a live D80 question, which was itself the stale reading; the
+  blast-radius sweep is what surfaced D106.)*
 - **Project-state view (user-raised)** — a synthesized "where is this project" surface (done · how it
   connects · what's left); likely **generated** (a `status` skill / console screen). ~~Prereq for **self-hosting**
   this project with itself.~~ **Re-argued and re-aimed (D175):** its only recorded justification was the
@@ -656,7 +659,7 @@ end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote 
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, model/effort routing,
 packaging, the state-view, **and the D84 skill→agent reclassification** (`execute` +
 `create-demo` → leaf agents: the file moves, agent-format rewrites, orchestrator dispatch-by-kind wiring, and the
-`19 skills + 2 agents` → `16 + 4` count update — a dedicated session; **the loop has now run (D128), so this is no
+`20 skills + 2 agents` → a `16 + 4`-shaped count update — a dedicated session; **the loop has now run (D128), so this is no
 longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 
@@ -972,7 +975,7 @@ view it would otherwise have waited on. *(**The clone experiment never happened 
 self-hosting outright.** The half of this call that was about not entangling a first run with a new capability was
 right and is kept; the half that deferred a run is moot, because there is no run.)*
 
-### Phase 10 — Truth-in-shipping: close the gap between what the tree CLAIMS and what it DOES **[OPEN 2026-08-05 — D175. The live phase pointer. Opened over the by-space remainder AFTER a premise re-check of all ten candidates; six of the ten were stale, so this phase corrects the RECORD as well as the product]**
+### Phase 10 — Truth-in-shipping: close the gap between what the tree CLAIMS and what it DOES **[COMPLETE 2026-08-05 — opened D175, BUILT D176 (`1d52783`→`5b0d09b`+). All three increments shipped: 10a (three over-claims), 10b (the portability claim measured, one defect fixed), 10c (the project-state view — a `status` skill over `project_state.py`). 853 tests (835→853), 5 meta-gates green, release boundary clean. **One residual, stated not hidden: 10b could not be closed on native Windows** — Git for Windows is not installed on this machine, so execution under its bash is unverified]**
 Phase 9 was the last phase *as planned*, and the remainder was described as "a menu, not a sequence". D175 reverses
 that **by decision, not by finding an error** — and the reversal was forced by the other one: **self-hosting is
 dropped**, which was the only spine the menu had. So the spine had to be found rather than assumed, and the
@@ -990,22 +993,22 @@ promote it.*
     and `skills/verify/SKILL.md` licenses `verify` to drive flows as a pure observer *for* it. `graph.observed.json`
     exists in **no product code**. **Retract both claims** — the precision bias is right on its own terms (a
     fabricated edge is sticky and unretractable) and does not need a layer that does not exist to justify it.
-    Do **not** build the layer; its tier is settled `[stageable]` above.
+    Do **not** build the layer; its tier is settled `[stageable]` above. **[DONE — D176]**
   - **`verify` #8.** The skill claims artifact conformance while reading only plan↔changelog. Wire the verdict to
-    sample the real staged diff — `hooks/verify_check.py` already runs `git diff --cached`, so this is a wiring job.
+    sample the real staged diff. **[DONE — D176]** It needed TWO git reads, both verified by measurement: `git diff HEAD` is blind to a newly created file (untracked until staged), and is fatal on a repo with no commits.
   - **Commitment dual-carriage.** `shared/schemas.md` carries `commitment` in the spec *and* in node frontmatter.
     Settle it under D80: one declared owner with the second copy **derived**, or an explicit statement that
-    dual-carriage is deliberate and why. Today it is neither.
+    dual-carriage is deliberate and why. **[DONE — D176, and it was neither: the node field had no producer and no consumer, so it is DELETED and the spec element is the sole owner.]**
 - **10b — the portability claim.** Shipped bash glue claims a target-OS interpreter it has never been tested against
   (**D89**): `pre-commit.sh`, `guard.sh`, `checks.sh`, `codemap.sh`, `loop.sh`. **Verify on native Windows** — not
   WSL, which is the environment every prior drive used and the one that hides this. Carries the **D58 first-launch
   trust-UX doc** with it (the weakest fit to the spine — a missing doc, not a false claim — taken in as cheap and
-  adjacent, not because it belongs). **[core]**
+  adjacent, not because it belongs). **[DONE — D176, with a stated residual: the stock-Windows `python3` stub and `bash` stub were measured and the fail-closed gates HOLD; `loop.sh`'s missing-`flock` misdiagnosis was found and fixed; execution under Git for Windows' bash remains UNVERIFIED — it is not installed here.]**
 - **10c — the project-state view.** The synthesized "where is this project" surface (done · how it connects ·
   what's left), **generated**, not hand-maintained (D38). Re-argued after losing its self-hosting premise: `07`'s
   original 2026-06-30 entry carries an independent justification that survives. **Built for a TARGET project** —
   it may not be built to read this repo's own `docs/design/`, which is both the D125 boundary and the only form
-  dogfooding can validate. **A surface: it gets a render before it is called done.** **[stageable → scheduled]**
+  dogfooding can validate. **A surface: it gets a render before it is called done.** **[DONE — D176: the `status` skill (side door, advances no node) over `scripts/project_state.py`, which is GENERATED and writes nothing. Rendered against a fixture and against its own degraded paths before being called done.]**
 
 **Deferred, each with its trigger:** the **proportional-rigor triage** (promote on a *second* narrow gate wanting it
 — D162's forecast gate covers today's case) · the **project-map tab** (the console has no tab machinery; inventing

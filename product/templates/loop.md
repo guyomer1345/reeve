@@ -47,8 +47,12 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `document:audit` | retention pass done (changes staged) | `commit` |
 | `align` | scan done (tickets filed via `create-issue`, fixes staged, anchor written) | `commit` |
 
-Side doors (callable from anywhere): `create-issue` → backlog · `research` (service) · `answer` (entered from
-the boundary drain, never from a node — a question advances nothing, so it has no edge).
+<!-- Every side door must be named ON the line below: the contract linter reads only the line that
+     starts with "Side doors", so a door introduced on a continuation line is silently unrouted. -->
+Side doors (callable from anywhere): `create-issue` → backlog · `research` (service) · `answer` · `status`.
+`answer` is entered from the boundary drain, never from a node — a question advances nothing, so it has no
+edge. `status` is the same shape: a pure read of where the project is, mutating nothing and returning to
+wherever it was called from.
 
 ## Scheduler boundary — the inbox drain
 Between items (and before any pick) the orchestrator **drains `.workflow/inbox/`** — the console's typed
