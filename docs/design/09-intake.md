@@ -199,10 +199,13 @@ hole, core flow broken.** These bound the "unspecified → undefined behaviour" 
   elicited early), surfaced as a **`forecast` judgment checkpoint** (`04`). The demo's sibling on the intake stage —
   `create-demo` de-risks *what* to build, `/create-forecast` de-risks *how the machine will proceed* — and, like the
   demo's spec edits, it fires **pre-plan**. Front-loads D97's setup *elicitation*, never its verify probe. Owner: **D159**.
-- **Org mode** — **[DESIGNED — D161, `11` Phase 9c; unbuilt]:** a third intake mode beside greenfield/brownfield for a
-  company product the maintainer does not own — **org-brownfield is `ingest` minus footprint** (never edits the
-  company `CLAUDE.md`, `create-issue` is local-only, **nothing out of the checkout is ever executed**), over a
-  private-tree brain with `project_root` = the external checkout. **Note (D171, 2026-08-04):** the execution hazard
-  is **not** in `ingest`, which runs no gates at all — it is the **commit gate**, where the adopted `checks.env`
-  would run the company's own suite on every loop commit. Owner: **D161**; the re-anchoring and the required third
-  `checks.sh` state: **D171**.
+- **Org mode** — **[BUILT + DRIVEN 2026-08-05 — D174; `11` Phase 9c]:** a third intake mode beside
+  greenfield/brownfield, **asked for explicitly and never detected** (`/start org <repo-url-or-path>`), for a company
+  product the maintainer does not own — **org-brownfield is `ingest` minus footprint** (never writes the company
+  `CLAUDE.md`, reading it as the intent-seed while the brief goes to `.claude/CLAUDE.md`; `create-issue` is
+  local-only; **nothing out of that tree is ever executed**). **The brain IS the private clone, `project_root: "."`**
+  — D161's "an absolute path to the external checkout" was incoherent with three shipped invariants and **D174
+  corrected it**; the operator's own checkout is a separate directory the workflow never touches, and derived
+  artifacts are namespaced under `docs_root: .workflow`. The execution hazard is **not** in `ingest`, which runs no
+  gates at all — it is the **commit gate**, answered by the third stack-gate state `STACK_GATE_NONE`. Owner:
+  **D174** (which corrects **D161** and re-grounds **D171**).

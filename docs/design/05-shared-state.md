@@ -169,9 +169,10 @@ mount by construction). **No prose below restates these sets** — every list th
 here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to the tree.
 ```
 <launch root>      # where Claude runs = orchestrator home (process / machinery)
-  CLAUDE.md         # orchestrator brief (greenfield: here; brownfield: a marked block in the existing one)
+  CLAUDE.md         # orchestrator brief (greenfield: here; brownfield: a marked block in the existing one;
+                    #   ORG: NOT here — the brief goes to .claude/CLAUDE.md so the owner's file is never written, D174)
   .workflow/
-    config.json     # project_root (./project | .) + run config; the daemon reads notify/checkpoint for the away channel — committed, so read across the repo mount (static after init; a parse failure ⇒ no away channel, surfaced) · bus:read
+    config.json     # project_root (./project | . — org is `.` too, D174) + docs_root (absent ⇒ project_root; org sets .workflow) + org (presence IS org mode, no toggle) + run config; the daemon reads notify/checkpoint for the away channel — committed, so read across the repo mount (static after init; a parse failure ⇒ no away channel, surfaced) · bus:read
     runtime.json    # RUNTIME — the pointer to the pinned runtime root; absent ⇒ this dir IS the runtime root (the no-relocation case). Machine-specific absolute path ⇒ never committed. NEVER pinned itself: it is *how* the pinned tree is found, so it must sit at a fixed spot on the repo mount — D115, gitignored · bus:none · no-pin
     loop.md         # routing graph + diagram (fixed topology)      (committed) · bus:none
     checks.sh       # mechanical-gate runner — installed FIXED from templates/ (--fix / --check), D127  (committed) · bus:none
@@ -198,7 +199,9 @@ here, and `scripts/check_enum_coherence.py` holds the two shipped consumers to t
     demos/<id>/     # RUNTIME — throwaway demo-sandbox bundle the bus daemon serves (both sockets) under a sandbox-CSP opaque origin; also holds create-demo's .refine.json round counter (a dotfile the server refuses); pruned on TERMINAL checkpoint-resolve by the verdict-apply path, retention's prune_demos backstops stragglers — D102/D104/D124, gitignored · bus:static · no-pin (write-once-then-serve, content-atomic on 9p — D104/D124)
     demo-approvals.json # the promoted refine ledgers — {item_id, approved_at, rounds, spec_ref} per TERMINAL demo verdict, written by check_demo_bundle.py --promote immediately BEFORE the bundle delete (the .refine.json above dies with it, so without this "approved with no ledger" is true of every approved item forever); ids/counts/a hash only, no bytes and no values; read by align's approved-demo lens — D157  (committed) · bus:none
   <worktrees>/      # RUNTIME — one git worktree per in-flight ticket (D91); raw `git worktree`, gitignored · bus:none · no-pin
-  <project_root>/   # the product (greenfield: project/ ; brownfield: the repo root)
+  <project_root>/   # the product (greenfield: project/ ; brownfield AND org: the repo root)
+                    #   ORG: the repo root is a CLONE of a product we do not own, so nothing below is
+                    #   ours — the derived half moves to <docs_root> = .workflow/ (D174)
     CLAUDE.md       # the product's own brief
     llms.txt        # thin agent entry point → points into docs/knowledge/  (committed)
     docs/           # ← the DOCS-ROOT — durable product knowledge (D62)
@@ -316,4 +319,5 @@ Still to close: symbol-level knowledge paths. *(Read/write ownership + the reque
 retention/read law — D61; **the context-budget law over prose — D160, built D167** (`config.doc_budget` +
 `check_doc_budget.py`: role-tiered, token-measured, two tiers per role — hard fails `checks.sh`, advisory schedules a
 `doc-budget` maintenance item; the VOLATILE tier is out of scope because `handoff.md` is already capped at injection
-by the `SessionStart` hook); docs-root unified under `<project_root>/docs/` — D62.)*
+by the `SessionStart` hook); docs-root unified under `<project_root>/docs/` — D62, **except org mode, where
+`docs_root` splits it to `.workflow/docs/` so derived IP never interleaves with the owner's own `docs/` — D174**.)*

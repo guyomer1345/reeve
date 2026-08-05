@@ -60,6 +60,11 @@ the workflow state under `.workflow/`, installs the shipped scripts and git hook
 off — to a spec-building conversation for a new project, or to an ingest + reconciliation pass for an existing
 one. It prints a **console URL**; open it to watch the run and to reach the loop while it works.
 
+There is a third mode you ask for rather than one it detects: `/start org <repo-url-or-path>`, for a product
+you do **not** own. It clones the repo into a private tree with its push path removed, keeps everything the
+workflow generates inside `.workflow/` and `.claude/`, and never touches your own checkout of that product.
+Work leaves as a per-item diff you apply, review, and commit yourself.
+
 From there the loop runs on its own. You step in at checkpoints (approve / request changes / reject), steer it
 with new requests, and authorize outward actions (pushes, issues) from the console when you choose to.
 

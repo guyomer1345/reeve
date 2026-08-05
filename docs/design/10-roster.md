@@ -53,7 +53,7 @@ overlap into one adjudicator.
 ## Roster
 | capability | kind | one-line job | file |
 |---|---|---|---|
-| start (init) | command | bootstrap the workflow; greenfield/brownfield (D28/D29) | `commands/start` |
+| start (init) | command | bootstrap the workflow; greenfield/brownfield (D28/D29) + **org** (D174 — asked for, never detected) | `commands/start` |
 | update | command | migrate an initialised project onto the installed package version (D137/D139) | `commands/update` |
 | rebind | command | bind the machine-local runtime half to THIS machine after a move (D141/D142) | `commands/rebind` |
 | dispatch | command | write a complete `handoff.md` on demand so a `/clear` is safe (D136) | `commands/dispatch` |

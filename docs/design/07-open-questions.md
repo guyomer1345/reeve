@@ -486,8 +486,9 @@ cannot assume plugin-scoped environment — the general form is worth rememberin
 
 ## Newly designed — Phase 9 (D159–D163, 2026-08-03) — sub-questions deferred to build
 **All three capabilities' sub-questions are now closed** — 9a's by its build (D163), the context-budget law's by
-D167, and org mode's **in design** by D171 (2026-08-04). **9c remains UNBUILT and still build-last behind its own
-drive**: the calls are settled, the evidence is not. A fourth ask — a
+D167, and org mode's in design by D171 (2026-08-04) and **then by its build + drive, D174 (2026-08-05)**. **9c is
+BUILT and DRIVEN**, so both the calls and the evidence are in — and building it **corrected its own recorded
+design** (D161's `project_root`) before any code was written. A fourth ask — a
 console **config tab** — was **DROPPED** (D161): writing `config.json` from the browser makes the bus a second writer
 (D93 violation), switching a project's git topology is a migration not a setting, and its "change credentials over
 Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away case is Tailscale-only). What stays open
@@ -516,22 +517,23 @@ Cloudflare" arm violated D112 (Cloudflare terminates TLS; the credential-away ca
     *honest* (D163's fourth state exists precisely so "I can't tell" never renders as "did not happen"), but it is
     thin, and if a real chain's reality column comes back mostly blank the fix is a **genuine anchor per node**, not
     a looser probe.
-- **Org mode (D161) — all three SETTLED in design 2026-08-04 (D171, owner); 9c still unbuilt.**
-  (1) **The review-bundle format is a PER-ITEM SQUASHED DIFF** + a metadata sidecar kept *outside* the diff — the
-  human is the author by construction (which is what "user and user only, enforced structurally" asks for), no loop
-  commit messages cross, and the unit matches the loop's own: **one item → one bundle → one human commit**. A branch
-  was rejected because the path of least resistance (`git push`) is the wrong act; `format-patch` survives as a
-  possible opt-in for large multi-commit work, never the default.
-  (2) **RE-ANCHORED — the hazard is the COMMIT gate, not `ingest`.** `ingest` runs no gates at all today, so the
-  question as phrased was nearly a no-op. `/start` brownfield **adopts** the project's formatter/linter/typechecker/
-  test into `checks.env`, and `checks.sh --check` runs them **repo-wide** from the `commit` skill *and* git's
-  `pre-commit` hook — so **every loop commit** would run the company's suite on personal infra. `checks.env` is
-  `source`d and fixers run via `eval`, so `TEST="npm test"` on an unknown repo is **arbitrary code execution**. The
-  rule is therefore *never execute anything out of the checkout*. **An empty `checks.env` does not work** — it
-  deadlocks org mode at its first commit (the fail-closed backstop), so org mode needs a **third declared state**:
-  deliberately unwired, coverage gates only. `codemap.py` is **verified static**, so the code map stays safe.
-  (3) **Archive-to-git stays local-only, and becomes VISIBLE** — an explicit acknowledgement key in `config.org` plus
-  a console badge whenever the private tree has a remote, so the governance caveat is a recorded fact, not a sentence.
+- **~~Org mode (D161) — the three design questions~~ — CLOSED 2026-08-04 in design (D171) and 2026-08-05 by the
+  build + drive (D174, owner).** All three shipped as settled: (1) the bundle is a **per-item squashed diff** + a
+  sidecar outside it (branch rejected — `git push` is the wrong path of least resistance; `format-patch` an opt-in,
+  never the default), and the producer now **verifies its own output** rather than merely applying the exclusion;
+  (2) the read-only hazard was **re-anchored** from `ingest` (which runs no gates) onto the **commit gate**, and
+  shipped as the third stack-gate state **`STACK_GATE_NONE`** — off *by declaration*, refusing rather than obeying
+  any command set alongside it, so a re-run of `/start`'s stack adoption cannot silently re-arm `eval` on foreign
+  code; (3) archive-to-git stays local-only and **visible** — `guard.sh` gates the act on `org.archive_remote_ack`
+  and the console badges the state, rendered in a real browser with a real remote configured.
+  **Two corrections the build made to the record, worth keeping because they are the pattern, not the exception:**
+  D161's `project_root` ("an absolute path to the checkout") was **incoherent** with three shipped invariants — the
+  brain IS the clone, `project_root: "."`, and there is no third `project_root` value; and D171's stated reason for
+  the third state (an empty `checks.env` *deadlocks*) is **topology-dependent** — under D161's literal wording the
+  backstop cannot fire at all, which is the worse failure. Both were caught by checking the premise before building
+  on it. The remaining honest limit is unchanged and is **not** an open question: the private tree still
+  concentrates derived IP about someone else's code on personal infrastructure, and zero footprint on their repo is
+  not compliance with their data policy — that is now badged rather than merely stated.
 - **The context-budget law (D160) — CLOSED by the build (D167, owner, 2026-08-03; 9b is BUILT).** The defaults were
   derived by measuring, and measuring forced a call D160 had not foreseen: the budget is **two-tier per role**
   (hard fails `checks.sh`, advisory schedules a trim) because the package's own always-loaded templates are

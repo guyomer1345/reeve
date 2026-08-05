@@ -4170,7 +4170,7 @@ owner), D88 (distill-to-lesson-before-drop), D136 (`warn_pct` = percentage-not-t
 Code #4002 (25k read ceiling), #2766 (40KB `CLAUDE.md` warning), context-rot / compression-beats-retention (2026).
 → `05`, `06`, `product/shared/memory-model.md`, `11`, `07`.
 
-## D161 — Org mode: the third `/start` mode — a private-tree brain over a read-only company checkout, ZERO footprint, human-only git **[DESIGNED 2026-08-03 — Phase 9c; unbuilt, and BUILD-LAST behind its own drive. Reframes the maintainer's "project repo vs docs repo"]**
+## D161 — Org mode: the third `/start` mode — a private-tree brain over a read-only company checkout, ZERO footprint, human-only git **[DESIGNED 2026-08-03 — Phase 9c. ⚠ PARTLY SUPERSEDED BY D174 (BUILT + DRIVEN 2026-08-05): the goal, the deltas and the drive protocol below all held, but the TOPOLOGY did not — `project_root` is **`.`** (the brain IS the private clone), not "an absolute path to the checkout", and there is no third `project_root` value. **Ground on D174 before building on this entry.** Reframes the maintainer's "project repo vs docs repo"]**
 The maintainer wants to run the workflow against a **company product he does not own** — where the docs/rules/knowledge/
 machinery the workflow generates "cannot by any means be included in the org's repo, not in a sandbox, not in testing,
 definitely not in prod," where **coworkers change the product independently** so the workflow must be able to re-align
@@ -4939,7 +4939,7 @@ not stalled**).
 browser-drive discipline, eleventh payoff), **D92** (disposable conversation → the rotation).
 → `07`, `11`. Files: none — capture only; the three defects are OPEN in `07`.
 
-## D171 — Phase 9c org mode: the review bundle is a PER-ITEM SQUASHED DIFF, and the "read-only ingest gates" question was anchored to the wrong node — the hazard is the COMMIT gate, which needs a third `checks.sh` state **[DECIDED 2026-08-04 — settles `07`'s org-mode questions (1) and (3) and RE-ANCHORS (2); 9c still unbuilt and still build-last behind its own drive]**
+## D171 — Phase 9c org mode: the review bundle is a PER-ITEM SQUASHED DIFF, and the "read-only ingest gates" question was anchored to the wrong node — the hazard is the COMMIT gate, which needs a third `checks.sh` state **[DECIDED 2026-08-04 — settles `07`'s org-mode questions (1) and (3) and RE-ANCHORS (2). BUILT by D174 (2026-08-05); all three calls shipped as decided. ⚠ ONE PREMISE RE-GROUNDED: "an empty `checks.env` deadlocks org mode at its first commit" is TOPOLOGY-DEPENDENT — true under D174's `project_root: "."`, but inverted under D161's literal external path, where the backstop cannot fire at all and is silently disarmed instead. The third state ships either way, for the stronger reason]**
 Two of D161's three deferred calls are now taken, and grounding the third against the shipped code moved it to a
 different part of the system than `07` recorded.
 
@@ -5143,3 +5143,96 @@ share `claude_config_path()`), **D166** (the render discipline, thirteenth payof
 *created*, an untrusted workspace, that showed the defect).
 → `01`, `07`, `11`. Files: `product/scripts/bus.py`, `product/scripts/test_bus.py`,
 `product/shared/schemas-runtime.md`.
+
+## D174 — Phase 9c org mode BUILT and DRIVEN: the brain IS the clone, the derived tree is namespaced, and the boundary is verified rather than applied **[BUILT + DRIVEN 2026-08-05 — six increments, `3816b62`→`1ad7707`; 835 tests (801→835), 5 meta-gates green, exit-gate drive 27/27. CLOSES Phase 9, and with it the last phase on the roadmap. CORRECTS D161's `project_root` and re-grounds D171's deadlock premise]**
+Org mode was the last unbuilt slice and the one with **zero prior multi-repo / multi-committer evidence**. Two of the
+three things that cost time were, again, **recorded framings rather than the work** — which is now five phases running
+(D169's inverted premise, D170's non-existent seam, D172's probe that could not fire, D173's predicate, and these).
+
+- **(1) THE TOPOLOGY WAS INCOHERENT AS RECORDED, and it is upstream of everything else.** D161 says `project_root` is
+  "an absolute path to the checkout". That cannot hold against three shipped invariants: `/start` writes `rules/`,
+  `docs/` and `llms.txt` **under** `project_root` (so it would install into the very checkout that must stay
+  pristine); `verify_check.py` binds the item to the **staged diff of one repo** (D161's own argument against the
+  two-repo split); and `checks.sh`'s backstop resolves `git ls-files -- "$proot"`, which on an external absolute path
+  exits **128 with empty stdout** — the `2>/dev/null` eats the fatal, `grep -q` finds nothing, and the fail-closed
+  gate **silently no-ops**. **Call: the brain IS the private clone, `project_root: "."`** — org mode is brownfield
+  cloned rather than in-place, with zero footprint on the operator's own checkout. Every single-repo guarantee then
+  holds unchanged, which is exactly why D161 rejected the two-repo split in the first place. **The "third
+  `project_root` value" dissolves.**
+- **(2) That topology has a consequence the design had not reached, and it is the LEAK BOUNDARY.** A real company repo
+  very likely already has `docs/`, so the brain's derived IP would interleave with — and clobber — the owner's files,
+  and the bundle's exclusion would degrade from **two directories to a per-file list that must stay correct forever**.
+  So **`docs_root` is ADOPTED as its own key with its own owner** (absent → `project_root`, so the split is invisible
+  in every other mode). Org mode sets `.workflow`, the brain then owns exactly **`.workflow/` + `.claude/`**, and the
+  exclusion list is two entries. The brief moves to **`.claude/CLAUDE.md`** — *verified against the live platform
+  docs, not assumed*: it is a first-class project-instructions location loaded at project scope, and discovered files
+  **concatenate rather than override**, so the brief loads every session while the owner's root `CLAUDE.md` stays
+  byte-untouched and still serves as the ingest intent-seed (which is what D161 asked for and had no mechanism for).
+- **(3) The third `checks.sh` state, and D171's premise re-grounded.** D171 called the empty-`checks.env` deadlock the
+  reason for a third state. That premise is **topology-dependent**: it holds under the settled `project_root: "."`
+  and is **inverted** under D161's literal wording, where the backstop cannot fire at all. Either way the state is
+  needed, so it ships — `STACK_GATE_NONE="<reason>"`, which short-circuits the backstop *and* refuses to execute
+  **anything** from `checks.env` in either mode, prints the reason every run, and **reports rather than obeys** a
+  command set alongside it. That last part is the structural half: a re-run of `/start`'s brownfield stack adoption
+  cannot silently re-arm `eval` on foreign code.
+- **(4) The review bundle — the one net-new capability — verifies its own output.** `git diff` excludes the brain by
+  pathspec, and then the producer **parses the paths back out of the bytes it just produced** and refuses to write a
+  bundle that still names one. An exclusion only ever *applied* is a policy; one *checked afterwards* is a gate. It
+  also refuses added lines referencing `.workflow/` inside the owner's own files — the path is theirs, the content is
+  ours, and path exclusion cannot see it.
+- **(5) org-align is align with a SECOND ANCHOR, exactly as D161 required — no new machinery.** `describes_sha` beside
+  `base_sha`; fetch read-only; scope the union of both diffs; **stamp last and only on a completed scan**, because
+  stamping early marks unread upstream commits as read, which is the one error the anchor exists to prevent. A
+  non-trivial upstream conflict raises a checkpoint, never an autonomous merge.
+- **(6) The governance caveat becomes a rendered fact.** `guard.sh` blocks `git remote add/set-url/rename` in org mode
+  unless `org.archive_remote_ack` records a reason (failing **open** outside org mode — an ordinary project must never
+  be blocked from managing its own remotes), and the console badges the **state** for as long as a push path exists,
+  so a remote added out of band still shows. Read from `git remote`, never from config: the hazard is the remote that
+  is actually there. The fetch-only `origin` (push url `no_push`) is correctly not one.
+
+*Rejected:* keeping D161's literal external `project_root` (breaks the three invariants above); a **second private
+clone** at an external path (the two-repo split D161 rejected by name); keeping `docs/` at the root and **gap-filling**
+(turns a structural boundary into a policed per-file one — the failure mode zero-footprint exists to avoid);
+**refusing** to bootstrap org mode when the repo already has `docs/` (converts a design problem into an availability
+problem on a large share of real repos); deriving the third `checks.sh` state from `config.org` presence (conflates
+"is org mode" with "the gate is deliberately off", and leaves a non-org project that must not run its own code with no
+path); a `config.org.enabled` toggle (a live topology switch is a **migration, not a setting** — presence *is* the
+mode, chosen once at `/start`).
+*Verified, not assumed:* `git remote set-url --push origin no_push` kills bare/explicit/`--all` pushes with a fatal
+while `fetch`/`FETCH_HEAD` keep working; `.claude/CLAUDE.md` is a project-scope instructions location that concatenates
+with the root file; `git ls-files` on an external absolute path exits 128 with empty stdout; `git -C <bad path> remote`
+returns **non-zero**, it does not raise.
+**Six defects found, five of them by rendering or driving the state we CREATED rather than by reading code** — the
+D166 discipline's fourteenth payoff: the org brain budgeted the **owner's** root `CLAUDE.md` (always-loaded, 4000-token
+hard wall, fails the commit, remedy forbidden — a large company brief would have deadlocked *every* commit behind a
+gate nobody there may satisfy); the bundle hand-off quoted a **brain-local sha** the owner's repo cannot resolve;
+the badge's "cannot read git" branch guarded only an exception, so a failed read reported "no remotes" — the one
+wrong-direction answer; two shipped files claimed `checks.env` "is gitignored and does not travel" while `/start` and
+`/update` ship it **committed** (load-bearing here, since a safety declaration that did not travel would lapse); and
+the **drive's own first run was falsely green** — `git init --bare` defaulted HEAD to `master` while the push created
+`main`, so both clones came up empty and four assertions passed for the wrong reason (the push refused as "src refspec
+does not match any", not by `no_push`; the pristine check compared two empty trees). A harness that cannot fail is not
+evidence, which is why the drive is committed rather than run once and described.
+**Verification / the exit gate:** `scripts/drive-org-mode.sh` — **pallets/click at a pinned historical SHA
+(`94c191c`)**, with **42 of the repo's own later real commits replayed** onto the origin as coworker drift (which
+produced a genuine same-file overlap, so the conflict case is present rather than hypothetical). **27/27** on the four
+properties that define the mode: **(a) pristine** — the operator's checkout is byte-identical before and after
+(content hash over every file, plus HEAD and porcelain), with no `.workflow/`, `.claude/` or git hook appearing, and
+work reaching it only when the human applies the bundle (author: the human); **(b) no push** — all three push forms
+die on `fatal: 'no_push' does not appear to be a git repository`, origin still byte-identical to the pinned SHA;
+**(c) drift** — 42 commits over 51 files detected against `describes_sha`, which the fetch did not auto-advance;
+**(d) no leak** — the bundle carries exactly one file, no `Refs:` trailer, no derived knowledge, no intermediate
+state. Plus the standing rule: no stack command was ever wired and nothing out of their tree ran.
+**Supersedes / corrects:** **D161** — `project_root` is **`.`**, not an external absolute path, and there is no third
+`project_root` value; its "never inject the managed block" now has a mechanism (`.claude/CLAUDE.md`) rather than only
+a prohibition. **D171** — the deadlock premise is **topology-dependent** and inverted under D161's literal wording;
+the third state ships regardless, for the stronger reason. Also corrects `pre-commit.sh` and `rebind.md` on
+`checks.env`'s travel.
+**Builds on:** **D161** (org mode), **D171** (the three settled calls — bundle form, commit-gate anchoring, local-only
+archive), **D48** (resume — why history stays in the private clone), **D110** (the `guard.sh` floor this extends),
+**D130** (the adopted-code-gates hazard), **D80** (`docs_root` adopted with a declared owner; the badge makes a
+caveat a visible fact), **D166** (render the state you created), **D68** (brownfield ingest, reused wholesale).
+→ `07`, `09`, `11`. Files: `product/templates/checks.sh`, `product/templates/loop.md`, `product/commands/start.md`,
+`product/commands/rebind.md`, `product/hooks/{guard.sh,pre-commit.sh}`, `product/skills/{commit,align}/SKILL.md`,
+`product/shared/schemas-runtime.md`, `product/scripts/{review_bundle.py,check_doc_budget.py,bus.py}`,
+`product/MANIFEST.json`, `scripts/drive-org-mode.sh`, + tests.

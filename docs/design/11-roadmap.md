@@ -417,10 +417,12 @@ The website+demo design decomposes into five clusters; the dependency spine is *
 **Phase 5 — pre-test hardening (D126). COMPLETE** (as are Phases 6 and 7 below); this paragraph is the
 historical framing of *why it opened*, not a live "next slice" pointer — it read as one for four phases after
 Phase 5 closed. **`### Phase 8` (opened D155) is now COMPLETE** — both halves: **8a** BUILT (D165) and **8b —
-the interaction-model rework — BUILT + browser-driven 2026-08-04 (D169, `ad9d910`)**. **The live pointer is
-therefore `### Phase 9` below** (D159–D163): `9a` is BUILT and browser-driven (D163 + D166) and `9b` is BUILT
-(D167); **`9c` (org mode) is all that remains**, and it is deliberately last, behind its own drive — which makes
-it the only `[core]`-adjacent slice still standing. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
+the interaction-model rework — BUILT + browser-driven 2026-08-04 (D169, `ad9d910`)**. **`### Phase 9` is now
+COMPLETE too** (D159–D163): `9a` BUILT + browser-driven (D163 + D166), `9b` BUILT (D167), and **`9c` (org mode)
+BUILT + DRIVEN 2026-08-05 (D174, `3816b62`→`1ad7707`)** behind the exit-gate drive it was always held behind.
+**There is therefore NO live phase pointer — Phase 9 was the last phase.** What remains is the by-space
+`[stageable]`/`[later]` list below, which is a menu, not a sequence: nothing on it is a phase, and nothing on it
+is gating. Historical framing follows. Phase 4 was **build-complete** (the demo D124 +
 the release surface D125), but "release-ready" was a *build-completeness* claim: the whole **install → `/start` →
 loop** runtime has **never been driven end-to-end once** (every Phase-3 increment was driven in isolation; the only
 prior loop run — D52 — was a pre-D66 throwaway that *simulated* dispatch). A pre-first-run audit (two independent
@@ -807,7 +809,7 @@ living code-map observed layer, the D84 reclassification, the proportional-rigor
 model/effort routing, the project-map tab, and the project-state view (still the self-hosting prerequisite it has
 been since 2026-06-30).*
 
-### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[DESIGNED 2026-08-03 — D159–D163. NOW THE LIVE POINTER, since Phase 8 completed 2026-08-04 (D169). 9a BUILT + browser-driven 2026-08-03 (D163; D166 closed its render residual and fixed two shell defects); 9b BUILT 2026-08-03 (D167); **9c is all that remains**. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. The D164 sequence `8a → drive 9a → 9b` is COMPLETE]**
+### Phase 9 — Three new capabilities: the chain-forecast, the context-budget law, org mode **[COMPLETE 2026-08-05 — D159–D163 designed; 9a BUILT + browser-driven 2026-08-03 (D163; D166 closed its render residual and fixed two shell defects); 9b BUILT 2026-08-03 (D167); 9c BUILT + DRIVEN 2026-08-05 (D174) behind its own exit gate — 27/27 against a real foreign repo. Built BY HAND: self-hosting is a separate later experiment on a clone, not this build. The D164 sequence `8a → drive 9a → 9b` is COMPLETE. **This was the LAST phase** — what follows the phase list is the by-space `[stageable]`/`[later]` menu, not a Phase 10]**
 Born from a design conversation on four maintainer asks (the fourth — a console config tab — was **dropped**, D161;
 its "change credentials over Cloudflare" arm violated D112). All three build **ON** existing machinery, not beside it —
 that is the through-line and the reason none is large. Capture is design-only; the deep-doc edits ride each build.
@@ -875,26 +877,33 @@ that is the through-line and the reason none is large. Capture is design-only; t
     kind-union — **both loud, in opposite directions, so not the silent-defeat class** (a first draft claimed it was;
     the measurement refuted it). Also closed a gap in 9b's own gate: the sizer prescribed a remedy whose output fell
     outside its glob, so a **detail file is now budgeted as its own row**, always on-demand. **[BUILT 2026-08-04]**
-- **9c — org mode (D161) `[stageable — BUILD LAST, behind its own drive]`.** A **third `/start` mode** (`config.org`;
-  absent ⇒ inert) for a company product the maintainer does not own: a **private-tree brain** (all machinery + derived
-  + intent) over a **byte-pristine, zero-footprint** company checkout, `project_root` = an absolute path, a
-  **remote-less private clone** the loop commits to freely (its resume ledger — invisible to the org), and a
-  **human-only** git boundary (the loop writes no company-visible surface — not `main`, not the tracker, not the
-  hooks). Coworker drift re-aligns via a `describes_sha` stamp read off `FETCH_HEAD` — **org-align is existing `align`
-  with a different anchor**, not new machinery. Mostly **brownfield-minus-footprint** (reuses `ingest`/codemap/reconcile)
-  plus one net-new **review-bundle producer** — its form **decided 2026-08-04 (D171): a per-item squashed diff** with
-  a metadata sidecar outside the diff, so the human authors the commit by construction and no loop commit message
-  crosses (branch rejected; `format-patch` an opt-in, never the default). D171 also **re-anchors** the read-only
-  question from `ingest` (which runs no gates) to the **commit gate**, where `checks.sh` would run the company's
-  adopted suite on every loop commit — needing a **third declared `checks.sh` state**, since an empty `checks.env`
-  fails the commit closed. **Zero prior multi-repo/multi-committer
-  evidence**, so it is gated on its own drive (a real public repo at a pinned SHA + its own later commits replayed as
-  coworker drift → assert pristine/no-push/drift-detected/no-leak). Full call + the org-brownfield delta list + the
-  governance caveat: **D161** (owner). **[stageable — DESIGNED; unbuilt; build last]**
+- **9c — org mode (D161, corrected + built by D174).** A **third `/start` mode** (`config.org`; absent ⇒ inert,
+  and there is deliberately **no toggle** — a live topology switch is a migration, not a setting) for a company
+  product the maintainer does not own. **The topology D161 recorded was incoherent and D174 corrected it: the brain
+  IS the private clone, `project_root: "."`** — org mode is brownfield *cloned* rather than in-place, so every
+  single-repo guarantee (`verify_check.py`'s staged-diff binding, `checks.sh`'s backstop, `align`'s single anchor)
+  holds unchanged. There is **no third `project_root` value**. The operator's own checkout is a separate directory
+  the workflow never reads or writes; the clone's push path is removed with git's own `no_push` idiom while `fetch`
+  keeps working. Derived artifacts are namespaced under **`docs_root: .workflow`** (a key D174 **adopted with its own
+  owner**, absent ⇒ `project_root`) and the brief goes to **`.claude/CLAUDE.md`**, so the brain owns exactly
+  **`.workflow/` + `.claude/`** — which is what keeps the review bundle's exclusion list two entries long instead of
+  a per-file list that must stay correct forever. `checks.env` declares **`STACK_GATE_NONE`** (the third stack-gate
+  state: off *by declaration*, refusing rather than obeying any command set alongside it), because nothing out of
+  that tree may ever execute here. The net-new **review-bundle producer** is a per-item **squashed diff** + a sidecar
+  outside it (D171), and it **verifies its own output** — parsing paths back out of the bytes it produced and
+  refusing a bundle that still names a brain path. **org-align is `align` with a second anchor** (`describes_sha`),
+  not new machinery. The governance caveat is now a **rendered fact**: `guard.sh` gates the act of adding a push
+  path on `org.archive_remote_ack`, and the console badges the state for as long as one exists.
+  **DRIVEN 27/27** against pallets/click at a pinned SHA with 42 of its own later commits replayed as coworker drift
+  → pristine / no-push / drift-detected / no-leak. Full call: **D174** (owner; corrects D161 and re-grounds D171).
+  **[done — BUILT + DRIVEN 2026-08-05]**
 
-*Sequencing note:* 9a → 9b → 9c is fixed (9b makes everything cheaper; 9c is riskiest and evidence-blind). **9a is
-done** (D163 + D166) and **9b is done** (D167), so **the D164 sequence `8a → drive 9a → 9b` is COMPLETE** and what
-remains in Phase 9 is 9c alone. The reasoning it was ordered that way, kept because it is the argument: not on
+*Sequencing note:* 9a → 9b → 9c was fixed (9b makes everything cheaper; 9c is riskiest and evidence-blind). **All
+three are done** — 9a (D163 + D166), 9b (D167), 9c (D174) — so the D164 sequence `8a → drive 9a → 9b` is COMPLETE
+and **Phase 9 carries nothing further**. Ordering 9c last was vindicated rather than merely tidy: building it
+required *correcting its own recorded design* before any code (D174), and the correction was only visible because
+the machinery it had to fit already existed and could be read. The reasoning it was ordered that way, kept because
+it is the argument: not on
 8a's user-facing payoff, but because **a stale install corrupts the evidence of every drive that follows it** — do 8a
 first and every later drive is trustworthy by construction, and **the 9a browser drive then doubles as 8a's exit
 test**, closing 9a's never-rendered `#fc-list` residual in the same pass. **The dogfooding half of that call was MADE for
@@ -961,5 +970,6 @@ and the matcher went exact. **`### Phase 8` (D155) is COMPLETE** — release dis
 interaction-model rework (D169), because shipping a new surface onto a fleet that cannot receive fixes multiplies
 the problem. **`### Phase 9` (D159–D163)** adds three new capabilities — the chain-forecast, the context-budget
 law, and org mode — all **designed 2026-08-03**, each built ON existing machinery. **9a is BUILT** (D163, by hand,
-same day; self-hosting split off as a later experiment on a clone) and **9b is BUILT** (D167); **`9c` (org mode) is
-the only one left** and is the live pointer. Beyond it, everything is `[stageable]`/`[later]`.
+same day; self-hosting split off as a later experiment on a clone), **9b is BUILT** (D167), and **`9c` (org mode) is
+BUILT + DRIVEN** (D174, 2026-08-05) — so **Phase 9 is COMPLETE and it was the last phase**. There is no live phase
+pointer; everything beyond is the by-space `[stageable]`/`[later]` menu.
