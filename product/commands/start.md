@@ -247,7 +247,10 @@ loop's normal `state.json` takes over when the motion ends.
        backstop, registered as the git hook in step 6), plus `verify_check.py`, the **shared verify-before-commit
        helper both hooks call** (so the two gates enforce it identically; it fails closed and derives the item from
        the staged diff, immune to state.json shape/path drift). `build-once-per-wave` is deferred.
-   - **Trust the workspace so the shipped allowlist is live.** Claude Code only honours
+   - **Trust the workspace so the shipped allowlist is live.** *(The user-facing explanation of the whole
+     permission posture — broad local allow, `ask` on outward, the hard floor that survives bypass, and why
+     `--dangerously-skip-permissions` is the wrong reach — is `shared/trust-model.md`. Point the user at it in
+     the one-time message rather than restating it here.)* Claude Code only honours
      `.claude/settings.json`'s `permissions.allow` when the launch root is **trusted**; until then `claude -p`
      (and the relaunch-runner) ignore the allowlist and **stall on the first tool prompt** — and on WSL the
      interactive trust dialog frequently does not render, so the loop cannot clear it itself. Establish trust

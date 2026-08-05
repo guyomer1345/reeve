@@ -68,6 +68,17 @@ Work leaves as a per-item diff you apply, review, and commit yourself.
 From there the loop runs on its own. You step in at checkpoints (approve / request changes / reject), steer it
 with new requests, and authorize outward actions (pushes, issues) from the console when you choose to.
 
+### Permissions — worth two minutes before the first run
+
+An autonomous loop that prompts on every file write is not autonomous, so `/start` installs settings that
+**allow local work broadly** (edit, read, run tests) while **always asking before anything leaves the machine**
+(`git push`, `gh`, deploys, `ssh`, `curl`). That is a real ask, and **[`shared/trust-model.md`](product/shared/trust-model.md)**
+states exactly what is granted, what stays gated, and what is enforced even if you disable the gates.
+
+Two things worth knowing up front: **you do not need `--dangerously-skip-permissions`** (it would auto-approve
+the outward actions, which is the one gate that matters), and `/start` records **workspace trust** for the
+project root — without it Claude Code treats the shipped allowlist as inert and prompts for everything.
+
 ## How it works
 
 - **The orchestrator** is a thin router driven by `CLAUDE.md` and a `.workflow/loop.md` state graph. It reads

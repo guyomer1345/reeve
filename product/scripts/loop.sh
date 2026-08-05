@@ -28,6 +28,21 @@ WF="${WORKFLOW_DIR:-.workflow}"
 LOCK="$(python3 -c "import sys; sys.path.insert(0, '$HERE'); from bus import Paths; print(Paths('$WF').orchestrator_lock)")"
 mkdir -p "$(dirname "$LOCK")"
 
+# `flock` MUST be probed separately from taking the lock. Without this, a missing flock
+# exits 127, `if ! flock` inverts that into the "already held" branch, and the operator is
+# told another orchestrator is running — sending them to hunt a session that does not exist,
+# on a machine where the launcher can never work. Same refusal either way (the duplicate-
+# orchestrator hazard this file exists to prevent is not worth trading for convenience);
+# what changes is that the diagnosis is true. Git for Windows' bash ships no flock.
+if ! command -v flock >/dev/null 2>&1; then
+  echo "loop.sh: 'flock' is not available on this system, so the orchestrator lock cannot" >&2
+  echo "         be published. The relaunch-runner would not be able to see this session and" >&2
+  echo "         could spawn a second orchestrator against the same ${WF}. Refusing to start." >&2
+  echo "         This is NOT 'another orchestrator is running' — nothing is holding the lock." >&2
+  echo "         Git for Windows' bash ships no flock: run from WSL, or install util-linux." >&2
+  exit 1
+fi
+
 # Open the lock on fd 9 and hold it. A bash redirection fd is NOT close-on-exec, so it
 # survives the `exec claude` below and the lock is held for claude's whole lifetime.
 exec 9>"$LOCK"
