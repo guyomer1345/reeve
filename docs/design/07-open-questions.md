@@ -699,3 +699,30 @@ now seven phases old and did not weaken.
   `status` on a continuation line left it unrouted, and the linter caught it as an advisory — so it is not
   silent, but the layout constraint is invisible in the file. A comment now warns the next editor. The parser
   could take the whole paragraph instead; not done because the gate already reports the failure it would prevent.
+
+## Drive-found, logged not fixed — the first long interactive drive of a real project (2026-08-06, `agentic cyber`)
+Found by a human driving a real greenfield through its design phase, not by a gate. Both are legibility defects
+of the same shape as D148/D149 — **the mechanism worked and the human learned nothing** — which is the class no
+green suite catches.
+- **The staleness detector is DELIVERED but not LEGIBLE, and warn-once makes each miss PERMANENT `[real, reproduced]`.**
+  `hooks/session_start.py` composes its two-hop warning into `hookSpecificOutput.additionalContext` and records
+  the SHA pair in `.git/hooks/.disciplined-builder-stale`. `additionalContext` reaches the **model** only, and
+  **nothing instructs the model to relay it** — `templates/orchestrator-CLAUDE.md` carries no rule about
+  surfacing SessionStart warnings. So the human is never told, the warn-once budget is spent, and the detector is
+  silent forever after for that pair. *Reproduced twice on the real harness:* hop B fired at 13:33:36 writing
+  `{"update": "d8c14604cfcf..9e4dcb6c1d71"}`; the human deleted the record to re-arm and ran `/clear`; it was
+  rewritten at 13:37 with the same pair — and both times the session said nothing. The project sat three phases
+  behind (10a/10b/10c) with no visible signal. **Why it was missed:** `session_start.py:31-36` records this as
+  driven, but what was driven is **deliverability** on `claude -p` ("is handed the warning and *can* quote it back
+  verbatim"). *Can*, not *does*. Legibility was never tested on an interactive session, where a model with no
+  instruction has no reason to volunteer it mid-way through a 6.9k-char handoff injection.
+  *Proposed, NOT applied:* a mandatory-relay rule in the orchestrator brief — a SessionStart-injected warning
+  must be surfaced to the human in that session's first response. Open beyond that: whether **hop B** should be
+  exempt from warn-once entirely, since it is the hop where a stale install **propagates** old code through
+  `/update` while reporting success (D164's whole argument), which is a bad thing to say exactly once.
+- **A cleared session looks identical to a broken one `[small, real]`.** `/clear` rehydrates correctly —
+  `additionalContext` carries `handoff.md` verbatim — but because that injection is invisible, the human sees an
+  empty window and reasonably concludes the resume failed. The maintainer reported exactly this ("i ran /clear and
+  ofc nothing happens it cant resume on its own"). Nothing is wrong with the mechanism; the *absence* of any
+  confirmation is what reads as failure. Cousin of the item above: the same fix (relay on first response) would
+  cover both, since a session that opens by saying where it is proves the rehydrate landed.
