@@ -569,7 +569,7 @@ Small, all found by building or driving rather than by reasoning, and none block
     it goes (D164 had just *deleted* a meta-gate, and adding one back needs a better reason than symmetry), but the
     asymmetry is now load-bearing: the package is the only tree that has actually crossed the wall.
   - **This repo's grounding instruction points at files no session can read `[core-ish]`.** `CLAUDE.md` tells every
-    session to ground itself in `08-decision-log.md` (**~186k tokens**) and `11-roadmap.md` (**~32k**) — both past
+    session to ground itself in `08-decision-log.md` (**~209k estimated tokens**) and `11-roadmap.md` (**~37k**) — both past
     the 25 000-token Read ceiling, so the instruction is literally unfollowable and every session silently
     substitutes targeted greps (this one did). Now the **next split-and-pointer customer**, and unlike `schemas.md`
     it is meta-repo-only, so it never touches the ship boundary. The roadmap/git split this repo already does by
@@ -681,8 +681,10 @@ now seven phases old and did not weaken.
   machine-followable pointer), and the natural seam here is **live status vs the historical phase record**, which
   is most of the file's bulk. **Not scheduled into Phase 10** — it is doc surgery on the one doc Phase 10 is
   actively editing, and doing both at once would make the diff unreviewable. Revisit at Phase 10's close.
-  *(This register: **21.4k**, +0.5k here, ~3.6k of headroom. Still measured by hand — the budget gate does not
-  scan the package's own docs.)*
+  *(This register: **22.3k estimated** (71.3k chars ÷ 3.2), ~2.7k of estimated headroom. Still measured by hand —
+  the budget gate does not scan the package's own docs. **And the estimator itself is now in question:** this
+  file's true count is **26.9k**, so it is already past the 25 000 ceiling and reads as green only because
+  `chars_per_token` is too high — see `reviews/post-phase10/doc-review-register.md` JF1, unresolved.)*
 
 ## Newly open from the Phase-10 BUILD (2026-08-05 — D176)
 - **Native Windows is still UNVERIFIED where it matters most `[open — the 10b residual]`.** What was measured on

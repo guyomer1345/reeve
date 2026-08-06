@@ -478,7 +478,9 @@ Phase 5 closed. **`### Phase 8` (opened D155) is now COMPLETE** — both halves:
 the interaction-model rework — BUILT + browser-driven 2026-08-04 (D169, `ad9d910`)**. **`### Phase 9` is now
 COMPLETE too** (D159–D163): `9a` BUILT + browser-driven (D163 + D166), `9b` BUILT (D167), and **`9c` (org mode)
 BUILT + DRIVEN 2026-08-05 (D174, `3816b62`→`1ad7707`)** behind the exit-gate drive it was always held behind.
-**`### Phase 10` (opened D175, 2026-08-05) is the live pointer** — see the section below. Phase 9 closed with no
+**`### Phase 10` (opened D175, 2026-08-05) is COMPLETE too** (BUILT D176) — see the section below; like the Phase-5
+paragraph above, this is now historical framing and **not** a live "next slice" pointer, and **no successor to
+Phase 10 is declared**. Phase 9 closed with no
 successor because the remainder read as a menu rather than a sequence; **that was a description of the plan, not a
 finding**, and D175 supersedes it by *deciding* to sequence the remainder. What forced the decision was dropping
 self-hosting (D175), which was the only candidate spine the menu had. Phase 10's spine is **truth-in-shipping**:
@@ -1079,5 +1081,7 @@ the problem. **`### Phase 9` (D159–D163)** adds three new capabilities — the
 law, and org mode — all **designed 2026-08-03**, each built ON existing machinery. **9a is BUILT** (D163, by hand,
 same day; self-hosting was split off as a later experiment on a clone — and is now **DROPPED**, D175), **9b is BUILT**
 (D167), and **`9c` (org mode) is BUILT + DRIVEN** (D174, 2026-08-05) — so **Phase 9 is COMPLETE**. It was the last
-phase *as planned*; **`### Phase 10` (D175, 2026-08-05) is now the live pointer**, sequencing the part of the
-by-space `[stageable]`/`[later]` menu that survived a premise re-check.
+phase *as planned*; **`### Phase 10` (D175, 2026-08-05) then sequenced** the part of the by-space
+`[stageable]`/`[later]` menu that survived a premise re-check, and **is itself COMPLETE (D176)**. **No successor
+to Phase 10 is currently declared** — what comes next is the maintainer's call, and this doc states the absence
+rather than leaving a completed phase reading as the live pointer.

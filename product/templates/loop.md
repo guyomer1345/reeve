@@ -16,7 +16,7 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `create-demo` | gate not triggered | `planner:decompose` |
 | `planner:decompose` | roadmap → backlog | `prioritize` |
 | `prioritize` | next wave emitted | `planner:plan-one` (per item in the wave) |
-| `prioritize` | maintenance due (retention or drift threshold) | `document:audit` / `align` |
+| `prioritize` | maintenance due (retention, drift, or doc-size threshold) | `document:audit` / `align` / `doc-budget` |
 | `prioritize` | backlog empty | `idle` (await steering) |
 | `idle` | steering arrives / new backlog item (a `create-issue` side-door) | `prioritize` (re-pick) |
 | `planner:plan-one` | open decisions | `decision-engineer` → back to `planner:plan-one` |
@@ -46,6 +46,7 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `close-issue` | issue closed (or no linked issue → skip) | `prioritize` (next item) |
 | `document:audit` | retention pass done (changes staged) | `commit` |
 | `align` | scan done (tickets filed via `create-issue`, fixes staged, anchor written) | `commit` |
+| `doc-budget` | over-budget doc trimmed or split-and-pointered (changes staged) | `commit` |
 
 <!-- Every side door must be named ON the line below: the contract linter reads only the line that
      starts with "Side doors", so a door introduced on a continuation line is silently unrouted. -->
@@ -159,7 +160,7 @@ flowchart TD
   create-demo -.refine cap hit.-> discuss
   dec --> prioritize
   prioritize -->|next wave| plan[planner:plan-one]
-  prioritize -->|maintenance due| maint[document:audit / align] --> commit
+  prioritize -->|maintenance due| maint[document:audit / align / doc-budget] --> commit
   prioritize -->|empty| idle([idle])
   idle -.steering / new issue.-> prioritize
   plan -->|open decision| decision-engineer --> plan
