@@ -38,7 +38,7 @@ resolves here — the name is the anchor, and the two files are one schema.*
   surface the running token count reaches — hooks and the model receive none): `warn_pct` (the
   context-usage **percentage** past which the statusline shows the persistent "run /dispatch, then
   /clear" banner). A percentage, never a token count, so it is model-window-agnostic — a 200k and a
-  1M window warn at the same fraction full. Absent → shipped default (`warn_pct` 75).
+  1M window warn at the same fraction full. Absent → shipped default (`warn_pct` 30).
 - `retention` — the memory-bound knobs the `audit` pass reads: `sessions_k` (per-node `# Sessions` cap — the
   retention script's only knob) + the scheduling thresholds `prioritize` trips on (`decisions_superseded_n` —
   **superseded** decision bodies awaiting GC, the count retention actually lowers, not the active count;

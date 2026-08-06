@@ -47,7 +47,7 @@ def _wf(tmp_path):
 
 def test_banner_absent_below_threshold(tmp_path):
     root = _wf(tmp_path)
-    r = _run(_status(pct=40, project_dir=str(root)), root)
+    r = _run(_status(pct=20, project_dir=str(root)), root)
     assert r.returncode == 0
     assert "/dispatch" not in r.stdout
 
@@ -60,10 +60,10 @@ def test_banner_present_at_and_above_threshold(tmp_path):
     assert "80%" in r.stdout
 
 
-def test_default_threshold_is_75(tmp_path):
+def test_default_threshold_is_30(tmp_path):
     root = _wf(tmp_path)                                   # no config.context.warn_pct
-    assert "/dispatch" not in _run(_status(pct=74, project_dir=str(root)), root).stdout
-    assert "/dispatch" in _run(_status(pct=75, project_dir=str(root)), root).stdout
+    assert "/dispatch" not in _run(_status(pct=29, project_dir=str(root)), root).stdout
+    assert "/dispatch" in _run(_status(pct=30, project_dir=str(root)), root).stdout
 
 
 def test_config_warn_pct_override(tmp_path):
@@ -75,7 +75,7 @@ def test_config_warn_pct_override(tmp_path):
 
 def test_percentage_computed_from_tokens_when_no_used_percentage(tmp_path):
     root = _wf(tmp_path)
-    # 180k / 200k = 90% -> over the default 75.
+    # 180k / 200k = 90% -> over the default 30.
     r = _run(_status(tokens=180000, size=200000, project_dir=str(root)), root)
     assert "/dispatch" in r.stdout
 

@@ -20,7 +20,7 @@ import os
 import subprocess
 import sys
 
-WARN_PCT_DEFAULT = 75
+WARN_PCT_DEFAULT = 30
 
 
 def _project_dir(status):

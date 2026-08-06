@@ -5427,3 +5427,40 @@ charter revisit stay parked); **D58** (its trust-UX residual is closed); **D89**
 → `07`, `10`, `11`. Files: `product/scripts/{codemap/codemap.py,loop.sh,project_state.py}`,
 `product/skills/{verify,status}/SKILL.md`, `product/shared/{schemas.md,trust-model.md}`,
 `product/templates/loop.md`, `product/commands/start.md`, `product/MANIFEST.json`, `README.md`, + tests.
+
+## D177 — the context governor's shipped default drops 75 → 30, because the default IS the setting everywhere **[DECIDED + BUILT 2026-08-06 — maintainer-set from the first long interactive drive of a real project (`agentic cyber`). Supersedes D136's `75`, which stands as the record of what was built then]**
+D136 shipped the interactive context governor with `config.context.warn_pct` defaulting to **75** — a percentage,
+never a token count, so it is model-window-agnostic. Driving a real project through a long design phase, the
+maintainer's call is that 75 arrives **too late to be a governor**: the banner fires with a quarter of the window
+left, by which point three quarters has been spent on context a handoff would have carried for free. The reset is
+cheap (a `/dispatch` write plus a `SessionStart` rehydrate) and the thing it prevents is not.
+
+- **The call:** `WARN_PCT_DEFAULT` **30**. The knob is unchanged — a project that wants a different threshold
+  still writes `config.context.warn_pct`, and an explicit value still wins.
+- **Why the DEFAULT and not a per-project edit:** measured on this machine, **every** other workflow-driven
+  project has `warn_pct` **absent** (`dogfood-orchestrator`, `dogfood-start`, `idea testing`, `p5-test`,
+  `drive-3b`, `drive-9a`, `drive-demo`) and therefore runs on the shipped constant. Only `agentic cyber` carried
+  an explicit stamp. So the default is not a fallback here — it **is** the live setting in 7 of 8 projects, and
+  editing one `config.json` would have reached exactly one of them.
+- **Rejected — 65**, first proposed as a compromise that keeps a runway to finish the current item before
+  clearing. The maintainer's counter is the one that decides it: the governor exists to stop unbounded
+  accumulation, and a threshold chosen to avoid interrupting an item is a threshold chosen by the thing being
+  governed. **Rejected — leave 75 and document the knob**: a default nobody changes is the behaviour, and this
+  one was found late by the only person driving it.
+- **The blast-radius sweep earned its keep on a case grep could not reach.** Searching `75` finds the constant,
+  the `schemas-runtime.md` owner line and D136's history. It does **not** find
+  `test_banner_absent_below_threshold`, which asserted "no banner" at **`pct=40`** — true under 75, false under
+  30. The test encoded the old default in a value that never mentions it, and would have failed on the next run
+  with no obvious cause. Retargeted to `pct=20`; the boundary test moved 74/75 → 29/30. 11 statusline tests green.
+- **D136's `default 75` is NOT edited.** It records what was built on 2026-07-26 and remains true of that build;
+  this entry supersedes the value, git holds the change. Same law the project applies to every other status fact.
+
+*Evidence:* the live `agentic cyber` drive (a human at 33% context with no banner, asking where it should have
+fired); the 8-project `warn_pct` census above; the statusline reads `config.json` per render, so the change lands
+with no restart and reaches existing projects on their next `/update`.
+**Supersedes:** **D136** (the `75` value only — its percentage-not-token-count reasoning is untouched and is why
+this change is a single constant).
+**Builds on:** **D136** (the governor), **D80** (one owner — `schemas-runtime.md` states the default, nothing else
+restates it).
+→ Files: `product/scripts/statusline.py`, `product/scripts/test_statusline.py`,
+`product/shared/schemas-runtime.md`.
