@@ -139,7 +139,7 @@ C# head-token filter is the worked example).
 when a real repo needs one, not up front (C++ additionally needs `compile_commands.json`). tree-sitter stays reserved
 for parse-hard languages.
 
-## The graph is a LIVING artifact — a durable observed layer **[DESIGNED + VERIFIED — D78; impl Phase-2/3]**
+## The graph is a LIVING artifact — a durable observed layer **[DESIGNED + VERIFIED — D78; UNBUILT — tier settled `[stageable]` by D175, and the claims that implied otherwise were retracted in Phase 10a (D176). The old "impl Phase-2/3" tag is retired: both phases closed without it, and no product code produces `graph.observed.json`. The design below is a design, not a description of the tree]**
 Static arms are precision-first but recall-imperfect (dynamic imports, DI, reflection, C# source-gen, dynamic
 dispatch are structurally invisible to *any* static analysis). D78 makes the loop's **own activity** close that
 recall gap so the graph improves as the project runs, rather than staying at its static ceiling.

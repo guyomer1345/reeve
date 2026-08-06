@@ -42,10 +42,11 @@ claude plugin marketplace add ./dev-autonomous-workflow
 claude plugin install dev-autonomous-workflow
 ```
 
-Installing **copies** the package — it is a snapshot, not a live link to the checkout, and `claude plugin update`
-compares *versions*, which move once per release rather than once per commit. So while you are editing the package,
-re-install rather than update: `scripts/dev-reinstall.sh` does it from the working tree and prints what the install
-now carries.
+Installing **copies** the package — it is a snapshot, not a live link to the checkout. The package ships **no
+`version` field**, so Claude Code keys the install on the **git commit SHA**; content that moves gets a new key,
+and `claude plugin update` is no longer a no-op over changed content. What it still cannot see is an **uncommitted**
+edit in your working tree, since the SHA has not moved yet. So while you are editing the package, re-install rather
+than update: `scripts/dev-reinstall.sh` does it from the working tree and prints what the install now carries.
 
 ## Getting started
 
