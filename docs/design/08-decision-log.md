@@ -5464,3 +5464,94 @@ this change is a single constant).
 restates it).
 → Files: `product/scripts/statusline.py`, `product/scripts/test_statusline.py`,
 `product/shared/schemas-runtime.md`.
+
+---
+
+## D178 — The shipped skills never reach the workers: every loop node dispatches to `general-purpose` carrying a hand-written paraphrase **[DECIDED — fix scoped as `### Phase 11`; unblocks D84's deferral and overrules its `document` call; MEASURED across 51 subagent transcripts of a real drive, not reasoned]**
+Origin: a design conversation on whether the loop's **one-execute-agent-and-wait** shape is right *practice* (not
+right per this repo's definition). External evidence says it is: Cognition's 2026 revision keeps **single writer**
+(writes stay single-threaded; extra agents contribute intelligence, not actions), Anthropic's multi-agent post
+states coding is less parallelizable than research, and the one benchmark of aggressive parallel coding agents in
+our own harness family scored **16.3% pass vs 20.1% for plain sequential** — fastest, and worse than serial. So the
+question closed *yes*. But sizing the writer required measuring a real drive, and the measurement found something
+larger than the question asked.
+
+**The finding.** Across the maintainer's `agentic-cyber` drive: **50 `Agent` dispatches — 33 to `general-purpose`,
+17 to `dev-autonomous-workflow:research` — and of 51 subagent transcripts, ZERO invoked the `Skill` tool.**
+`Execute`/`Document`/`Verify`/`Plan` each went to `general-purpose` carrying a **2.8k–8.8k-character prompt the
+orchestrator composed itself**. `execute/SKILL.md`, `verify/SKILL.md`, `document/SKILL.md`, `planner/SKILL.md` never
+entered a worker's context. **`research` is the only node working as designed — because it is the only one of them
+that is a declared agent**, and it resolved namespaced 17/17 (D128's rule holds).
+
+**The sharper version:** the main window invoked skills 10 times (`planner`×2, `execute`, `verify`, `document`,
+`commit`, `prioritize`, `dispatch`, `discuss`×2). So on some items the orchestrator **read the skill into its own
+context and then re-typed a lossy summary into the dispatch prompt** — paying the full context cost D84 exists to
+avoid *and* still handing the worker a paraphrase. A telephone game with a token bill.
+
+**What the paraphrase drops is the load-bearing detail**, which is the whole reason this is not cosmetic:
+`verify`'s **two required git reads** (`git diff HEAD` is blind to a new untracked file — "checking only the first
+command yields a check that passes for the wrong reason", D176), its exact `pass: true` first line (machine-read by
+`guard.sh`/`pre-commit.sh`), and `execute`'s **backup guard** on a destructive `risk_class`. Two further violations
+are visible in the same data: **one subagent spawned its own `Agent`** (leaves must not spawn — D84 — but
+`general-purpose` carries the tool), and subagents ran **134 `WebSearch` + 61 `WebFetch`** (legitimate for
+`research`; an executor that can browse is an executor that can improvise).
+
+**Cause, and it is one line we shipped:** `templates/orchestrator-CLAUDE.md:17` — *"Never do inline what a skill or
+agent should do. When in doubt, dispatch."* With no agent type declared for those nodes, the only way to obey it is
+`general-purpose` plus improvisation. D84 classified the nodes and never turned the classification into a
+**dispatch** rule, so the brief and the roster disagreed and the model resolved it the only way it could.
+
+**Calls (the fix, to be built as `### Phase 11`):**
+1. **Declare the leaf agents.** `execute` · `document` · `create-demo` move `skills/` → `agents/` in `research.md`'s
+   format, `Route` stripped (an agent returns a result; the hub follows the edge). **`tools:` is the point** — no
+   `Task`/`Agent` (leaves don't spawn) and no `WebSearch`/`WebFetch` on `execute`. This converts two prose
+   invariants into harness-enforced ones.
+2. **`document` becomes an agent — overruling D84**, which left it a skill as "borderline weight". Measured at
+   **40.0k tokens / 13s per dispatch**. It is not borderline. The call is amended on evidence, not re-argued.
+3. **State the dispatch rule in the brief.** Replace `:17` with D84's two axes as a *dispatch* rule: leaf+heavy →
+   `Agent(dev-autonomous-workflow:<name>)`; fan-out controller / human-interactive / thin bookkeeping →
+   `Skill(dev-autonomous-workflow:<name>)` **inline**; never dispatch a loop node to `general-purpose`.
+4. **A mechanical gate for the class** — a `PreToolUse` matcher on `Agent` that **blocks** `general-purpose` when
+   the dispatch targets a loop node. Without it (3) is advisory prose, and advisory prose is precisely what failed
+   here. Blocking, not warn-only: D117's lesson is that *a rule that lives only in this repo's decision log is not
+   a rule the consumer follows*. It ships in the package, so an in-flight project is untouched until `/update`.
+5. **Make the measurement repeatable** — the transcript query lands in `scripts/` (meta-only, never ships):
+   dispatches by `subagent_type`, skill-load rate inside subagents, per-node token distribution. **This defect was
+   invisible to reading and obvious to measurement**; it should stay measurable.
+6. **Drive it** (D127/D128 practice): one full item on a real project showing namespaced dispatch, roles arriving,
+   and **zero** `general-purpose` loop dispatches. **Only then** re-measure the writer's scope — a scoped `execute`
+   with no web tools may burn materially less, and the plan-size question must be answered against the fixed
+   system, not the broken one.
+
+**`verify` stays an inline skill** (D84: fan-out need beats heaviness — a leaf cannot spawn). The tension that
+creates — an inline `verify` reads the diff in the orchestrator's own window, and against a 191k–300k `execute`
+that diff is large — is **logged as open in `07` rather than declared settled**. D84's answer ("authoring-thinness:
+push heavy reads into spawned workers") is the intended one; it has not been measured.
+
+**Interim exposure, stated rather than implied:** the **deterministic layer is untouched** — `guard.sh`,
+`pre-commit.sh`, `check_promise_coverage.py`, `check_decision_coverage.py` and `checks.sh` are hooks and scripts,
+not skills, and the `pass: true` contract **fails closed** (a garbled token blocks a commit rather than passing a
+bad one). What is degraded is judgment inside the workers. Two exceptions carry real risk until Phase 11 lands:
+a **destructive `risk_class`** (the backup guard exists only in the skill text that is not arriving — nothing
+mechanical enforces it) and **`verify`'s new-file blindness** (the one silent-wrong-pass in the set).
+
+*Rejected:* **parallel execution agents / within-item fan-out** — the shape the conversation opened with. Rejected
+on external measurement (above) plus **4–220× token consumption** for multi-agent vs single-agent, which on a
+product that runs on the *user's own subscription* is a product defect, not a trade-off. **Re-open trigger, stated
+so this is a decision and not a nailed door:** the arXiv cohesion-aware result (+11.3%/+14.0% pass, −45/−52%
+latency, −28/−35% cost) came from partitioning on a **dependency graph** — which is our D91 predicate. If within-item
+parallelism is ever reconsidered, the entry condition is that predicate applied to plan *steps*, restricted to
+independent leaf files, never naive splitting. Also rejected: **warn-only** for call 4 (the failure mode being
+guarded is "advisory rule ignored"); **fixing the writer's scope first** (it would have measured a paraphrase).
+
+*Evidence:* `~/.claude/projects/-mnt-c-…-agentic-cyber` transcripts, 2026-08-07 — 50 `Agent` dispatches
+(33 `general-purpose` / 17 `dev-autonomous-workflow:research`); 51 subagent transcripts, **0** `Skill` invocations;
+10 main-window `Skill` loads; dispatch prompts 2.8k–8.8k chars; 1 nested `Agent` inside a subagent; 134 `WebSearch`
++ 61 `WebFetch` inside subagents; `Execute S2a-evidence-store` 11m16s / 191.3k tokens (maintainer reports ~300k
+routinely), `Document S2a-evidence-store` 13s / 40.0k. External: Cognition *Don't Build Multi-Agents* (2025) +
+*Multi-Agents: What's Actually Working* (2026-04-22); Anthropic's multi-agent research system; arXiv 2606.00953
+*When Parallelism Pays Off*. **Unblocks D84** (whose deferral rested on "the context saving can't be measured until
+the loop runs" — it ran, and the number is 191.3k per dispatch) and **widens its blast radius** from a file move to
+a dispatch-mechanism defect. Reuses **D128** (namespaced resolution), **D117** (deterministic > logged prose),
+**D91** (the collision predicate), **D127/D128** (drive-to-verify). → `11` (`### Phase 11` opened), `10` (D84
+annotation amended), `07` (the inline-`verify` tension), `01` (the dispatch rule).

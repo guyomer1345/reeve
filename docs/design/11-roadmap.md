@@ -593,7 +593,8 @@ Driven on a real full-stack repo (the `stock simulator`, ~720 source files, rich
 `format.md`'s meta-script reference is dropped **[bug — DONE D130]** · ✅ `start.md`'s "Expand later" prose claiming
 the console write-path/forms are unbuilt — **fixed (D129, folded into F1):** the stale bullet is removed **[doc — DONE]**.
 
-Everything past Phase 5 stays `[stageable]`/`[later]` (the living code-map observed layer, D84 reclassification, the
+Everything past Phase 5 stays `[stageable]`/`[later]` (the living code-map observed layer, the D84 reclassification
+— *since scheduled as `### Phase 11` (D178)*, the
 proportional-rigor gate, build-once-per-wave, model/effort routing, the project-map tab, the project-state view,
 `align`'s semantic layer, the away-channel config prerequisites) — none sit on "run the loop once." *(Amended
 2026-07-21: the first **lived** onboarding opened **Phase 6 — onboarding-experience hardening** (D131–D135, below),
@@ -659,10 +660,11 @@ end-to-end**: alerted anywhere (D111 webhook) → act from a phone (D112 remote 
 - **One orchestrator is operator-assumed** (D109), with the runner's liveness marker as its one exception.
 
 Everything `[stageable]`/`[later]` — the `build-once-per-wave` coordinator, model/effort routing,
-packaging, the state-view, **and the D84 skill→agent reclassification** (`execute` +
-`create-demo` → leaf agents: the file moves, agent-format rewrites, orchestrator dispatch-by-kind wiring, and the
-`20 skills + 2 agents` → a `16 + 4`-shaped count update — a dedicated session; **the loop has now run (D128), so this is no
-longer validation-blocked**) — slots around these phases as it pays off. *(The **local relaunch-runner** left this list: D113 pulled it onto the
+packaging and the state-view — slots around these phases as it pays off. *(The **D84 skill→agent
+reclassification** LEFT this list: it is no longer a deferred file move. D178 measured a real drive and found the
+dispatch mechanism itself defective — the shipped skills never reach the workers — so the reclassification is now
+scheduled as **`### Phase 11`**, widened to include `document` and carrying the brief's dispatch rule and a
+blocking `PreToolUse` gate.)* *(The **local relaunch-runner** left this list: D113 pulled it onto the
 critical path as Phase-3 increment 6. The **version-update skill** left it too: D135 promoted it into Phase 6.)*
 
 ### Phase 6 — Onboarding-experience hardening (D131–D139) — **COMPLETE: D131–D136 BUILT + RE-DRIVEN (D138); `/update` BUILT (D139). The governor-cycle residual is DISCHARGED (D151) — no residual remains.**
@@ -867,7 +869,7 @@ biggest remaining feature — it is the only open item that **harms a user today
   predicate is *not `True`*, since the platform writes no record at all for a project never opened interactively).
 
 *Everything else stayed `[stageable]`/`[later]` and was picked off the by-space list above, not this sequence — the
-living code-map observed layer, the D84 reclassification, the proportional-rigor gate, build-once-per-wave,
+living code-map observed layer, the D84 reclassification (*since scheduled as `### Phase 11` — D178*), the proportional-rigor gate, build-once-per-wave,
 model/effort routing, the project-map tab, and the project-state view (then still framed as the self-hosting
 prerequisite it had been since 2026-06-30). **Superseded 2026-08-05 (D175):** self-hosting is dropped, so the
 project-state view is re-argued on the product's own merits and scheduled as **Phase 10c**; the rest of that list
@@ -1021,6 +1023,45 @@ navigation is the real first cost) · **model + effort routing** (a cost optimiz
 the *arbiter input contract* (the component exists nowhere; its substance is `prioritize`'s) · *`@import`-survives-
 `/compact`* (the package uses no imports).
 
+### Phase 11 — Dispatch fidelity: make the shipped roles actually reach the workers **[OPEN — designed 2026-08-07 (D178); NOT BUILT. Opened by measurement of a real drive, not by a premise re-check]**
+Phase 10 closed with **no successor declared**. This is it, and it was not chosen from the deferred menu — it was
+**found**. A design question about whether one-execute-agent-and-wait is right *practice* (it is — D178) required
+measuring a real drive to size the writer, and the measurement found that **the package's capability layer is not
+reaching the workers at all**: 51 subagent transcripts, **0** `Skill` invocations, 33 of 50 dispatches to
+`general-purpose` carrying a paraphrase the orchestrator typed itself. `research` works because it is the only one
+of those nodes that is a declared agent. Full finding, cause and rejected alternatives: **D178**.
+
+*This phase supersedes the `[stageable]`/`[later]` framing of the **D84 reclassification** wherever this doc still
+carries it. D84's deferral rested on "the context saving can't be measured until the loop runs"; it ran, and the
+number is 191.3k tokens per `execute` dispatch. It is no longer a file move — it is a dispatch-mechanism fix.*
+
+- **11a — declare the leaf agents.** `execute` · `document` · `create-demo` → `agents/` in `research.md`'s format,
+  `Route` stripped. **`tools:` is the substance**, not the move: no `Task`/`Agent` (leaves don't spawn — one
+  already did) and no `WebSearch`/`WebFetch` on `execute`. **`document` is included, overruling D84's
+  "borderline weight"** on measured 40.0k/dispatch. **[core]**
+- **11b — the dispatch rule in the brief.** Replace `templates/orchestrator-CLAUDE.md:17` ("when in doubt,
+  dispatch" — the direct cause) with D84's two axes stated as a dispatch rule; never dispatch a loop node to
+  `general-purpose`. **[core]**
+- **11c — the mechanical gate.** A `PreToolUse` matcher on `Agent` that **blocks** `general-purpose` for a loop
+  node. Blocking, not warn-only — the failure mode being guarded *is* "advisory rule ignored" (D117). Ships in the
+  package, so an in-flight project is untouched until `/update`. **[core]**
+- **11d — make the measurement repeatable.** The transcript query → `scripts/` (meta-only): dispatches by
+  `subagent_type`, skill-load rate inside subagents, per-node token distribution. This defect was invisible to
+  reading and obvious to measurement. **[core]**
+- **11e — drive it** (D127/D128): one full item on a real project, namespaced dispatch, roles arriving, **zero**
+  `general-purpose` loop dispatches. **The phase's exit test.** **[core]**
+- **11f — THEN re-measure the writer's scope.** `execute` runs 191.3k–~300k per dispatch and `planner` has **no
+  sizing rule** — but a scoped `execute` with no web tools may burn materially less, and the attribution
+  (discovery-read cost vs production-write cost, re-read ratio, off-`files_touched` reads) must be taken against
+  the fixed system. Two diagnoses, opposite fixes: read-dominated → `planner` under-supplies context (D134's
+  resolution); write-dominated → a plan-size budget splitting on the D91 predicate, **serially**. **[core]**
+
+**Not in scope, deliberately:** the **cold-context reviewer** (Cognition's Code-Review-Loop — the loop has no
+per-item correctness review: `verify` is conformance-only by design and `debug` is on-fail only). It is a real gap
+and a *read-only* addition that does not touch single-writer, but it is worth nothing while the workers aren't
+running their own instructions — **promote it once 11e is green.** Also out: **within-item parallel writers**,
+rejected in D178 with a stated re-open trigger.
+
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
 `rules/` + the drift gate), **knowledge-complete** (code-map generation → brownfield ingest), **visible + reachable**
@@ -1082,6 +1123,9 @@ law, and org mode — all **designed 2026-08-03**, each built ON existing machin
 same day; self-hosting was split off as a later experiment on a clone — and is now **DROPPED**, D175), **9b is BUILT**
 (D167), and **`9c` (org mode) is BUILT + DRIVEN** (D174, 2026-08-05) — so **Phase 9 is COMPLETE**. It was the last
 phase *as planned*; **`### Phase 10` (D175, 2026-08-05) then sequenced** the part of the by-space
-`[stageable]`/`[later]` menu that survived a premise re-check, and **is itself COMPLETE (D176)**. **No successor
-to Phase 10 is currently declared** — what comes next is the maintainer's call, and this doc states the absence
-rather than leaving a completed phase reading as the live pointer.
+`[stageable]`/`[later]` menu that survived a premise re-check, and **is itself COMPLETE (D176)**. **`### Phase 11`
+(D178, 2026-08-07) is now the live pointer and is OPEN — dispatch fidelity.** It was not picked from the deferred
+menu: measuring a real drive to size the execution agent found that the shipped skills never reach the workers
+(51 subagent transcripts, **0** `Skill` invocations), which makes every judgment-layer contract in the package
+advisory in practice. It supersedes the `[stageable]`/`[later]` framing of the **D84 reclassification** wherever
+this doc still carries it.

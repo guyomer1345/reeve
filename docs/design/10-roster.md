@@ -42,8 +42,17 @@ own `.claude-plugin/marketplace.json` (D125). The repo is **both** the construct
   **leaf agent** when it does heavy autonomous work AND neither fans out nor holds the human conversation; it
   stays a **skill** when it is a fan-out controller (leaves can't spawn — authored *thin*), human-interactive, or
   thin bookkeeping. **Fan-out need beats heaviness** — a heavy adjudicator stays a skill. **Reclassification
-  pending (deferred to a dedicated session): `execute` + `create-demo` → leaf agents** (`document` stays a skill
-  for now; `ingest` stays a skill — it spawns `research`). Until then the table below reads the on-disk truth.
+  pending: `execute` + `create-demo` + `document` → leaf agents** (`ingest` stays a skill — it spawns `research`).
+  Until then the table below reads the on-disk truth.
+- **Amended by D178 (2026-08-07) — the axis is a *dispatch* rule, and `document` moves too.** D84 classified the
+  nodes but never said which **mechanism** carries each, so the shipped brief's "when in doubt, dispatch" was the
+  only rule the orchestrator had. Measured on a real drive: **51 subagent transcripts, 0 `Skill` invocations** —
+  33 of 50 dispatches went to `general-purpose` with a paraphrase the orchestrator typed itself, so *no* node
+  below except `research` was actually running its own file. The rule is now: **leaf+heavy → `Agent(dev-autonomous-workflow:<name>)`
+  · fan-out controller / human-interactive / thin bookkeeping → `Skill(dev-autonomous-workflow:<name>)` inline ·
+  never `general-purpose` for a loop node** (enforced by a blocking `PreToolUse` gate, not prose). **`document` is
+  reclassified to an agent**, overruling D84's "borderline weight" on measured 40.0k tokens/dispatch. Scheduled as
+  `11`'s **`### Phase 11`**; the table still reads on-disk truth until it is built.
 
 ## The adjudicate pattern **[DECIDED — D24]**
 One base skill `adjudicate` (gather views → judge → confidence-gate → loop/escalate), specialized by

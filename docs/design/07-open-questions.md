@@ -730,3 +730,33 @@ green suite catches.
   ofc nothing happens it cant resume on its own"). Nothing is wrong with the mechanism; the *absence* of any
   confirmation is what reads as failure. Cousin of the item above: the same fix (relay on first response) would
   cover both, since a session that opens by saying where it is proves the rehydrate landed.
+
+## Newly open from the dispatch-fidelity measurement (2026-08-07 — D178)
+Found by *measuring* a real drive (`agentic cyber`), not by reading — the class that reading cannot reach. The
+finding itself is decided (D178) and scheduled (`11`'s `### Phase 11`); what stays open is the tension the fix
+creates and the question it defers.
+
+- **An inline `verify` reads a 191k–300k-token item's diff in the orchestrator's own window `[real, unmeasured]`.**
+  D84's rule holds that `verify` must stay an inline skill — it is a fan-out controller and a leaf cannot spawn —
+  and D178 keeps it there. But the same measurement that justified moving `execute` out of the hub shows what
+  `verify` is then asked to read *inside* it. D84's stated answer is **authoring-thinness**: push the heavy reads
+  into workers `verify` spawns, hold only thin summaries inline. `verify/SKILL.md` already licenses that ("Lean:
+  for small changes, judge directly without fanning out workers"), so the mechanism exists — **it has simply never
+  been measured under a large diff**, and the skill gives no threshold for when to fan out. Open: does inline
+  `verify` actually stay thin at this item size, and if not, is the fix a stated fan-out threshold in the skill, or
+  a hub-mediated split that reopens D27's two-level-agent topology? *Do not settle this by reasoning — it is a
+  measurement, and `11`'s **11d** ships the tooling that would take it.*
+- **`planner` has no sizing rule at all `[real, deferred by decision]`.** `decompose` emits phases, `plan-one`
+  emits "ordered verifiable steps" + `files_touched`, and **nothing anywhere bounds how big a plan may be**. Plan
+  size is whatever the backlog item happened to be, which is how a single `execute` dispatch reaches ~300k. This is
+  **deliberately not answered yet** (`11`'s **11f**): the attribution must be taken against the fixed system,
+  because a scoped `execute` agent with no web tools may burn materially less, and because measuring the current
+  system would measure a paraphrase. Two diagnoses with opposite fixes — read-dominated burn ⇒ `planner`
+  under-supplies context (D134's resolution: mechanical seeds, and splitting would make it *worse*);
+  write-dominated burn ⇒ a plan-size budget splitting on the D91 predicate, serially.
+- **The loop has no cold-context correctness reviewer `[real, promotion-gated]`.** `verify` is artifact conformance
+  by design, `debug` is on-fail only, `align` is periodic and not per-item — so a change that is logically wrong
+  but passes its own tests and matches its own changelog goes straight to `commit`. Cognition's Code-Review-Loop is
+  the measured counter-pattern (~2 bugs/PR, ~58% severe) and is **read-only**, so it does not touch the
+  single-writer rule D178 upheld; it fits as a leaf agent. Held out of Phase 11 on purpose — a reviewer is worth
+  nothing while the workers are not running their own instructions. **Promote once `11e` is green.**

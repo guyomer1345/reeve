@@ -126,6 +126,17 @@ per-capability *how*), it encodes:
   entirely** — D110 removed the settings `ask` for the outbox-covered classes, because it would block the very
   away-release it was imagined to back up; build-once-per-wave deferred) vs **disposition** (hub-and-spoke; pure
   queue; resolve-don't-stall via `research`→`decision-engineer`; mind the tiers).
+- **The dispatch rule [DECIDED — D178; NOT BUILT, `11`'s `### Phase 11`]** — the brief must say *which mechanism*
+  carries each node, not only what each node is. It didn't: it said **"Never do inline what a skill or agent
+  should do. When in doubt, dispatch"** (`templates/orchestrator-CLAUDE.md:17`), and since D84 classified the
+  nodes without declaring agents for them, the only way to obey that line was `general-purpose` + an improvised
+  prompt. Measured on a real drive: **51 subagent transcripts, 0 `Skill` invocations**; 33 of 50 dispatches to
+  `general-purpose` carrying a 2.8k–8.8k-char paraphrase; `research` — the sole declared agent among them —
+  resolved namespaced 17/17. So the package's whole judgment layer was advisory in practice. The rule is now
+  D84's two axes stated as *dispatch*: **leaf+heavy → `Agent(dev-autonomous-workflow:<name>)`** · **fan-out
+  controller / human-interactive / thin bookkeeping → `Skill(dev-autonomous-workflow:<name>)` inline** · **never a
+  loop node to `general-purpose`** — the last one enforced by a blocking `PreToolUse` gate, because the failure
+  mode being guarded is precisely "advisory rule ignored" (D117).
 - **Checkpoints** (durable park on the bus — D90) and **handoff/resume**.
 
 Driving model: `CLAUDE.md` is **advisory context, not enforced configuration** — so the loop *sequence* runs
@@ -144,3 +155,5 @@ fresh session (D92/D108/D123), never by rolling the bootstrap window into featur
 ## Model + effort routing **[DEFERRED]**
 Not every task runs at the same model/effort. The orchestrator assigns a model+effort per task type
 (e.g. graph-maintenance cheap; Arbiter/planning expensive). Exact mapping not specced now.
+- *Note (D178): this is unreachable while every heavy node dispatches as `general-purpose` — per-node model/effort
+  lives in an agent definition's frontmatter. `### Phase 11` does not build it, but it removes the blocker.*
