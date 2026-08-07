@@ -124,9 +124,19 @@ def _is_base_skill(body):
     return bool(_BASE_SKILL.search(body))
 
 
-def check(loop_text, skills, schemas_text):
-    """skills: {name: body}. Returns (hard, advisory) — lists of message strings."""
+def check(loop_text, skills, schemas_text, agents=None):
+    """skills/agents: {name: body}. Returns (hard, advisory) — lists of message strings.
+
+    Both halves of the roster are scanned. A loop node can be authored as either a skill
+    (run inline) or a leaf agent (dispatched), and the checks below are about the ROSTER's
+    wiring, not about which of the two a node happens to be — when `document` moved to
+    `agents/`, a skills-only scan silently stopped covering `document:audit`, which is the
+    one thing check 2 exists to catch.
+    """
     hard, advisory = [], []
+    agents = agents or {}
+    caps = dict(skills)
+    caps.update(agents)
     nodes, targets, side_doors = parse_loop(loop_text)
     node_bases = {n.split(":")[0] for n in nodes}
     reachable = nodes | node_bases | side_doors | TERMINALS
@@ -136,18 +146,21 @@ def check(loop_text, skills, schemas_text):
     for t in sorted(targets - reachable):
         hard.append(f"loop.md routes to {t!r}, which is not a node, side-door, or terminal")
 
-    # 2. unrouted mode-refs invoked by a skill (hard)
+    # 2. unrouted mode-refs invoked by a capability (hard)
     routed = nodes | targets
-    for name in sorted(skills):
-        for tok in BACKTICK.findall(skills[name]):
+    for name in sorted(caps):
+        for tok in BACKTICK.findall(caps[name]):
             tok = tok.strip()
-            if MODE_REF.match(tok) and tok.split(":")[0] in skills and tok not in routed:
+            if MODE_REF.match(tok) and tok.split(":")[0] in caps and tok not in routed:
                 hard.append(
                     f"{name}: invokes {tok!r}, a node:mode that loop.md never routes"
                 )
 
-    # 3. coverage gap — a skill that is neither a node nor a side-door (advisory).
+    # 3. coverage gap — a SKILL that is neither a node nor a side-door (advisory).
     #    Abstract base skills (specialized, never invoked directly) are exempt.
+    #    Agents are deliberately out of scope here: an agent is reached by DISPATCH from
+    #    whichever node owns it (`setup-guide` from a setup checkpoint), not by a routing
+    #    row of its own, so "no row names it" is not the drift this advisory detects.
     covered = node_bases | side_doors
     for name in sorted(set(skills) - covered):
         if _is_base_skill(skills[name]):
@@ -160,8 +173,8 @@ def check(loop_text, skills, schemas_text):
     # 4. commitment-tag drift (advisory)
     if commitment:
         pat = re.compile(r"\b(?:" + "|".join(sorted(commitment)) + r")-[a-z][a-z-]*")
-        for name in sorted(skills):
-            for tag in sorted({m.group(0) for m in pat.finditer(skills[name])}):
+        for name in sorted(caps):
+            for tag in sorted({m.group(0) for m in pat.finditer(caps[name])}):
                 advisory.append(
                     f"{name}: uses commitment-derived tag {tag!r} outside the enum "
                     f"{sorted(commitment)}"
@@ -169,8 +182,8 @@ def check(loop_text, skills, schemas_text):
 
     # 5. novel kind= (advisory)
     if kinds:
-        for name in sorted(skills):
-            for val in sorted(set(KIND_ASSIGN.findall(skills[name]))):
+        for name in sorted(caps):
+            for val in sorted(set(KIND_ASSIGN.findall(caps[name]))):
                 if val not in kinds:
                     advisory.append(
                         f"{name}: kind={val!r} is outside the schema kind-enums {sorted(kinds)}"
@@ -232,6 +245,22 @@ def _load_skills(skills_dir):
         if os.path.isfile(p):
             skills[name] = _read(p)
     return skills
+
+
+def _load_agents(agents_dir):
+    """`agents/<name>.md` — the dispatched half of the roster.
+
+    Derived from the skills dir rather than given its own flag: the two always sit side by
+    side (package root, or the plugin root in an install), so a second path to keep in step
+    would be a second thing to get wrong. An absent dir is simply an empty half.
+    """
+    agents = {}
+    if not agents_dir or not os.path.isdir(agents_dir):
+        return agents
+    for fn in os.listdir(agents_dir):
+        if fn.endswith(".md") and os.path.isfile(os.path.join(agents_dir, fn)):
+            agents[fn[:-3]] = _read(os.path.join(agents_dir, fn))
+    return agents
 
 
 def default_paths(script=None, env=None):
@@ -316,12 +345,15 @@ def main(argv=None):
     unread = [f for f in (_missing("--skills-dir", args.skills_dir, d_skills, os.path.isdir),
                           _missing("--schemas", args.schemas, d_schemas, os.path.isfile)) if f]
     skills = _load_skills(args.skills_dir) if "--skills-dir" not in unread else {}
+    # The agents dir is the skills dir's sibling in both layouts (see _load_agents).
+    agents = (_load_agents(os.path.join(os.path.dirname(args.skills_dir.rstrip(os.sep)), "agents"))
+              if "--skills-dir" not in unread else {})
     # Follow the split, so the enum union is taken over the WHOLE schema and not just the
     # survivor -- see the import note. An unreadable split half is announced, never swallowed.
     schemas_text, lost_splits = (
         read_with_splits(args.schemas) if "--schemas" not in unread else ("", []))
 
-    hard, advisory = check(_read(args.loop), skills, schemas_text)
+    hard, advisory = check(_read(args.loop), skills, schemas_text, agents)
 
     for a in advisory:
         print(f"advisory: {a}", file=sys.stderr)

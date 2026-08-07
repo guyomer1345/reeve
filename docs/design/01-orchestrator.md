@@ -126,7 +126,7 @@ per-capability *how*), it encodes:
   entirely** — D110 removed the settings `ask` for the outbox-covered classes, because it would block the very
   away-release it was imagined to back up; build-once-per-wave deferred) vs **disposition** (hub-and-spoke; pure
   queue; resolve-don't-stall via `research`→`decision-engineer`; mind the tiers).
-- **The dispatch rule [DECIDED — D178; NOT BUILT, `11`'s `### Phase 11`]** — the brief must say *which mechanism*
+- **The dispatch rule [DECIDED — D178; BUILT + DRIVEN — D179, `11`'s `### Phase 11`]** — the brief must say *which mechanism*
   carries each node, not only what each node is. It didn't: it said **"Never do inline what a skill or agent
   should do. When in doubt, dispatch"** (`templates/orchestrator-CLAUDE.md:17`), and since D84 classified the
   nodes without declaring agents for them, the only way to obey that line was `general-purpose` + an improvised
@@ -136,7 +136,10 @@ per-capability *how*), it encodes:
   D84's two axes stated as *dispatch*: **leaf+heavy → `Agent(dev-autonomous-workflow:<name>)`** · **fan-out
   controller / human-interactive / thin bookkeeping → `Skill(dev-autonomous-workflow:<name>)` inline** · **never a
   loop node to `general-purpose`** — the last one enforced by a blocking `PreToolUse` gate, because the failure
-  mode being guarded is precisely "advisory rule ignored" (D117).
+  mode being guarded is precisely "advisory rule ignored" (D117). **As shipped (D179)** the brief carries a fourth
+  clause that turned out to matter as much as the first three — **pass inputs, not instructions**: a long prompt
+  explaining *how* is the paraphrase re-forming. Driven on a real model, dispatch prompts fell from
+  2794–9663 chars to **289–1188**, and 4/4 dispatches resolved namespaced with none on a general worker.
 - **Checkpoints** (durable park on the bus — D90) and **handoff/resume**.
 
 Driving model: `CLAUDE.md` is **advisory context, not enforced configuration** — so the loop *sequence* runs
@@ -156,4 +159,6 @@ fresh session (D92/D108/D123), never by rolling the bootstrap window into featur
 Not every task runs at the same model/effort. The orchestrator assigns a model+effort per task type
 (e.g. graph-maintenance cheap; Arbiter/planning expensive). Exact mapping not specced now.
 - *Note (D178): this is unreachable while every heavy node dispatches as `general-purpose` — per-node model/effort
-  lives in an agent definition's frontmatter. `### Phase 11` does not build it, but it removes the blocker.*
+  lives in an agent definition's frontmatter. `### Phase 11` does not build it, but it removes the blocker —
+  and as of D179 the blocker IS removed: the three heavy nodes are agent definitions with frontmatter of their
+  own, so a per-node `model:` is now a one-line change rather than a redesign.*

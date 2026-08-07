@@ -5555,3 +5555,88 @@ the loop runs" — it ran, and the number is 191.3k per dispatch) and **widens i
 a dispatch-mechanism defect. Reuses **D128** (namespaced resolution), **D117** (deterministic > logged prose),
 **D91** (the collision predicate), **D127/D128** (drive-to-verify). → `11` (`### Phase 11` opened), `10` (D84
 annotation amended), `07` (the inline-`verify` tension), `01` (the dispatch rule).
+
+## D179 — Phase 11 BUILT + DRIVEN: the roles now reach the workers, and the gate that keeps them there **[DECIDED — 11a–11e BUILT and DRIVEN 2026-08-07; the exit test is green on a real model. 11f NOT started. Two defects were found *by the drive*, both in this slice's own changes]**
+D178 measured the defect and scoped the fix; this is the fix, built and driven. Nothing here re-argues D178 —
+single-writer stands, `document` is an agent, `verify` stays inline — what is new is what the build cost, what
+the drive found, and the numbers the exit test produced.
+
+**What shipped.**
+1. **`execute` · `document` · `create-demo` are `agents/`** in `research.md`'s format, `Route` stripped (the hub
+   follows the edge). **The `tools:` line is the substance:** `Read, Write, Edit, Grep, Glob, Bash` and nothing
+   else — no `Task`/`Agent`, so "leaves don't spawn" is now enforced by the harness rather than promised in
+   prose, and no `WebSearch`/`WebFetch`, so an executor cannot improvise from the web.
+2. **The dispatch rule replaced the brief's `:17`.** Two axes stated as a *mechanism* rule — leaf+heavy →
+   dispatch `dev-autonomous-workflow:<name>`; everything else → run the skill inline by name; never a loop node
+   to `general-purpose`; **pass inputs, not instructions**.
+3. **`hooks/dispatch_guard.py`** — a blocking `PreToolUse(Agent|Task)` gate. It **reads the node names from the
+   project's own `.workflow/loop.md`** and keeps no roster of its own (a second list is the drift D80 exists to
+   stop). Two independent signals, either sufficient: the dispatch *title* leads with a node name, or the prompt
+   reaches into the loop's runtime (`.workflow/items/…`, a plan/changelog/verdict). Deliberate failure modes: no
+   `loop.md` → allow (there is no loop to protect); `loop.md` present but yielding no nodes → **block** and say
+   why (an empty node set would pass every dispatch vacuously); a namespaced dispatch → always allowed, even
+   with a broken graph, so the gate can never stall the loop's own work. **Stated cost, not discovered later:**
+   signal 2 also blocks a general-purpose dispatch that merely mentions those paths. That is the trade — the
+   block prints the correct call, and re-dispatching by name is one turn.
+4. **`scripts/measure-dispatch.py`** (meta-only): dispatches by `subagent_type`, role-arrival rate, per-node
+   cost, and the two invariant violations. It **refuses to report a single per-dispatch token figure** — the
+   number the CLI shows is not in the transcript, so it reports the parts instead (`new` / `fed in` / `written`
+   / `peak context`). An empty scan prints "nothing measured", never a clean bill.
+5. **Collateral the move required:** the contract linter now scans `agents/` as well as `skills/` — moving
+   `document` out of `skills/` had silently taken `document:audit` out of the unrouted-mode-ref check, a gate
+   going quiet with no message; the sandbox gate moved out of `create-demo` (a dispatched agent's file is the
+   *worker's* context, and the router never reads it, so a gate living there could not be evaluated); MANIFEST
+   gained the hook, `/start` and the trust model name it, and the roster table reads the on-disk truth.
+
+**The two defects the drive found, both ours.**
+- **The fix blew the shipped doc budget.** The new dispatch rule and the relocated sandbox gate pushed *both*
+  always-loaded templates over the 4000-token HARD budget (`loop.md` 3896→4251, the brief 3506→4064), so every
+  new install would have started with `checks.sh --check` red. Found only because the drive ran the real gate on
+  a real install. Fixed by the budget's own prescribed remedy — the gate's conditions now live once in
+  `create-demo`'s file with a one-line pointer from `loop.md` (read on demand; that file is not read every
+  turn), and the brief's new section was compressed to the operative sentences. Both now pass (3984 / 3926).
+  **`loop.md` has ~16 tokens of headroom left: it cannot take another addition without a matching subtraction.**
+- **`dev-reinstall.sh` was silently shipping stale bytes.** With the cache keyed on the commit SHA (D164), a
+  *second* reinstall at the same HEAD reused the already-extracted directory, so the drive kept exercising the
+  first run's package while the working tree had moved on. This is **D151's staleness failure returning through
+  D164's key**, and it attacks the one mechanism the exit test depends on. Fixed: the SHA's cache dir is dropped
+  before install, every time — a dirty tree has no SHA of its own, which is this script's whole premise.
+
+**The exit test (11e), on a real model.** A real project (the packaged `slugify` library from the Phase-5
+fixture), migrated onto the new package **through the product's own `/update` runner** — which is also the proof
+of D178's claim that an in-flight project is untouched until `/update`. One full item driven end to end
+(`planner:plan-one → execute → verify → document → commit`), plus a maintenance `document:audit` pass:
+- **4/4 dispatches namespaced, 0 loop nodes on a general worker** (was 33 of 50). The inline half behaved too —
+  `planner`, `verify`, `commit`, `discuss`, `decision-engineer` ran as skills in the orchestrator's own window.
+- **The paraphrase disappeared, measurably: dispatch prompts fell from 2794–9663 chars to 289–1188.** That is
+  the telephone game ending — the prompt now carries inputs, and the role arrives as the worker's own file.
+- **0 nested spawns** (was 1) and **0 web calls in a worker whose job is not to gather** — both now structural,
+  from `tools:`, not from a rule anyone has to remember.
+- **The gate was verified firing in a live session**, not just in tests: a deliberate `general-purpose` dispatch
+  at `execute` came back `BLOCKED … Run it by name instead`, and the model did not work around it.
+- **Replayed against history:** all 51 dispatches of the original `agentic-cyber` drive were fed to the shipped
+  hook — **34/34 non-namespaced blocked, 17/17 namespaced allowed, zero false negatives** on real data.
+
+**What the measurement now says about 11f (recorded, not acted on).** Every node is **read-dominated**:
+`execute` at 335.6k fed in against 24.1k written, `document` 175.0k vs 15.7k, `research` 151.7k vs 13.7k, with
+peak contexts of 60.5k / 52.5k / 47.0k. Of D178's two rival diagnoses this is the *first* one — the writer is
+being fed, not writing too much — which points at `planner` under-supplying context (D134's resolution) rather
+than at a plan-size budget. **One item is not a sample**; 11f takes this properly.
+
+*Rejected:* **warn-only** for the gate (re-affirmed under the false-positive cost, which is real: the failure
+being guarded is "the advisory was ignored", and an advisory version fails at exactly the moment it matters);
+a **hardcoded node list** in the hook (a second roster, drifting the day a node is added); **matching on the
+whole prompt body** rather than title-position + runtime-path (every node name is also a common English word —
+`document`, `execute`, `verify` — and body matching would block ordinary work); **hand-seeding the drive
+fixture** instead of migrating it with `update_reconcile.py` (it would have tested a fixture, not the product's
+own upgrade path); and **splitting `execute`'s plan** in response to its cost (the number says read-dominated,
+so splitting would make it worse — this is exactly the reasoning-ahead-of-measurement 11f exists to prevent).
+
+*Evidence:* the drive at `~/drive-11e` — item `ROADMAP-3` committed `03d6c0f`, its prerequisite-repair riding
+its own commit `5f52739` (the two-commit carve-out working unprompted); `scripts/measure-dispatch.py
+~/drive-11e --since 2026-08-07` → 4/4 declared, 0 general-purpose, 0 violations; the historical replay against
+`~/.claude/projects/-mnt-c-…-agentic-cyber`; the live block message quoted verbatim above. 885 tests pass
+(824→885, +61: 15 for the gate, 11 for the measurement, 6 for the linter's agent half, the rest existing), all
+five meta-gates green. **Discharges D178's calls 1–6** and leaves **11f** — the writer's scope — open with its
+first real numbers attached. → `11` (Phase 11 status), `10` (roster + the D84 amendment), `07` (the open
+tensions, now measurable), `01` (the dispatch rule as shipped).

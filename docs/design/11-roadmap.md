@@ -10,7 +10,9 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   read→place→advance algorithm, the resume model (`state.json` / `handoff.md` / git), and the autonomous
   **permission model** (broad-allow + `ask` outward + `guard.sh`) — **dogfood-validated** end-to-end, zero
   local prompts after trust (D46–D58).
-- **Space 2 — Roster + contracts.** 20 skills + 2 agents, I/O schemas, hub-and-spoke topology (D24–D34, D53);
+- **Space 2 — Roster + contracts.** The full roster (its count and the skill/agent split live in the roster
+  doc's table, which is the owner — the three heavy leaves moved to `agents/` in D178), I/O schemas,
+  hub-and-spoke topology (D24–D34, D53);
   the **D36–D45 skill-body deltas** authored (`prioritize` waves · `execute` divergence tiers +
   refuse-destructive · `planner` risk_class+backup + decision-coverage gate · `adjudicate`
   conjunction-of-signals · `commit` secret-scan) + the prerequisite-repair two-commit carve-out and
@@ -1023,7 +1025,7 @@ navigation is the real first cost) · **model + effort routing** (a cost optimiz
 the *arbiter input contract* (the component exists nowhere; its substance is `prioritize`'s) · *`@import`-survives-
 `/compact`* (the package uses no imports).
 
-### Phase 11 — Dispatch fidelity: make the shipped roles actually reach the workers **[OPEN — designed 2026-08-07 (D178); NOT BUILT. Opened by measurement of a real drive, not by a premise re-check]**
+### Phase 11 — Dispatch fidelity: make the shipped roles actually reach the workers **[11a–11e BUILT + DRIVEN 2026-08-07 (designed D178, built D179); 11f OPEN. Opened by measurement of a real drive, not by a premise re-check — and closed the same way: the exit test is a real-model drive, not an argument]**
 Phase 10 closed with **no successor declared**. This is it, and it was not chosen from the deferred menu — it was
 **found**. A design question about whether one-execute-agent-and-wait is right *practice* (it is — D178) required
 measuring a real drive to size the writer, and the measurement found that **the package's capability layer is not
@@ -1035,31 +1037,39 @@ of those nodes that is a declared agent. Full finding, cause and rejected altern
 carries it. D84's deferral rested on "the context saving can't be measured until the loop runs"; it ran, and the
 number is 191.3k tokens per `execute` dispatch. It is no longer a file move — it is a dispatch-mechanism fix.*
 
-- **11a — declare the leaf agents.** `execute` · `document` · `create-demo` → `agents/` in `research.md`'s format,
-  `Route` stripped. **`tools:` is the substance**, not the move: no `Task`/`Agent` (leaves don't spawn — one
-  already did) and no `WebSearch`/`WebFetch` on `execute`. **`document` is included, overruling D84's
-  "borderline weight"** on measured 40.0k/dispatch. **[core]**
-- **11b — the dispatch rule in the brief.** Replace `templates/orchestrator-CLAUDE.md:17` ("when in doubt,
-  dispatch" — the direct cause) with D84's two axes stated as a dispatch rule; never dispatch a loop node to
-  `general-purpose`. **[core]**
-- **11c — the mechanical gate.** A `PreToolUse` matcher on `Agent` that **blocks** `general-purpose` for a loop
-  node. Blocking, not warn-only — the failure mode being guarded *is* "advisory rule ignored" (D117). Ships in the
-  package, so an in-flight project is untouched until `/update`. **[core]**
-- **11d — make the measurement repeatable.** The transcript query → `scripts/` (meta-only): dispatches by
-  `subagent_type`, skill-load rate inside subagents, per-node token distribution. This defect was invisible to
-  reading and obvious to measurement. **[core]**
-- **11e — drive it** (D127/D128): one full item on a real project, namespaced dispatch, roles arriving, **zero**
-  `general-purpose` loop dispatches. **The phase's exit test.** **[core]**
-- **11f — THEN re-measure the writer's scope.** `execute` runs 191.3k–~300k per dispatch and `planner` has **no
-  sizing rule** — but a scoped `execute` with no web tools may burn materially less, and the attribution
+- **11a — declare the leaf agents.** **DONE (D179)** — the three are `agents/` files, `Route` stripped, with
+  `tools:` carrying both invariants (no `Task`/`Agent`, no web). Two things the move forced: the contract linter
+  now scans `agents/` too (moving `document` out had silently taken `document:audit` out of its check), and the
+  sandbox gate left `create-demo` — a dispatched agent's file is the *worker's* context, so a gate living there
+  could never be evaluated by the router. **[core]**
+- **11b — the dispatch rule in the brief.** **DONE (D179)** — `:17` is gone; the two axes are stated as a
+  mechanism rule (dispatch by name / run inline by name / never `general-purpose`), plus **pass inputs, not
+  instructions**, which is the half that actually killed the paraphrase. **[core]**
+- **11c — the mechanical gate.** **DONE (D179)** — `hooks/dispatch_guard.py`, blocking, reading the node names
+  from the project's own `loop.md` rather than carrying a list. Verified firing in a live session, and replayed
+  against the original drive: **34/34 non-namespaced dispatches blocked, 17/17 namespaced allowed**. **[core]**
+- **11d — make the measurement repeatable.** **DONE (D179)** — `scripts/measure-dispatch.py`. It reports token
+  *components* rather than one figure (the CLI's per-dispatch number is not in the transcript), and an empty scan
+  says "nothing measured" instead of reporting a clean bill. **[core]**
+- **11e — drive it.** **DONE (D179) — the exit test is GREEN.** A real project migrated onto the package through
+  `/update`'s own runner, one full item driven to commit: **4/4 dispatches namespaced, 0 loop nodes on a general
+  worker, 0 nested spawns**, and dispatch prompts down from **2794–9663 chars to 289–1188**. The drive also found
+  two defects in this slice's own work — the fix had blown the always-loaded doc budget, and `dev-reinstall.sh`
+  was silently shipping stale bytes into every drive. Both fixed. **[core]**
+- **11f — THEN re-measure the writer's scope. THE ONLY PART STILL OPEN.** `planner` has **no sizing rule** — but
+  a scoped `execute` with no web tools may burn materially less, and the attribution
   (discovery-read cost vs production-write cost, re-read ratio, off-`files_touched` reads) must be taken against
   the fixed system. Two diagnoses, opposite fixes: read-dominated → `planner` under-supplies context (D134's
-  resolution); write-dominated → a plan-size budget splitting on the D91 predicate, **serially**. **[core]**
+  resolution); write-dominated → a plan-size budget splitting on the D91 predicate, **serially**. **The fixed
+  system's first numbers are in (D179) and they say READ-dominated** — `execute` 335.6k fed in against 24.1k
+  written, `document` 175.0k vs 15.7k — which points at the first diagnosis. One item is not a sample; this
+  increment takes it properly, and it is deliberately not acted on until then. **[core]**
 
 **Not in scope, deliberately:** the **cold-context reviewer** (Cognition's Code-Review-Loop — the loop has no
 per-item correctness review: `verify` is conformance-only by design and `debug` is on-fail only). It is a real gap
-and a *read-only* addition that does not touch single-writer, but it is worth nothing while the workers aren't
-running their own instructions — **promote it once 11e is green.** Also out: **within-item parallel writers**,
+and a *read-only* addition that does not touch single-writer, but it was worth nothing while the workers weren't
+running their own instructions — **that condition is now met (11e is green), so it is promotable**: it is the
+first candidate for whatever follows this phase, alongside 11f. Still out: **within-item parallel writers**,
 rejected in D178 with a stated re-open trigger.
 
 ## The one-liner
@@ -1124,8 +1134,12 @@ same day; self-hosting was split off as a later experiment on a clone — and is
 (D167), and **`9c` (org mode) is BUILT + DRIVEN** (D174, 2026-08-05) — so **Phase 9 is COMPLETE**. It was the last
 phase *as planned*; **`### Phase 10` (D175, 2026-08-05) then sequenced** the part of the by-space
 `[stageable]`/`[later]` menu that survived a premise re-check, and **is itself COMPLETE (D176)**. **`### Phase 11`
-(D178, 2026-08-07) is now the live pointer and is OPEN — dispatch fidelity.** It was not picked from the deferred
+(D178, 2026-08-07) is the live pointer — dispatch fidelity.** It was not picked from the deferred
 menu: measuring a real drive to size the execution agent found that the shipped skills never reach the workers
 (51 subagent transcripts, **0** `Skill` invocations), which makes every judgment-layer contract in the package
 advisory in practice. It supersedes the `[stageable]`/`[later]` framing of the **D84 reclassification** wherever
-this doc still carries it.
+this doc still carries it. **`11a`–`11e` are BUILT + DRIVEN (D179, same day) and the exit test is green** — the
+three heavy leaves are declared agents, the brief carries the mechanism rule, a blocking gate enforces it, the
+measurement is repeatable, and a real-model drive of a full item produced **4/4 namespaced dispatches, zero on a
+general worker**, with dispatch prompts collapsing from thousands of characters to hundreds. **`11f` — the
+writer's scope — is the one part still open**, and it now has its first honest numbers to work from.

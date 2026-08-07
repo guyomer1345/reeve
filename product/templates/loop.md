@@ -55,6 +55,10 @@ Side doors (callable from anywhere): `create-issue` → backlog · `research` (s
 edge. `status` is the same shape: a pure read of where the project is, mutating nothing and returning to
 wherever it was called from.
 
+**The gated rows (`create-demo?`) are the router's call, before any dispatch** — default **no demo**, decided
+per work-item. Its three conditions live once in the `create-demo` capability's *sandbox gate* section: read
+them there (this file is read every turn; that one is not).
+
 ## Scheduler boundary — the inbox drain
 Between items (and before any pick) the orchestrator **drains `.workflow/inbox/`** — the console's typed
 messages to the loop. This is **plain control-flow, not a node**: no skill runs and no edge is followed, so it

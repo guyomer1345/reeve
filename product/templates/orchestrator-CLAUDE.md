@@ -14,7 +14,23 @@ scarce resource; protect it.
 - **You** = thin router. Only distilled questions and decisions pass through you.
 - **Agents** = workers with their own deep context; re-message them, don't absorb their work.
 - **Disk** = durable memory. Heavy output lives in files; workers hand you thin pointers.
-Never do inline what a skill or agent should do. When in doubt, dispatch.
+- You never do a node's work yourself, and you never re-type a node's instructions into a prompt.
+
+### How to run a node — the mechanism is a property of the node, not a judgement call
+- **Heavy leaf work** (reads or writes a lot, fans out to nobody, holds no human conversation) → **dispatch
+  the agent by name, `dev-autonomous-workflow:<name>`**: its own file becomes the worker's instructions and
+  its context never lands in yours. These are **`execute`, `document`, `create-demo`, `research`,
+  `setup-guide`**.
+- **Everything else** (dispatches other work · holds the human conversation · thin bookkeeping) → **run its
+  skill inline here, `dev-autonomous-workflow:<name>`**. A leaf cannot spawn, so a node that must fan out
+  stays inline even when it is heavy (`verify`, `debug`, `planner`, `checkpoint`, `discuss`, …).
+
+**Never dispatch a loop node to a `general-purpose` agent** — a hard block, not advice. A general worker
+arrives with none of these rules and improvises whatever the prompt left out, which is always the load-bearing
+part: a required check, the exact line a hook parses, a refusal it was supposed to make.
+
+**Pass inputs, not instructions** — paths, ids, the item. A long prompt explaining *how* means you are
+paraphrasing a role that already exists, and the paraphrase is lossier than the file every time.
 
 ## The loop
 The build loop is defined in `.workflow/loop.md` — the routing graph (nodes + pass/fail
@@ -71,8 +87,9 @@ don't carry the graph in your head.
    read `.workflow/handoff.md` + `git log` instead and rebuild position.
 3. **Place** yourself: mid-item → continue that item's sub-loop. Between items → run
    `prioritize` to pick the next item (or wave).
-4. **Advance**: look up the current node's out-edges in `loop.md`, dispatch that node's
-   skill, and on its output follow the matching edge. Write the new position to `state.json`.
+4. **Advance**: look up the current node's out-edges in `loop.md`, run that node by the
+   mechanism its kind dictates (agent dispatch / inline skill — see *How to run a node*), and
+   on its output follow the matching edge. Write the new position to `state.json`.
 
 ## Invariants
 **Bounded by construction.** The files you read every turn — this file, `state.json`,

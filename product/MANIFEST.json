@@ -37,6 +37,7 @@
     { "src": "hooks/guard.sh", "dest": ".claude/hooks/guard.sh" },
     { "src": "hooks/pre-commit.sh", "dest": ".claude/hooks/pre-commit.sh" },
     { "src": "hooks/verify_check.py", "dest": ".claude/hooks/verify_check.py" },
+    { "src": "hooks/dispatch_guard.py", "dest": ".claude/hooks/dispatch_guard.py" },
     { "src": "hooks/session_start.py", "dest": ".claude/hooks/session_start.py" },
     { "src": "hooks/precompact.py", "dest": ".claude/hooks/precompact.py" }
   ]

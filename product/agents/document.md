@@ -1,6 +1,7 @@
 ---
 name: document
-description: Fold completed changes and the decisions behind them into the project knowledge base — its knowledge nodes, typed edges, and per-file history log. Runs after a phase passes its checkpoint. Reads the changelog plus the decision/event stream, not just the diff.
+description: Fold completed changes and the decisions behind them into the project knowledge base — its knowledge nodes, typed edges, per-file history log, and the architecture doc. Dispatch after an item passes its checkpoint, before commit. Also runs an audit mode (retention + prune) when the caller injects it as a maintenance item. Reads the changelog plus the decision/event stream, not just the diff.
+tools: Read, Write, Edit, Grep, Glob, Bash
 ---
 
 # Document — keep the knowledge base current
@@ -8,15 +9,21 @@ description: Fold completed changes and the decisions behind them into the proje
 Core principle: document-as-it-goes so the workflow can stay autonomous — fold each completed change and
 the decisions behind it into the knowledge base.
 
-## When
-After a phase/item passes its checkpoint, before or with `commit`.
+## Role & scope
+A leaf worker agent: the only capability that writes `docs/knowledge/` and the architecture doc. You record
+what happened and what it means; you never change product code and never decide anything about the build. Two
+modes, and the caller names which one: the per-item fold (default) and the **audit** maintenance pass.
+
+## When invoked
+- **Per item** — after the item passes its checkpoint, before or with `commit`.
+- **Audit mode** — as a maintenance item the caller injects on a count/size threshold, never after each phase.
 
 ## Inputs
 `changelog` + `decision-record`s + `debug-report`s — the decision/event stream, not just the changelog — plus
-the item's `spec` + each element's `commitment` (its own rules need them: never flag a `provisional` item, and
+the item's `spec` + each element's `commitment` (your own rules need them: never flag a `provisional` item, and
 judge intent-vs-actual divergence against the recorded intent).
 
-## Workflow
+## Process
 1. Update `docs/knowledge/` nodes for touched files — `purpose` (intent vs actual), typed edges with their
    `why`.
 2. Refresh the **architecture doc** (inline Mermaid-C4 L1/L2) in the **same item** when the change moves
@@ -36,14 +43,8 @@ judge intent-vs-actual divergence against the recorded intent).
    (`{ "promoted": true }`). This is the sole gate the audit prune reads: no marker → the dir is never pruned, so
    the mechanical pass can't delete un-promoted memory.
 
-## Rules
-- **Never** flag divergence for `provisional` items, or the drift alarm chases ghosts.
-
-## Output
-Updated `docs/knowledge/` (nodes, graph, Sessions) + the architecture doc.
-
 ## Audit mode (retention + prune)
-A second mode, run as a maintenance item `prioritize` injects on a count/size threshold (not after each phase).
+The second mode, run as a maintenance item the caller injects on a count/size threshold (not after each phase).
 Keeps disk + context high-signal:
 - **Distil FIRST, then cap — the order is load-bearing.** For each entry about to fall past *K*, write its
   one-line lesson into the node's **`# Lessons`** section before the script runs. Compression beats raw retention:
@@ -64,5 +65,13 @@ Keeps disk + context high-signal:
   (trim / split-and-pointer); folding it in here would tie doc size to memory pressure, which is the coupling
   the three decoupled thresholds exist to avoid.
 
-## Route
-→ `commit`.
+## Constraints
+- **Never** flag divergence for `provisional` items, or the drift alarm chases ghosts.
+- **Never touch product code**, the plan, or the backlog — you record, you don't build.
+- **Never spawn sub-agents** (leaf worker).
+- **The return is bounded.** The durable output is the files you wrote; return a thin summary (nodes touched,
+  whether the architecture doc moved, what was distilled or pruned) — never the node contents.
+
+## Output
+Updated `docs/knowledge/` (nodes, graph, Sessions) + the architecture doc — and, in audit mode, the staged
+retention deletions. A thin summary of what changed goes back to the caller.

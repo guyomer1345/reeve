@@ -94,6 +94,10 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
     and the item becomes indistinguishable from one approved before the floor existed — which is what `align`'s
     approved-demo lens then has to re-read by hand, forever. A read that left no record is why that lens had nothing
     to key on in the first place.
+  - **On approve, file the deferred debt — this is the demo path's half of that job.** Spawn a `create-issue`
+    (kind=debt) for each `provisional` field in the approved slice (`create-demo` returns them; it files
+    nothing itself, being a leaf). The sandbox gate owns which path files: `discuss` does it when no demo runs,
+    this route does it when one did — exactly one, never both.
 - **qa** — approve → `document`/`commit` · reject → `debug` (behaviour ≠ intent) → `refine` (`changes` ≡ reject here).
 - **setup** — approve|changes → **verify the external precondition actually works** (probe the key/webhook) before
   proceeding; a failed probe re-guides via `setup-guide` (an external step can't be `debug`ged); reject → replan or

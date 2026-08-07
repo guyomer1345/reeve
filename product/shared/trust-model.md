@@ -50,14 +50,17 @@ means re-establishing it (which is what `/rebind` exists for).
 
 Permissions are user-controlled by design: no `CLAUDE.md` and no command can raise its own privileges,
 and this package only ever *recommends* a mode. So the guarantees that must not be optional are not
-permissions at all — they are a `PreToolUse` hook (`hooks/guard.sh`), which **overrides allow and still
-fires under full bypass**:
+permissions at all — they are `PreToolUse` hooks (`hooks/guard.sh` on shell commands, `hooks/dispatch_guard.py`
+on subagent dispatch), which **override allow and still fire under full bypass**:
 
 - **secret-scan** — blocks a commit carrying a staged secret.
 - **verify-before-commit** — blocks a commit whose item failed `verify`.
 - **protected-branch floor** — blocks a push to `main`/`master` (lowerable per-project, deliberately).
 - **remote mutation in org mode** — blocks `git remote add`/`set-url`/`rename` unless acknowledged, so a
   read-only clone cannot silently grow a push path.
+- **dispatch fidelity** — blocks handing a loop node to a general worker. Every other gate here protects the
+  repo from the loop; this one protects the loop from itself, because a worker dispatched without its role
+  arrives with none of the rules above it and improvises whatever the prompt left out.
 
 These fail **closed**: a degraded read (missing config, malformed JSON, no interpreter) blocks rather
 than permits. Silence is only ever allowed to be *more* conservative.

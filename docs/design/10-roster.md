@@ -35,15 +35,15 @@ own `.claude-plugin/marketplace.json` (D125). The repo is **both** the construct
 - **agent** = a **leaf worker** — its own tools, persistent/re-messageable (D4); does the heavy lifting;
   **never spawns sub-agents.**
 - Topology (closes `02`): **strict hub-and-spoke** — only skills/orchestrator fan out; agents are leaves.
-- Consequence: the only agents are `research` and `setup-guide`; all adjudicators (`verify`, `debug`,
-  `decision-engineer`) are skills.
+- Consequence: all adjudicators (`verify`, `debug`, `decision-engineer`) are skills; the agents are the
+  information workers (`research`, `setup-guide`) plus the three heavy leaves D178 declared (below).
 - **Context-isolation axis (D84 — refines D27):** the line is drawn by *two* axes, not just fan-out. A skill runs
   *inline in the orchestrator's context*; an agent runs *isolated* and returns a thin pointer. So a node is a
   **leaf agent** when it does heavy autonomous work AND neither fans out nor holds the human conversation; it
   stays a **skill** when it is a fan-out controller (leaves can't spawn — authored *thin*), human-interactive, or
-  thin bookkeeping. **Fan-out need beats heaviness** — a heavy adjudicator stays a skill. **Reclassification
-  pending: `execute` + `create-demo` + `document` → leaf agents** (`ingest` stays a skill — it spawns `research`).
-  Until then the table below reads the on-disk truth.
+  thin bookkeeping. **Fan-out need beats heaviness** — a heavy adjudicator stays a skill. **Reclassified by
+  D178: `execute` + `create-demo` + `document` are leaf agents** (`ingest` stays a skill — it spawns `research`).
+  The table below reads the on-disk truth.
 - **Amended by D178 (2026-08-07) — the axis is a *dispatch* rule, and `document` moves too.** D84 classified the
   nodes but never said which **mechanism** carries each, so the shipped brief's "when in doubt, dispatch" was the
   only rule the orchestrator had. Measured on a real drive: **51 subagent transcripts, 0 `Skill` invocations** —
@@ -51,8 +51,10 @@ own `.claude-plugin/marketplace.json` (D125). The repo is **both** the construct
   below except `research` was actually running its own file. The rule is now: **leaf+heavy → `Agent(dev-autonomous-workflow:<name>)`
   · fan-out controller / human-interactive / thin bookkeeping → `Skill(dev-autonomous-workflow:<name>)` inline ·
   never `general-purpose` for a loop node** (enforced by a blocking `PreToolUse` gate, not prose). **`document` is
-  reclassified to an agent**, overruling D84's "borderline weight" on measured 40.0k tokens/dispatch. Scheduled as
-  `11`'s **`### Phase 11`**; the table still reads on-disk truth until it is built.
+  reclassified to an agent**, overruling D84's "borderline weight" on measured 40.0k tokens/dispatch. **Built as
+  `11`'s `### Phase 11`** — the three files are `agents/` on disk, their `tools:` frontmatter carries the two
+  prose invariants (no `Task`/`Agent`, and no web tools on `execute`/`create-demo`), and the sandbox gate moved to
+  `loop.md` because a dispatched agent's body is the *worker's* context and the router never reads it.
 
 ## The adjudicate pattern **[DECIDED — D24]**
 One base skill `adjudicate` (gather views → judge → confidence-gate → loop/escalate), specialized by
@@ -68,19 +70,19 @@ overlap into one adjudicator.
 | dispatch | command | write a complete `handoff.md` on demand so a `/clear` is safe (D136) | `commands/dispatch` |
 | adjudicate | skill (base) | gather views → judge → confidence-gate | `skills/adjudicate` |
 | discuss | skill | intake conversation → `spec` | `skills/discuss` |
-| create-demo | skill *(→ agent, D84 — pending)* | throwaway sandbox for product approval | `skills/create-demo` |
+| create-demo | agent *(D178)* | throwaway sandbox for product approval (the gate is the router's — `loop.md`) | `agents/create-demo` |
 | create-forecast | skill | the chain of events the loop proposes, before it walks it | `skills/create-forecast` |
 | prioritize | skill | order the backlog, emit the next wave | `skills/prioritize` |
 | planner | skill | decompose → `roadmap` / plan one item → `plan` | `skills/planner` |
 | decision-engineer | skill | resolve an open build decision (adjudicate) | `skills/decision-engineer` |
 | research | agent | gather info (Investigation worker) | `agents/research` |
-| execute | skill *(→ agent, D84 — pending)* | run a plan, decide nothing → `changelog` | `skills/execute` |
+| execute | agent *(D178)* | run a plan, decide nothing → `changelog`; the loop's single writer | `agents/execute` |
 | verify | skill | artifact conformance (adjudicate) | `skills/verify` |
 | debug | skill | root-cause behaviour ≠ intended (adjudicate) | `skills/debug` |
 | refine | skill | route corrections back through planner→execute | `skills/refine` |
 | checkpoint | skill | pause for a human verdict (demo / qa / setup / reconcile / forecast) | `skills/checkpoint` |
 | setup-guide | agent | precise human steps for a manual external task | `agents/setup-guide` |
-| document | skill | fold changes + decisions into the knowledge base | `skills/document` |
+| document | agent *(D178)* | fold changes + decisions into the knowledge base | `agents/document` |
 | ingest | skill | brownfield: build the knowledge base + reconstructed spec from existing code | `skills/ingest` |
 | commit | skill | git snapshot (Conventional Commit; the checkpoint marker) | `skills/commit` |
 | create-issue | skill | capture a problem/idea → backlog + GitHub issue | `skills/create-issue` |

@@ -56,6 +56,21 @@ claude plugin marketplace update "$plugin" >/dev/null 2>&1
 # Uninstall first, deliberately. `install` over an existing install is the path that
 # short-circuits on a matching version — the exact no-op this script exists to defeat.
 claude plugin uninstall "$plugin" >/dev/null 2>&1
+
+# ...and drop this SHA's cache dir, because uninstall does not. MEASURED, not assumed: with
+# the cache keyed on the commit SHA (`version` is gone from plugin.json), a SECOND reinstall
+# at the same HEAD reuses the extracted dir and silently ships the FIRST run's bytes — so a
+# drive kept exercising a stale package while the working tree had moved on. That is the
+# D151 staleness failure returning through the new key, and it defeats the one mechanism
+# this phase's exit test depends on. The whole point of this script is that a dirty working
+# tree has no SHA of its own; the cache must therefore be re-extracted every single time.
+cache_root_pre="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/cache"
+head_dir="$(git -C "$root" rev-parse HEAD 2>/dev/null | cut -c1-12)"
+if [ -n "$head_dir" ]; then
+  for stale in "$cache_root_pre"/*/"$plugin"/"$head_dir"; do
+    [ -d "$stale" ] && rm -rf -- "$stale" && echo "    dropped stale cache for $head_dir"
+  done
+fi
 if ! claude plugin install "$plugin"; then
   echo "install failed — run 'claude plugin marketplace add $root' by hand to see why" >&2
   exit 1

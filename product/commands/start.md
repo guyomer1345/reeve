@@ -246,7 +246,10 @@ loop's normal `state.json` takes over when the motion ends.
        floor**: never move a protected branch, never push a secret) and `pre-commit.sh` (the mechanical-gate
        backstop, registered as the git hook in step 6), plus `verify_check.py`, the **shared verify-before-commit
        helper both hooks call** (so the two gates enforce it identically; it fails closed and derives the item from
-       the staged diff, immune to state.json shape/path drift). `build-once-per-wave` is deferred.
+       the staged diff, immune to state.json shape/path drift), plus `dispatch_guard.py`, the **dispatch gate**
+       (a loop node is never handed to a general worker that would arrive with none of these rules and improvise
+       the difference — it reads the node names from this project's own `.workflow/loop.md`).
+       `build-once-per-wave` is deferred.
    - **Trust the workspace so the shipped allowlist is live.** *(The user-facing explanation of the whole
      permission posture — broad local allow, `ask` on outward, the hard floor that survives bypass, and why
      `--dangerously-skip-permissions` is the wrong reach — is `shared/trust-model.md`. Point the user at it in

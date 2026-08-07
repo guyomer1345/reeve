@@ -22,8 +22,8 @@ sections — name `shared/schemas.md` artifacts; don't re-explain them in prose.
 - **## Inputs** — required. The artifacts it consumes, each named from `schemas.md`. The contract is
   *defined* here, not described.
 - **## Workflow** — optional. Numbered steps only when genuinely multi-step; omit for lean skills.
-- **## Rules** — optional. Boundaries / negative instructions — what it must NOT do (e.g. "`execute` never
-  edits `docs/knowledge/`; that's `document`"). Use to stop drift.
+- **## Rules** — optional. Boundaries / negative instructions — what it must NOT do (e.g. "`refine` touches no
+  code itself; every change flows through plan → execute → verify"). Use to stop drift.
 - **## Output** — required. The artifact it emits (named from `schemas.md`).
 - **## Route** — required. `pass → … · fail → …` — the directed edges of the loop.
 - **## Calls** — optional. Sub-skills / agents it dispatches (a route is not a call).

@@ -86,6 +86,47 @@ class HardChecks(unittest.TestCase):
         self.assertEqual(hard, [])
 
 
+class AgentsAreScannedToo(unittest.TestCase):
+    """A loop node authored as a leaf AGENT must not fall out of the lint.
+
+    The regression this guards is exact: `document` moved from `skills/` to `agents/`, and a
+    skills-only scan then stopped seeing `document:audit` — the mode-ref check went quiet
+    without a single message saying so.
+    """
+
+    def test_mode_ref_inside_an_agent_body_blocks(self):
+        agents = {"document": "runs a `document:audit` maintenance pass"}
+        hard, _ = c.check(LOOP, CLEAN, SCHEMAS, agents)
+        self.assertTrue(any("document:audit" in h for h in hard))
+
+    def test_mode_ref_named_by_a_skill_but_OWNED_by_an_agent_blocks(self):
+        # the real shape: `prioritize` (skill) injects `document:audit`, `document` is an agent
+        skills = dict(CLEAN, prioritize="injects a `document:audit` item")
+        hard, _ = c.check(LOOP, skills, SCHEMAS, {"document": "the knowledge writer"})
+        self.assertTrue(any("document:audit" in h for h in hard))
+
+    def test_an_agent_is_not_a_coverage_gap(self):
+        # an agent is reached by dispatch, not by a routing row of its own
+        _, adv = c.check(LOOP, CLEAN, SCHEMAS, {"setup-guide": "checkpoint helper"})
+        self.assertFalse(any("setup-guide" in a for a in adv))
+
+    def test_novel_kind_inside_an_agent_is_flagged(self):
+        _, adv = c.check(LOOP, CLEAN, SCHEMAS, {"create-demo": "surfaced via kind=nonesuch"})
+        self.assertTrue(any("nonesuch" in a for a in adv))
+
+    def test_no_agents_half_behaves_exactly_as_before(self):
+        self.assertEqual(c.check(LOOP, CLEAN, SCHEMAS), c.check(LOOP, CLEAN, SCHEMAS, {}))
+
+    def test_load_agents_reads_flat_md_files_and_tolerates_absence(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp)
+        _write(os.path.join(tmp, "agents", "execute.md"), "the writer")
+        _write(os.path.join(tmp, "agents", "notes.txt"), "not a capability")
+        self.assertEqual(c._load_agents(os.path.join(tmp, "agents")), {"execute": "the writer"})
+        self.assertEqual(c._load_agents(os.path.join(tmp, "nope")), {})
+        self.assertEqual(c._load_agents(""), {})
+
+
 class Advisories(unittest.TestCase):
     def test_coverage_gap_is_advisory_not_hard(self):
         skills = dict(CLEAN, ingest="brownfield entry")
