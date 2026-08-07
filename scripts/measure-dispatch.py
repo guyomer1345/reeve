@@ -64,6 +64,11 @@ BASH_READ = re.compile(
     r"^\s*(?:cat|head|tail|sed|awk|less|more|nl|wc|ls|find|tree|grep|rg|ag|"
     r"git\s+(?:show|log|diff|status|blame|ls-files))\b")
 CHARS_PER_TOKEN = 4  # the usual rough constant; used for SHARES, never for a headline total
+# The prompt cache's TTL. A dispatch that idles longer than this between calls pays to write
+# its ENTIRE prefix again on the next one — which shows up in `fed in` as if the worker had
+# been handed that much new material. MEASURED: the 11e `execute` had one 659s gap and the
+# next call wrote 55.5k of cache, alone accounting for 47% of its "fed in".
+CACHE_TTL_SECONDS = 300
 # The loop's node names. Unlike the shipped gate — which reads the project's own loop.md and
 # must never carry a list — this is a meta-side reporting label: it only decides which bucket
 # a number is printed under, and an unmatched dispatch is reported as unattributed, not lost.
@@ -134,6 +139,36 @@ def usage_of(record):
 
 def _int(u, k):
     return int(u.get(k) or 0)
+
+
+def stalls(records, ttl=CACHE_TTL_SECONDS):
+    """(count, tokens) — cache re-writes caused by idling past the prompt cache's TTL.
+
+    Without this, a node that stalled once reads as a node that consumed twice the context.
+    That misreading is not hypothetical: it is half of the number that opened this phase.
+    """
+    import datetime
+    marks, seen = [], set()
+    for r in records:
+        if r.get("type") != "assistant":
+            continue
+        msg = r.get("message") or {}
+        key = msg.get("id") or r.get("requestId") or r.get("uuid")
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            when = datetime.datetime.fromisoformat(
+                str(r.get("timestamp") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        marks.append((when, _int(msg.get("usage") or {}, "cache_creation_input_tokens")))
+    count = tokens = 0
+    for i in range(len(marks) - 1):
+        if (marks[i + 1][0] - marks[i][0]).total_seconds() > ttl:
+            count += 1
+            tokens += marks[i + 1][1]
+    return count, tokens
 
 
 def api_calls(records):
@@ -403,6 +438,7 @@ def scan_subagent(jsonl_path, meta_path, since, project_root=None):
     # splitting one plan across N dispatches pays it N times — the number any plan-size
     # budget has to beat.
     boot = _int(calls[0], "cache_creation_input_tokens") if calls else 0
+    stall_count, stall_tokens = stalls(records)
     for u in calls:
         created += _int(u, "cache_creation_input_tokens")
         out_toks += _int(u, "output_tokens")
@@ -437,6 +473,8 @@ def scan_subagent(jsonl_path, meta_path, since, project_root=None):
         "read_tokens": read,
         "peak_context": peak,
         "boot_tokens": boot,
+        "stalls": stall_count,
+        "stall_tokens": stall_tokens,
         "turns": len(calls),  # API responses, not transcript records — see api_calls()
         "seconds": _elapsed(stamps),
         "tools": dict(tools),
@@ -572,6 +610,16 @@ def report(subagents, main_skills, main_dispatches, out=None):
     print("  new = fed in + written + uncached input · fed in ≫ written means the node is "
           "READ-dominated · boot = the fixed cost of EXISTING, paid once per dispatch",
           file=out)
+    stalled = [s for s in subagents if s.get("stalls")]
+    if stalled:
+        print(f"  CAUTION: {len(stalled)} dispatch(es) idled past the {CACHE_TTL_SECONDS}s "
+              f"prompt-cache TTL and paid to re-write their whole prefix — "
+              f"{sum(s['stall_tokens'] for s in stalled)/1000:.1f}k of the `fed in` above is "
+              f"that re-write, not material anyone supplied:", file=out)
+        for s in stalled:
+            print(f"          {s['node']:<18} {s['stalls']} stall(s), "
+                  f"{s['stall_tokens']/1000:.1f}k re-written of {s['created_tokens']/1000:.1f}k"
+                  f" fed in", file=out)
 
     nested = [s for s in subagents if s["nested_dispatches"]]
     web = [s for s in subagents if s["web_calls"] and s["node"] not in ("research", "setup-guide")]

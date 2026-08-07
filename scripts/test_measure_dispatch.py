@@ -318,3 +318,18 @@ def test_loop_runtime_reads_are_not_scored_as_off_plan_hunting(tmp_path):
     assert s["on_plan_reads"] == 1
     assert s["off_plan_reads"] == 0          # NOT 2
     assert s["scaffolding_reads"] == 2
+
+
+def test_a_stall_past_the_cache_ttl_is_named_not_billed_as_context(tmp_path):
+    """A node that idled once reads as a node that consumed twice the context — which is
+    half of the number that opened this phase."""
+    _subagent(tmp_path, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go", [
+        _turn(usage={"cache_creation_input_tokens": 10_000}, msg_id="m1",
+              ts="2026-08-07T10:00:00.000Z"),
+        _turn(usage={"cache_creation_input_tokens": 55_000}, msg_id="m2",
+              ts="2026-08-07T10:11:00.000Z"),   # 11 minutes later: the whole prefix again
+        _turn(usage={"cache_creation_input_tokens": 500}, msg_id="m3",
+              ts="2026-08-07T10:11:30.000Z"),
+    ])
+    s = md.scan(str(tmp_path))[0][0]
+    assert s["stalls"] == 1 and s["stall_tokens"] == 55_000
