@@ -165,7 +165,8 @@ loop's normal `state.json` takes over when the motion ends.
        owner's own root `CLAUDE.md` stays **byte-untouched**. It is still read as a primary ingest source; it is
        simply never written. Set `project_root: .` and `docs_root: .workflow` (§3a).
    - Copy `${CLAUDE_PLUGIN_ROOT}/templates/loop.md` → **`.workflow/loop.md`** and write
-     **`.workflow/config.json`** (`project_root` + run config).
+     **`.workflow/config.json`** (`project` — the same name you just filled `<project>` with, so `/update`
+     re-renders the brief without renaming the project — plus `project_root` + run config).
    - **Capture any pre-existing statusline *before* the copy (composition — never clobber).** The template
      `settings.json` wires the interactive context governor's `statusLine`, and a project `statusLine` shadows
      the user's global one; so the governor **delegates** to whatever statusline already existed rather than

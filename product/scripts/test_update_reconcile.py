@@ -69,12 +69,13 @@ def _plugin(root, version="0.2.0", extra_install=(), drop=()):
     return root
 
 
-def _project(root, project_root="."):
+def _project(root, project_root=".", project=None):
     """A target with target-owned artifacts we assert are never touched."""
     (root / ".workflow" / "items" / "ITEM-1").mkdir(parents=True)
-    (root / ".workflow" / "config.json").write_text(
-        json.dumps({"project_root": project_root, "runner": False,
-                    "context": {"warn_pct": 60}}, indent=2) + "\n")
+    cfg = {"project_root": project_root, "runner": False, "context": {"warn_pct": 60}}
+    if project:
+        cfg["project"] = project
+    (root / ".workflow" / "config.json").write_text(json.dumps(cfg, indent=2) + "\n")
     (root / ".workflow" / "checks.env").write_text('TEST="pytest -q"\n')
     (root / ".workflow" / "backlog.md").write_text("- human backlog\n")
     (root / ".workflow" / "handoff.md").write_text("bootstrap: complete\n")
@@ -269,7 +270,29 @@ def test_brief_placeholders_are_filled_from_the_target_config(tmp_path):
     body, found = ur.read_brief_block(str(project))
     assert found
     assert "root=./project" in body and "<project_root>" not in body
-    assert "# proj — Orchestrator" in body
+    assert "# proj — Orchestrator" in body  # no config.project ⇒ the basename fallback
+
+
+def test_the_project_name_comes_from_config_not_the_checkout_directory(tmp_path):
+    """A checkout dir named something else must not make /update rename the project."""
+    plugin = _plugin(tmp_path / "pkg", version="0.1.0")
+    project = _project(tmp_path / "some-checkout-dir", project_root="./project",
+                       project="slugify")
+    _install(plugin, project)
+    body, _ = ur.read_brief_block(str(project))
+    assert "# slugify — Orchestrator" in body
+    assert "some-checkout-dir" not in body
+
+
+def test_a_config_named_project_is_not_reported_as_a_local_edit(tmp_path):
+    """The regression: the package inventing a difference from itself, then demanding
+    --confirm-overwrite over it. A same-version plan must be a clean no-op."""
+    plugin = _plugin(tmp_path / "pkg", version="0.1.0")
+    project = _project(tmp_path / "some-checkout-dir", project="slugify")
+    _install(plugin, project)
+    plan = ur.compute_plan(str(plugin), str(project))
+    brief = [a for a in plan["actions"] if a["path"] == ur.BRIEF_KEY]
+    assert [a["kind"] for a in brief] == ["SAME"], brief
 
 
 def test_unmarked_brief_is_flagged_not_rewritten(tmp_path):

@@ -283,7 +283,16 @@ def render_brief(plugin_root, project_root):
     except OSError:
         return None
     cfg = _read_json(os.path.join(project_root, CONFIG_REL), {}) or {}
-    name = os.path.basename(os.path.abspath(project_root)) or "project"
+    # `config.project` FIRST, directory basename only as the fallback. `/start` fills
+    # `<project>` with the project's real name (the one the spec discussion settled on) and
+    # records it in config.json; a checkout directory is frequently named something else
+    # entirely. Deriving the name here from the basename instead made every /update on such
+    # a project report the brief as a LOCAL-EDIT — "local edit would be LOST", demanding
+    # --confirm-overwrite — over a difference the package itself had invented, and then
+    # RENAME the project on apply. A false alarm on the exact flag that protects real local
+    # edits is worse than no alarm: it teaches the operator to pass it.
+    name = (cfg.get("project") or "").strip() \
+        or os.path.basename(os.path.abspath(project_root)) or "project"
     body = body.replace("<project_root>", cfg.get("project_root") or ".")
     body = body.replace("<project>", name)
     return "\n" + BRIEF_NOTE + "\n" + body.strip("\n") + "\n"

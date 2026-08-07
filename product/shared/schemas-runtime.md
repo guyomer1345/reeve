@@ -11,6 +11,11 @@ convention in `shared/memory-model.md`. A reference of the form `schemas.md § <
 resolves here — the name is the anchor, and the two files are one schema.*
 
 ## config.json  · written once by `/start`, read on demand · *rewrite-in-place · static after init (committed)*
+- `project` — the project's **name**, as `/start` filled `<project>` in the brief. Load-bearing rather than
+  cosmetic: `/update` re-renders that managed block, and with no name to read it fell back to the checkout
+  directory's basename — which for any project whose directory is named something else made every update
+  report the brief as a `LOCAL-EDIT` ("local edit would be LOST") over a difference the package itself had
+  invented, then rename the project on apply. Absent ⇒ the basename fallback, unchanged.
 - `project_root` — `./project` (greenfield) | `.` (brownfield **and org**); makes code-touching skills path-agnostic
 - `docs_root` — where the workflow's **derived** docs live (`docs/spec.md`, `docs/architecture.md`,
   `docs/knowledge/`, `docs/decisions/`, `rules/`). Absent → **`project_root`**, which is every mode but org, so
