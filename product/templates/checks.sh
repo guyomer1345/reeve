@@ -78,11 +78,33 @@ case "$MODE" in
     # Fixers run only over the passed (staged) files, never repo-wide. FMT_FIX/LINT_FIX are
     # prefixes; `"$@"` appends the file list, each token quoted. Best-effort — --check gates.
     # Each runs in a SUBSHELL so a `cd`-ing command cannot leak its CWD into this runner.
+    #
+    # The loop's OWN runtime is withheld from the fixers, and this is a repair, not a
+    # nicety. The commit skill scopes --fix to the item's staged files, and an item's staged
+    # files include its `.workflow/items/<id>/promises.json` — so a Python stack handed that
+    # manifest to `ruff format`, which force-parses an explicitly-named file as Python
+    # regardless of extension and wrote a magic trailing comma into it. MEASURED on a real
+    # drive: the manifest came back as invalid JSON, and the coverage gates that parse it are
+    # the ones that then refuse the commit. The fixers exist for the stack's own source; a
+    # formatter has no business in `.workflow/` for ANY stack, so the filter is stack-agnostic
+    # and lives here rather than in per-project config. Skipped paths are named, never silent.
     if [ -n "${STACK_GATE_NONE:-}" ]; then
       declared_none            # refuse the fixers too — they are `eval`'d the same way
     elif [ "$#" -gt 0 ]; then
-      [ -n "${FMT_FIX:-}" ]  && { echo "+ $FMT_FIX $*" >&2;  ( eval "$FMT_FIX \"\$@\"" )  || true; }
-      [ -n "${LINT_FIX:-}" ] && { echo "+ $LINT_FIX $*" >&2; ( eval "$LINT_FIX \"\$@\"" ) || true; }
+      fixable=(); withheld=()
+      for f in "$@"; do
+        case "${f#./}" in
+          .workflow/*|.claude/*) withheld+=("$f") ;;
+          *)                     fixable+=("$f") ;;
+        esac
+      done
+      [ "${#withheld[@]}" -gt 0 ] && echo "  (not passed to the fixers — the loop's own" \
+        "runtime, which a code formatter would corrupt: ${withheld[*]})" >&2
+      if [ "${#fixable[@]}" -gt 0 ]; then
+        set -- "${fixable[@]}"
+        [ -n "${FMT_FIX:-}" ]  && { echo "+ $FMT_FIX $*" >&2;  ( eval "$FMT_FIX \"\$@\"" )  || true; }
+        [ -n "${LINT_FIX:-}" ] && { echo "+ $LINT_FIX $*" >&2; ( eval "$LINT_FIX \"\$@\"" ) || true; }
+      fi
     fi
     exit 0
     ;;

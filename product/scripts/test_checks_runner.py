@@ -288,3 +288,27 @@ def test_an_advisory_alone_never_blocks_a_commit(tmp_path):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_fix_never_hands_the_loops_own_runtime_to_a_code_formatter(tmp_path):
+    """MEASURED on a drive: the commit skill scopes `--fix` to the item's staged files, and
+    those include `.workflow/items/<id>/promises.json`. `ruff format` force-parses an
+    explicitly-named file as Python whatever its extension, and wrote a magic trailing comma
+    into the manifest — invalid JSON, and the coverage gates that read it then refuse the
+    commit. A formatter has no business in `.workflow/` for any stack."""
+    root = _project(tmp_path, "")
+    logger = root / "fixlog.sh"
+    logger.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$@" >> "$PWD/fixed.txt"\n')
+    logger.chmod(0o755)
+    (root / ".workflow" / "checks.env").write_text(f'FMT_FIX="bash {logger}"\n')
+    r = _run(root, "--fix", "a.py", ".workflow/items/IT-1/promises.json",
+             "./.claude/settings.json", "src/b.py")
+    assert r.returncode == 0, r.stderr
+    assert (root / "fixed.txt").read_text().split() == ["a.py", "src/b.py"]
+    assert "promises.json" in r.stderr          # named, never silently dropped
+
+
+def test_fix_with_only_runtime_files_never_invokes_the_fixer_at_all(tmp_path):
+    root = _project(tmp_path, 'FMT_FIX="false"\n')   # would fail the run if invoked
+    r = _run(root, "--fix", ".workflow/items/IT-1/promises.json")
+    assert r.returncode == 0
