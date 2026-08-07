@@ -731,38 +731,45 @@ green suite catches.
   confirmation is what reads as failure. Cousin of the item above: the same fix (relay on first response) would
   cover both, since a session that opens by saying where it is proves the rehydrate landed.
 
-## Newly open from the dispatch-fidelity measurement (2026-08-07 — D178)
+## Newly open from the dispatch-fidelity measurement (2026-08-07 — D178; re-measured 2026-08-08 — D180)
 Found by *measuring* a real drive (`agentic cyber`), not by reading — the class that reading cannot reach. The
-finding itself is decided (D178) and scheduled (`11`'s `### Phase 11`); what stays open is the tension the fix
-creates and the question it defers.
+finding itself is decided (D178) and was built and driven (D179, `11`'s `### Phase 11`, now COMPLETE). **D180 then
+re-measured all three entries below against four items on the fixed system, and moved two of them:** the plan-size
+question is CLOSED (no bound is warranted), the inline-`verify` tension is measured and reframed as a
+fan-out-controller question, and only the reviewer is still simply open.
 
-- **An inline `verify` reads a 191k–300k-token item's diff in the orchestrator's own window `[real, unmeasured]`.**
-  D84's rule holds that `verify` must stay an inline skill — it is a fan-out controller and a leaf cannot spawn —
-  and D178 keeps it there. But the same measurement that justified moving `execute` out of the hub shows what
-  `verify` is then asked to read *inside* it. D84's stated answer is **authoring-thinness**: push the heavy reads
-  into workers `verify` spawns, hold only thin summaries inline. `verify/SKILL.md` already licenses that ("Lean:
-  for small changes, judge directly without fanning out workers"), so the mechanism exists — **it has simply never
-  been measured under a large diff**, and the skill gives no threshold for when to fan out. Open: does inline
-  `verify` actually stay thin at this item size, and if not, is the fix a stated fan-out threshold in the skill, or
-  a hub-mediated split that reopens D27's two-level-agent topology? *Do not settle this by reasoning — it is a
-  measurement, and the tooling that would take it now EXISTS (`11`'s **11d**, built D179): a drive's per-node
-  read/write split is one command away. Still unmeasured, because the one item driven so far had a small diff —
-  the question is now cheap to answer, not answered.*
-- **`planner` has no sizing rule at all `[real, deferred by decision]`.** `decompose` emits phases, `plan-one`
-  emits "ordered verifiable steps" + `files_touched`, and **nothing anywhere bounds how big a plan may be**. Plan
-  size is whatever the backlog item happened to be, which is how a single `execute` dispatch reaches ~300k. This is
-  **deliberately not answered yet** (`11`'s **11f**): the attribution must be taken against the fixed system,
-  because a scoped `execute` agent with no web tools may burn materially less, and because measuring the current
-  system would measure a paraphrase. *The fixed system's first measurement is in (D179) and it reads
-  **read-dominated** — `execute` 335.6k fed in against 24.1k written — i.e. the first of the two diagnoses below.
-  One item is not a sample, so this stays open; what changed is that it is a measurement question with a tool
-  now, not a reasoning question.* Two diagnoses with opposite fixes — read-dominated burn ⇒ `planner`
-  under-supplies context (D134's resolution: mechanical seeds, and splitting would make it *worse*);
-  write-dominated burn ⇒ a plan-size budget splitting on the D91 predicate, serially.
+- **The INLINE HALF fills the router's window — measured, and it is not only `verify` `[real, MEASURED D180]`.**
+  Four items driven end to end: one item consumes **98k–179k of the orchestrator's own window**, the router is
+  **43–53% of every drive's fed-in tokens**, and on one axis at last — an **inline** node costs the router
+  **9–29k**, a **dispatched** one **0.3–2.6k** (`research` is the honest exception at +22.5k: its findings are
+  read there by design). The most expensive inline node is **`planner`** (+26.6k / +16.0k / +49.2k / +38.1k),
+  consistently **above `verify`** (+10.6k / +20.6k / +20.6k). So this tension is settled in its factual
+  half — inline nodes really do land their reads in the hub — and reframed in its open half: the fix is not a
+  `verify` threshold, it is what to do about **fan-out controllers in general** when a leaf cannot spawn (D84),
+  which is D27's two-level-agent topology reopened. **Named as a successor to Phase 11 (`11`), not scheduled.**
+  D84's answer for a fan-out controller is **authoring-thinness** — push the heavy reads into workers it spawns,
+  hold only thin summaries inline — and `verify/SKILL.md` already licenses it ("Lean: for small changes, judge
+  directly without fanning out workers") with **no threshold for when to fan out**. That remains the cheapest
+  candidate fix and is still untested; what D180 adds is that a threshold on `verify` alone would miss `planner`,
+  the larger consumer. *(The earlier form of this entry framed it as "an inline `verify` reads a 191k–300k-token
+  diff, unmeasured". Both halves are superseded: the token figure was an instrument artifact — see the entry
+  below — and it is no longer unmeasured.)*
+- **~~`planner` has no sizing rule at all~~ — it still has none, and D180 measured that this is FINE `[CLOSED —
+  D180]`.** `decompose` emits phases, `plan-one` emits "ordered verifiable steps" + `files_touched`, and nothing
+  bounds how big a plan may be. Four items (3→11 declared files) driven on the fixed system say neither proposed
+  bound is warranted. **Discovery is flat** — 7.7–10.4k tokens over 7–8 reads *whatever the item size* — with
+  **0% re-reads** in three of four and **one** off-plan product read in the two items that had any, so `planner`
+  is not under-supplying context and D134's resolution has nothing left to fix here. **Production scales
+  sub-linearly** (3.7x scope buys 2.5x output) and peaks at a 59.9k worker context, while every extra dispatch
+  pays a fixed **7–10k of boot** — so a plan-size budget splitting on D91, even serially, costs more than it
+  saves. The `~300k` figure this entry used to quote was an instrument artifact (2.8–3.5x over-count + one
+  cache-TTL stall); the real number is 119.1k of billing over a 60.5k context. **What the measurement relocated,
+  rather than resolved, is the first bullet above: the router, not the writer.**
 - **The loop has no cold-context correctness reviewer `[real, promotion-gated]`.** `verify` is artifact conformance
   by design, `debug` is on-fail only, `align` is periodic and not per-item — so a change that is logically wrong
   but passes its own tests and matches its own changelog goes straight to `commit`. Cognition's Code-Review-Loop is
   the measured counter-pattern (~2 bugs/PR, ~58% severe) and is **read-only**, so it does not touch the
   single-writer rule D178 upheld; it fits as a leaf agent. Held out of Phase 11 on purpose — a reviewer is worth
   nothing while the workers are not running their own instructions. **That condition is now met: `11e` is green
-  (D179), so this is promotable** — the next phase's first candidate, alongside `11f`.
+  (D179), so this is promotable** — and with `11f` measured and Phase 11 closed (D180), it is now **the** first
+  candidate for what follows, alongside the fan-out-controller question in the first bullet.

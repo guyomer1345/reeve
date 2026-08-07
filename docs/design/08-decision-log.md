@@ -5640,3 +5640,104 @@ its own commit `5f52739` (the two-commit carve-out working unprompted); `scripts
 five meta-gates green. **Discharges D178's calls 1–6** and leaves **11f** — the writer's scope — open with its
 first real numbers attached. → `11` (Phase 11 status), `10` (roster + the D84 amendment), `07` (the open
 tensions, now measurable), `01` (the dispatch rule as shipped).
+
+## D180 — Phase 11f MEASURED: the writer is right-sized, the ROUTER is the constrained window — and the instrument that said otherwise was wrong **[DECIDED — 11f MEASURED 2026-08-08 on four items driven end to end; Phase 11 CLOSED. Neither of D178's two fixes is adopted, and the reason is data, not preference. Three shipped defects were found by driving and fixed]**
+11f existed to take one attribution against the fixed system — discovery-read cost vs production-write cost,
+re-read ratio, off-`files_touched` reads — and then choose between two opposite fixes. The attribution was taken.
+It chose neither, and the first thing it found was that **the measurement itself was wrong**.
+
+**The instrument was over-counting, twice.** Both defects inflate exactly the number D178/D179 reasoned from.
+1. **One API response is written as SEVERAL transcript records** — one per content block — each repeating the whole
+   response's `usage`. Summing over records multiplies `cache_creation` by the block count. `execute` on the 11e
+   drive was never 335.6k fed in: it is **119.1k**. `document` 175.0k → **45.6k**; `research` 151.7k → **48.6k**.
+   `written` was barely affected (partial records carry partial counts, only the last carries the total — which is
+   why the aggregation is MAX within a response, not first-wins). Grouped on `message.id`, falling back to
+   `requestId` then the record `uuid`, so an unknown shape degrades to the old over-count rather than silently
+   dropping turns.
+2. **`cache_creation` double-counts a stall.** That same `execute` had one **659-second gap**, and the next call
+   wrote **55,518 tokens** — its whole prefix again, past the prompt cache's 5-minute TTL. That single stall is
+   **47% of its "fed in"**. The other three drives never stalled and their `fed in` ≈ their peak context. So
+   `cache_creation` is a *billing* proxy, not a "how much material was this worker given" proxy; the material
+   measures are peak context and the tool-level split. The instrument now names stalls under the cost table.
+
+So the number that opened this phase describes a worker whose context actually peaked at **60.5k**, ~13k of it
+material it read.
+
+**The attribution, four items, 3→11 declared files, all driven to commit on the fixed package.**
+
+| item (plan files) | fed in | peak | boot | written | produced | discovery | disc:prod | reads | off-plan | re-read |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ROADMAP-4 `__version__` (3) | 39.8k | 39.7k | 9.5k | 11.5k | 2.8k | 7.7k | 2.8x | 7 | 1 | 0% |
+| ROADMAP-5 CLI (4) | 49.4k | 51.5k | 7.2k | 15.7k | 4.9k | 9.2k | 1.9x | 7 | 1 | 0% |
+| ROADMAP-3 `max_length` | 119.1k† | 60.5k | 10.0k | 24.0k | 5.5k | 10.4k | 1.9x | 8 | — | 12% |
+| ROADMAP-6 package split (11) | 57.6k | 59.9k | 7.0k | 29.0k | 7.0k | 9.5k | 1.4x | 7 | 0 | 0% |
+
+† 55.5k of it is the stall re-write. **`off-plan` counts PRODUCT reads only** — the loop's own `plan.md` /
+`promises.json` / `checks.env` are excluded, and that exclusion is load-bearing: scored in, they made `execute`
+read 43–57% off-plan, which looks exactly like a writer hunting for context nobody gave it. Every one of those
+reads was a file the worker is *told* to read and which a plan never lists in its own `Files touched` table.
+
+***Rejected — read-dominated ⇒ `planner` under-supplies context (D134's resolution).*** Discovery is **flat**:
+7.7k–10.4k, seven or eight reads, across a 3.7x spread in item scope. Re-reads are **0% in three of four**.
+Off-plan product hunting is **one read** in each of the two items that had any (both a test file the plan forgot
+to name) and **zero** on the largest item. The writer is not casting about, so there is nothing for a
+better-supplied plan to fix — and the supply would be paid for in the wrong window (below).
+
+***Rejected — write-dominated ⇒ a plan-size budget splitting on the D91 predicate, serially.*** Production **is**
+the half that scales (2.8k → 7.0k produced; 11.5k → 29.0k written), but **sub-linearly** — 3.7x the scope buys
+2.5x the output — and it lands nowhere near a ceiling: the largest writer peaked at **59.9k**. Against that,
+splitting pays **7–10k of `boot` per extra dispatch** (the fixed cost of a worker existing, measured on every
+dispatch here) plus extra turns in the window that *is* near its ceiling. The D178 re-open trigger for within-item
+parallelism is untouched and still stands; this rejects *serial* splitting too, on cost.
+
+**What the data says instead — the constraint is the ROUTER, not the writer.** One item consumes **98k–179k of
+the orchestrator's own window**, and the router is **43–53% of every drive's fed-in tokens**. Put on one axis for
+the first time: an **inline** node costs the router 9–29k, a **dispatched** one costs it 0.3–2.6k. That is the
+dispatch rule's claim, measured — and the exception is honest: `research` costs the router +22.5k, because its
+findings are read there by design. The most expensive inline node is **`planner` itself** (+26.6k, +16.0k,
++49.2k, +38.1k across the four drives), consistently **above `verify`** (+10.6k, +20.6k, +20.6k). So the first
+diagnosis' remedy would have loaded the constrained window to relieve the unconstrained one.
+
+**This does not become a fix in this slice, deliberately.** `planner` and `verify` are inline *because they fan
+out*, and a leaf cannot spawn (D84) — so "move them out" is not an edit, it is D27's two-level-agent topology
+reopened. What changes is that `07`'s inline-`verify` tension is no longer unmeasured, and it is no longer only
+about `verify`. **Phase 11 closes here**; the successor candidates are that tension and the cold-context reviewer,
+which `11e` unblocked.
+
+**Three shipped defects, found by driving, fixed and re-proven (not one of them reachable by reading).**
+- **`/update` renamed the project it was updating.** `render_brief` filled `<project>` from the checkout
+  directory's basename while `/start` had filled it with the project's real name. Every update on such a project
+  reported the brief as a `LOCAL-EDIT` — "local edit would be LOST", demanding `--confirm-overwrite` — over a
+  difference the package invented itself, and an apply would have renamed the project. A false alarm on the exact
+  flag that protects real local edits is worse than no alarm: it teaches the operator to pass it. `config.project`
+  is now the source (basename the fallback), with `schemas-runtime.md` as its owner and `/start` told to write it.
+- **`checks.sh --fix` handed the loop's own manifests to the stack formatter.** The `commit` skill scopes `--fix`
+  to the item's *staged* files, which include `.workflow/items/<id>/promises.json`; `ruff format` force-parses an
+  explicitly-named file as Python whatever its extension and wrote a **magic trailing comma** into it — invalid
+  JSON, and that manifest is what `check_promise_coverage.py`/`check_criterion_discharge.py` parse. Reproduced
+  independently on a real manifest rather than taken on the drive's word: both gates then exit 2 with "cannot
+  parse manifest", so the fail-closed contract **held** and the damage is a self-inflicted commit stall, not a
+  silent gate defeat. Fixed in the shipped runner (a formatter has no business in `.workflow/`/`.claude/` for any
+  stack, so the filter is stack-agnostic and mechanical rather than a rule `commit` must remember — D117);
+  withheld paths are named on stderr.
+- **The instrument's own two over-counts**, above.
+
+*Rejected:* **acting on the D179 numbers** (they were 2.8–3.5x high — the whole reason 11f re-measures rather than
+reasons); **folding test/gate output into "discovery"** (it is feedback on work done, not context for work not
+done, and folding it in blames the planner for a test suite's verbosity); **scoring `.workflow/` reads against the
+plan** (see above); **counting only `Read` as a read** (a worker can `cat` its way through a repo, so read-shaped
+Bash counts as discovery); **fixing `checks.sh` in the `commit` skill's prose** instead of the runner; and
+**building the router fix here** — the measurement says where the constraint is, it does not say the topology
+question is answered.
+
+*Evidence:* three fresh fixtures forked from the migrated 11e drive — `~/drive-11f-s` (`ROADMAP-4`, committed
+`1c19688`), `~/drive-11f-m` (`ROADMAP-5`, `e01e55b`), `~/drive-11f-l` (`ROADMAP-6`, `fab043d`) — each seeded with
+one item and driven headless to its commit, plus the re-measured 11e drive. Fidelity held throughout: **8/8
+dispatches namespaced, 0 loop nodes on a general worker, 0 nested spawns**, all three trees clean and green
+(799 / 877 / 1012 tests in the fixtures). Two of the three drives were cut mid-item by an account session limit
+and resumed in a second session, so their router *totals* sum two windows; the comparable figure is the
+per-session peak (106.3k / 98.4k). **Scope caveat, stated rather than implied:** one small fixture project (a
+79-line library) — what generalizes is the *shape* (flat discovery, own-output dominance, a fixed ~8k boot, the
+router's share), not the absolutes; on the large `agentic-cyber` tree the same node peaked at 220.3k. `901` tests
+pass (`899`→`901`, +16 across the slice), all five meta-gates green. **Closes Phase 11.** → `11` (11f + phase
+status), `07` (both tensions re-stated against real numbers), `10` (the D84 annotation).

@@ -55,6 +55,16 @@ own `.claude-plugin/marketplace.json` (D125). The repo is **both** the construct
   `11`'s `### Phase 11`** — the three files are `agents/` on disk, their `tools:` frontmatter carries the two
   prose invariants (no `Task`/`Agent`, and no web tools on `execute`/`create-demo`), and the sandbox gate moved to
   `loop.md` because a dispatched agent's body is the *worker's* context and the router never reads it.
+- **Confirmed by D180 (2026-08-08) — the split is worth what it claims, and the next pressure is on the *skill*
+  side.** Four items driven end to end put both mechanisms on one axis: a **dispatched** node costs the router
+  **0.3–2.6k** of its own window, an **inline** one **9–29k** (`research` excepted at +22.5k — its findings are
+  read in the hub by design). So "an agent returns a thin pointer" is now a measurement, not a premise. The same
+  numbers put the strain where D84 did not look: the router carries **43–53%** of a drive's fed-in tokens and
+  **`planner`** is its most expensive inline node — *above* `verify`. That does not reclassify anything here
+  (both are fan-out controllers, and a leaf cannot spawn), and D180 deliberately did not build a fix; it is
+  logged in `07` as the fan-out-controller question. **The token figures in the D178 amendment above — including
+  `document`'s 40.0k — predate D180's correction of the instrument (2.8–3.5x over-count); the classification they
+  supported is unaffected, but the corrected numbers live in D180.**
 
 ## The adjudicate pattern **[DECIDED — D24]**
 One base skill `adjudicate` (gather views → judge → confidence-gate → loop/escalate), specialized by

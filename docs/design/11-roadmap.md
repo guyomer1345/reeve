@@ -1025,7 +1025,7 @@ navigation is the real first cost) · **model + effort routing** (a cost optimiz
 the *arbiter input contract* (the component exists nowhere; its substance is `prioritize`'s) · *`@import`-survives-
 `/compact`* (the package uses no imports).
 
-### Phase 11 — Dispatch fidelity: make the shipped roles actually reach the workers **[11a–11e BUILT + DRIVEN 2026-08-07 (designed D178, built D179); 11f OPEN. Opened by measurement of a real drive, not by a premise re-check — and closed the same way: the exit test is a real-model drive, not an argument]**
+### Phase 11 — Dispatch fidelity: make the shipped roles actually reach the workers **[COMPLETE — 11a–11e BUILT + DRIVEN 2026-08-07 (designed D178, built D179); 11f MEASURED 2026-08-08 (D180), which chose NEITHER of the two fixes it was scheduled to decide between and relocated the constraint to the router. Opened by measurement of a real drive, not by a premise re-check — and closed the same way]**
 Phase 10 closed with **no successor declared**. This is it, and it was not chosen from the deferred menu — it was
 **found**. A design question about whether one-execute-agent-and-wait is right *practice* (it is — D178) required
 measuring a real drive to size the writer, and the measurement found that **the package's capability layer is not
@@ -1036,6 +1036,10 @@ of those nodes that is a declared agent. Full finding, cause and rejected altern
 *This phase supersedes the `[stageable]`/`[later]` framing of the **D84 reclassification** wherever this doc still
 carries it. D84's deferral rested on "the context saving can't be measured until the loop runs"; it ran, and the
 number is 191.3k tokens per `execute` dispatch. It is no longer a file move — it is a dispatch-mechanism fix.*
+*(That 191.3k, and every per-dispatch token figure predating **D180**, came from an instrument that summed the
+counters over transcript records rather than API responses and was therefore **2.8–3.5x high**. The correction
+does not touch this phase's premise — the roles were not reaching the workers, which is a count of dispatches,
+not of tokens — but the corrected figures live in **D180**, not here.)*
 
 - **11a — declare the leaf agents.** **DONE (D179)** — the three are `agents/` files, `Route` stripped, with
   `tools:` carrying both invariants (no `Task`/`Agent`, no web). Two things the move forced: the contract linter
@@ -1056,21 +1060,24 @@ number is 191.3k tokens per `execute` dispatch. It is no longer a file move — 
   worker, 0 nested spawns**, and dispatch prompts down from **2794–9663 chars to 289–1188**. The drive also found
   two defects in this slice's own work — the fix had blown the always-loaded doc budget, and `dev-reinstall.sh`
   was silently shipping stale bytes into every drive. Both fixed. **[core]**
-- **11f — THEN re-measure the writer's scope. THE ONLY PART STILL OPEN.** `planner` has **no sizing rule** — but
-  a scoped `execute` with no web tools may burn materially less, and the attribution
-  (discovery-read cost vs production-write cost, re-read ratio, off-`files_touched` reads) must be taken against
-  the fixed system. Two diagnoses, opposite fixes: read-dominated → `planner` under-supplies context (D134's
-  resolution); write-dominated → a plan-size budget splitting on the D91 predicate, **serially**. **The fixed
-  system's first numbers are in (D179) and they say READ-dominated** — `execute` 335.6k fed in against 24.1k
-  written, `document` 175.0k vs 15.7k — which points at the first diagnosis. One item is not a sample; this
-  increment takes it properly, and it is deliberately not acted on until then. **[core]**
+- **11f — THEN re-measure the writer's scope.** **DONE (D180) — and it chose NEITHER fix.** Four items driven end
+  to end (3→11 declared files). First finding: **the instrument was over-counting 2.8–3.5x** (one API response is
+  written as several transcript records, each repeating its `usage`) and **a single 659s stall re-cached a whole
+  prefix** past the 5-minute TTL — so `execute` was never 335.6k fed in; it is **119.1k**, over a context that
+  peaked at **60.5k**. The attribution itself: **discovery is flat** (7.7–10.4k, 7–8 reads, whatever the item
+  size), **re-reads 0%** in three of four, and off-plan *product* reads are **one** — so `planner` is not
+  under-supplying. Production scales but **sub-linearly** and peaks at 59.9k, while every extra dispatch costs a
+  fixed **7–10k of boot** — so a plan-size budget would cost more than it saves. **What the numbers do say: the
+  ROUTER is the constrained window** — 98–179k per item, 43–53% of all fed-in tokens, an inline node costing it
+  9–29k against a dispatched one's 0.3–2.6k, and `planner` its most expensive inline node (above `verify`).
+  That is `07`'s tension, now measured; it does not become an edit here, because a leaf cannot spawn. **[core]**
 
-**Not in scope, deliberately:** the **cold-context reviewer** (Cognition's Code-Review-Loop — the loop has no
-per-item correctness review: `verify` is conformance-only by design and `debug` is on-fail only). It is a real gap
-and a *read-only* addition that does not touch single-writer, but it was worth nothing while the workers weren't
-running their own instructions — **that condition is now met (11e is green), so it is promotable**: it is the
-first candidate for whatever follows this phase, alongside 11f. Still out: **within-item parallel writers**,
-rejected in D178 with a stated re-open trigger.
+**Phase 11 is CLOSED.** Its successors are **not in it** and are named rather than assumed: the **cold-context
+reviewer** (Cognition's Code-Review-Loop — the loop has no per-item correctness review: `verify` is
+conformance-only by design and `debug` is on-fail only), which was worth nothing while the workers weren't running
+their own instructions and is **promotable now that 11e is green**; and the **inline-node topology question** that
+11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
+stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
@@ -1141,5 +1148,9 @@ advisory in practice. It supersedes the `[stageable]`/`[later]` framing of the *
 this doc still carries it. **`11a`–`11e` are BUILT + DRIVEN (D179, same day) and the exit test is green** — the
 three heavy leaves are declared agents, the brief carries the mechanism rule, a blocking gate enforces it, the
 measurement is repeatable, and a real-model drive of a full item produced **4/4 namespaced dispatches, zero on a
-general worker**, with dispatch prompts collapsing from thousands of characters to hundreds. **`11f` — the
-writer's scope — is the one part still open**, and it now has its first honest numbers to work from.
+general worker**, with dispatch prompts collapsing from thousands of characters to hundreds. **`11f` then measured
+the writer's scope across four items and CLOSED the phase (D180) by choosing neither of its two scheduled fixes:**
+the instrument itself was 2.8–3.5x high, the writer's discovery is flat with item size and its production scales
+sub-linearly, and the constrained window turns out to be the **router's** (43–53% of a drive's fed-in tokens,
+98–179k per item) — where an inline node costs 9–29k against a dispatched node's 0.3–2.6k, and `planner` outweighs
+`verify`. That question is logged in `07`, not scheduled here.
