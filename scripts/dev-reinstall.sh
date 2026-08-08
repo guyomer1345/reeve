@@ -46,6 +46,30 @@ dirty=""
 if ! git -C "$root" diff --quiet 2>/dev/null || ! git -C "$root" diff --cached --quiet 2>/dev/null; then
   dirty=" (+ uncommitted changes — the install copies the WORKING TREE, not HEAD)"
 fi
+# A linked worktree must NEVER become the registered marketplace. `marketplace add` binds a
+# `source: directory` marketplace to an ABSOLUTE PATH under the name in marketplace.json —
+# and that name is identical in every checkout of this repo, so adding from a worktree does
+# not create a second marketplace, it silently REBINDS the only one. Merge the worktree,
+# delete it, and the registered path dangles: the plugin loses its marketplace and vanishes
+# from `/plugin`, from skills, agents and commands, on every project on the machine. That is
+# not a hypothetical — it happened here on 2026-08-06, and the install survived only because
+# it is a copy in the CLI's cache that nothing could reach.
+#
+# Refuse rather than silently redirecting to the main tree: installing main's bytes when the
+# caller asked for this worktree's would be a different lie, of exactly the kind this script
+# exists to defeat. `--allow-worktree` keeps the deliberate case open.
+common="$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+gitdir="$(git -C "$root" rev-parse --path-format=absolute --git-dir 2>/dev/null || true)"
+if [ -n "$common" ] && [ -n "$gitdir" ] && [ "$common" != "$gitdir" ] \
+   && [ "${1:-}" != "--allow-worktree" ]; then
+  echo "refusing to install from a linked worktree: $root" >&2
+  echo "  the marketplace would be bound to a path that dies with the worktree, and the" >&2
+  echo "  plugin disappears everywhere the moment it is removed." >&2
+  echo "  install from the main working tree instead: $(dirname "$common")" >&2
+  echo "  or pass --allow-worktree, and re-run this from the main tree before deleting it." >&2
+  exit 1
+fi
+
 echo "==> reinstalling $plugin from $root @ $head_sha$dirty"
 
 # The marketplace entry may already point here from a previous run; `add` is what picks
@@ -79,6 +103,29 @@ fi
 echo "==> installed. Roster the install now carries:"
 claude plugin list 2>/dev/null | grep -A 6 "$plugin" || true
 echo "==> source tree was $root @ $head_sha$dirty"
+
+# Print what the marketplace is ACTUALLY bound to, rather than assuming it is $root. Same
+# rule as the roster line above: a wrong binding should be visible, not inferred — and the
+# binding is the thing that, when it points somewhere that later disappears, takes the whole
+# plugin with it.
+bound="$(python3 - "$plugin" <<'PY' 2>/dev/null || true
+import json, os, sys
+cfg = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+try:
+    known = json.load(open(os.path.join(cfg, "plugins", "known_marketplaces.json")))
+except Exception:
+    sys.exit(0)
+e = (known or {}).get(sys.argv[1]) or {}
+print(e.get("installLocation") or ((e.get("source") or {}).get("path") or ""))
+PY
+)"
+if [ -n "$bound" ]; then
+  if [ "$bound" = "$root" ]; then
+    echo "==> marketplace bound to $bound"
+  else
+    echo "==> WARNING: marketplace is bound to $bound, NOT $root" >&2
+  fi
+fi
 
 # ---- keep-2 cache prune (D164 call 4) -------------------------------------------------
 # With `version` deleted from plugin.json the cache key is the COMMIT SHA, so every update

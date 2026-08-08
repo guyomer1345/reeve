@@ -232,11 +232,19 @@ def _marketplace_anchor(mkt):
       directory           -> the source tree itself, so `git rev-parse HEAD`
     Probed in that order rather than switched on `source.source`, so a source kind the CLI
     adds later still resolves if it leaves either anchor behind.
+
+    THREE outcomes, not two. `(None, location)` is the registered-but-GONE case: the source
+    tree the package was installed from is no longer on this disk. Folding it into
+    `(None, None)` would read to the caller as "no anchor to compare against" and go quiet,
+    which is precisely backwards — an install whose source has vanished can never be
+    updated again, and silence lets it read as current forever.
     """
     known = _read_json(os.path.join(_config_dir(), "plugins", "known_marketplaces.json"))
     loc = ((known or {}).get(mkt) or {}).get("installLocation") if mkt else None
-    if not loc or not os.path.isdir(loc):
+    if not loc:
         return None, None
+    if not os.path.isdir(loc):
+        return None, loc
     gcs = _read(os.path.join(loc, ".gcs-sha"))
     if gcs:
         sha = gcs.decode("utf-8", "replace").strip()
@@ -317,7 +325,22 @@ def detect_staleness(cwd):
     # hop A — the install against the source it was installed from.
     installed = str(entry.get("gitCommitSha") or "")
     anchor, loc = _marketplace_anchor(mkt)
-    if installed and anchor and not _same_sha(installed, anchor):
+    if loc and anchor is None:
+        # The source is registered and GONE — a checkout that was moved, renamed or deleted
+        # (a throwaway one is the easy way to do this by accident: bind the package to it,
+        # then delete it). The install keeps working, because it is a COPY, so nothing
+        # visibly breaks; what breaks is every route to a newer one. Keyed on the dead path
+        # so re-pointing it silences this by itself, like the SHA-pair hops.
+        if _stale_once(root, "reinstall", "missing:" + loc):
+            notes.append(
+                "The source this workflow package was installed FROM no longer exists on "
+                "this disk: `%s` is still registered as its marketplace, and that path is "
+                "gone. The install itself keeps working — it is a COPY — but nothing can "
+                "update it any more, and it will keep reading as current however far the "
+                "real source moves ahead. Re-point it at a checkout that exists and "
+                "reinstall: `claude plugin marketplace add <path-to-checkout> && claude "
+                "plugin install %s`." % (loc, PLUGIN_NAME))
+    elif installed and anchor and not _same_sha(installed, anchor):
         if _stale_once(root, "reinstall", installed[:12] + ".." + anchor[:12]):
             behind = _git(["-C", loc, "rev-list", "--count", installed + ".." + anchor])
             gap = (" — the source is %s commit%s ahead" %

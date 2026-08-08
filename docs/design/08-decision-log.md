@@ -5741,3 +5741,62 @@ per-session peak (106.3k / 98.4k). **Scope caveat, stated rather than implied:**
 router's share), not the absolutes; on the large `agentic-cyber` tree the same node peaked at 220.3k. `901` tests
 pass (`899`→`901`, +16 across the slice), all five meta-gates green. **Closes Phase 11.** → `11` (11f + phase
 status), `07` (both tensions re-stated against real numbers), `10` (the D84 annotation).
+
+---
+
+## D181 — the marketplace binding is a single mutable pointer to an absolute path, and a throwaway worktree can silently take it **[DECIDED + BUILT 2026-08-08 — from a real failure on this machine, where the plugin disappeared from every project at once. Two mechanisms: one meta-only guard at the cause, one shipped detector at the symptom. Extends the hop-A design with the third state it never had]**
+On 2026-08-06 `scripts/dev-reinstall.sh` was run from inside the build worktree
+`.claude/worktrees/phase9-capture`. It resolves its own directory and hands that to `claude plugin marketplace
+add` — so the marketplace was bound to the worktree's absolute path. The worktree was then merged and deleted,
+and **the plugin vanished from `/plugin`, from skills, agents and commands, on every project on the machine.**
+
+Two facts make that a silent single-point failure rather than an obvious mistake:
+
+- **The marketplace name is identical in every checkout of this repo** (it comes from `.claude-plugin/marketplace.json`).
+  So adding from a worktree does not create a *second* marketplace beside the real one — it **rebinds the only
+  one**, with no prompt and no warning. The script's own comment blessed exactly this ("`add` is what picks up a
+  moved/renamed checkout"), which is right for a moved checkout and wrong for a disposable one.
+- **A `source: directory` marketplace stores an absolute path with no liveness contract.** Nothing re-checks it,
+  nothing warns when it dies. The installed bytes survive — the install is a *copy* under the CLI cache, which is
+  why nothing appeared to break at install time — but every route to a newer copy is severed.
+
+- **Call 1 — `dev-reinstall.sh` refuses to install from a linked worktree** (`--git-common-dir` ≠ `--git-dir`),
+  naming the main working tree to use instead. `--allow-worktree` keeps the deliberate case open with the
+  consequence printed. It also now prints **what the marketplace is actually bound to** at the tail, beside the
+  roster line, on the same principle: a wrong binding should be visible, not inferred.
+- **Call 2 — hop A gains a third state: registered-but-GONE.** `_marketplace_anchor` returned `(None, None)` both
+  when there was no anchor to read *and* when the anchor's whole location had disappeared, and the caller reads a
+  `None` anchor as "nothing to compare" and stays quiet. So the one condition that is **unrecoverable without
+  human action** was the one condition the detector was silent about, and an install whose source is gone reads as
+  current forever. It now returns `(None, location)` for that case and says so, naming the dead path, warn-once
+  keyed on it so re-pointing silences it by itself.
+- **Rejected — silently redirecting the install to the main tree** when run from a worktree. Installing main's
+  bytes when the caller asked for this worktree's is a *different* lie, of exactly the kind this script exists to
+  defeat (D151). Refusing states the problem; redirecting hides it.
+- **Rejected — shipping a "your marketplace is a worktree" detector in the product.** The root cause is a
+  maintainer script, not user behaviour, and the dangling-path warning already covers the released user who moves
+  or deletes a checkout. Ship the symptom detector, keep the cause guard meta-only.
+- **A corollary worth stating, because it raised a false alarm.** The install pins a **commit SHA**, and the SHA it
+  pinned (`15af534`) was **orphaned by a rebase 18 minutes later** — the worktree branched at `9e4dcb6`, `main`
+  moved two commits, so the ff-only merge was impossible and the commit was rebased to `f8d4f7f` before landing.
+  `merge-base --is-ancestor` therefore says "not an ancestor" and reads as a regression risk. It is not one: the
+  rebased commit is a strict **superset** (194 vs 186 lines into the register, 10 vs 8 into `07`), and every line
+  that later disappeared is a supersession, not a loss. **The right test after a rebase is content-containment,
+  not ancestry** — and the second-order lesson is that a reinstall must follow any rebase, because the pin can
+  outlive the commit.
+
+*Evidence — reproduced, not reasoned:* the failure was reproduced **twice live** while fixing it. The second time
+was accidental and is the better evidence: running the *worktree's own* copy of `dev-reinstall.sh` (still at
+`15af534`, before the guard) silently rebound all three registries — `known_marketplaces.json`, `settings.json`'s
+`extraKnownMarketplaces`, and the install's `gitCommitSha` — back to the worktree, from a command that looked like
+an ordinary reinstall. **The failure needs no unusual conditions; it needs one `cd`.** The guard was then proven on
+a throwaway repo with a real linked worktree: refuses from the worktree naming the main tree, proceeds from the
+main tree, proceeds under `--allow-worktree`. Three tests cover hop A's new state (fires and names the dead path ·
+warn-once holds · a location that exists but yields no SHA stays as silent as before). `904` tests pass
+(`901`→`904`), all five meta-gates green. The orphaned worktree is removed and the binding is repaired to the
+repo root — which the new tail line now states rather than leaving to be assumed.
+**Builds on:** **D164/D165** (the two-hop detector and its warn-once marker — this adds a state to hop A, it does
+not change the design), **D151** (the staleness class, and the "no-op that reports success" failure mode this
+inherits its refusal principle from), **D125** (the repo as its own marketplace, which is *why* the name collides
+across checkouts).
+→ Files: `product/hooks/session_start.py`, `product/scripts/test_session_start.py`, `scripts/dev-reinstall.sh`.

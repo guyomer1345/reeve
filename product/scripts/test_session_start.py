@@ -343,6 +343,50 @@ def test_hop_a_is_silent_when_the_install_matches_the_source(tmp_path):
     assert _run(proj, source="startup", config_dir=cfg).stdout.strip() == ""
 
 
+def test_hop_a_says_so_when_the_source_no_longer_exists(tmp_path):
+    """The third state, and the one that used to be silent. A marketplace bound to a path
+    that has since gone — a moved, renamed or deleted checkout — leaves the install
+    unreachable by any update, and the detector's own anchor is what disappeared. Measured:
+    the package was bound to a throwaway worktree, the worktree was merged and removed, and
+    the plugin vanished from every project on the machine while this hook said nothing."""
+    gone = tmp_path / "deleted-checkout"                 # deliberately never created
+    cfg = _cli_config(tmp_path / "cc", installed_sha="a" * 40, version="aaaaaaaaaaaa",
+                      location=gone)
+    proj = _target(tmp_path / "proj")
+
+    r = _run(proj, source="startup", config_dir=cfg)
+    assert r.returncode == 0
+    ac = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert "no longer exists on this disk" in ac
+    assert str(gone) in ac                               # names the dead path, not just the fact
+    assert "marketplace add" in ac
+    assert "INSTALLED workflow package is NOT the source" not in ac   # not the drift hop
+    assert json.loads((proj / MARKER).read_text())["reinstall"] == "missing:" + str(gone)
+
+
+def test_the_missing_source_warning_fires_once_not_every_session(tmp_path):
+    """Warn-once holds for the new state too, on the same marker — a detector that repeats
+    itself every session is the noise this one was built to avoid being."""
+    gone = tmp_path / "deleted-checkout"
+    cfg = _cli_config(tmp_path / "cc", installed_sha="a" * 40, version="aaaaaaaaaaaa",
+                      location=gone)
+    proj = _target(tmp_path / "proj")
+    assert "no longer exists" in _run(proj, source="startup", config_dir=cfg).stdout
+    assert _run(proj, source="startup", config_dir=cfg).stdout.strip() == ""
+
+
+def test_a_source_that_exists_but_is_not_a_repo_stays_silent(tmp_path):
+    """The boundary the new state must not swallow: the path IS there, it just yields no
+    SHA (no `.gcs-sha`, not a git repo). There is nothing to compare and nothing broken, so
+    this stays as quiet as it always was."""
+    loc = tmp_path / "plain-dir"
+    loc.mkdir()
+    cfg = _cli_config(tmp_path / "cc", installed_sha="a" * 40, version="aaaaaaaaaaaa",
+                      location=loc)
+    proj = _target(tmp_path / "proj")
+    assert _run(proj, source="startup", config_dir=cfg).stdout.strip() == ""
+
+
 def test_hop_b_fires_when_the_project_is_behind_the_install(tmp_path):
     """The axis that can LIE: `/update` is bounded by the install, so a project can be
     behind an install that is itself current, and only this hop says so."""
