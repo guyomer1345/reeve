@@ -149,6 +149,11 @@ writing new machinery here, stop: this is `align` with a different base.
 The updated findings register + the routed tickets + the new scan anchor (`.workflow/align/anchor.json`, carrying
 `describes_sha` in org mode), and a one-screen summary of what was scoped, found, and deferred.
 
+**Stage the maintenance receipt with them** — `.workflow/maintenance/<item-id>.json`
+`{ item, kind: "align", summary }`, deleting any earlier receipt as you write yours (`shared/schemas.md`
+§ maintenance-receipt). A scan has no `verify`, so the receipt is the only thing that tells the commit gate this
+item is verify-free by design rather than a verify that was skipped — without it the commit **blocks**.
+
 ## Route
 → `commit` (the mechanical auto-fixes + the new anchor). Each *semantic* finding leaves as a `create-issue`
 ticket (the side-door) → `prioritize`. Injected by `prioritize` on the drift threshold; see `loop.md`

@@ -186,5 +186,130 @@ def test_building_no_phase_still_blocks(tmp_path):
     assert "no item is identifiable" in r.stdout
 
 
+# --- maintenance items: a verify-free motion needs a LEGAL commit, not a faked verdict ---
+
+def _receipt(root, ident, kind="align", item=None, raw=None):
+    d = root / ".workflow" / "maintenance"
+    d.mkdir(parents=True, exist_ok=True)
+    body = raw if raw is not None else json.dumps(
+        {"item": ident if item is None else item, "kind": kind, "summary": "scan done"})
+    (d / ("%s.json" % ident)).write_text(body)
+
+
+def _commit_all(root, msg="c"):
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "commit", "-q", "--no-verify", "-m", msg], cwd=root, check=True)
+
+
+def test_maintenance_receipt_lets_a_verify_free_item_commit(tmp_path):
+    # loop.md § Maintenance items: `align` runs its own pass and flows STRAIGHT to commit — no
+    # planner/execute/verify, so there is no verdict to find. Before the receipt this had no legal
+    # commit at all: with current_item set the gate demanded a verdict, without it the gate failed
+    # closed on an unidentifiable item.
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "current_item": "MAINT-1", "node": "align"})
+    (root / ".workflow" / "align").mkdir()
+    (root / ".workflow" / "align" / "anchor.json").write_text('{"base_sha": "abc"}')
+    _receipt(root, "MAINT-1")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout
+
+
+def test_maintenance_item_without_a_receipt_still_blocks(tmp_path):
+    # The escape is the published marker, never the ABSENCE of a verdict — which is exactly what a
+    # skipped verify looks like too.
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "current_item": "MAINT-1", "node": "align"})
+    (root / ".workflow" / "align").mkdir()
+    (root / ".workflow" / "align" / "anchor.json").write_text('{"base_sha": "abc"}')
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1, "no receipt => the maintenance claim was never published"
+
+
+def test_unstaged_receipt_does_not_exempt(tmp_path):
+    # The marker must ride the commit under review. One sitting in the tree unstaged would be a
+    # standing exemption for every later commit — the stale-marker hole this design exists to avoid.
+    root = _repo(tmp_path)
+    _receipt(root, "MAINT-1")
+    _commit_all(root, "receipt lands")
+    _state(root, {"status": "building", "current_item": "MAINT-1"})
+    (root / "note.txt").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1, "a receipt from an earlier commit must not exempt this one"
+
+
+def test_unknown_kind_receipt_is_rejected_and_named(tmp_path):
+    root = _repo(tmp_path)
+    _state(root, {"status": "building"})
+    _receipt(root, "MAINT-1", kind="execute")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1, "only the loop's maintenance nodes may claim the exemption"
+    assert "Rejected receipt" in r.stdout and "execute" in r.stdout
+
+
+def test_receipt_not_matching_its_filename_is_rejected(tmp_path):
+    root = _repo(tmp_path)
+    _state(root, {"status": "building"})
+    _receipt(root, "MAINT-1", item="ITEM-9")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1
+    assert "does not match its filename" in r.stdout
+
+
+def test_unparseable_receipt_is_rejected(tmp_path):
+    root = _repo(tmp_path)
+    _state(root, {"status": "building"})
+    _receipt(root, "MAINT-1", raw="not json at all")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1
+    assert "not readable JSON" in r.stdout
+
+
+def test_receipt_does_not_excuse_a_staged_item_dir(tmp_path):
+    # A maintenance commit that ALSO stages a built item dir still has that item's verdict checked:
+    # `planner` mkdirs the dir, so something was built under it, and a built item is verified.
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "current_item": "MAINT-1"})
+    _receipt(root, "MAINT-1")
+    _verdict(root, "false")
+    _stage(root)
+    r = _run(root)
+    assert r.returncode == 1, "the receipt exempts the maintenance item, never a built one"
+    assert "FAILING" in r.stdout
+
+
+def test_pruned_item_dir_does_not_read_as_an_unverified_item(tmp_path):
+    # `document:audit`'s retention prune DELETES closed item dirs. Deleted paths are still listed by
+    # `git diff --cached --name-only`, so the prune used to re-derive every dir it had just deleted
+    # as an item under commit and block on the verdict it was deleting.
+    root = _repo(tmp_path)
+    _verdict(root, "true")
+    _stage(root)
+    _commit_all(root, "item lands")
+    subprocess.run(["git", "rm", "-r", "-q", ".workflow/items/ITEM-1"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout
+
+
+def test_prune_ridden_maintenance_commit_proceeds(tmp_path):
+    # The whole `document:audit` shape at once: a prune deletion plus its own receipt, mid-build.
+    root = _repo(tmp_path)
+    _verdict(root, "true")
+    _stage(root)
+    _commit_all(root, "item lands")
+    _state(root, {"status": "building", "current_item": "MAINT-2", "node": "document:audit"})
+    subprocess.run(["git", "rm", "-r", "-q", ".workflow/items/ITEM-1"], cwd=root, check=True)
+    _receipt(root, "MAINT-2", kind="document:audit")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))

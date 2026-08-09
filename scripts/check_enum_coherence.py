@@ -77,6 +77,19 @@ ENUMS = [
         "consumers": ["product/scripts/bus.py"],
         "consumer_re": {"product/scripts/bus.py": r"CONTROL_OPS\s*=\s*\(([^)]*)\)"},
     },
+    {
+        "name": "maintenance.kind",
+        "owner": "product/shared/schemas.md",
+        # the maintenance-receipt kinds (D182); anchors on `align` so it can't collide with
+        # the `kind:` enums above.
+        "owner_re": r"kind:\s*(align(?:\|[a-z:-]+)+)",
+        # verify_check.py is the DECIDER, not a restatement: a receipt whose kind is outside
+        # MAINT_KINDS is rejected, so a maintenance node the schema declares and the tuple
+        # omits is an item that can never commit — and `loop.md`'s straight-to-commit path
+        # says nothing is wrong. Exactly the checkpoint.kind/PARK_KINDS shape.
+        "consumers": ["product/templates/loop.md", "product/hooks/verify_check.py"],
+        "consumer_re": {"product/hooks/verify_check.py": r"MAINT_KINDS\s*=\s*\(([^)]*)\)"},
+    },
 ]
 
 # --- COUNT invariants --------------------------------------------------------
@@ -275,7 +288,10 @@ def declared_values(consumer_text, consumer_re):
     m = re.search(consumer_re, consumer_text, re.S)
     if not m:
         return None
-    return re.findall(r"['\"]([a-z][a-z-]*)['\"]", m.group(1))
+    # `:` is in the class because a value may name a node MODE (`document:audit`), not just a
+    # bare word — dropping it would silently parse that member out of the set and report a
+    # mismatch the code does not have.
+    return re.findall(r"['\"]([a-z][a-z:-]*)['\"]", m.group(1))
 
 
 def check_enums(read=_default_read):

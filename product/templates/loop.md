@@ -44,9 +44,9 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 | `document` | knowledge + Sessions updated | `commit` |
 | `commit` | snapshot made | `close-issue?` |
 | `close-issue` | issue closed (or no linked issue → skip) | `prioritize` (next item) |
-| `document:audit` | retention pass done (changes staged) | `commit` |
-| `align` | scan done (tickets filed via `create-issue`, fixes staged, anchor written) | `commit` |
-| `doc-budget` | over-budget doc trimmed or split-and-pointered (changes staged) | `commit` |
+| `document:audit` | retention pass done (changes + receipt staged) | `commit` |
+| `align` | scan done (tickets filed via `create-issue`, fixes + receipt staged, anchor written) | `commit` |
+| `doc-budget` | over-budget doc trimmed or split-and-pointered (changes + receipt staged) | `commit` |
 
 <!-- Every side door must be named ON the line below: the contract linter reads only the line that
      starts with "Side doors", so a door introduced on a continuation line is silently unrouted. -->
@@ -142,6 +142,14 @@ verify — then `close-issue?` (skip: no linked issue) → `prioritize`. `align`
 ordinary `create-issue` tickets (the side-door) and ride the normal queue; only its mechanical auto-fixes + the
 new scan anchor ride this commit. The three thresholds are **decoupled** — memory pressure ≠ drift risk ≠ doc
 size, and one shared threshold would make each of them fire for another's reason.
+
+**No verify means no verdict — and from outside, a verify-free item and a *skipped* verify look identical.** So the
+pass **stages a receipt in its own commit**: `.workflow/maintenance/<item-id>.json` (`{ item, kind, summary }`,
+`kind` = the maintenance node that ran). That receipt is what the commit gate accepts in place of a verdict; without
+it a maintenance item has **no legal commit at all**. It writes its own and **deletes any earlier one**, so the
+directory holds only the current commit's receipt and the history of past maintenance is that directory's git log.
+Never fake a trivial `pass: true` verdict instead — the console reads that first line as "verify passed"
+(`shared/schemas.md` § maintenance-receipt).
 
 ## Item-complete tail
 `verify`(pass) → `checkpoint:qa?` → `document` → `commit` → `close-issue?` → `prioritize`.

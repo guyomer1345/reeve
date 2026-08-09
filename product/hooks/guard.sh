@@ -94,7 +94,8 @@ if is_git commit; then
   # both the shape drift (a nested `position.item`, no top-level `current_item`) and the path drift
   # (a relocated runtime tree) that each left the old read empty and silently skipped the gate —
   # and cross-checks a runtime-resolved state.json. CONTRACT (shared/schemas.md · verify):
-  # `.workflow/items/<id>/verify-verdict.md`, first line exactly `pass: true|false`.
+  # `.workflow/items/<id>/verify-verdict.md`, first line exactly `pass: true|false` — or, for a
+  # maintenance item (no verify BY DESIGN), a staged `.workflow/maintenance/<id>.json` receipt.
   vmsg="$(python3 .claude/hooks/verify_check.py 2>&1)"; vrc=$?
   [ "$vrc" -eq 0 ] || block "${vmsg:-verify-before-commit could not run (python3?). Failing closed.}"
 fi

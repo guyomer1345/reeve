@@ -34,7 +34,8 @@ fi
 # It fails CLOSED and does not trust a single state.json key/path: it derives the item(s) from the
 # staged diff (immune to state.json shape/path drift) and cross-checks a runtime-resolved state.json.
 # CONTRACT (shared/schemas.md · verify): `.workflow/items/<id>/verify-verdict.md`, first line
-# exactly `pass: true|false`.
+# exactly `pass: true|false` — or, for a maintenance item (no verify BY DESIGN), a staged
+# `.workflow/maintenance/<id>.json` receipt (shared/schemas.md · maintenance-receipt).
 vmsg="$(python3 .claude/hooks/verify_check.py 2>&1)"; vrc=$?
 [ "$vrc" -eq 0 ] || block "${vmsg:-verify-before-commit could not run (python3?). Failing closed.}"
 

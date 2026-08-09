@@ -5800,3 +5800,71 @@ not change the design), **D151** (the staleness class, and the "no-op that repor
 inherits its refusal principle from), **D125** (the repo as its own marketplace, which is *why* the name collides
 across checkouts).
 → Files: `product/hooks/session_start.py`, `product/scripts/test_session_start.py`, `scripts/dev-reinstall.sh`.
+
+## D182 — a maintenance item had no legal commit: the gate could not tell "verify-free by design" from "verify was skipped", so the pass now says which, in the commit itself **[DECIDED + BUILT 2026-08-09 — from a real drive, where landing the first `align` scan needed a hand-written verdict to get past the gate. Two defects, one root cause. The escape is a committed receipt, deliberately not a `state.json` field]**
+
+`loop.md` § Maintenance items gives `document:audit` / `align` / `doc-budget` a **straight-to-commit** path — no
+`planner`/`execute`/`verify`, because there is no product-code change to plan and no runtime behaviour to verify.
+`verify_check.py` was never told. Under `status: building` it demands an identifiable item and a `pass: true`
+verdict for it, with `phase: bootstrap` the only escape — so a maintenance commit **blocked both ways**: with
+`current_item` set, *"no verify-verdict.md"*; with it null, *"no item is identifiable … fails closed"*. There was
+no value of `current_item` that let the commit through.
+
+**Same root, second defect:** `staged_item_ids()` derived items from `git diff --cached --name-only`, which lists
+**deletions**. `document:audit`'s retention prune deletes closed `.workflow/items/<id>/` dirs — so the prune
+re-derived every dir it had just deleted as an item under commit, went looking for the verdict inside it, and
+blocked on the file the same commit was deleting. Both defects are the gate reading a **non-build change as an
+unverified build item**.
+
+**The call.** A maintenance pass **stages a receipt in its own commit** — `.workflow/maintenance/<item-id>.json`
+`{ item, kind, summary }`, `kind` ∈ the three maintenance nodes — and the gate accepts that in place of a verdict.
+It is validated (parses · `item` equals the filename stem · known `kind`) and must be **staged in the commit under
+review**; a rejected receipt blocks with the reason named. Deletions are dropped from the staged derivation
+(`--diff-filter=d`). The pass deletes any earlier receipt as it writes its own, so the directory holds exactly one
+file and the history of past maintenance is that directory's git log.
+
+- **Rejected — a `state.json` marker (`phase: maintenance`), the obvious mirror of the bootstrap escape.** The
+  bootstrap escape is safe *because it fires once and then disappears forever*; maintenance **recurs for the life of
+  the project**. A volatile marker for a recurring motion re-arms on every threshold hit and, left stale by a
+  crashed pass or a resumed session, disarms verify-before-commit for the next **product-code** commit — the same
+  fail-open shape as the two drift vectors D129 exists to defeat. A marker carried in the commit cannot go stale,
+  and a human reviewing the diff can see it. (The proposal also assumed a `phase: normal-ops`; `phase` is
+  bootstrap-only and absent once the loop drives.)
+- **Rejected — a trivial `pass: true` verdict from the maintenance skills** (the workaround used to land the scan).
+  `project_state.py` derives an item's `verified` from that first line, so a courtesy verdict makes the console
+  report an item as **verified that never ran verify**. The anchors are evidence; an anchor that lies is worse than
+  an absent one. This is also why the receipt is a distinct artifact rather than a verdict variant.
+- **Rejected — the receipt under `.workflow/items/<id>/maintenance.md`** (the first sketch). That directory's
+  filenames are declared FIXED *because they are anchors*, and it entangles a verify-free item with `promoted.json`
+  prune semantics it can never satisfy — leaving maintenance dirs as permanent sediment, or inviting a second lying
+  marker to clear them. A separate namespace also makes the rule honest: a maintenance item is not an item with an
+  exemption, it is a different kind of thing under commit. Nothing exempts a **staged item dir** — `planner` mkdirs
+  that dir, so something was built under it, and a built item is verified rather than exempted.
+- **Rejected — making the receipt a forecast anchor.** An anchor firing for a node no chain named is read as a
+  **structural divergence**, and maintenance items are *injected* by `prioritize`, never forecast — so every routine
+  maintenance pass would re-forecast the tail.
+- **Rejected — a retention rule for the new tier.** Self-collection (each pass deletes the previous receipt) bounds
+  the directory at one file by construction, with no new `config.retention` key and no `retention.py` change. An
+  append-only tier with no collector would have been sediment by this project's own memory law.
+- **The `kind` set is registered as a real enum invariant** (`maintenance.kind`, the fifth), because
+  `verify_check.py`'s `MAINT_KINDS` is its **decider** and not a restatement — the `checkpoint.kind`/`PARK_KINDS`
+  shape exactly (D-gate). A node the schema declares and the tuple omits is an item whose receipt is rejected, so it
+  can **never commit**, while `loop.md` goes on routing it straight to `commit`; the drift is invisible from the
+  schema side. `declared_values()` had to admit `:` to parse a node **mode** (`document:audit`) — without it the
+  gate silently drops that member and reports a mismatch the code does not have.
+
+*Evidence — reproduced against the shipped gate, not reasoned:* restoring the pre-fix `verify_check.py` fails
+**6 of the 9 new tests**, including both reported repros (the `align` commit, and the prune commit blocking on the
+verdict it deletes). The other 3 pass on **both** versions and are the tightness tests that must never regress — a
+maintenance item **without** a receipt still blocks, an **unstaged** receipt exempts nothing, and a receipt does not
+excuse a staged item dir carrying a failing verdict. The defect was found by driving, not by reading: the first
+`align` scan on a real run could only be landed by hand-writing a verdict. `916` tests pass (`904`→`916`; 9 gate
+tests + 3 enum-drift tests), all five meta-gates green.
+
+**Builds on:** **D129** (the fail-closed verify-before-commit gate and its two drift vectors), **D139** (the
+bootstrap carve-out — this is the second escape, and it is deliberately shaped *unlike* it), **D133** (bootstrap
+state-publishing), and `loop.md` § Maintenance items, which promised the straight-to-commit path this makes legal.
+→ Files: `product/hooks/verify_check.py`, `product/scripts/test_verify_check.py`, `product/templates/loop.md`,
+`product/shared/schemas.md`, `product/skills/align/SKILL.md`, `product/agents/document.md`,
+`product/skills/prioritize/SKILL.md`, `product/commands/start.md`, `scripts/check_enum_coherence.py`,
+`scripts/test_check_enum_coherence.py`.

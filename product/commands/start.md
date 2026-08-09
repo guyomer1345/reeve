@@ -94,10 +94,11 @@ loop's normal `state.json` takes over when the motion ends.
        knowledge/      # code map                            (committed)
        decisions/      # decision-records = ADRs (append-only) (committed)
    ```
-   `.workflow/items/<id>/`, `.workflow/align/` and `.workflow/demo-approvals.json` are **not** scaffolded here —
-   `planner` `mkdir`s each item dir on demand, `align` `mkdir`s `.workflow/align/` on its first run (writing
-   `anchor.json`), and `check_demo_bundle.py --promote` writes the approvals file the first time a demo is
-   approved. All three are **committed** when they appear (the gitignore below is an allowlist of runtime paths,
+   `.workflow/items/<id>/`, `.workflow/align/`, `.workflow/maintenance/` and `.workflow/demo-approvals.json` are
+   **not** scaffolded here — `planner` `mkdir`s each item dir on demand, `align` `mkdir`s `.workflow/align/` on its
+   first run (writing `anchor.json`), each maintenance pass `mkdir`s `.workflow/maintenance/` when it stages its
+   receipt, and `check_demo_bundle.py --promote` writes the approvals file the first time a demo is
+   approved. All four are **committed** when they appear (the gitignore below is an allowlist of runtime paths,
    so a new durable file is committed by default — which is the right default for a ledger).
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
    `bundles/` (org mode's review bundles — regenerable from git at any time, so they are a hand-off artifact

@@ -16,6 +16,7 @@ SCHEMAS = """\
 - `verdict` — `{ outcome: approve|changes|reject, notes }`
 - inbox message is typed — `kind: verdict|intake|control` — one transport
 - **`kind: control`** — `{ op: reprioritize|pause|resume }` — honored at a boundary
+- `item` — the maintenance item's id · `kind: align|document:audit|doc-budget` — the node that ran
 """
 
 # A CODE consumer declares the set as a literal. The prose word-search is worthless
@@ -51,6 +52,18 @@ ROSTER_OK = "| checkpoint | skill | verdict (demo / qa / setup / reconcile) |"
 ROSTER_STALE = "| checkpoint | skill | verdict (demo / qa / setup) |"  # missing reconcile
 SHARED05_OK = "one typed inbox — verdict, intake, control — single consumer"
 SHARED05_STALE = "one typed inbox — verdict, intake — single consumer"  # missing control
+
+# The maintenance-receipt kinds (D182). verify_check.py is the DECIDER — a kind outside this
+# tuple is a receipt it rejects, so a node the schema declares and the tuple omits is a
+# maintenance item that can never commit, which `loop.md` promises is a straight-to-commit path.
+VERIFY_OK = '''\
+"""Shared verify-before-commit check. A maintenance pass may align, audit or trim."""
+MAINT_KINDS = ("align", "document:audit", "doc-budget")
+'''
+VERIFY_STALE = VERIFY_OK.replace(', "doc-budget")', ")")
+VERIFY_EXTRA = VERIFY_OK.replace(', "doc-budget")', ', "doc-budget", "vibes")')
+LOOP_OK = "| `document:audit` / `align` / `doc-budget` | maintenance due | `commit` |"
+LOOP_STALE = "| `document:audit` / `align` | maintenance due | `commit` |"  # missing doc-budget
 
 CODEMAP = "ARMS = [PythonArm(), JsTsArm(), GoArm(), JavaArm(), CSharpArm(), GenericArm()]  # precedence\n"
 ROADMAP_OK = "**Five precise arms built** — thread CLOSED (D77/D79)."
@@ -119,12 +132,15 @@ class Helpers(unittest.TestCase):
 
 
 class Enums(unittest.TestCase):
-    def _files(self, roster, shared05=SHARED05_OK, bus=BUS_OK):
+    def _files(self, roster, shared05=SHARED05_OK, bus=BUS_OK,
+               verify=VERIFY_OK, loop=LOOP_OK):
         return {"product/shared/schemas.md": SCHEMAS,
                 "product/skills/checkpoint/SKILL.md": CHECKPOINT,
                 "docs/design/10-roster.md": roster,
                 "docs/design/05-shared-state.md": shared05,
-                "product/scripts/bus.py": bus}
+                "product/scripts/bus.py": bus,
+                "product/hooks/verify_check.py": verify,
+                "product/templates/loop.md": loop}
 
     def test_clean_passes(self):
         self.assertEqual(e.check_enums(reader(self._files(ROSTER_OK))), [])
@@ -141,6 +157,25 @@ class Enums(unittest.TestCase):
         is how a non-idempotent op enters through the front door."""
         errs = e.check_enums(reader(self._files(ROSTER_OK, bus=BUS_EXTRA_OPS)))
         self.assertTrue(any("inbox.control.op" in x and "abort" in x for x in errs), errs)
+
+    def test_maintenance_kind_dropped_by_the_gate_is_caught(self):
+        """A node the schema declares and MAINT_KINDS omits is a maintenance item whose
+        receipt the gate rejects — so it can never commit, while `loop.md` still routes it
+        straight to `commit`. The drift is invisible from the schema side."""
+        errs = e.check_enums(reader(self._files(ROSTER_OK, verify=VERIFY_STALE)))
+        self.assertTrue(any("maintenance.kind" in x and "verify_check.py" in x for x in errs), errs)
+
+    def test_maintenance_kind_added_by_the_gate_is_caught(self):
+        """Both directions: a kind the gate would honour that no schema admits is an
+        exemption from verify-before-commit that nothing declared."""
+        errs = e.check_enums(reader(self._files(ROSTER_OK, verify=VERIFY_EXTRA)))
+        self.assertTrue(any("maintenance.kind" in x and "vibes" in x for x in errs), errs)
+
+    def test_maintenance_kind_missing_from_the_loop_is_caught(self):
+        """The prose consumer matters too: a maintenance node `loop.md` never routes is a
+        node the orchestrator cannot reach."""
+        errs = e.check_enums(reader(self._files(ROSTER_OK, loop=LOOP_STALE)))
+        self.assertTrue(any("maintenance.kind" in x and "loop.md" in x for x in errs), errs)
 
     def test_a_mention_in_prose_does_not_satisfy_a_code_consumer(self):
         """The toothless case, pinned: BUS_STALE_OPS drops "resume" from the tuple while

@@ -41,7 +41,9 @@ The backlog (items with `depends_on`, `kind`, `severity`).
      rewrite: splitting prose coherently is judgment, which is exactly why this is a ticket and not a script.
      `memory-model.md` owns the convention and the head marker.
    All three are self-contained maintenance items (`loop.md` § Maintenance items) — they run their pass and flow
-   straight to `commit`, never through `planner`/`execute`/`verify`.
+   straight to `commit`, never through `planner`/`execute`/`verify`. Because of that each **stages a maintenance
+   receipt** (`.workflow/maintenance/<item-id>.json`) in its own commit: with no verdict to show, that receipt is
+   the only thing standing between a verify-free item and a commit gate that reads it as an unverified one.
 3. Make eligible only items whose `depends_on` are already done.
 4. Order eligible items by **urgency × dependency-readiness**.
 5. **Group into a wave.** Walking from the top, gather the independent items that can run together — ones

@@ -110,6 +110,28 @@ line 1.
 - `mismatches[]` — `{ expected, actual }`
 - `confidence`
 
+## maintenance-receipt  · produced by the maintenance pass itself (`align` / `document:audit` / `doc-budget`) · *on disk at `.workflow/maintenance/<item-id>.json`; COMMITTED (it must ride the commit it describes), and self-collecting — each pass deletes any earlier receipt as it writes its own, so the directory holds one file and the history lives in its git log*
+**The verify-free counterpart of `verify-verdict`, and the same kind of load-bearing on-disk contract.** A
+maintenance item runs its own pass and flows straight to `commit` with no `planner`/`execute`/`verify`
+(`loop.md` § Maintenance items) — so it has no verdict, and the commit gate cannot otherwise tell a legitimately
+verify-free item from an item whose verify was skipped. The receipt is how the pass *says which one it is*.
+- `item` — the maintenance item's id; **must equal the filename stem** · `kind: align|document:audit|doc-budget`
+  — the maintenance node that ran · `summary` — one line, human-readable.
+- **Consumer fails closed, exactly like the verdict's:** `verify_check.py` accepts the receipt only when it is
+  **staged in the commit under review**, parses, and agrees with its own filename; anything else is not a receipt
+  and the commit blocks with the reason named. An unstaged receipt exempts nothing — a marker sitting in the tree
+  would be a standing exemption for every later commit.
+- **Why this and not a `state.json` field:** the bootstrap escape (`phase: bootstrap`) is safe because it fires
+  once and then disappears forever; maintenance recurs for the life of the project, so a volatile marker re-arms on
+  every threshold hit and, left stale by a crashed pass, disarms the gate for the next **product-code** commit — the
+  fail-open shape the gate exists to prevent. A marker carried in the commit cannot go stale.
+- **Why not a trivial `pass: true` verdict:** `project_state.py` derives an item's `verified` from that first line,
+  so a courtesy verdict would make the console report an item as verified that never ran `verify`. The anchors are
+  evidence; an anchor that lies is worse than an absent one.
+- **Not a forecast anchor** (§ the forecast ANCHOR TABLE) and deliberately so: maintenance items are *injected* by
+  `prioritize`, never forecast, so an anchor for them would fire for a node no chain ever named — which that table
+  reads as a **structural divergence** and would re-forecast the tail on every routine maintenance pass.
+
 ## decision-record  · produced by `decision-engineer` · *append-only — one record per decision; a reversal is a NEW record that supersedes (status flip), never an edit; global under `<project_root>/docs/decisions/`*
 - `id` — stable id (e.g. `D-001`); `plan.decisions[]` reference these, and coverage is checked id → step
 - `status` ∈ `{ active, superseded }` · `supersedes` / `superseded_by` — the reversal chain; a flip writes a

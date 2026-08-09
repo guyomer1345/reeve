@@ -61,6 +61,10 @@ Keeps disk + context high-signal:
 - **Deletion-test (judgment)** over `CLAUDE.md` + `rules/` — cut prose the agent no longer needs; bloat makes
   it ignore its own instructions.
 - **Dead-node prune:** a deleted source file → delete its `docs/knowledge/` node.
+- **Stage the maintenance receipt** — `.workflow/maintenance/<item-id>.json` `{ item, kind: "document:audit",
+  summary }`, deleting any earlier receipt as you write yours (`shared/schemas.md` § maintenance-receipt). This is
+  not bookkeeping: an audit item has no `verify`, so without the receipt the commit gate cannot distinguish it from
+  an item whose verify was skipped and **blocks the commit**. Never write a courtesy `verify-verdict.md` instead.
 - **Doc budget is a SEPARATE item, not part of this one.** `doc-budget` has its own trigger and its own remedy
   (trim / split-and-pointer); folding it in here would tie doc size to memory pressure, which is the coupling
   the three decoupled thresholds exist to avoid.
