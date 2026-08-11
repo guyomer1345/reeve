@@ -5875,3 +5875,106 @@ state-publishing), and `loop.md` § Maintenance items, which promised the straig
 `product/shared/schemas.md`, `product/skills/align/SKILL.md`, `product/agents/document.md`,
 `product/skills/prioritize/SKILL.md`, `product/commands/start.md`, `scripts/check_enum_coherence.py`,
 `scripts/test_check_enum_coherence.py`.
+
+## D183 — `building` with no current item is LEGAL at a boundary, so the gate stops asking about status and the receipt generalizes to every non-item commit motion **[DECIDED 2026-08-09, NOT BUILT — settles the question `07` § the `/update` onto D182 named as upstream of the rest. Fixes are deferred to the post-harvest fix pass]**
+
+**The call, in one line: `status: building` with `current_item: null` at a boundary node is a correct description
+of the loop, and `idle` is not available as a synonym for it.** The three statuses describe the loop's **mode**,
+not item occupancy — `intake` is gathering requirements, `building` is the autonomous loop driving, `idle` is
+**backlog empty, awaiting steering**, and that last meaning is owned by `loop.md`'s routing table
+(`prioritize | backlog empty | idle (await steering)`). At `prioritize` with a full backlog the loop is driving
+and has not yet picked; `building` + null is the only honest pair. So the drive's flip to `idle` was a
+**misreport, not a correction** — it announced "awaiting steering" to the console while the loop was mid-wave.
+
+Two things follow, and the second is the reason this had to be decided before anything is built:
+
+1. **The flip-commit-flip pattern is banned outright.** Mutating the field a gate reads, committing, and
+   restoring is not a workaround, it is the gate being off for the duration — with a window where a crash leaves
+   `state.json` lying about the loop's position. No commit may be obtained by editing `state.json`.
+2. **`/update` gets a sanctioned path by generalizing D182's artifact, not by a new mechanism.** The receipt stops
+   being a *maintenance* receipt and becomes a **non-item commit receipt**: one artifact, one validated shape, a
+   `kind` that enumerates the sanctioned motions, `/update` adding `kind: update`. D182's three maintenance kinds
+   become three members of that set rather than the whole of it.
+
+- **Rejected — publishing `idle` at every scheduler boundary** (which would make the drive's flip the *correct*
+  behaviour). It destroys the one distinction `idle` carries. A console that says "awaiting steering" while the
+  loop is picking the next item is worse than the gate it would fix, and it puts the gate's applicability in the
+  hands of a status the loop would then be lying with. `idle` means the loop has nothing to do and a human must act.
+- **Rejected — keying the tripwire on `node` instead of `status`.** This is the elegant answer and it is wrong for
+  this gate. `state.json` already carries `node`, and the **forecast anchor table already declares which nodes are
+  item-bearing** (`planner`/`execute`/`verify`/`debug`/`refine`/`document`), so the set would be derived rather than
+  invented — but it hands the decision *"does the gate apply at all?"* to a volatile field, which is precisely the
+  D129 lesson. The staged-diff primary would still catch most cases; the tripwire exists for the case the primary
+  **misses** (product code staged while an item is in flight and its dir is not), and that is exactly the case a
+  stale `node: prioritize` would wave through.
+- **Rejected — the complaint that enumerating exceptions is an unbounded accretion** (the argument that pushed
+  toward `node`). In a safety gate an explicit allowlist is a **feature**: the set is small and closed-ish
+  (bootstrap · the three maintenance items · update · plausibly `/rebind`), each addition is a reviewed act rather
+  than an emergent one, and `check_enum_coherence.py` now holds the set against its decider. Four members is not
+  accretion; it is the inventory.
+- **`phase: normal-ops` is not adopted — the orchestrator stops writing it.** `status` already carries the mode and
+  `schemas.md` states `phase` is present **only** during the bootstrap motion. A second, redundant mode field that
+  no consumer reads is how the next `phase: <something>` gets invented and then depended on.
+- **Left to the fix pass:** whether bootstrap's `phase: bootstrap` escape (D139) migrates onto the same receipt, for
+  one mechanism instead of two. It is the right shape, but `/start` is the most-driven motion in the package and
+  changing how its commits pass a gate is not a change to make in the same slice as everything else here.
+
+*Evidence:* the drive commit was 7 package files and **zero** item files at `node: prioritize`, `current_item: null`
+— by the topology no item can be under construction at that node, and none was. `07` § the `/update` onto D182
+carries the reproduction.
+**Builds on:** **D129** (fail closed; never let volatile state decide), **D139** (the bootstrap escape — the first
+member of the set this decision names), **D182** (the receipt, which this generalizes on the day after it shipped).
+→ Files (fix pass): `product/hooks/verify_check.py`, `product/shared/schemas.md`, `product/templates/loop.md`,
+`product/commands/update.md`, `product/templates/orchestrator-CLAUDE.md`, `scripts/check_enum_coherence.py`.
+
+## D184 — the always-loaded budget caps the wrong thing: per-file, with an advisory no always-loaded file has ever been under **[DECIDED 2026-08-09, NOT BUILT — the cap stays, the numbers and the unit change. Numbers are set in the fix pass, after relocation, and only to values the shipped package actually meets]**
+
+Measured at source, both always-loaded files sit against the same 4000 `always_hard`: `templates/loop.md` **4219**
+(3984 before D182 — sixteen tokens of headroom) and `templates/orchestrator-CLAUDE.md` **3926**. `always_advisory`
+is **1200** — a number neither file has been under since the budget was written, so the warning tier has been
+permanently tripped and is therefore silent by habit. That is why a file crossing its hard limit produced no signal
+on the way: **the only tier that could have warned had been crying wolf since day one.**
+
+**The call has three parts.**
+
+1. **Relocation before any number changes.** `loop.md`'s 4219 is not uniformly router: the graph (routing table +
+   item-complete tail + preamble) is ~1.5k, and the rest is **node-local procedure that belongs where the node reads
+   it** — stack-wiring at `tech_stack` lock (535, and the file itself calls it "a one-time transition, not a per-item
+   step"), maintenance-item mechanics (567). The **mermaid diagram (432) is a second copy of the routing table it
+   sits under**, which is the one thing D80 forbids outright: one owner per fact, never a second copy. A file read
+   every turn is the last place to keep a restatement. Trimming prose to buy headroom is the move that puts us back
+   at the cliff in two decisions; moving procedure to its node is the move that holds.
+2. **The unit is wrong: cap the always-loaded TOTAL, not only each file.** Two files each just under cap cost the
+   same rent as one file at twice the cap, and only the second is caught — today the pair is **8145 tokens of rent
+   before a word is typed**, and no gate anywhere can see that number. The per-file cap stays (it is a shape check —
+   it says *this file* has outgrown its role) and a **total** always-loaded ceiling is added on top, which is the
+   figure that actually describes the cost.
+3. **The advisory becomes a band, not an aspiration.** An advisory below what a file can structurally be is noise;
+   it must sit **proportionally under hard** (≈80%) so there is a real warning zone. The point of the tier is to
+   fire *once*, early, with room to act — not continuously.
+
+- **Rejected — raising `always_hard` to clear the shipped file** (the drive's 4400, and any variant of it). It
+  concedes the rent permanently and buys one decision's worth of room. The cap stays a real cap; the user's
+  constraint is explicit and correct — even a raised ceiling is a ceiling.
+- **Rejected — trimming `loop.md`'s prose back under 4000 and calling it done.** It treats the symptom. The file
+  grows structurally: every new node, every new rule adds a line, so the next D-entry re-breaches it.
+- **Rejected — setting the new numbers now.** The hard tier **fails `checks.sh` on every commit**, so a total
+  ceiling set today (8145 against anything sane) would wedge every install until the relocation lands. Numbers are
+  set *after* relocation, and the standing rule is: **a cap is set to a value the shipped package meets, never
+  raised to accommodate what it happens to weigh.** That rule is the whole difference between a budget and a
+  rubber stamp.
+- **The meta-gate hole is part of this, not a separate item.** `check_doc_budget.py` walks the *installed*
+  `.workflow/` docs, so `product/templates/*` is invisible to it and this repo shipped a package that fails its own
+  gate with five gates green. Every template with an installed budget must be **measured at source in the meta-repo
+  pre-commit**. Until that exists, no cap here is real — it is a cap on other people's copies.
+- **The target-side `doc_budget.always_hard: 4400`** in the driven project comes out when the relocation lands. A
+  target-owned knob is never the fix for a package-owned defect: it converts one bug into N silent ones.
+
+*Evidence:* measured with the package's own `estimate_tokens` at 3.2 chars/token — `loop.md` 3984 → 4219 across
+D182, section weights 1340/1192/567/535/432/83, `orchestrator-CLAUDE.md` 3926, defaults
+`always_hard 4000 / always_advisory 1200`. The 4219 was found by *installing*, not by any gate here.
+**Builds on:** **D80** (one owner per fact — which the diagram violates), the doc-budget design in
+`shared/memory-model.md` (the two tiers and the split-and-pointer remedy, whose convention this uses rather than
+invents), **D182** (whose paragraph tipped the file).
+→ Files (fix pass): `product/templates/loop.md`, `product/templates/orchestrator-CLAUDE.md`,
+`product/scripts/check_doc_budget.py`, `product/shared/memory-model.md`, the meta-repo pre-commit.
