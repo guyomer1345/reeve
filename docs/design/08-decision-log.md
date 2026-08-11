@@ -5861,6 +5861,13 @@ excuse a staged item dir carrying a failing verdict. The defect was found by dri
 `align` scan on a real run could only be landed by hand-writing a verdict. `916` tests pass (`904`→`916`; 9 gate
 tests + 3 enum-drift tests), all five meta-gates green.
 
+**Installing this same day opened five more findings, four of the same shape (`07` § the `/update` onto D182).**
+The sharpest two: a **`/update` package commit has no sanctioned path either** — `MAINT_KINDS` is closed and the
+motion is not one of the three, so this decision covers three of *four* non-item commit motions; and the § Maintenance
+items paragraph above pushed `templates/loop.md` from **3984 → 4219** est. tokens against a 4000 `always_hard`, so
+the package now fails its own doc-budget gate on install. That it shipped green is a **meta-gate hole**: the budget
+checker walks *installed* `.workflow/` docs, so a template is never measured at source. Neither is fixed here.
+
 **Builds on:** **D129** (the fail-closed verify-before-commit gate and its two drift vectors), **D139** (the
 bootstrap carve-out — this is the second escape, and it is deliberately shaped *unlike* it), **D133** (bootstrap
 state-publishing), and `loop.md` § Maintenance items, which promised the straight-to-commit path this makes legal.

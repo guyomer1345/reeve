@@ -773,3 +773,51 @@ fan-out-controller question, and only the reviewer is still simply open.
   nothing while the workers are not running their own instructions. **That condition is now met: `11e` is green
   (D179), so this is promotable** — and with `11f` measured and Phase 11 closed (D180), it is now **the** first
   candidate for what follows, alongside the fan-out-controller question in the first bullet.
+
+## Drive-found, logged not fixed — the `/update` onto D182 (2026-08-11, `agentic cyber`)
+Found by *installing* the fix, not by building it. D182 closed the maintenance-item hole the same day; carrying
+the new package into a live project immediately opened five more, and four of them are the same shape as D182
+itself — **a legitimate motion with no sanctioned path through a gate that is right to be closed.**
+- **A package-level commit (`/update`) has no sanctioned path `[real, reproduced]`.** D182 gave *three* non-item
+  commit motions a receipt (`align` / `document:audit` / `doc-budget`) and `MAINT_KINDS` is a closed set, so the
+  `/update` package-refresh commit — 7 package files, zero item files, `status: building` — fails closed with no
+  legal escape. The drive's model **correctly refused to fake a `kind: align` receipt**, which is the validation
+  working, and then had nowhere to go. Open: a fourth `kind: update`, or a bootstrap-style `phase: update` marker.
+  The second is more attractive than it was for maintenance — `/update` is **bootstrap-shaped** (a bounded motion a
+  command drives start to finish, not a recurring loop state), so D182's "a volatile marker for a recurring motion
+  goes stale" objection is much weaker here. Note this also means **`/start` is the only non-item motion that ever
+  had a path**, and it got one the same way (D139).
+- **The workaround that unblocked it is a two-line disarm of verify-before-commit `[real, precedent-setting]`.**
+  The drive flipped `state.json.status` `building → idle`, committed, and flipped back. Whatever the intent, the
+  mechanism mutates the exact field the gate reads — *worse* than the volatile marker D182 rejected, because it is
+  not even a declared marker, and it leaves a window where a crash makes `state.json` lie about the loop's position.
+  Underneath it is a real question the schema does not settle: **is `status: building` with `current_item: null` at
+  node `prioritize` legal at all?** If yes, the gate needs a fourth path and the flip was a workaround. If no, the
+  orchestrator has a state-publishing bug and the gate correctly caught it — and the durable fix is for the loop to
+  publish `idle` at that boundary itself, which would dissolve the finding above as a side effect. Decide this one
+  first; it is upstream of the other.
+- **The package ships an always-loaded doc over its own HARD budget, and no meta-gate can see it `[real, measured]`.**
+  `templates/loop.md` measured **3984** est. tokens before D182 against a 4000 `always_hard` — *16 tokens of
+  headroom* — and **4219** after. So the D182 paragraph tipped it, and the install failed the package's own
+  `check_doc_budget.py` on the target. **The token count is the symptom; the gate hole is the finding:** the budget
+  checker walks the *installed* `.workflow/` docs, so `product/templates/loop.md` is invisible to it and this repo's
+  five gates stayed green while shipping a package that cannot commit itself into any project. Every template with
+  an installed budget needs measuring **at source**, in the meta-repo's pre-commit. Open beyond the trim: whether
+  the 4000 default is still right for a `loop.md` that has grown to its ceiling, or whether the file splits.
+- **The accommodation landed at the wrong layer `[real, should be reverted]`.** The drive raised the *target's*
+  `config.json` `doc_budget.always_hard` 4000 → 4400 to clear the shipped file. That is a per-project patch over a
+  package defect: every project that updates will hit the same wall and invent its own number, and the divergence is
+  invisible from here. It should come back out when `loop.md` is trimmed at source. The general rule worth stating:
+  **a target-owned knob must never be the fix for a package-owned defect** — it converts one bug into N silent ones.
+- **`state.json` carries a `phase` the schema does not admit `[small, real]`.** The live file read
+  `phase: normal-ops`; `shared/schemas.md` says `phase` is **present only during the `/start` bootstrap motion** and
+  absent once the loop drives. Harmless today (only `bootstrap` is read), but it is exactly the drift that seeded the
+  original bug report, whose repro premise was a `phase: normal-ops` that does not exist. Decide: adopt the value in
+  the schema (and give the enum a home) or stop writing it.
+- **The block message steered the reader to the nearest escape instead of the cause `[legibility, D148/D149 class]`.**
+  The drive concluded "the refreshed guard is stricter than the old one." It is not — the `building` + no-identifiable-item
+  fail-closed is unchanged since D129/D139, and D182 only *widened* what passes. What changed is the message, which
+  now names the maintenance receipt; so the reader went hunting for a receipt mechanism instead of asking whether the
+  state was legal. A block reason that lists its sanctioned escapes reads as *"pick one of these"*, and a motion that
+  belongs to none of them gets a forced fit. Same family as the two 2026-08-06 findings above: the mechanism worked
+  and the human learned the wrong thing.
