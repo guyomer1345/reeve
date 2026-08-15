@@ -48,7 +48,7 @@ import re
 import sys
 from collections import Counter, defaultdict
 
-PLUGIN = "dev-autonomous-workflow"
+PLUGIN = "reeve"
 DISPATCH_TOOLS = {"Agent", "Task"}
 WEB_TOOLS = {"WebSearch", "WebFetch"}
 # ---- the writer-scope attribution (11f) ----------------------------------------------

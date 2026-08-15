@@ -72,7 +72,7 @@ MARKER = os.path.join(".git", "hooks", ".disciplined-builder-assert")
 # rewritten in place — so nothing has to prune it. `shared/schemas.md` owns both.
 STALE_MARKER = os.path.join(".git", "hooks", ".disciplined-builder-stale")
 
-PLUGIN_NAME = "dev-autonomous-workflow"
+PLUGIN_NAME = "reeve"
 _SHA_RE = re.compile(r"[0-9a-f]{7,40}\Z")
 
 

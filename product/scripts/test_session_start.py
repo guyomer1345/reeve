@@ -267,9 +267,9 @@ def _cli_config(root, installed_sha, version, location, mkt="dev-marketplace"):
     p.mkdir(parents=True, exist_ok=True)
     (p / "installed_plugins.json").write_text(json.dumps({
         "version": 2,
-        "plugins": {"dev-autonomous-workflow@%s" % mkt: [{
+        "plugins": {"reeve@%s" % mkt: [{
             "scope": "user",
-            "installPath": "/cache/dev-autonomous-workflow/%s" % version,
+            "installPath": "/cache/reeve/%s" % version,
             "version": version,
             "installedAt": "2026-08-03T11:26:51.816Z",
             "lastUpdated": "2026-08-03T11:26:51.816Z",

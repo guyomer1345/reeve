@@ -34,7 +34,7 @@
 set -uo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-plugin="dev-autonomous-workflow"
+plugin="reeve"
 
 if ! command -v claude >/dev/null 2>&1; then
   echo "claude is not on PATH — nothing to reinstall into" >&2

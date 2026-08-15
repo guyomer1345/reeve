@@ -145,11 +145,11 @@ class RuntimeRootDerivation(Tmp):
     def test_honours_xdg_state_home_else_falls_back_under_home(self):
         with_env(self, XDG_STATE_HOME=os.path.join(self.root, "xdg"))
         self.assertTrue(bus.runtime_root_for("/p/q").startswith(
-            os.path.join(self.root, "xdg", "dev-autonomous-workflow")))
+            os.path.join(self.root, "xdg", "reeve")))
         with_env(self, XDG_STATE_HOME=None, HOME=os.path.join(self.root, "home"))
         self.assertTrue(bus.runtime_root_for("/p/q").startswith(
             os.path.join(self.root, "home", ".local", "state",
-                         "dev-autonomous-workflow")))
+                         "reeve")))
 
     def test_slug_survives_a_name_with_nothing_usable_in_it(self):
         with_env(self, XDG_STATE_HOME=os.path.join(self.root, "state"))

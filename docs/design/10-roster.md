@@ -48,8 +48,8 @@ own `.claude-plugin/marketplace.json` (D125). The repo is **both** the construct
   nodes but never said which **mechanism** carries each, so the shipped brief's "when in doubt, dispatch" was the
   only rule the orchestrator had. Measured on a real drive: **51 subagent transcripts, 0 `Skill` invocations** —
   33 of 50 dispatches went to `general-purpose` with a paraphrase the orchestrator typed itself, so *no* node
-  below except `research` was actually running its own file. The rule is now: **leaf+heavy → `Agent(dev-autonomous-workflow:<name>)`
-  · fan-out controller / human-interactive / thin bookkeeping → `Skill(dev-autonomous-workflow:<name>)` inline ·
+  below except `research` was actually running its own file. The rule is now: **leaf+heavy → `Agent(reeve:<name>)`
+  · fan-out controller / human-interactive / thin bookkeeping → `Skill(reeve:<name>)` inline ·
   never `general-purpose` for a loop node** (enforced by a blocking `PreToolUse` gate, not prose). **`document` is
   reclassified to an agent**, overruling D84's "borderline weight" on measured 40.0k tokens/dispatch. **Built as
   `11`'s `### Phase 11`** — the three files are `agents/` on disk, their `tools:` frontmatter carries the two

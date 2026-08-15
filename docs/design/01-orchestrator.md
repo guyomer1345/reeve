@@ -133,8 +133,8 @@ per-capability *how*), it encodes:
   prompt. Measured on a real drive: **51 subagent transcripts, 0 `Skill` invocations**; 33 of 50 dispatches to
   `general-purpose` carrying a 2.8k–8.8k-char paraphrase; `research` — the sole declared agent among them —
   resolved namespaced 17/17. So the package's whole judgment layer was advisory in practice. The rule is now
-  D84's two axes stated as *dispatch*: **leaf+heavy → `Agent(dev-autonomous-workflow:<name>)`** · **fan-out
-  controller / human-interactive / thin bookkeeping → `Skill(dev-autonomous-workflow:<name>)` inline** · **never a
+  D84's two axes stated as *dispatch*: **leaf+heavy → `Agent(reeve:<name>)`** · **fan-out
+  controller / human-interactive / thin bookkeeping → `Skill(reeve:<name>)` inline** · **never a
   loop node to `general-purpose`** — the last one enforced by a blocking `PreToolUse` gate, because the failure
   mode being guarded is precisely "advisory rule ignored" (D117). **As shipped (D179)** the brief carries a fourth
   clause that turned out to matter as much as the first three — **pass inputs, not instructions**: a long prompt

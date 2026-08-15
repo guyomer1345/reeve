@@ -132,9 +132,9 @@ class Classification(Fixture):
         """The rule that would have recovered the incident that opened Phase 7 with
         nothing lost: same tree, same layout, only the $HOME prefix changed."""
         survivor = self._tree(os.path.join(self.home, ".local", "state",
-                                           "dev-autonomous-workflow", "proj"))
+                                           "reeve", "proj"))
         self._pointer("/home/someone-who-is-gone/.local/state/"
-                      "dev-autonomous-workflow/proj")
+                      "reeve/proj")
         p, code = rebind.apply(self.project)
         self.assertEqual((p["classification"], code), ("RE-POINT", 0))
         self.assertEqual(p["target"], survivor)
@@ -161,9 +161,9 @@ class Classification(Fixture):
     def test_a_tree_bound_to_another_project_is_never_adopted(self):
         """isdir() is not identity. Adopting here corrupts two installs at once."""
         stray = self._tree(os.path.join(self.home, ".local", "state",
-                                        "dev-autonomous-workflow", "proj"),
+                                        "reeve", "proj"),
                            stamp_to="/somewhere/else")
-        self._pointer("/home/gone/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/gone/.local/state/reeve/proj")
         p, _ = rebind.apply(self.project)
         self.assertEqual(p["classification"], "RE-CREATE")
         self.assertNotEqual(p["target"], stray)
@@ -173,9 +173,9 @@ class Classification(Fixture):
 
     def test_an_empty_directory_is_not_a_surviving_runtime_tree(self):
         empty = os.path.join(self.home, ".local", "state",
-                             "dev-autonomous-workflow", "proj")
+                             "reeve", "proj")
         os.makedirs(empty)
-        self._pointer("/home/gone/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/gone/.local/state/reeve/proj")
         p, _ = rebind.apply(self.project)
         self.assertEqual(p["classification"], "RE-CREATE")
 
@@ -265,7 +265,7 @@ class FirstBind(Fixture):
 class ReCreate(Fixture):
     def setUp(self):
         super(ReCreate, self).setUp()
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
 
     def test_it_rebuilds_the_shape_and_binds_the_pointer(self):
         p, code = rebind.apply(self.project)
@@ -327,7 +327,7 @@ class ReCreate(Fixture):
 class LossIsFiled(Fixture):
     def setUp(self):
         super(LossIsFiled, self).setUp()
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
 
     def test_every_loss_lands_in_the_backlog(self):
         """A printed report is durability that depends on a human remembering."""
@@ -361,7 +361,7 @@ class LossIsFiled(Fixture):
         first = self._backlog()
         os.unlink(os.path.join(self.workflow, "runtime.json"))
         shutil.rmtree(bus.runtime_root_for(self.project))
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         rebind.apply(self.project)
         self.assertEqual(self._backlog().count("**rebind: outbox lost"), 1)
         self.assertEqual(len(self._backlog().splitlines()),
@@ -373,13 +373,13 @@ class LossIsFiled(Fixture):
         self._write(os.path.join(self.workflow, "backlog.md"), closed)
         os.unlink(os.path.join(self.workflow, "runtime.json"))
         shutil.rmtree(bus.runtime_root_for(self.project))
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         rebind.apply(self.project)
         self.assertEqual(self._backlog().count("- [ ] **rebind: outbox lost"), 1)
 
     def test_a_LOSSLESS_re_point_files_nothing(self):
         self._tree(os.path.join(self.home, ".local", "state",
-                                "dev-autonomous-workflow", "proj"))
+                                "reeve", "proj"))
         rebind.apply(self.project)
         self.assertEqual(self._backlog(), BACKLOG)
 
@@ -411,7 +411,7 @@ class DeclaredSecrets(Fixture):
 
     def test_a_recreate_itemizes_every_declared_key(self):
         self._config(secrets_required=["POLAR_WEBHOOK_SECRET", "CLERK_SECRET_KEY"])
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         p, _ = rebind.apply(self.project, probe=False)
         text = self._backlog()
         self.assertIn("POLAR_WEBHOOK_SECRET", text)
@@ -421,28 +421,28 @@ class DeclaredSecrets(Fixture):
     def test_no_declaration_means_no_itemization_not_no_loss(self):
         """Absent is "we cannot tell", not "nothing is missing" — the generic
         store-lost entry still has to cover the move."""
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         rebind.apply(self.project, probe=False)
         self.assertEqual(len(self._entries()), 3)
         self.assertIn("secret store", self._backlog())
 
     def test_a_surviving_store_reports_nothing_missing(self):
         surviving = self._tree(os.path.join(
-            self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
+            self.home, ".local", "state", "reeve", "proj"))
         self._store(surviving, [{"returns": {"POLAR_WEBHOOK_SECRET": {"value": "whsec_x",
                                                        "sensitive": True}}}])
         self._config(secrets_required=["POLAR_WEBHOOK_SECRET"])
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         p, _ = rebind.apply(self.project, probe=False)
         self.assertEqual(p["classification"], "RE-POINT")
         self.assertEqual(self._backlog(), BACKLOG)
 
     def test_a_partial_survival_names_only_what_is_gone(self):
         surviving = self._tree(os.path.join(
-            self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
+            self.home, ".local", "state", "reeve", "proj"))
         self._store(surviving, [{"returns": {"KEPT_KEY": {"value": "v", "sensitive": True}}}])
         self._config(secrets_required=["KEPT_KEY", "GONE_KEY"])
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         rebind.apply(self.project, probe=False)
         text = self._backlog()
         self.assertIn("GONE_KEY", text.split("does not hold:")[1])
@@ -451,11 +451,11 @@ class DeclaredSecrets(Fixture):
     def test_no_secret_VALUE_ever_reaches_the_committed_backlog(self):
         """config.json and backlog.md are both committed. Names only, always."""
         surviving = self._tree(os.path.join(
-            self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
+            self.home, ".local", "state", "reeve", "proj"))
         self._store(surviving, [{"returns": {"A_KEY": {"value": "sk_live_NEVERCOMMITTHIS",
                                                        "sensitive": True}}}])
         self._config(secrets_required=["A_KEY", "MISSING_KEY"])
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         p, _ = rebind.apply(self.project, probe=False)
         self.assertNotIn("sk_live_NEVERCOMMITTHIS", self._backlog())
         self.assertNotIn("sk_live_NEVERCOMMITTHIS", rebind.render(p, "apply"))
@@ -509,10 +509,10 @@ class DeclaredSecrets(Fixture):
 
     def test_the_unreadable_count_is_stated_in_the_loss_not_folded_into_it(self):
         surviving = self._tree(os.path.join(
-            self.home, ".local", "state", "dev-autonomous-workflow", "proj"))
+            self.home, ".local", "state", "reeve", "proj"))
         self._store(surviving, [{"returns": [{"id": "runpod", "value": "sk_live_x"}]}])
         self._config(secrets_required=["GONE_KEY"])
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         rebind.apply(self.project, probe=False)
         text = self._backlog()
         self.assertIn("GONE_KEY", text)
@@ -543,7 +543,7 @@ class Bindability(Fixture):
 
     def setUp(self):
         super(Bindability, self).setUp()
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
 
     def _checks(self, body):
         path = os.path.join(self.workflow, "checks.sh")
@@ -657,7 +657,7 @@ class Bindability(Fixture):
         rebind.apply(self.project)
         os.unlink(os.path.join(self.workflow, "runtime.json"))
         shutil.rmtree(bus.runtime_root_for(self.project))
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         rebind.apply(self.project)
         self.assertEqual(
             self._backlog().count("**rebind: the mechanical commit gate"), 1)
@@ -684,7 +684,7 @@ class Rehome(unittest.TestCase):
         self.assertEqual(rebind.rehome("/root/state/x"), "/home/newuser/state/x")
 
     def test_a_path_outside_any_home_yields_no_candidate(self):
-        self.assertIsNone(rebind.rehome("/var/lib/dev-autonomous-workflow/x"))
+        self.assertIsNone(rebind.rehome("/var/lib/reeve/x"))
 
     def test_a_path_already_under_this_home_yields_no_duplicate_candidate(self):
         self.assertIsNone(rebind.rehome("/home/newuser/.local/state/x"))
@@ -703,7 +703,7 @@ class Cli(Fixture):
         self.assertEqual(_capture(["check", "--project-root", self.project])[1], 2)
 
     def test_the_prose_report_names_the_losses(self):
-        self._pointer("/home/guy/.local/state/dev-autonomous-workflow/proj")
+        self._pointer("/home/guy/.local/state/reeve/proj")
         text = _capture(["check", "--project-root", self.project])[0]
         self.assertIn("RE-CREATE", text)
         self.assertIn("LOST [bug/high]", text)

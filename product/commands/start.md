@@ -127,7 +127,7 @@ loop's normal `state.json` takes over when the motion ends.
    pointer if and only if one is needed. Report what it did.
    - **Local mount (the common case):** nothing to do. `.workflow/` is the runtime root; no pointer is written.
    - **Network-style / interop mount** (e.g. a repo under a mounted Windows drive): the tree is created at
-     `$XDG_STATE_HOME/dev-autonomous-workflow/<slug>-<hash-of-the-project's-abspath>` and
+     `$XDG_STATE_HOME/reeve/<slug>-<hash-of-the-project's-abspath>` and
      **`.workflow/runtime.json`** = `{"runtime_root": "<abs path>"}` is written. That pointer is how every other
      process finds the relocated tree, so it stays on the repo mount and is **gitignored** (the path is
      machine-specific — committing it would hand a clone a wrong root). Tell the user plainly that `.workflow/`
@@ -146,10 +146,10 @@ loop's normal `state.json` takes over when the motion ends.
      markers**; only its FILE differs by mode (root `CLAUDE.md`, except org — see below) — `shared/schemas.md`
      owns the exact strings:
      ```
-     <!-- dev-autonomous-workflow:brief:begin -->
+     <!-- reeve:brief:begin -->
      <!-- managed block: /update replaces everything between these markers. Put project notes OUTSIDE them. -->
      …the filled template…
-     <!-- dev-autonomous-workflow:brief:end -->
+     <!-- reeve:brief:end -->
      ```
      Greenfield wraps its brief too even though it is writing a fresh file: the markers are what let a later
      `/update` refresh the brief **without** clobbering notes the human adds to that file afterwards, and a

@@ -65,7 +65,7 @@ def test_a_general_purpose_loop_dispatch_is_counted_and_named(tmp_path, capsys):
 
 
 def test_a_namespaced_dispatch_counts_as_the_role_arriving(tmp_path, capsys):
-    _subagent(tmp_path, "s1", "a1", "dev-autonomous-workflow:execute", "Execute item",
+    _subagent(tmp_path, "s1", "a1", "reeve:execute", "Execute item",
               ".workflow/items/s2a/plan.md", [_turn()])
     subs, skills, n, _ = md.scan(str(tmp_path))
     assert subs[0]["attribution"] == "declared"
@@ -76,13 +76,13 @@ def test_a_namespaced_dispatch_counts_as_the_role_arriving(tmp_path, capsys):
 
 def test_a_skill_load_inside_a_general_subagent_also_counts_as_arrival(tmp_path, capsys):
     _subagent(tmp_path, "s1", "a1", "general-purpose", "Verify the item", "check it",
-              [_turn(tools=[("Skill", {"skill": "dev-autonomous-workflow:verify"})])])
+              [_turn(tools=[("Skill", {"skill": "reeve:verify"})])])
     subs, _, _, _ = md.scan(str(tmp_path))
     assert subs[0]["skill_loads"] == 1
 
 
 def test_token_components_stay_separate(tmp_path):
-    _subagent(tmp_path, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go", [
+    _subagent(tmp_path, "s1", "a1", "reeve:execute", "Execute", "go", [
         _turn(usage={"input_tokens": 5, "cache_creation_input_tokens": 1000,
                      "cache_read_input_tokens": 20000, "output_tokens": 300}),
         _turn(usage={"input_tokens": 5, "cache_creation_input_tokens": 500,
@@ -108,10 +108,10 @@ def test_a_nested_dispatch_inside_a_leaf_is_reported(tmp_path, capsys):
 def test_main_window_skill_loads_are_the_telephone_game_signal(tmp_path):
     (tmp_path / "s1").mkdir()
     (tmp_path / "s1.jsonl").write_text(json.dumps(
-        _turn(tools=[("Skill", {"skill": "dev-autonomous-workflow:execute"}),
+        _turn(tools=[("Skill", {"skill": "reeve:execute"}),
                      ("Agent", {"subagent_type": "general-purpose"})])), encoding="utf-8")
     _, skills, dispatches, _ = md.scan(str(tmp_path))
-    assert skills["dev-autonomous-workflow:execute"] == 1
+    assert skills["reeve:execute"] == 1
     assert dispatches == 1
 
 
@@ -159,7 +159,7 @@ def test_one_response_written_as_several_records_is_counted_once(tmp_path):
     """
     u = {"input_tokens": 5, "cache_creation_input_tokens": 1000,
          "cache_read_input_tokens": 20000, "output_tokens": 40}
-    _subagent(tmp_path, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go", [
+    _subagent(tmp_path, "s1", "a1", "reeve:execute", "Execute", "go", [
         _turn(usage=u, msg_id="msg_1"),
         _turn(usage=u, msg_id="msg_1", tools=[("Read", {"file_path": "a.py"})]),
         _turn(usage=u, msg_id="msg_1", tools=[("Read", {"file_path": "b.py"})]),
@@ -173,7 +173,7 @@ def test_one_response_written_as_several_records_is_counted_once(tmp_path):
 
 def test_a_partial_record_never_lowers_the_response_total(tmp_path):
     """Within one response the counters are snapshots, so the aggregate is MAX, not first."""
-    _subagent(tmp_path, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go", [
+    _subagent(tmp_path, "s1", "a1", "reeve:execute", "Execute", "go", [
         _turn(usage={"cache_creation_input_tokens": 900, "output_tokens": 3}, msg_id="m"),
         _turn(usage={"cache_creation_input_tokens": 900, "output_tokens": 1200}, msg_id="m"),
     ])
@@ -205,7 +205,7 @@ def test_discovery_and_production_are_attributed_separately(tmp_path):
     project = tmp_path / "proj"
     _plan(project, "IT-1", ["src/a.py"])
     transcripts = tmp_path / "tx"
-    _subagent(transcripts, "s1", "a1", "dev-autonomous-workflow:execute", "Execute",
+    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute",
               "run .workflow/items/IT-1/plan.md", [
                   _turn(tools=[("Read", {"file_path": str(project / "src/a.py"), "_id": "t1"})]),
                   _turn(tools=[("Write", {"file_path": str(project / "src/a.py"),
@@ -224,7 +224,7 @@ def test_discovery_and_production_are_attributed_separately(tmp_path):
 def test_a_file_read_through_bash_is_still_discovery(tmp_path):
     """A worker can cat its way through a repo; counting only `Read` would call that clean."""
     transcripts = tmp_path / "tx"
-    _subagent(transcripts, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go", [
+    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute", "go", [
         _turn(tools=[("Bash", {"command": "sed -n 1,200p src/big.py", "_id": "t1"}),
                      ("Bash", {"command": "pytest -q", "_id": "t2"})]),
     ])
@@ -238,7 +238,7 @@ def test_a_file_read_through_bash_is_still_discovery(tmp_path):
 
 def test_the_same_file_read_twice_is_counted_as_a_re_read(tmp_path):
     transcripts = tmp_path / "tx"
-    _subagent(transcripts, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go", [
+    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute", "go", [
         _turn(tools=[("Read", {"file_path": "/p/a.py"}), ("Read", {"file_path": "/p/a.py"}),
                      ("Read", {"file_path": "/p/b.py"})]),
     ])
@@ -252,7 +252,7 @@ def test_reads_are_scored_against_the_plans_declared_files(tmp_path):
     project = tmp_path / "proj"
     _plan(project, "IT-1", ["src/a.py", "docs/*"])
     transcripts = tmp_path / "tx"
-    _subagent(transcripts, "s1", "a1", "dev-autonomous-workflow:execute", "Execute",
+    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute",
               "work .workflow/items/IT-1/", [
                   _turn(tools=[("Read", {"file_path": str(project / "src/a.py")}),
                                ("Read", {"file_path": str(project / "docs/spec.md")}),
@@ -265,7 +265,7 @@ def test_reads_are_scored_against_the_plans_declared_files(tmp_path):
 
 def test_no_plan_is_reported_as_unscored_not_as_zero_off_plan(tmp_path, capsys):
     transcripts = tmp_path / "tx"
-    _subagent(transcripts, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go",
+    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute", "go",
               [_turn(tools=[("Read", {"file_path": "/p/a.py"})])])
     subs = md.scan(str(transcripts))[0]
     assert "off_plan_reads" not in subs[0]["scope"]
@@ -275,7 +275,7 @@ def test_no_plan_is_reported_as_unscored_not_as_zero_off_plan(tmp_path, capsys):
 
 def test_boot_is_the_first_responses_cache_write(tmp_path):
     """The fixed cost of a dispatch existing — what any plan-splitting proposal must beat."""
-    _subagent(tmp_path, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go", [
+    _subagent(tmp_path, "s1", "a1", "reeve:execute", "Execute", "go", [
         _turn(usage={"cache_creation_input_tokens": 9999, "cache_read_input_tokens": 0},
               msg_id="m1"),
         _turn(usage={"cache_creation_input_tokens": 2000,
@@ -290,8 +290,8 @@ def test_the_router_trace_attributes_growth_to_the_node_that_was_running(tmp_pat
     def call(ctx, tools, mid):
         return _turn(usage={"cache_read_input_tokens": ctx}, tools=tools, msg_id=mid)
     recs = [
-        call(10_000, [("Skill", {"skill": "dev-autonomous-workflow:planner"})], "m1"),
-        call(50_000, [("Agent", {"subagent_type": "dev-autonomous-workflow:execute"})], "m2"),
+        call(10_000, [("Skill", {"skill": "reeve:planner"})], "m1"),
+        call(50_000, [("Agent", {"subagent_type": "reeve:execute"})], "m2"),
         call(52_000, [], "m3"),
     ]
     trace = md.router_trace(recs)
@@ -307,7 +307,7 @@ def test_loop_runtime_reads_are_not_scored_as_off_plan_hunting(tmp_path):
     project = tmp_path / "proj"
     _plan(project, "IT-1", ["src/a.py"])
     transcripts = tmp_path / "tx"
-    _subagent(transcripts, "s1", "a1", "dev-autonomous-workflow:execute", "Execute",
+    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute",
               "work .workflow/items/IT-1/", [
                   _turn(tools=[("Read", {"file_path": str(project / "src/a.py")}),
                                ("Read", {"file_path": str(project /
@@ -323,7 +323,7 @@ def test_loop_runtime_reads_are_not_scored_as_off_plan_hunting(tmp_path):
 def test_a_stall_past_the_cache_ttl_is_named_not_billed_as_context(tmp_path):
     """A node that idled once reads as a node that consumed twice the context — which is
     half of the number that opened this phase."""
-    _subagent(tmp_path, "s1", "a1", "dev-autonomous-workflow:execute", "Execute", "go", [
+    _subagent(tmp_path, "s1", "a1", "reeve:execute", "Execute", "go", [
         _turn(usage={"cache_creation_input_tokens": 10_000}, msg_id="m1",
               ts="2026-08-07T10:00:00.000Z"),
         _turn(usage={"cache_creation_input_tokens": 55_000}, msg_id="m2",

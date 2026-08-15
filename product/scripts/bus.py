@@ -258,7 +258,7 @@ def runtime_root_for(project_path):
         os.path.expanduser("~"), ".local", "state")
     digest = hashlib.sha256(project.encode("utf-8")).hexdigest()[:8]
     return os.path.join(os.path.abspath(os.path.expanduser(base)),
-                        "dev-autonomous-workflow",
+                        "reeve",
                         "%s-%s" % (slugify(os.path.basename(project)), digest))
 
 

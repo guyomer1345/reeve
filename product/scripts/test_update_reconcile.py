@@ -28,7 +28,7 @@ def _plugin(root, version="0.2.0", extra_install=(), drop=()):
     tag = version or "nover"
     root.mkdir(parents=True, exist_ok=True)
     (root / ".claude-plugin").mkdir(exist_ok=True)
-    meta = {"name": "dev-autonomous-workflow"}
+    meta = {"name": "reeve"}
     if version is not None:
         meta["version"] = version
     (root / ".claude-plugin" / "plugin.json").write_text(json.dumps(meta))
@@ -56,7 +56,7 @@ def _plugin(root, version="0.2.0", extra_install=(), drop=()):
     install = [e for e in install if e["dest"] not in drop]
 
     (root / "MANIFEST.json").write_text(json.dumps(
-        {"plugin": "dev-autonomous-workflow", "ship": ["scripts"],
+        {"plugin": "reeve", "ship": ["scripts"],
          "exclude": ["**/test_*.py", "**/*.pyc", "**/*.pyo"], "install": install}))
 
     (root / "templates").mkdir(exist_ok=True)

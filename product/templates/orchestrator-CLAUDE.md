@@ -18,11 +18,11 @@ scarce resource; protect it.
 
 ### How to run a node — the mechanism is a property of the node, not a judgement call
 - **Heavy leaf work** (reads or writes a lot, fans out to nobody, holds no human conversation) → **dispatch
-  the agent by name, `dev-autonomous-workflow:<name>`**: its own file becomes the worker's instructions and
+  the agent by name, `reeve:<name>`**: its own file becomes the worker's instructions and
   its context never lands in yours. These are **`execute`, `document`, `create-demo`, `research`,
   `setup-guide`**.
 - **Everything else** (dispatches other work · holds the human conversation · thin bookkeeping) → **run its
-  skill inline here, `dev-autonomous-workflow:<name>`**. A leaf cannot spawn, so a node that must fan out
+  skill inline here, `reeve:<name>`**. A leaf cannot spawn, so a node that must fan out
   stays inline even when it is heavy (`verify`, `debug`, `planner`, `checkpoint`, `discuss`, …).
 
 **Never dispatch a loop node to a `general-purpose` agent** — a hard block, not advice. A general worker

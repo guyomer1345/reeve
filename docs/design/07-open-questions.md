@@ -83,7 +83,7 @@ Deliberately deferred — known unknowns, to close during build or later.
 - **Real dispatch validation** — **RESOLVED (D128).** The first real end-to-end greenfield loop drove both leaf
   agents through the Task tool with a real model (`research` via `decision-engineer`, `setup-guide` via a setup
   checkpoint) — structured returns intact, orchestrator context stayed clean (hub-and-spoke holds). The agents
-  resolve only **namespaced** (`dev-autonomous-workflow:<name>`), not bare.
+  resolve only **namespaced** (`reeve:<name>`), not bare.
 - **Package install** — **plugin packaging BUILT (D125):** the repo self-markets (`.claude-plugin/marketplace.json`,
   `source: ./product`) and installs via `claude plugin install`; `/start` copies the shipped scripts/hooks out per
   `product/MANIFEST.json`'s `install` map, resolved from `${CLAUDE_PLUGIN_ROOT}`. Loose `.claude/` files remain the

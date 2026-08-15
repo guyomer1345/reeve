@@ -125,7 +125,7 @@ schema or new node frontmatter, and the only correct way to get it is to re-run 
 
 ## 4. The orchestrator brief
 The brief lives in the target's root `CLAUDE.md` inside a **managed block** (the
-`dev-autonomous-workflow:brief:begin` / `:end` markers, owned by `shared/schemas.md`). `/update`
+`reeve:brief:begin` / `:end` markers, owned by `shared/schemas.md`). `/update`
 replaces only what is between those markers, in greenfield, brownfield **and org** installs, so
 project notes around it are never touched. **In org mode the brief is at `.claude/CLAUDE.md`, not the root
 file** — refresh it there and leave the root `CLAUDE.md` alone; it belongs to the product's owner and the

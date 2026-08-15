@@ -530,7 +530,7 @@ below — captured, fix next session per the maintainer). DONE:
 - ✅ **Real orchestrator→subagent dispatch + one full real-model loop iteration** — drove `/start → discuss →
   decompose → prioritize → plan-one → decision-engineer → execute → verify → document → commit → setup-checkpoint →
   outbox → release` with a real model. **Both leaf agents dispatched via Task** (`research` through
-  `decision-engineer`, `setup-guide` through a setup checkpoint — namespaced `dev-autonomous-workflow:<name>`);
+  `decision-engineer`, `setup-guide` through a setup checkpoint — namespaced `reeve:<name>`);
   context stayed clean. codemap resolved the real greenfield import edge; `verify-verdict` first line `pass: true`;
   the **outbox → console `release` → guard push** fired end to end (feature branch, nothing pushed until released).
   **[drive — DONE D128]**
@@ -760,7 +760,7 @@ push that skipped the secret scan (`df5440d`), and `/rebind` pointing at the pro
 - **Four routing arms** — `bus.Paths`' raise, `/start` §0 (a fourth completeness state: installed + bootstrapped +
   *unbound* — a **guard that stops and routes**, never a repair), the daemon's exit, and `/update` (**warn and
   proceed** — it is repo-side only, and blocking would deadlock the delivery of `rebind.py` itself). **[bind — BUILT (D142); the daemon's arm is `Paths`' raise, which now names the cure]**
-- **`runtime_root_for(project_path)` in code** — `$XDG_STATE_HOME/dev-autonomous-workflow/<slug>-<hash-of-abspath>`,
+- **`runtime_root_for(project_path)` in code** — `$XDG_STATE_HOME/reeve/<slug>-<hash-of-abspath>`,
   shared by `/start` step 3 and `rebind.py`. Today the location is model-chosen prose, so two same-named projects
   cross-bind. **[bind — BUILT (D142): `bus.runtime_root_for()`; `/start` step 3 now shells to `rebind.py bind`]**
 - **`.workflow-runtime` identity stamp** `{project_path, bound_at, bound_host}` — `Paths` fails on **mismatch**, not

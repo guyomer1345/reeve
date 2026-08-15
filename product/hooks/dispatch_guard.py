@@ -28,7 +28,7 @@ FAILURE MODES, ON PURPOSE
   - no `.workflow/loop.md`  → ALLOW. There is no loop in this project to protect.
   - loop.md present but unparseable → BLOCK non-package dispatches, and say why. An empty node
     set would pass every dispatch vacuously, which is the one way a gate dies silently.
-  - a namespaced dispatch (`dev-autonomous-workflow:<name>`) → always allowed, including when
+  - a namespaced dispatch (`reeve:<name>`) → always allowed, including when
     the graph is unreadable, so a corrupted file can never stall the loop's own work.
 
 KNOWN COST, STATED RATHER THAN DISCOVERED: signal B blocks a general-purpose dispatch that
@@ -40,7 +40,7 @@ import os
 import re
 import sys
 
-PLUGIN = "dev-autonomous-workflow"
+PLUGIN = "reeve"
 WORKFLOW = ".workflow"
 DISPATCH_TOOLS = {"Agent", "Task"}
 TITLE_CHARS = 200          # a dispatch title is short; the node name leads it or it isn't a title

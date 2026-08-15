@@ -67,7 +67,7 @@ def test_execute_to_general_purpose_is_blocked(tmp_path):
              prompt="Work the plan step by step and record what you did.")
     assert r.returncode == BLOCKED
     assert "execute" in r.stderr
-    assert "dev-autonomous-workflow:execute" in r.stderr
+    assert "reeve:execute" in r.stderr
 
 
 def test_document_to_general_purpose_is_blocked(tmp_path):
@@ -113,14 +113,14 @@ def test_the_word_document_in_ordinary_prose_is_not_a_dispatch_title(tmp_path):
 
 # --- the gate must never stall the loop's own work ------------------------------------
 def test_a_namespaced_agent_dispatch_is_allowed(tmp_path):
-    r = _run(_project(tmp_path), subagent_type="dev-autonomous-workflow:execute",
+    r = _run(_project(tmp_path), subagent_type="reeve:execute",
              description="Execute S2a-evidence-store", prompt=".workflow/items/s2a/plan.md")
     assert r.returncode == ALLOWED
 
 
 def test_a_namespaced_dispatch_survives_an_unparseable_graph(tmp_path):
     p = _project(tmp_path, loop="this file is corrupt\n")
-    r = _run(p, subagent_type="dev-autonomous-workflow:research", description="Research X")
+    r = _run(p, subagent_type="reeve:research", description="Research X")
     assert r.returncode == ALLOWED
 
 

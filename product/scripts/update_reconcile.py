@@ -62,8 +62,8 @@ UNKNOWN_VERSION = "unknown"
 # modes write them (greenfield wraps its whole brief in them too) so /update has one shape to
 # find. `shared/schemas.md` owns these strings -- they are a compatibility contract and must
 # stay byte-stable across versions.
-BRIEF_BEGIN = "<!-- dev-autonomous-workflow:brief:begin -->"
-BRIEF_END = "<!-- dev-autonomous-workflow:brief:end -->"
+BRIEF_BEGIN = "<!-- reeve:brief:begin -->"
+BRIEF_END = "<!-- reeve:brief:end -->"
 BRIEF_NOTE = ("<!-- managed block: /update replaces everything between these markers. "
               "Put project notes OUTSIDE them. -->")
 BRIEF_KEY = "CLAUDE.md#brief"
@@ -201,7 +201,7 @@ def _looks_like_cache_key(name):
 
     The cache dir is named by resolution rules (1)-(4): a `plugin.json` semver, a
     marketplace semver, a short commit SHA, or the literal `unknown`. All three shapes are
-    recognisable; a source directory a human named (`product`, `dev-autonomous-workflow`)
+    recognisable; a source directory a human named (`product`, `reeve`)
     is not. That is the whole discriminator -- see `plugin_version`.
     """
     return name == UNKNOWN_VERSION or bool(_CACHE_KEY_RE.match(name))

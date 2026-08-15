@@ -228,7 +228,7 @@ resolves here — the name is the anchor, and the two files are one schema.*
   **names `/rebind`** — a detector that does not route is a dead end, since the operator on a new machine has no
   other way to learn the cure exists.
 - **The root's location is DERIVED, never chosen** — `bus.runtime_root_for(project_path)` →
-  `$XDG_STATE_HOME/dev-autonomous-workflow/<slug>-<sha256(abspath)[:8]>`. It used to be prose, which meant a
+  `$XDG_STATE_HOME/reeve/<slug>-<sha256(abspath)[:8]>`. It used to be prose, which meant a
   model picked it, and two projects with the same basename in different parents derived the *same* root and
   cross-bound two live installs. The hash kills the collision; the determinism is also what lets `/rebind` guess a
   canonical location from the project path alone when the pointer is lost.
@@ -273,10 +273,10 @@ The **install ledger**: what this package wrote into this project, and the hash 
 ## orchestrator-brief managed block  · written by `/start` step 4 (both modes), replaced by `/update` · *inside the target's root `CLAUDE.md`*
 The orchestrator brief is delimited by two **byte-stable** markers:
 ```
-<!-- dev-autonomous-workflow:brief:begin -->
+<!-- reeve:brief:begin -->
 <!-- managed block: /update replaces everything between these markers. Put project notes OUTSIDE them. -->
 …the filled orchestrator-CLAUDE.md template…
-<!-- dev-autonomous-workflow:brief:end -->
+<!-- reeve:brief:end -->
 ```
 - **Both modes wrap.** Greenfield writes a fresh `CLAUDE.md` and still wraps: the file accumulates the
   human's own notes over the project's life exactly as a brownfield one does, and the markers are what let a

@@ -1,4 +1,4 @@
-# dev-autonomous-workflow — working brief
+# reeve — working brief
 
 This repo is the **spec for "the disciplined builder"**: an autonomous-but-disciplined dev workflow shipped as
 a pure Claude-Code-native config package (skills + subagents + hooks + slash commands + CLAUDE.md) that a user
