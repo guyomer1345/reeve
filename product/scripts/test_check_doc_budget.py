@@ -374,3 +374,56 @@ def test_a_detail_split_out_of_an_always_loaded_file_is_on_demand(tmp_path):
     rows = {r["path"]: r for r in _scan(root)["files"]}
     assert rows["docs/brief-detail.md"]["role"] == db.ONDEMAND
     assert rows["docs/brief-detail.md"]["tier"] == "ok"
+
+
+# ------------------------------------------------- the always-loaded TOTAL
+
+def test_the_total_catches_what_no_per_file_cap_can(tmp_path):
+    """The reason the set-wide bound exists at all. Two always-loaded files EACH under the
+    per-file cap cost the same rent as one file at twice the cap, and a per-file gate sees
+    nothing wrong. `over` (per-file) is empty and the gate still fails."""
+    root = _project(str(tmp_path), doc_budget={"always_hard": 4000, "always_total_hard": 6000})
+    _write(root, "CLAUDE.md", tokens=3900)
+    _write(root, ".workflow/loop.md", tokens=3900)
+    result = _scan(root)
+    assert result["over"] == []                      # every file is individually legal
+    assert result["total"]["tokens"] == 7800
+    assert result["total"]["tier"] == "over"
+    assert db.failed(result) is True
+
+
+def test_the_total_ignores_the_on_demand_tier(tmp_path):
+    """Summing on-demand docs would fail a project for owning documentation — nothing loads
+    them until something needs them, so they are not rent."""
+    root = _project(str(tmp_path))
+    _write(root, "CLAUDE.md", tokens=1000)
+    for i in range(20):
+        _write(root, "docs/knowledge/n%d.md" % i, tokens=5000)
+    result = _scan(root)
+    assert result["total"]["tokens"] == 1000
+    assert result["total"]["files"] == 1
+    assert db.failed(result) is False
+
+
+def test_a_relative_project_root_does_not_double_count_a_doc(tmp_path):
+    """`project_root` is commonly written `./project`. That spelling survives `os.path.join`
+    into the glob (`<root>/./project/docs/...`) while a split-pointer target is resolved
+    through `normpath`, so one file arrived under two unequal spellings and was admitted
+    TWICE — reported twice, and counted twice in any sum over the tier."""
+    root = _project(str(tmp_path), project_root="./project")
+    _write(root, "CLAUDE.md", tokens=100)
+    _write(root, "project/docs/architecture.md", tokens=100)
+    with open(os.path.join(root, "project", "docs", "architecture.md"), "a") as fh:
+        fh.write("\n" + db.SPLIT_MARKER_SIBLING % "architecture.md")   # points at ITSELF
+    paths = [r["path"] for r in _scan(root)["files"]]
+    assert len(paths) == len(set(paths)), "a doc was admitted under two path spellings"
+
+
+def test_the_advisory_is_a_band_under_hard_not_an_aspiration(tmp_path):
+    """A warning tier pitched below what a file can structurally be fires on a fresh install
+    and every run after it, and is therefore silent by habit on the day it matters. The
+    shipped advisories sit proportionally under their hard bounds."""
+    assert db.DEFAULTS["always_advisory"] == int(db.DEFAULTS["always_hard"] * 0.8)
+    assert db.DEFAULTS["always_total_advisory"] == int(db.DEFAULTS["always_total_hard"] * 0.8)
+    assert db.DEFAULTS["always_total_hard"] < 3 * db.DEFAULTS["always_hard"], (
+        "a total at or above (slots x per-file cap) ratifies the accumulation it exists to stop")

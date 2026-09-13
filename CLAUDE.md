@@ -14,7 +14,10 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
 - **`docs/design/`** — this construction record: the numbered design docs `00`–`11` + the `08` decision log +
   `reviews/`. Dense and internal by design; a consumer never needs it.
 - **`scripts/`** — meta-only tooling that never ships (`check-no-spec-refs.sh`, `check-status-coherence.sh`,
-  `check_enum_coherence.py`, `build-release.py`, `dev-reinstall.sh`), plus their tests.
+  `check_enum_coherence.py`, `check-template-budgets.py`, `build-release.py`, `dev-reinstall.sh`), plus their
+  tests. `check-template-budgets.py` is the one that binds *this* repo to the package's own context budget:
+  the shipped gate walks an installed project, so `product/templates/*` is invisible to it — that one measures
+  them **at source**, through the shipped gate's own estimator and role rule (D184).
 
 ## Ground yourself first (read before proposing anything)
 - **`docs/design/11-roadmap.md`** — the complete by-space map of what's left + the phased build sequence

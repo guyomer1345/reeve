@@ -33,56 +33,25 @@ part: a required check, the exact line a hook parses, a refusal it was supposed 
 paraphrasing a role that already exists, and the paraphrase is lossier than the file every time.
 
 ## The loop
-The build loop is defined in `.workflow/loop.md` — the routing graph (nodes + pass/fail
-edges) and its diagram. You are always somewhere in it. Read it to decide the next node;
-don't carry the graph in your head.
+The build loop is defined in `.workflow/loop.md` — the routing graph: nodes, and the pass/fail
+edges between them. You are always somewhere in it. Read it to decide the next node; don't carry
+the graph in your head.
 
 ## Each turn: drain → read → place → advance
-1. **Drain** `.workflow/inbox/` — the console's messages to you.
+1. **Drain** `.workflow/inbox/` — the console's messages to you. This step is what resumes parked
+   work: skip it and a checkpoint never unparks.
 
-   **Run `python3 .claude/scripts/drain.py list`.** It returns exactly what to apply, in the
-   order to apply it, with already-consumed messages skipped. Don't list the directory yourself
-   and don't reason about which ids are new: that part is arithmetic, it is this script's job,
-   and it is the half that is easy to get quietly wrong.
+   **Run `python3 .claude/scripts/drain.py list`.** It returns exactly what to apply, in the order to
+   apply it, with already-consumed messages skipped. Don't list the directory yourself and don't reason
+   about which ids are new — that part is arithmetic, it is the script's job, and it is the half that is
+   easy to get quietly wrong. **Applying** each message is the half that is yours.
 
-   **Apply each one — that part is yours**, by kind:
-   - `control` (reprioritize / pause / resume) — honored here only, never mid-item.
-   - `verdict` — resume the parked ticket whose `token` matches. An unknown or already-closed
-     token → **dead-letter it and surface it**, never a silent resume. Once you have routed the
-     verdict, **close the ticket with `python3 .claude/scripts/bus.py unpark --id <ticket_id>`** —
-     removing the record is what closes the token (so a re-applied verdict no-ops) *and* what drops
-     the entry from `handoff.md`'s parked block. Skip it and the loop reports a checkpoint that is
-     already answered as still open, forever.
-   - `intake` — promote into `backlog.md` through triage, stamping the message's id into the new
-     item's `source`. If an item already carries that id, it's already promoted: skip it.
-   - `release` — fire each named `outbox/` entry (skip any already `executed`).
-   - `question` — run the **`answer`** skill: reply from this project's own knowledge base, spec and
-     decision record, and append the turn to `.workflow/thread/thread.json`. A reply already carrying
-     that message id means it is answered: skip it. **A question is a read** — it is applied last, it
-     advances nothing, and it is never promoted into the backlog. If it is plainly a work request in
-     the wrong box, say so in the answer and let the human re-send it as a request.
+   → **What each kind does, its idempotence anchor, how to record what you applied, and the rule for a
+   returned credential: `.workflow/loop-detail.md § the boundary drain, by kind`.** Read it at the drain,
+   not every turn.
 
-   **Then record what you applied:**
-   `python3 .claude/scripts/drain.py record --applied <id> [<id>...] [--dead-letter <id>="why"]`
-   Record each id **as soon as** its apply succeeds, not in one batch at the end — a crash
-   between applying and recording re-applies that message on restart, and the window should be
-   as small as you can make it. (Each kind's effect is *also* idempotent, which is what covers
-   the window you can't close: a closed token, an `executed` outbox entry, the `source` stamp.)
-
-   `record` recomputes the watermark, prunes the set, and republishes `handoff.md` durably. It
-   owns the machine block in that file — **never hand-write, hand-edit, or delete that block**;
-   rewrite the prose around it as freely as you like.
-
-   **A returned credential never passes through you.** If `list` marks a message `sensitive`,
-   don't open the file — run `python3 .claude/scripts/drain.py secret --id <id>`. It moves the
-   value into the secret store, unlinks the message, and records it, without the value ever
-   reaching your context or a log.
-
-   **Never delete an inbox file.** The bus owns that directory and collects messages itself once
-   you publish the watermark. The `secret` command above is the only exception, and it exists
-   because a credential must not wait on a janitor.
-
-   This step is what resumes parked work — skip it and a checkpoint never unparks.
+   **Never delete an inbox file.** The bus owns that directory and collects messages itself once you
+   publish the watermark.
 2. **Read** `.workflow/state.json` to find where you are. On a cold start (fresh session),
    read `.workflow/handoff.md` + `git log` instead and rebuild position.
 3. **Place** yourself: mid-item → continue that item's sub-loop. Between items → run
@@ -99,27 +68,25 @@ state only, never history, within a small size budget. History lives in git.
 **One orchestrator per repo.** Nothing enforces this. Two sessions driving the same
 `.workflow/` will silently clobber each other's state — an atomic write stops a torn *read*,
 not a lost *update*. If a session is already driving this repo, do not start a second.
-If `config.json`'s `runner` is enabled, **start/resume the orchestrator via
-`bash .claude/scripts/loop.sh`, not bare `claude`** — the launcher holds the
-`orchestrator.lock` the runner probes, so it can tell you are live and won't spawn a
-duplicate. A bare start is invisible to the runner (the one operator residual).
+*(How a session takes the lock, and why it must be launched via `loop.sh` rather than bare
+`claude`: `shared/schemas-runtime.md § orchestrator.lock`.)*
 
 **Enforced by hooks (you cannot cross these):**
 - No commit until `verify` passes for the item.
 - No commit if the staged diff trips the secret scan.
 - **Never push a protected branch** — by default `main`/`master`, plus anything `config.json`'s
-  `guard.protected_branches` adds. Push a feature branch; a **human** moves `main`. A hard block, not a prompt:
-  there is no approve-and-proceed *for a branch in the set*. The **set itself** is a project decision —
-  `guard.allow_protected_push: true` drops the `main`/`master` floor (added names still apply), which is the
-  right setting for a solo repo where the owner is the only pusher. Default OFF, so unless this project's
-  `config.json` says otherwise, assume `main` is protected.
+  `guard.protected_branches` adds. Push a feature branch; a **human** moves `main`. A hard block, not a
+  prompt: there is no approve-and-proceed for a branch in the set. Default ON, so unless this project's
+  `config.json` says otherwise, assume `main` is protected. *(How the set is configured and lowered:
+  `shared/schemas-runtime.md § config.json → guard`.)*
 - No push whose outgoing commit range trips the secret scan.
 
 **Gated by the outbox (defer — never block, never wait):**
 - An outward action — push, issue create/close — is **not** a prompt and **not** a checkpoint. Read
-  `config.json`'s `outward` policy: match `allow` → run it; otherwise **append a record to `.workflow/outbox/`
-  and carry straight on to the next work**. The human approves a batch from the console; you fire it at a later
-  drain. Never run an outward command expecting a prompt to gate it — nobody may be at the terminal.
+  `config.json`'s `outward` policy: match `allow` → run it; otherwise **append a record to
+  `.workflow/outbox/` and carry straight on to the next work**. The human approves a batch from the console;
+  you fire it at a later drain. **Never run an outward command expecting a prompt to gate it — nobody may be
+  at the terminal.**
 - Other outward commands (deploy / publish / cloud / network) are **not** queued and still raise a permission
   prompt, so they only ever run with a human present.
 
@@ -149,30 +116,30 @@ When context runs low: finish or park the current item, run `document`, `commit`
 rewrite `handoff.md` as the resume anchor — current item, position in the loop, what's
 parked. Write the anchor as if the next session is a stranger: it is.
 
-**Interactive reset (the statusline governor).** The shipped statusline shows a persistent
-budget banner once context passes `config.json` → `context.warn_pct`. When you (or the human)
-see it, run **`/dispatch`** — it writes a complete, current `handoff.md` on the spot — then the
-human runs **`/clear`**. You cannot `/clear` yourself; the human does that. A cleared session
-**auto-rehydrates**: the `SessionStart` hook re-injects `handoff.md`, and a `PreCompact` backstop
-preserves it even if the warning is ignored into an auto-compaction. So a long interactive run
-resets its context without losing the build — the analogue of the runner's fresh-window-per-ticket.
+**Interactive reset (the statusline governor).** The shipped statusline shows a persistent budget
+banner once context passes `config.json` → `context.warn_pct`. When you or the human see it, run
+**`/dispatch`**, then the human runs **`/clear`** — you cannot `/clear` yourself. A cleared session
+auto-rehydrates from `handoff.md`, so a long interactive run resets its context without losing the
+build. *(What `/dispatch` writes and the `PreCompact` backstop behind it: the `/dispatch` command.)*
 
 If the runner is enabled (`config.json` → `runner`) it relaunches a fresh session for the next
 ticket automatically; otherwise a human restarts. Either way the new session resumes from
 `handoff.md` + `git log` — completed items are committed, so nothing reruns.
 
 ## Where things live
+What you touch every turn:
+
 | Path | What | Tier |
 |---|---|---|
 | `.workflow/config.json` | `project_root` (the product dir) + run config | stable |
-| `.workflow/loop.md` | the routing graph + diagram | stable |
+| `.workflow/loop.md` | the routing graph (detail in `loop-detail.md`) | stable |
 | `.workflow/state.json` | live position (item / phase / wave) | volatile, gitignored |
 | `.workflow/handoff.md` | durable resume anchor | volatile |
-| `.workflow/backlog.md` | live open queue: issues + roadmap (closed leave) | volatile |
-| `.workflow/items/<id>/` | per-item plan / changelog / verdict / debug-report (planner mkdirs on demand; pruned closed in audit) | committed |
-| `<project_root>/docs/decisions/` | decision records / ADRs (global) | append-only |
-| `.workflow/outbox/` | pending outward-action queue (push/issue/deploy awaiting a console `release`) | runtime, gitignored |
-| `.workflow/thread/` | the console conversation — questions asked and answered (`answer` writes, the bus reads) | runtime, gitignored |
+| `.workflow/backlog.md` | live open queue: issues + roadmap (closed entries leave) | volatile |
 | `<project_root>/` | the product code | — |
-| `<project_root>/docs/` | spec · architecture.md · knowledge code-map | stable · generated + append-only `# Sessions` |
-| `.claude/skills/` · `.claude/agents/` · `.claude/commands/` | the capability package | stable |
+
+**Every other workflow artifact — where it lives, who writes it, and its tier — is declared by its own
+section in `shared/schemas.md`.** That file is the owner; don't keep a second map here. The ones you will
+reach for most: `.workflow/items/<id>/` (per-item plan · changelog · verdict), `.workflow/outbox/` (deferred
+outward actions), `.workflow/thread/` (the console conversation), `<project_root>/docs/` (spec ·
+architecture · knowledge code-map), `<project_root>/docs/decisions/` (decision records).

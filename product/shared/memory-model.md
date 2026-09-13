@@ -90,7 +90,16 @@ its **role's** budget, **in tokens** (model-window-agnostic, like `context.warn_
   and not content. For the on-demand set the hard number is not a preference: it is the **Read tool's
   25 000-token ceiling**, past which a file cannot be loaded in one call at all. That is enforcement that is a
   *failure*, not advice.
-- **ADVISORY** never fails a build; `prioritize` injects a `doc-budget` maintenance item. Both tiers exist
+- **TWO BOUNDS ON THE ALWAYS-LOADED TIER — per-file, and the SET.** A per-file cap is a *shape* check: it
+  says one file has outgrown its role. It cannot see the bill — two files each a token under cap cost the same
+  rent as one file at twice the cap, and only the second is caught. So the always-loaded files are **also**
+  summed against a set-wide ceiling, which is the figure that actually describes what a session pays before a
+  word is typed, and it fails the gate the same way. The on-demand set is not totalled: nothing loads it until
+  something needs it, so a sum over it would fail a project for owning documentation.
+- **ADVISORY** never fails a build; `prioritize` injects a `doc-budget` maintenance item. It sits
+  **proportionally under its hard bound (~80%)** — a warning band with room to act, never an aspirational
+  floor. An advisory pitched below what a file can structurally be fires on a fresh install and every run
+  after it, and a tier that has been tripped since day one is the tier that is silent when it matters. Both tiers exist
   because an aggressive-only budget is red on a clean install, and a gate that fires on a fresh bootstrap is one
   a human learns to skip — so the aspiration is tracked as work instead of as a broken build.
 - **Over budget is a TICKET, never an auto-edit.** You cannot drop half a spec doc to git the way retention drops

@@ -105,38 +105,3 @@ a `pass: true` verdict instead.
 `verify`(pass) → `checkpoint:qa?` → `document` → `commit` → `close-issue?` → `prioritize`.
 The item's backlog done-flip and the `handoff.md` rewrite happen **before** `commit` (it captures them);
 `close-issue` is the only post-commit step.
-
-## Diagram
-```mermaid
-flowchart TD
-  start([/start]) -->|greenfield| discuss
-  start -->|brownfield| ingest --> reconcile{reconcile ok?}
-  reconcile -->|confirmed| prioritize
-  reconcile -->|corrections| ingest
-  discuss --> fc{forecast gate?}
-  fc -->|big + hard to reverse| create-forecast --> demo{sandbox gate?}
-  fc -->|no| demo
-  create-forecast -.reject.-> discuss
-  demo -->|visible surface| create-demo --> dec[planner:decompose]
-  demo -->|no| dec
-  create-demo -.refine cap hit.-> discuss
-  dec --> prioritize
-  prioritize -->|next wave| plan[planner:plan-one]
-  prioritize -->|maintenance due| maint[document:audit / align / doc-budget] --> commit
-  prioritize -->|empty| idle([idle])
-  idle -.steering / new issue.-> prioritize
-  plan -->|open decision| decision-engineer --> plan
-  decision-engineer -.needs evidence.-> research -.-> decision-engineer
-  plan -->|per-item demo| pdemo[create-demo] --> execute
-  plan -->|plan ready| execute --> verify
-  execute -.structural divergence.-> plan
-  verify -->|pass| qa{human-qa?}
-  verify -->|fail| debug --> refine --> plan
-  debug -.no clear cause.-> hcp[checkpoint: human]
-  qa -->|pass / none| document
-  qa -->|fail| debug
-  document --> commit --> close{linked issue?}
-  close -->|yes| close-issue --> prioritize
-  close -->|no| prioritize
-  any[any node] -.problem found.-> create-issue -.-> backlog[(backlog)]
-```

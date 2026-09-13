@@ -72,7 +72,7 @@ loop's normal `state.json` takes over when the motion ends.
    ```
    .workflow/
      config.json       # project_root + run config      (committed)
-     loop.md           # routing graph + diagram        (committed)
+     loop.md           # routing graph (+ loop-detail.md) (committed)
      loop-detail.md    # the on-demand half of loop.md — split-and-pointer sibling, same dir (committed)
      checks.sh         # mechanical-gate runner — installed FIXED from templates/ (--fix / --check) (committed)
      checks.env        # per-stack commands checks.sh reads — data /start writes (committed)

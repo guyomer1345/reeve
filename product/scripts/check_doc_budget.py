@@ -17,11 +17,19 @@ TWO TIERS PER ROLE, and the second tier is the one that keeps this usable:
                cannot be loaded in one call*, so this is enforcement that is a failure rather
                than advice.
   ADVISORY  -> never fails a build; it schedules a trim as an ordinary maintenance item.
-Shipping only the aggressive number would have made this gate red on a clean install (the
-package's own always-loaded templates are ~3.4k tokens each), and a gate that fires on a
-fresh install trains a human to ignore it -- the same reason the staleness detector warns
-once per SHA rather than every session. Green on install, with the aspiration tracked as
-work rather than as a broken build.
+Shipping only the aggressive number would have made this gate red on a clean install, and a
+gate that fires on a fresh install trains a human to ignore it -- the same reason the
+staleness detector warns once per SHA rather than every session. Green on install, with the
+aspiration tracked as work rather than as a broken build. The advisory is therefore pinned
+proportionally under hard (~80%) rather than at an aspirational floor; see `DEFAULTS`.
+
+AND TWO BOUNDS ON THE ALWAYS-LOADED TIER: per-file, and the SET. A per-file cap is a shape
+check -- it says *this file* has outgrown its role -- and it structurally cannot see the bill,
+because two files each a token under cap cost the same rent as one file at twice the cap and
+only the second is caught. The always-loaded TOTAL is the number that describes what a session
+actually pays before a word is typed, and it fails the gate exactly as a per-file breach does.
+The on-demand tier is deliberately NOT totalled: nothing loads it until something needs it, so
+a sum over it would fail a project for owning documentation.
 
 ESTIMATED, NOT COUNTED, AND CALIBRATED ON A REAL FAILURE. There is no tokenizer in the
 standard library and this package ships stdlib-only Python, so the count is an estimate from
@@ -39,7 +47,8 @@ over-budget prose file routes to a SPLIT-AND-POINTER: a lean current-state file,
 archived-detail file, and a head marker in the survivor, mirroring the marker retention
 already leaves. This script names the remedy; it never performs it.
 
-  --check   (default) the gate: exit 1 if any file exceeds its role's HARD budget.
+  --check   (default) the gate: exit 1 if any file exceeds its role's HARD budget, or if the
+            always-loaded files together exceed the TOTAL ceiling.
   --report  every file with its role, estimate and tier; exit 0. What the maintenance item
             reads, and what a human runs by hand.
   --json    machine-readable, for either mode.
@@ -55,14 +64,33 @@ import sys
 CONFIG_REL = os.path.join(".workflow", "config.json")
 
 # Shipped defaults, DERIVED BY MEASURING this package rather than by citing a number (there
-# is no single best-practice max size; that is why the budget is per role). The always-loaded
-# pair the package itself ships measure ~3.3k and ~3.4k tokens, so `always_hard` sits above
-# them with headroom -- the gate is green on a fresh install -- while `always_advisory` keeps
-# the community sub-1k target visible as a scheduled trim.
+# is no single best-practice max size; that is why the budget is per role).
+#
+# TWO BOUNDS ON THE ALWAYS-LOADED TIER, because one of them caps the wrong thing.
+# `always_hard` is a SHAPE check on a single file -- it says *this file* has outgrown its role.
+# It cannot see the bill: two files each a token under cap cost the same rent as one file at
+# twice the cap, and only the second is caught. `always_total_hard` is the figure that actually
+# describes what a session pays before a word is typed, and it is deliberately far below
+# (number of always-loaded slots x always_hard) -- otherwise it would ratify exactly the
+# accumulation it exists to stop.
+#
+# THE ADVISORY IS A BAND, NOT AN ASPIRATION. It sits proportionally under its hard bound
+# (~80%) so there is a real warning zone with room to act. An advisory pitched below what a
+# file can structurally be fires on a fresh install, every run, forever -- and a tier that has
+# been tripped since day one is a tier nobody reads. That is not hypothetical: `always_advisory`
+# shipped at 1200, no always-loaded file was ever under it, and when a file crossed its HARD
+# limit the only tier that could have warned on the way had been crying wolf since day one.
+#
+# THE STANDING RULE FOR CHANGING THESE: a cap is set to a value the shipped package already
+# meets, and is never raised to accommodate what the package happens to weigh. If the package
+# breaches a cap, the package is relocated -- the cap does not move. That rule is the whole
+# difference between a budget and a rubber stamp.
 DEFAULTS = {
     "chars_per_token": 3.2,
     "always_hard": 4000,
-    "always_advisory": 1200,
+    "always_advisory": 3200,
+    "always_total_hard": 8000,
+    "always_total_advisory": 6400,
     # Not a preference: the Read tool's own ceiling. A file over it cannot be read in one call.
     "ondemand_hard": 25000,
     "ondemand_advisory": 15000,
@@ -202,8 +230,16 @@ def workflow_docs(project_root, proot, droot=None, org=False):
     SessionStart hook. Giving it a second budget here would be a second owner of one bound,
     and the two would drift.
     """
-    p = (lambda *a: os.path.join(project_root, *a))
-    d = (lambda *a: os.path.join(project_root, droot if droot is not None else proot, *a))
+    # EVERY path is normalised the moment it is built, and `seen` only ever holds normalised
+    # paths. Not tidiness -- `project_root` is commonly a relative spelling like `./project`,
+    # which makes `os.path.join` produce `<root>/./project/docs/...`; `glob` hands that spelling
+    # straight back, while a split-pointer target is resolved through `normpath`. The two
+    # spellings denote one file and compare unequal, so the same doc was admitted twice: once by
+    # its glob and once as a pointer target. That double-counted it in the always-loaded TOTAL
+    # and reported it twice in the advisory list.
+    p = (lambda *a: os.path.normpath(os.path.join(project_root, *a)))
+    d = (lambda *a: os.path.normpath(
+        os.path.join(project_root, droot if droot is not None else proot, *a)))
     out = []
     # `.claude/CLAUDE.md` is the platform's OTHER project-instructions location and loads at the
     # same scope as the root file (verified against the shipped docs, not assumed). Org mode puts
@@ -233,6 +269,7 @@ def workflow_docs(project_root, proot, droot=None, org=False):
     seen = {path for _r, path in out}
     for pat in patterns:
         for path in sorted(glob.glob(pat, recursive=True)):
+            path = os.path.normpath(path)
             if os.path.isfile(path) and path not in seen:
                 seen.add(path)
                 out.append((ONDEMAND, path))
@@ -279,9 +316,35 @@ def scan(project_root):
                      "role": role, "tokens": est, "hard": hard, "advisory": adv,
                      "tier": tier})
     rows.sort(key=lambda r: (-r["tokens"], r["path"]))
-    return {"budgets": b, "files": rows,
+
+    # THE BILL, not the shape. Summed over the always-loaded tier only: the on-demand tier is
+    # not rent (nothing loads it until something needs it), so totalling it would produce a
+    # number that means nothing and would fail a project for owning documentation.
+    always_rows = [r for r in rows if r["role"] == ALWAYS]
+    tot = sum(r["tokens"] for r in always_rows)
+    t_hard, t_adv = b["always_total_hard"], b["always_total_advisory"]
+    total = {"role": ALWAYS, "tokens": tot, "hard": t_hard, "advisory": t_adv,
+             "files": len(always_rows),
+             "tier": "over" if tot > t_hard else ("advisory" if tot > t_adv else "ok")}
+
+    return {"budgets": b, "files": rows, "total": total,
             "over": [r for r in rows if r["tier"] == "over"],
             "advisories": [r for r in rows if r["tier"] == "advisory"]}
+
+
+def failed(result):
+    """The gate's verdict, in one place -- a per-file HARD breach OR the TOTAL over ceiling.
+
+    One owner for "did this fail", because the exit code, the rendered verdict line and every
+    caller must agree; two copies of this predicate is how a gate reports OK and exits 1.
+    """
+    return bool(result["over"]) or result["total"]["tier"] == "over"
+
+
+TOTAL_REMEDY = (
+    "move a whole file OUT of the always-loaded set, or split one and leave a pointer. "
+    "Trimming a single file need not fix this: every always-loaded file can be under its own "
+    "cap while the set still costs more than a session should pay before a word is typed")
 
 
 def _remedy(row):
@@ -307,15 +370,32 @@ def render(result, report):
                          % (r["path"], r["tokens"], r["advisory"], r["role"],
                             ROLE_WHY[r["role"]]))
             lines.append("             not a build failure: schedule a trim. %s" % _remedy(r))
+    t = result["total"]
+    if t["tier"] == "over":
+        lines.append("OVER BUDGET  %-52s %7d tok  > %d (always-loaded TOTAL HARD)"
+                     % ("(%d always-loaded file(s), summed)" % t["files"],
+                        t["tokens"], t["hard"]))
+        lines.append("             %s" % TOTAL_REMEDY)
+    elif report and t["tier"] == "advisory":
+        lines.append("ADVISORY     %-52s %7d tok  > %d (always-loaded TOTAL -- %s)"
+                     % ("(%d always-loaded file(s), summed)" % t["files"],
+                        t["tokens"], t["advisory"], ROLE_WHY[ALWAYS]))
+        lines.append("             not a build failure: schedule a trim. %s" % TOTAL_REMEDY)
+
     n = len(result["files"])
-    if result["over"]:
-        lines.append("BLOCKED: %d of %d workflow-owned doc(s) exceed a HARD budget. Over the "
+    if failed(result):
+        lines.append("BLOCKED: %d of %d workflow-owned doc(s) exceed a HARD budget%s. Over the "
                      "on-demand wall a file cannot be read in one call at all, so this is a "
                      "broken read, not a style note. Fix by splitting, never by deleting "
-                     "content that carries intent." % (len(result["over"]), n))
+                     "content that carries intent."
+                     % (len(result["over"]), n,
+                        "" if t["tier"] != "over" else
+                        ", and the always-loaded set costs %d tok against a %d ceiling"
+                        % (t["tokens"], t["hard"])))
     else:
-        lines.append("OK: doc budget -- %d workflow-owned doc(s) within budget (%d advisory)"
-                     % (n, len(result["advisories"])))
+        lines.append("OK: doc budget -- %d workflow-owned doc(s) within budget (%d advisory); "
+                     "always-loaded set %d/%d tok"
+                     % (n, len(result["advisories"]), t["tokens"], t["hard"]))
     return "\n".join(lines)
 
 
@@ -337,7 +417,7 @@ def main(argv=None):
         print(render(result, report=args.report))
     # `--report` is the read-only view: it must not fail a commit for an advisory, and its
     # whole job is to be safe to run anywhere.
-    return 0 if args.report else (1 if result["over"] else 0)
+    return 0 if args.report else (1 if failed(result) else 0)
 
 
 if __name__ == "__main__":

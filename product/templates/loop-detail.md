@@ -1,8 +1,8 @@
 # Loop — the long-form detail
 
 The on-demand half of the routing graph. [`loop.md`](loop.md) holds what the
-orchestrator needs **every turn** — the routing table, the side doors, the boundary order, the diagram — and
-is budgeted as an always-loaded doc (`doc_budget.always_hard`). This file holds the parts that are read
+orchestrator needs **every turn** — the routing table, the side doors and the boundary order — and is
+budgeted as an always-loaded doc (`doc_budget.always_hard`, and its share of `always_total_hard`). This file holds the parts that are read
 **when the situation arises**: the per-kind drain semantics, the forecast divergence check, the one-time
 stack-wiring transition, and the maintenance-item contract. Each has a one-line pointer from `loop.md`.
 
@@ -27,6 +27,23 @@ The order itself is in `loop.md`. What each kind *does*, and the **anchor** that
   `.workflow/thread/thread.json`. *Anchor:* that turn's source message id (a reply already carrying it →
   skip). **Last, and it advances nothing** — a question is a read, so it never delays a parked resume or a
   promotion, and it must never be promoted into the backlog on its own.
+
+### recording what you applied
+`python3 .claude/scripts/drain.py record --applied <id> [<id>...] [--dead-letter <id>="why"]`
+
+Record each id **as soon as** its apply succeeds, **not** in one batch at the end. A crash between applying
+and recording re-applies that message on restart, so the window should be as small as you can make it. Each
+kind's effect is *also* idempotent, via the anchors above — that is what covers the window you cannot close.
+
+`record` recomputes the watermark, prunes the consumed-set and republishes `handoff.md` durably. **It owns
+the machine block in that file** — never hand-write, hand-edit or delete that block. The prose around it is
+yours to rewrite freely.
+
+### a returned credential never passes through the orchestrator
+If `list` marks a message `sensitive`, **do not open the file.** Run
+`python3 .claude/scripts/drain.py secret --id <id>`: it moves the value into the secret store, unlinks the
+message and records it, without the value ever reaching a context window or a log. This is also the **one**
+exception to "the consumer never deletes an inbox file" — a credential must not sit waiting on a janitor.
 
 **The drain is split, and the split is the point.** *Which* messages are new, in what order they apply, what
 the watermark is now, and what may be pruned are all a pure function of the inbox and `handoff.md` — that

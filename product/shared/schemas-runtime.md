@@ -62,11 +62,23 @@ resolves here — the name is the anchor, and the two files are one schema.*
   call at all. `chars_per_token` is the estimator's divisor — there is no tokenizer in the standard library, so
   the count is estimated from length and **deliberately errs high**, since under-reporting is what lets an
   unreadable file pass. Lower it for a project whose docs are dense in fenced code. Absent → shipped defaults
-  (`chars_per_token` 3.2, `always_hard` 4000, `always_advisory` 1200, `ondemand_hard` 25000,
-  `ondemand_advisory` 15000, `every_p_items` 15). **Decoupled from `retention` and `align`** — doc size is not
+  (`chars_per_token` 3.2, `always_hard` 4000, `always_advisory` 3200, `always_total_hard` 8000,
+  `always_total_advisory` 6400, `ondemand_hard` 25000, `ondemand_advisory` 15000, `every_p_items` 15). **Decoupled from `retention` and `align`** — doc size is not
   memory pressure and not drift risk, so it gets its own threshold, the same shape those two already use.
   The **VOLATILE tier is deliberately out of scope**: `handoff.md` is already capped mechanically at injection
-  time by the SessionStart hook, and a second budget for one bound is a second owner
+  time by the SessionStart hook, and a second budget for one bound is a second owner.
+  **The always-loaded tier carries a SECOND, set-wide bound: `always_total_hard` /
+  `always_total_advisory`, over the SUM of the always-loaded files.** The per-file cap is a *shape* check —
+  it says one file has outgrown its role — and it structurally cannot see the bill, because two files each a
+  token under cap cost the same rent as one file at twice the cap and only the second is caught. The total is
+  the number that describes what a session pays before a word is typed; it fails `checks.sh` exactly as a
+  per-file breach does, and it is set far below (slots x `always_hard`) or it would ratify the accumulation it
+  exists to stop. The on-demand set is deliberately **not** totalled — nothing loads it until something needs
+  it, so a sum over it would fail a project for owning documentation.
+  **Every advisory sits proportionally under its hard bound (~80%), not at an aspirational floor** — an
+  advisory below what a file can structurally be fires on every run forever, and a tier tripped since day one
+  is a tier nobody reads. Changing any of these follows one standing rule: **a cap is set to a value the
+  shipped package already meets, and is never raised to accommodate what the package happens to weigh**
 - `align` — the drift-scan knobs, read by `prioritize` (trigger) + `align` (budget): `every_n_commits` (commits
   since `.workflow/align/anchor.json`'s `base_sha` before an `align` item is injected) + `max_agents` (hard cap
   on the semantic pass's fan-out; deferred surface rides the next scan). **Decoupled from `retention`** (drift

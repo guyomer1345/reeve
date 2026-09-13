@@ -63,7 +63,7 @@
   },
   "statusLine": {
     "type": "command",
-    "command": "python3 .claude/scripts/statusline.py"
+    "command": "python3 \"${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || echo .)}\"/.claude/scripts/statusline.py"
   },
   "hooks": {
     "PreToolUse": [
