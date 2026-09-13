@@ -6078,3 +6078,69 @@ call 3 extends rather than invents), **D129** (fail closed; never let the volati
 governor whose banner this makes enforced rather than advisory), **D180** (the corrected instrument, and the router
 as the constrained window), **D184** (the always-loaded budget the directive file must live inside).
 → `11` (`### Phase 12` opened), `07` (the open sub-questions).
+
+## D186 — The work order: measure, close the fix pass, then Phase 12 in its safety order — and the order gets one owner **[DECIDED 2026-09-13, NOT BUILT — the sequence itself. Written to be executed from a COLD CONTEXT: `11`'s `### The ordered build sequence` is the entry point, and it is the only copy]**
+
+D185 opened Phase 12 and set its internal slice order. What it did not do is place that phase against the work
+already open — D183 and D184's remainder, both DECIDED and unbuilt — or say which of those are *prerequisites*
+rather than merely pending. Left implicit, a fresh session reads two decided-not-built entries and a new phase and
+picks by recency. This decides the whole order, and puts it in **one** place.
+
+**Calls.**
+
+1. **Measurement is step 0, because it is free and it can change a later design.**
+   `scripts/measure-dispatch.py --writer-scope` runs over `agentic cyber` transcripts **that are already on disk** —
+   no drive needed. It settles whether the observed 300–400k per `execute` is real or the same artifact D180
+   corrected, where the router's per-item 98–179k goes, and whether a live subagent token count is observable at
+   all. Every one of those is an input to `12b` and to the `warn_pct` question. A step that is free and
+   design-changing goes first; there is no argument for the other order.
+2. **The fix pass comes before Phase 12, on three prerequisites and not on tidiness.** The always-loaded **total
+   ceiling** and the **source-side meta-gate** must exist before `12a` adds a third always-loaded file, or the
+   directive channel ships per-turn rent no gate can see — committing D184's own defect a second time, in the slice
+   that read the lesson. The **mermaid diagram** comes out before `12c` rewrites routing, because deleting a stale
+   second copy *after* editing the primary is how the two disagree. And **D183 unblocks `/update`**, which has no
+   legal commit path today, so nothing in Phase 12 can reach a real install until it lands.
+3. **Phase 12's order is a safety order, not a value order.** `12a` first because the mechanical slices persist as
+   *code* and are safe without it, while the residue that cannot be mechanized has nowhere to live — and because
+   `12d`/`12e` must not run unattended without a decided autonomy boundary. `12e` last because it multiplies every
+   defect above it across sessions nobody is watching.
+4. **The order has ONE owner** — `11`'s `### The ordered build sequence`. Phase 12's section keeps the slice
+   *content* and its own sequencing paragraph is **deleted**, replaced by a pointer. Two copies of a work order is
+   the D80 failure in the document a cold session reads to decide what to do next, which is the worst possible
+   place for it.
+5. **The uncaptured tree change is adopted and named.** `settings.json`'s hook commands became
+   `"$CLAUDE_PROJECT_DIR"/.claude/…` in the working tree with no decision behind them. It is **right** — hooks
+   receive `CLAUDE_PROJECT_DIR` (measured, CLI 2.1.220) and a cwd-relative command is only correct while cwd
+   happens to be the project root — so it is committed with the D184 slice (`9830c4e`) rather than reverted or
+   left dangling. But it is **inconsistent**: the statusline command is still cwd-relative. That inconsistency is
+   carried into the fix pass as an open item rather than swept, because "fix the ones I noticed" is how a
+   half-applied rule reads as a deliberate exception to the next reader.
+
+- **Rejected — Phase 12 first, fix pass alongside.** The attractive version: the phase is the exciting work and
+  D183/D184 are cleanup. It fails on call 2 — two of the three are *load-bearing for slices in the phase itself*,
+  so "alongside" means building `12a` against a budget gate that cannot see it and `12c` against a routing table
+  with a stale twin. Cleanup that a later slice depends on is not cleanup.
+- **Rejected — `12c` (the wave coordinator) ahead of `12b`, for an early visible speed win.** *This reverses a
+  reading stated earlier in the same conversation* ("12c can jump ahead without much cost"), and the reversal is
+  the point: fanning out N workers multiplies **simultaneous returns into the router**, which 11f measured as the
+  constrained window (43–53% of a drive's fed-in tokens). Parallelism before returns are bounded buys wall-clock by
+  spending the exact budget the phase exists to protect. The earlier reading treated the two as independent; they
+  are not.
+- **Rejected — `12a` after the mechanical slices** (build the code first, write the channel once we know what goes
+  in it). Tempting and wrong in one specific place: `12d`/`12e` run unattended, and the autonomy boundary is what
+  decides whether an unattended session may take a decision at all. A driver built before its boundary is a driver
+  whose boundary is "whatever it felt like".
+- **Rejected — folding the cold-context reviewer into this phase.** It is genuinely promotable now that 11e is
+  green, and it is the strongest candidate for what follows Phase 12. That is exactly why it stays out: a phase
+  that absorbs its own best successor stops being a sequence. It is named in `07`, unscheduled, on purpose.
+
+*Evidence:* `~/.claude/projects/-mnt-c-Users-guyo0-Documents-Projects-agentic-cyber/` exists, so step 0 needs no
+drive. `product/templates/loop.md` is 2760 est. tokens post-split and `orchestrator-CLAUDE.md` 3915, i.e. 6675 of
+always-loaded rent that no gate can currently see as a total. `.git/hooks/pre-commit` runs five gates and none of
+them measures `product/templates/*`. `verify_check.py`'s `MAINT_KINDS` is still the closed three, so `/update`
+still has no legal commit. `settings.json:66` is still `python3 .claude/scripts/statusline.py` while every hook
+beside it is absolute.
+**Builds on:** **D80** (one owner per fact — applied here to the work order itself), **D180** (the router as the
+constrained window, which is what orders `12b` before `12c`), **D183**/**D184** (the two unbuilt entries this
+places), **D185** (the phase this sequences).
+→ `11` (`### The ordered build sequence` — the owner), `07` (the open sub-questions, unchanged).

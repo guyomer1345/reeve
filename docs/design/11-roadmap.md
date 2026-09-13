@@ -1079,6 +1079,69 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
+### The ordered build sequence (set 2026-09-13, D186) — the fix pass, then Phase 12
+**This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
+built, with the dependency that fixes each position stated rather than implied. A step that is merely *nice*
+before another is called that; a step that is a **prerequisite** says why. Phase 12's per-slice content lives
+in `### Phase 12` below — this section owns only the ORDER.
+
+**Step 0 — Measure. Read-only, free, and first.**
+Run `scripts/measure-dispatch.py --writer-scope` over the existing `agentic cyber` transcripts (they are on disk;
+no new drive is needed). It answers three things every later step would otherwise guess: whether the observed
+300–400k per `execute` is real or the artifact D180 already corrected (the instrument read **2.8–3.5× high**);
+where the router's 98–179k per item actually goes; and whether any live signal can observe a running subagent's
+token count at all. **First because it is the only step whose answer can change a later step's design**, and it
+costs nothing — it reads transcripts that already exist. Feeds Step 2 and the `warn_pct` question.
+
+**Step 1 — Finish the fix pass: D184's remainder, then D183.**
+Not tidiness. Three of its pieces are **prerequisites** for what follows:
+- The **always-loaded TOTAL ceiling** + the **meta-gate that measures `product/templates/*` at source** must exist
+  *before* `12a` adds a third always-loaded file. Without them the directive channel ships new per-turn rent that
+  no gate can see — which is precisely the defect D184 exists to fix, committed a second time by the slice that
+  read the lesson.
+- The **mermaid diagram** (a second copy of the routing table it sits under, which D80 forbids outright) comes out
+  *before* `12c`, which rewrites routing. Deleting a stale second copy *after* editing the primary is exactly how
+  the two disagree.
+- **D183 unblocks `/update`**, which today has **no legal commit path at all** — and every later step reaches a
+  real install through `/update`. Phase 12 cannot be driven on a real project until it lands.
+Order *within* the step: D184's relocation is already done (`9830c4e`); its **numbers are set after** the rest of
+the relocation, never before, under the standing rule that **a cap is set to a value the shipped package meets and
+never raised to accommodate what it happens to weigh**. Then D183. Then the target-side `always_hard: 4400`
+accommodation comes back out of `agentic cyber`, since a target-owned knob is never the fix for a package-owned
+defect. Carries one loose end found in the tree: `settings.json`'s hooks are now `$CLAUDE_PROJECT_DIR`-absolute
+while the **statusline command is still cwd-relative** — decide whether that is deliberate or the same bug.
+
+**Step 2 — `12a`, the directive channel.** First of the phase because it is the phase's premise: the mechanical
+slices below persist as *code* and are safe, but the residue that cannot be mechanized — *"notify me when X"*, and
+the judgment half of the autonomy boundary — has nowhere to live and decays at every `/clear`. It also has to
+precede `12d`/`12e` on safety grounds: **an autonomous driver with no decided autonomy boundary is the one
+combination in this phase that can do damage unattended.** Depends on Step 1's ceiling.
+
+**Step 3 — `12b`, return contracts + scratch retention.** Cheapest slice, pure contract work, and it buys router
+headroom that Step 4 immediately spends. Uses Step 0's numbers rather than guessed ones.
+
+**Step 4 — `12c`, the wave coordinator + continue-while-parked.** The largest speed win, on a predicate decided
+back in D91. **Must follow Step 3, and this corrects an earlier reading that it could jump ahead cheaply:** fanning
+out N workers multiplies *simultaneous returns into the router*, which is the constrained window (43–53% of a
+drive's fed-in tokens, D180). Parallelism before the returns are bounded makes the scarce resource scarcer — it
+would buy wall-clock by spending the exact budget the phase is trying to protect.
+
+**Step 5 — `12d`, goal-drive with convergence measurement.** Needs `12a`'s autonomy boundary to know what to route
+and what to take, and needs a measure before `12e` can know when to stop.
+
+**Step 6 — `12e`, the `loop.sh` session driver.** Last, and the ordering is a safety call rather than a
+convenience: it multiplies any defect in Steps 2–5 across unattended sessions, and **an autonomous driver without a
+convergence test is a churn engine holding a lock.** Its exit test is a real goal driven across several sessions
+with no human `/clear`, interrupted once on purpose to prove the drop-in window and the `pause` path.
+
+**Deliberately NOT in this sequence,** so the phase stays a sequence rather than a backlog with a new name: the
+**cold-context reviewer** and the **inline-node topology question** (both named as Phase-11 successors in `07`,
+both still unscheduled — the reviewer is *promotable* now that 11e is green, and is the strongest candidate for
+whatever follows Phase 12); and the standing deferred menu, each already carrying its trigger — proportional-rigor
+triage · project-map tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA ·
+the code-map observed layer. **Org mode is parked at the maintainer's word** (2026-09-13) until the company
+context is real; nothing in this sequence touches it.
+
 ### Phase 12 — Standing intent: make the operator's recurring instructions part of the machine **[OPEN 2026-09-13 — designed D185, NOT BUILT. Opened from LIVED USE, not from a premise re-check (Phase 10) or an instrument reading (Phase 11): the maintainer noticed what he keeps re-typing. Org mode is explicitly parked and no slice here touches it]**
 Five behaviours were being re-established conversationally, session after session, and every one of them decays at
 the next `/clear`. They have **one root cause** — there is no owner in the package for a standing operator
@@ -1137,10 +1200,7 @@ fraction full). And the decision log **is** mirrored into a target as `docs/deci
   an absurdity-ceiling is self-reported plus a post-hoc gate), and whether the router should hand off earlier than
   a single-purpose leaf — i.e. whether `warn_pct` 30 is right for the one node that touches every surface.
 
-*Sequencing:* **12a → 12b → 12c → 12d → 12e**, and it is not merely tidy. 12a is the carrier every later slice
-registers in. 12b is the cheapest and buys router headroom the rest spend. 12c is the largest speed win and its
-predicate is already decided. 12d needs a measure, and 12e needs 12d to know when to stop — an autonomous driver
-without a convergence test is a churn engine with a lock.
+*Order, and why each slice sits where it does: **`### The ordered build sequence`** above — this section owns the slices, that one owns their order. There is deliberately no second copy of the sequence here.*
 
 
 ## The one-liner
@@ -1218,4 +1278,4 @@ the instrument itself was 2.8–3.5x high, the writer's discovery is flat with i
 sub-linearly, and the constrained window turns out to be the **router's** (43–53% of a drive's fed-in tokens,
 98–179k per item) — where an inline node costs 9–29k against a dispatched node's 0.3–2.6k, and `planner` outweighs
 `verify`. That question is logged in `07`, not scheduled here.
-**`### Phase 12` (D185, 2026-09-13) is the live pointer — standing intent.** It is the third kind of phase-opening this repo has had: not a stale-claim sweep (Phase 10) and not an instrument reading (Phase 11), but **lived use** — the maintainer noticing which instructions he re-types every session. Five of them, one root cause: the package has no owner for a standing operator directive about how the *loop* behaves, so each one decays at the next `/clear`. The channel is built first and everything else registers in it; then return contracts, the wave coordinator D91's predicate has been waiting on since it was decided, an acceptance-derived convergence measure, and last — because it multiplies every defect above it — a `loop.sh` that drives session after session toward a goal on its own.
+**`### Phase 12` (D185, 2026-09-13) is the live pointer — standing intent.** It is the third kind of phase-opening this repo has had: not a stale-claim sweep (Phase 10) and not an instrument reading (Phase 11), but **lived use** — the maintainer noticing which instructions he re-types every session. Five of them, one root cause: the package has no owner for a standing operator directive about how the *loop* behaves, so each one decays at the next `/clear`. The channel is built first and everything else registers in it; then return contracts, the wave coordinator D91's predicate has been waiting on since it was decided, an acceptance-derived convergence measure, and last — because it multiplies every defect above it — a `loop.sh` that drives session after session toward a goal on its own. **Where to start reading if you know nothing else: `### The ordered build sequence` (D186)** — it places Phase 12 against the two decided-but-unbuilt entries that come first (D184's remainder, then D183), and it is the only copy of that order.
