@@ -522,7 +522,7 @@ subtractions, which is why this mode is cheap to build and expensive to get wron
   floor is absolute in org mode and must not be lowered by `allow_protected_push` here.
   - **Refuse to bootstrap into a non-empty directory.** The brain must be the clone; laying it over an existing
     tree is how the two get confused.
-- **Namespace everything derived** — `docs_root: .workflow` (schema in `shared/schemas-runtime.md`). Spec,
+- **Namespace everything derived** — `docs_root: .workflow` (schema in `shared/schemas-config.md`). Spec,
   architecture, knowledge, decisions and `rules/` go under `.workflow/`; no `llms.txt` at the root. The brain
   therefore owns exactly **`.workflow/` + `.claude/`** and touches nothing else, which is what makes the review
   bundle's exclusion list two entries long instead of a per-file list that must stay correct forever. Do **not**

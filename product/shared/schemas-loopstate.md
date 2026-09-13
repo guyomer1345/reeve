@@ -1,8 +1,9 @@
 # Shared Artifact Schemas — the loop's own working set
 
-The third sibling of [`schemas.md`](schemas.md). Those files own **artifacts**: `schemas.md` what the build
-loop *produces and consumes*, [`schemas-bus.md`](schemas-bus.md) what crosses the console↔orchestrator
-boundary, [`schemas-runtime.md`](schemas-runtime.md) the records the package's own processes own. This file
+A sibling of [`schemas.md`](schemas.md). Those files own **artifacts** and **settings**: `schemas.md` what the
+build loop *produces and consumes*, [`schemas-bus.md`](schemas-bus.md) what crosses the console↔orchestrator
+boundary, [`schemas-runtime.md`](schemas-runtime.md) the records the package's own processes own, and
+[`schemas-config.md`](schemas-config.md) the knobs a human turns. This file
 owns something different in kind — not an artifact the loop emits, but **where the loop keeps its own working
 set**: the live pointer that says where it is, the durable anchor it resumes from, and the on-disk layout of
 the per-item scratch space it works in.

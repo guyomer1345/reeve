@@ -81,7 +81,7 @@ not a lost *update*. If a session is already driving this repo, do not start a s
   `guard.protected_branches` adds. Push a feature branch; a **human** moves `main`. A hard block, not a
   prompt: there is no approve-and-proceed for a branch in the set. Default ON, so unless this project's
   `config.json` says otherwise, assume `main` is protected. *(How the set is configured and lowered:
-  `shared/schemas-runtime.md § config.json → guard`.)*
+  `shared/schemas-config.md § config.json → guard`.)*
 - No push whose outgoing commit range trips the secret scan.
 
 **Gated by the outbox (defer — never block, never wait):**

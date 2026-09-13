@@ -1,8 +1,9 @@
 # Shared Artifact Schemas — the console & bus substrate
 
-The second sibling of [`schemas.md`](schemas.md). That file owns what the **build loop** produces and
+A sibling of [`schemas.md`](schemas.md). That file owns what the **build loop** produces and
 consumes — a spec, a plan, a changelog, a verdict, a forecast. [`schemas-runtime.md`](schemas-runtime.md)
-owns the records the package's own **processes** own. This file owns the third belonging: the records that
+owns the records the package's own **processes** own, and [`schemas-config.md`](schemas-config.md) the knobs a
+human turns. This file owns the records that
 cross the **console↔orchestrator boundary** — the durable queues, the typed transport on them, and the
 side-channels a human's answer arrives through. A skill authors and reads these as *work*, which is what
 keeps them out of the runtime half; what they have in common is that **the other end of each one is a
@@ -224,7 +225,7 @@ consumed-set is pruned to ids above it — bounding both the inbox and the set. 
 The **transactional-outbox** queue behind the "never stalls — queue the outward action, one approval releases a
 batch" rule. An outward action (`push`, `issue-create`, `issue-close`, later `deploy` / `send`) is **not** a
 checkpoint — it doesn't park the ticket (the commit is local, the ticket completes, the loop advances). When the
-skill's `config.outward` check (`schemas-runtime.md § config.json`) yields `ask`, it appends a record here and continues; a console `release`
+skill's `config.outward` check (`schemas-config.md § config.json`) yields `ask`, it appends a record here and continues; a console `release`
 fires it.
 - `{ id, action ∈ { push, issue-create, issue-close, deploy, send }, args, item_ref, created_at, ttl, state_binding, status ∈ { pending, executed, rejected, dropped } }`.
 - **`state_binding`** — what the action was queued against, re-validated at release (TOCTOU defense): `push` binds
@@ -238,7 +239,7 @@ fires it.
   `HEAD:main`, a leading `+`, `--all`/`--mirror` and a bare `git push` via upstream/`push.default` — and **block
   any push to a protected branch**, plus secret-scan the outgoing range). It fires on execute regardless of config
   and cannot be waived, because `guard.sh` exits non-zero *ahead of* the permission decision. **Layer 2** =
-  `config.outward` (`schemas-runtime.md § config.json`), the overridable human-approval layer. Standing pre-auth waives the human, never the
+  `config.outward` (`schemas-config.md § config.json`), the overridable human-approval layer. Standing pre-auth waives the human, never the
   checks.
 - **No durable ledger:** single-user = author-is-approver → segregation-of-duties moot → the action's own external
   consequence (moved git ref / GitHub issue event / deploy record) is the audit; the away-run digest is the console

@@ -6,16 +6,20 @@ new-record-supersede · create-per-item) and **tier** (see `shared/memory-model.
 read law) live in `shared/memory-model.md`.*
 
 <!-- doc-budget: detail split -> schemas-runtime.md -->
+<!-- doc-budget: detail split -> schemas-config.md -->
 <!-- doc-budget: detail split -> schemas-bus.md -->
 <!-- doc-budget: detail split -> schemas-loopstate.md -->
 
-> **This file is one of FOUR parts, split by who the artifact belongs to.** It owns what the **build loop**
-> produces and consumes — a spec, a plan, a changelog, a verdict, a receipt, a forecast, an issue. The three
-> siblings own the other three belongings:
+> **This file is one of FIVE parts, split by who the artifact belongs to.** It owns what the **build loop**
+> produces and consumes — a spec, a plan, a changelog, a verdict, a receipt, a forecast, an issue. The four
+> siblings own the other four belongings:
+> - [`schemas-config.md`](schemas-config.md) — the **operator's control surface**: every setting a human turns,
+>   wherever it physically lives: `config.json` · `subagentPromptCacheTtl`.
 > - [`schemas-runtime.md`](schemas-runtime.md) — the records the package's own **processes** own, never authored
->   by a skill as work: `config.json` · `runtime.json` · `.workflow-runtime` · `install-set.json` ·
->   `orchestrator-brief managed block` · `statusline.delegate` · `bus.lock` · `orchestrator.lock` ·
->   `wave-build slot` · `bus.json` · `remote_token` · `alerts.json` · `session-start warn-once markers`.
+>   by a skill as work and never hand-edited: `dispatch_return.py` · `runtime.json` · `.workflow-runtime` ·
+>   `install-set.json` · `orchestrator-brief managed block` · `statusline.delegate` · `bus.lock` ·
+>   `orchestrator.lock` · `wave-build slot` · `bus.json` · `remote_token` · `alerts.json` ·
+>   `session-start warn-once markers`.
 > - [`schemas-bus.md`](schemas-bus.md) — the records that cross the **console↔orchestrator boundary**, where the
 >   other end is a human: `parked-ticket` · `inbox-message` · `conversation-thread` · `refine-ledger` ·
 >   `demo-approvals` · `outbox / pending-outward-action` · `secret store`.
