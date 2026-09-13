@@ -6482,3 +6482,79 @@ the package's to set, the same rule D184 applied in the other direction.
 **Builds on:** **D190** (the weighting), **D185** call 5 (the call), **D184** (the budget-hole shape this
 repeats), **D80** (four near-copies → one owner).
 → `11` (Step 3 closed, Step 4 next).
+
+## D192 — D91's "interleaving, NOT parallelism" is REVERSED: real same-turn fan-out, gated on verified standalone-ness, and the orchestrator may never wait alone **[DECIDED 2026-09-13 by the maintainer, on a contradiction surfaced while opening Step 4. A deliberate reversal of a decided safety call, recorded as one. Also reverses D185's rejection of backfill-during-a-hang, for a reason D185 itself supplies. NOT YET BUILT — this is `12c`'s charter]**
+
+**The contradiction that forced this.** D91 decided *"interleaving, not parallelism — exactly ONE ticket in
+active development at a time"*, and its rejected list names *"real concurrency / parallel writers (Cognition's
+incoherence warning)"*. It was never reversed. Yet the shipped `prioritize/SKILL.md` has told every reader since
+it was written that it emits items *"that can safely run **in parallel**"*, that *"fanning a wave out in parallel
+is the coordinator's job, still to come"*, and that *"**parallel agents** sharing a build otherwise collide"* —
+and D185 call 4 then scheduled that coordinator as the phase's largest speed win, citing D91 for the *predicate*
+while passing over that D91 had decided against the concurrency itself. **One of those two was lying to a
+reader, and the log is the half that gets corrected.**
+
+**The call: real fan-out. N workers dispatched in the same turn.** D91's central restriction is lifted. What
+survives D91 intact — and is now load-bearing rather than advisory — is its **independence predicate**
+(dependency-ready ∧ file-disjoint ∧ ¬1-hop-neighbour) and its **worktree-per-ticket isolation**.
+
+**Condition 1 — independence is a HARD PRECONDITION on both of them, not a heuristic.** Nothing fans out until every area in the
+batch is verified to be genuinely **standalone and non-intervening**. D91 graded its predicate (pass-hard /
+trip-soft → start *flagged*); under real concurrency that softness is not available in the same form, because a
+flagged start is now a *concurrent* writer rather than a later one. The gate is checked **before** the batch is
+formed, and a candidate that cannot be shown independent does not enter it — it waits and runs serially. **The
+burden of proof is on fanning out, never on staying serial.**
+
+**TWO FIRST-CLASS CAPABILITIES, NEITHER SUBORDINATE TO THE OTHER.** An early draft of this entry ranked them —
+calling the fan-out *"not primarily run N items at once"* — and the maintainer corrected it on sight. The ranking
+was wrong and the correction is recorded because the build would have inherited it:
+
+1. **HOMOGENEOUS fan-out — N `execute` agents at once, and this is not a side effect.** When several items'
+   work genuinely does not overlap, running their `execute` calls concurrently is the plain, intended use and the
+   largest throughput win in the phase. It is not a consolation prize for the batching rule below, and it must not
+   be built as one: the coordinator's first question is *how many independent items can run right now*, and the
+   answer is allowed to be several.
+2. **HETEROGENEOUS batching — the orchestrator may NEVER WAIT ALONE.** Before dispatching anything long-running —
+   an `execute`, a commit gate, any blocking call — it must establish that there is genuinely **nothing else worth
+   doing at that moment**, and batch everything that is into the *same turn*: the execute(s), the research a known
+   upcoming item will need, the planning that is already viable.
+
+Both reduce to one coordinator behaviour — *form the largest legal batch, then dispatch it in one turn* — but they
+fail differently if either is treated as the exception. Build for both; measure both.
+
+**This also reverses D185's rejection of backfill-during-a-hang — using D185's own reasoning.** D185 rejected
+*"use the hang for small researches"* on two grounds. The **mechanical** one — *"while a `Task` is in flight the
+orchestrator is blocked on its result and cannot interleave; concurrency requires same-turn dispatch, so this ask
+collapses into call 4"* — was **conditional on call 4 not being built**, and D185 says so in the same breath.
+Building call 4 *makes the collapse happen*, which is exactly what is being asked for. **The policy objection,
+however, stands and is carried forward as a constraint:** unbounded speculative spend *"pollutes the knowledge
+base with findings nobody asked for"*. So the batched work must be work the **backlog already implies** — a
+known upcoming item's research, a viable plan — and never invented exploration. *Viable* is the test, not
+*possible*.
+
+- **What must still be answered, because D91 raised it and nothing built so far touches it: COHERENCE.** Worktrees
+  solve file conflicts, the predicate solves dependency order, `12b` solved return size — none of them addresses
+  whether concurrent workers produce work that *fits together*, which was D91's actual stated reason. It has never
+  been measured here because parallel items have never been run. **`12c`'s exit test must therefore demonstrate
+  coherence, not throughput** — a fanned-out wave whose merged result is correct, not merely faster.
+- **`prioritize/SKILL.md` stops being ahead of the record.** Its parallel language becomes true on this decision
+  rather than aspirational, and `orchestrator-CLAUDE.md`'s "build-once-per-wave — *not yet enforced*" becomes
+  enforced, which is the one piece both the old design and the new one always required.
+- **Rejected — keeping D91 and rewording the package to match it.** Offered as the conservative option and
+  declined. It would have been coherent, but it forecloses the phase's largest win on an objection that has never
+  been tested on this codebase, and the operator's lived experience is that the loop sits waiting on hangs that
+  have other work available.
+- **Rejected — treating this as an extension of D91 rather than a reversal.** It is a reversal of that entry's
+  central sentence, and recording it as anything softer would leave the log saying two things at once — which is
+  the exact defect that surfaced this decision.
+- **D91 is NOT superseded wholesale.** Its predicate, its worktree isolation, its bounded-concurrency instinct,
+  its non-preemptive item-level scheduler and its continue-while-parked interleaving all stand. What is reversed
+  is "exactly one ticket in active development at a time."
+
+*Evidence:* `prioritize/SKILL.md` lines 3/49–54/72–73 (parallel language, shipped) against D91's decision line and
+rejected list; D185 call 4 (schedules the coordinator) and D185's backfill rejection (supplies the conditional
+that dissolves it); `orchestrator-CLAUDE.md`'s own "not yet enforced" admission on build-once-per-wave.
+**Builds on / reverses:** **D91** (reversed in part — the concurrency restriction; predicate and isolation
+retained), **D185** (call 4 promoted; its backfill rejection reversed on its own terms), **D26** (pure queue —
+untouched: this is not preemption), **D190/D191** (the return bound that makes simultaneous returns affordable).
+→ `11` (Step 4 — charter replaced), `07` (a coherence question, to be opened by the build).

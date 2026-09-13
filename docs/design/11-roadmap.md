@@ -1154,7 +1154,19 @@ what a worker does between turns. **It also re-justifies Step 4's ordering more 
 fanning out N workers multiplies *stalls*, not only simultaneous returns, since more workers wait on a
 coordinator that serialises. Parallelism before stall exposure is bounded makes the scarce resource scarcer.
 
-**Step 4 — `12c`, the wave coordinator + continue-while-parked.** The largest speed win, on a predicate decided
+**Step 4 — `12c`, the wave coordinator. CHARTER REPLACED 2026-09-13 by `D192`, which REVERSES D91's
+"interleaving, not parallelism".** Opening this step surfaced a contradiction: D91 decided against real
+concurrency and was never reversed, while the shipped `prioritize/SKILL.md` has promised parallel fan-out to every
+reader since it was written. The maintainer's call is **real same-turn fan-out**, with two first-class capabilities
+and neither subordinate — **N `execute` agents at once on non-overlapping work** (the throughput win, not a side
+effect), and **the orchestrator may never wait alone** (before any blocking dispatch, establish that nothing else
+is viable and batch what is into the same turn). Both are gated on one **hard precondition**: every area in a batch
+verified genuinely standalone and non-intervening; the burden of proof is on fanning out, never on staying serial.
+D91's predicate, worktree isolation and continue-while-parked all survive. `D192` also reverses D185's rejection of
+backfill-during-a-hang, on the conditional D185 itself supplied. **The exit test must demonstrate COHERENCE, not
+throughput** — that is the objection D91 actually raised and nothing built so far addresses it.
+
+**Step 4 (as originally written) — `12c`, the wave coordinator + continue-while-parked.** The largest speed win, on a predicate decided
 back in D91. **Must follow Step 3, and this corrects an earlier reading that it could jump ahead cheaply:** fanning
 out N workers multiplies *simultaneous returns into the router*, which is the constrained window (43–53% of a
 drive's fed-in tokens, D180). Parallelism before the returns are bounded makes the scarce resource scarcer — it
