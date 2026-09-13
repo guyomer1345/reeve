@@ -79,6 +79,17 @@ The prose layer over `graph.json`: the structural fields are **copied from `grap
 - `backup` — required when `risk_class` is destructive: `{ what, mechanism, verification, restore }`.
   `execute` refuses a destructive plan without it and runs+verifies it before the destructive step.
 - `files_touched[]`
+- `base_sha` — the commit the plan was written against, stamped by `planner` in every mode. It is what makes a
+  plan's **freshness decidable**: under plan-ahead a plan can sit unbuilt while siblings land, and
+  `plan_freshness.py` asks whether anything in `files_touched[]` moved between this sha and `HEAD`. **Absent ⇒
+  the plan is re-planned, not refreshed** — a plan that cannot say what it was planned against cannot be shown
+  fresh, and guessing (the last commit touching `plan.md`, say) would infer a fact the producer is the only one
+  who knows. Plans written before this field existed therefore re-plan once, which is the correct one-time cost.
+- `refresh_count` — how many times `planner:refresh` has updated this plan in place; absent ⇒ `0`. The mechanical
+  stand-in for "too stale to patch": at `config.run.wave.refresh_max` it re-plans instead. It counts **how often
+  we have papered over the tree**, deliberately rather than measuring how far the tree moved — every distance
+  metric (commits, files, elapsed time) is wrong in both directions, since a mechanical rename across forty files
+  is trivially refreshable and one commit inverting a module's contract is fatal.
 - `steps[]` — ordered, each independently verifiable
 - `acceptance_criteria[]` — the definition-of-done; each `{ id, criterion, gate: artifact | human-qa,
   boundary?: bool, discharge? }`. `artifact` → checked by `verify`; `human-qa` → confirmed by a `checkpoint`

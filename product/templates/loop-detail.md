@@ -82,6 +82,34 @@ costs wall-clock, a wrong "parallel" costs correctness, and those are not compar
 the predicate's original grading, which admitted a near-miss as a *flagged* start with raised integration rigor —
 that concession made sense when the candidate would run **later**, and does not when it runs **concurrently**.
 
+**The wave sequence, and why refresh sits where it does.** A wave is *plan-N-then-execute-M*, because the
+independence predicate reads `files_touched` from a plan and a backlog row has none until it is picked — so
+planning has to run ahead of dispatch for there to be anything to prove disjoint. Order:
+
+1. `prioritize` emits the **plan batch**: the head of the queue, up to `config.run.wave.plan_max`.
+2. **Plan the batch.** Hand each `planner:plan-one` the **wave manifest** — the other members' ids, titles and
+   dependencies — which is a *tiebreaker only*: equivalent approaches prefer to stay out of each other's way,
+   non-equivalent ones take the better design and declare the overlap. Never let a plan narrow `files_touched`
+   to look separable; `verify` treats a wave diff outside the declaration as a hard finding.
+3. **Run `check_wave_independence.py`.** It classifies plan freshness *itself* — a caller cannot switch that off
+   by forgetting a flag — and reads a stale plan **pessimistically**, at two code-map hops rather than one.
+   Widening can only hold an item back, never admit one, so the wave can be chosen before anything is refreshed.
+4. **Refresh only the batch.** Every member the report marks `REFRESH FIRST` goes through `planner:refresh`;
+   `cannot refresh` sends it back through `planner:plan-one`. **Do not refresh candidates the gate declined** —
+   the batch you are about to dispatch will land on them and undo the work. The gate proves the batch disjoint
+   from *itself*, not from what it left behind.
+5. **Re-run the gate on the batch alone** (pass the ids). A refreshed plan's real scope can have grown into a
+   co-member; the re-run is a script call and costs nothing next to discovering it in a merge.
+6. **Mint and record the wave id** before dispatching: `wave_build.py mint <ids…>` → `state.json`'s `wave`.
+   Clear it back to `null` when the batch drains.
+
+A plan is durable, so the members that did not make the batch are **not wasted** — they keep their plans and
+walk into the next wave already eligible. Only the first wave pays full price.
+
+**A held item that says `held ONLY by pessimistic widening` is a real signal, not noise.** Widening is
+deliberately over-cautious, and an item in a churning area can be pushed out wave after wave. Force a refresh on
+it (or dispatch it serially) rather than letting it starve invisibly.
+
 **Build once per wave.** The authoritative gate (`checks.sh --check`, the one a commit depends on) runs **once per
 wave**, not once per member — N workers each triggering it collide on shared build state, caches, ports and
 fixtures. That is distinct from a worker validating its own work inside its own worktree, which is legitimate and

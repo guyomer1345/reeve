@@ -1,9 +1,9 @@
 ---
 name: prioritize
-description: Order the backlog and emit the next set of independent work items — the ones that can safely run in parallel. Runs on every backlog change and whenever a phase completes. Pure queue — never preempts in-flight work; the machine finishes the current item, then re-picks.
+description: Order the backlog and emit the next batch of items to plan. Runs on every backlog change and whenever a phase completes. Pure queue — never preempts in-flight work; the machine finishes the current item, then re-picks. It does not decide what may run in parallel; `check_wave_independence.py` owns that.
 ---
 
-# Prioritize — order the backlog, emit the next wave
+# Prioritize — order the backlog, emit the next batch to plan
 
 Core principle: a **pure queue** — the machine never preempts itself; it finishes the current item, then
 re-picks.
@@ -46,12 +46,25 @@ The backlog (items with `depends_on`, `kind`, `severity`).
    the only thing standing between a verify-free item and a commit gate that reads it as an unverified one.
 3. Make eligible only items whose `depends_on` are already done.
 4. Order eligible items by **urgency × dependency-readiness**.
-5. **Group into a wave.** Walking from the top, gather the independent items that can run together — ones
-   that don't collide (they touch disjoint files / modules / areas). A colliding or dependent item falls to
-   a later wave. The overlap test is a conservative heuristic (when in doubt, serialize) and will sharpen as
-   the collision model firms up.
-6. Emit that set as the next **wave**. With a single agent a wave is one item (the degenerate case);
-   fanning a wave out in parallel is the coordinator's job, still to come.
+5. **Emit the PLAN BATCH: the head of the queue, up to `config.run.wave.plan_max`**, skipping anything already
+   planned, in flight or parked. Straight down the order from step 4 — no separability judgement here, for two
+   reasons worth stating because the obvious design is to make one:
+   - **You have nothing to judge with.** A backlog row carries `{title, kind, severity, depends_on}` and *no
+     file scope*. Scope first exists when a plan exists, which is the whole reason planning has to run ahead of
+     dispatch at all. Guessing an area from a title would be a judgement dressed as a filter.
+   - **Planning far from dispatch creates staleness debt.** A plan is durable, so a surplus plan is not waste —
+     but a plan for an item ten waves out gets refreshed over and over as the tree moves beneath it, and
+     eventually hits `refresh_max` and is re-planned from scratch. Head-of-queue keeps each plan close to the
+     moment it is spent.
+   Surplus is expected and is the mechanism, not an overrun: unbuilt items keep their plans and walk into the
+   next wave already eligible, so the pool of provably-independent work grows monotonically. Only the first
+   wave pays full price.
+6. **Do not claim these items are independent — you cannot know that yet, and something else now does.**
+   `check_wave_independence.py` computes it from the real plans once they exist, and it is the only owner of
+   that answer. What this step emits is a batch that is *worth planning*; what may then be dispatched together
+   is the gate's call and is routinely a subset. (This step used to gather "the independent items that can run
+   together" on an admitted conservative heuristic. That was one fact with two owners the moment the gate
+   shipped.)
 
 ## Rules
 - **Never preempt in-flight work.** A bug found *during* the current item is handled inside that item's own
@@ -65,13 +78,14 @@ The backlog (items with `depends_on`, `kind`, `severity`).
   cosmetic drift sits low as `debt`), so no special-casing.
 
 ## Output
-The next **wave** — the independent items to run together (+ the updated ordering). Serial execution runs a
-wave of one.
+The **plan batch** — the next `plan_max` items to plan, in queue order (+ the updated ordering). It is a
+candidate set, never a promise of concurrency.
 
 ## Route
-→ the orchestrator runs each item in the wave through `planner` / its sub-loop. The authoritative build/test
-gate runs **once per wave**, not once per item — parallel agents sharing a build otherwise collide on it
-(one build cache, one set of ports, one set of fixtures).
+→ the orchestrator plans the batch, then runs `check_wave_independence.py` to learn which of the resulting
+plans may be dispatched together. The authoritative build/test gate runs **once per wave**, not once per item —
+parallel agents sharing a build otherwise collide on it (one build cache, one set of ports, one set of
+fixtures).
 
 **That is now a mechanism, not a convention you have to remember.** `checks.sh --check` takes the **wave build
 slot** before it runs the stack commands: an `flock` on the repo's common git dir — the one path every worktree

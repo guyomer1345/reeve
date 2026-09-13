@@ -168,6 +168,24 @@ def wave_id():
     return None
 
 
+def mint_wave_id(members):
+    """-> the id for a wave dispatching `members`, DERIVED rather than allocated.
+
+    A wave is identified by what it dispatched and where: the sorted member ids plus `HEAD`.
+    Nothing has to hand out numbers, keep a counter or read a clock, and re-deriving it from
+    the same batch on the same tree gives the same answer -- which is what makes the build memo
+    work at all, since two different waves collide only when they dispatch the same items at
+    the same commit, and that is not two waves.
+
+    This closes the half of the wave-build slot that shipped dormant: exclusion (one build at a
+    time) has always been mechanical, while dedup (do not re-gate a tree this wave already
+    passed) could not fire because nothing in the package ever wrote a non-null `wave`.
+    """
+    head = git("rev-parse", "--short", "HEAD")
+    base = ",".join(sorted(str(m) for m in members)) + "|" + (head.strip() if head else "nohead")
+    return "w-" + hashlib.sha256(base.encode("utf-8")).hexdigest()[:10]
+
+
 # ------------------------------------------------------------------ the tree fingerprint
 
 def _path_digest(path):
@@ -342,6 +360,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="the wave's authoritative build slot")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("claim", help="0 = this wave already passed this tree; 1 = run the build")
+    mint = sub.add_parser("mint", help="print the wave id for a batch (write it to state.json `wave`)")
+    mint.add_argument("members", nargs="+", help="the item ids this wave dispatches")
     rec = sub.add_parser("record", help="record a PASS for the tree `claim` measured")
     rec.add_argument("--fingerprint", default="")
     args = ap.parse_args(argv)
@@ -350,6 +370,9 @@ def main(argv=None):
     try:
         if args.cmd == "claim":
             return cmd_claim()
+        if args.cmd == "mint":
+            print(mint_wave_id(args.members))
+            return 0
         return cmd_record(args.fingerprint.strip())
     except Exception as exc:                                  # noqa: BLE001 — deliberate floor
         sys.stderr.write("  (wave build slot: %s failed (%s) — building)\n" % (args.cmd, exc))

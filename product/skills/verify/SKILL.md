@@ -41,6 +41,13 @@ the wrong reason. In org mode the brain *is* the clone, so these run against the
    - **Over-report** — the changelog claims a change no diff entry supports. The work was not done, or was lost.
    - **Off-plan** — a path in the diff that no plan step asked for. Not automatically wrong (a plan may license
      incidental edits), but it must be *accounted for*, not merely present.
+     - **When the item ran in a WAVE (`state.json.wave` is set), a path outside `plan.files_touched[]` is a
+       HARD finding, not something to account for.** In a wave that declaration stopped being documentation:
+       `check_wave_independence.py` proved this item disjoint from its co-workers using it, and a worker that
+       wandered outside it may have been writing the same file as somebody else the whole time. The declaration
+       is also a thing the planner has an *incentive* to shrink — a wave manifest asks it to prefer staying in
+       its lane, and the cheapest way to look separable is to under-declare rather than to design differently.
+       This is the mechanical answer to that incentive, and it is why it cannot be a judgement call here.
    Judgment stays with you: matching prose to paths is not mechanical, and a changelog may legitimately describe
    one logical change spanning several files. **Set-level absence is the signal; wording is not.**
 2. **Intent met:** the `spec` intent and the plan's **`artifact`-gated** `acceptance_criteria` are reflected

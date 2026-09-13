@@ -36,7 +36,12 @@ resolves here — the name is the anchor, and the four files are one schema.*
   human-readable step marker (`"seeding knowledge nodes 40/95"`) — the console's "Now" panel renders these, so
   the motion is visible from the first minute. Written at every stage boundary, same atomic publish.
 - `node` — current loop node; value ∈ the `loop.md` node labels (e.g. `planner:plan-one`, `verify`)
-- `current_item` — backlog id or `null` · `wave` — wave id or `null` · `note` — human-readable cursor.
+- `current_item` — backlog id or `null` · `note` — human-readable cursor.
+- `wave` — the id of the wave in flight, or `null` when work is serial. **Written by the orchestrator when it
+  dispatches a batch, and DERIVED rather than allocated** — `wave_build.py mint <ids…>` hashes the sorted member
+  ids plus `HEAD`, so no counter, clock or registry is needed and re-deriving it from the same batch on the same
+  tree gives the same id. That is what makes the build memo usable: two waves collide only if they dispatch the
+  same items at the same commit, which is one wave. Cleared back to `null` when the batch drains.
   `current_item` (top-level) is the canonical active-item key. **The verify-before-commit gate does not depend on
   it:** it derives the item(s) under commit from the staged `.workflow/items/<id>/` diff and reads state.json only
   runtime-resolved (via `runtime.json`) and tolerantly (`current_item` **or** a nested `position.item`), and it

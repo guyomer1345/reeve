@@ -583,3 +583,191 @@ def test_explicit_candidates_are_honoured(tmp_path):
     assert [c["id"] for c in res["candidates"]] == ["item-2", "item-3"], \
         "argv order must not change the answer — queue order decides"
     assert res["batch"] == ["item-2", "item-3"]
+
+
+# ---------------------------------------------------------------- plan freshness (widening)
+#
+# Under plan-ahead a plan can sit unbuilt while siblings land, so the gate can no longer read a
+# declared scope as fact. These pin the seam between the two scripts: the classifier says what
+# moved, the gate decides what that costs. The whole point is that an untrustworthy declaration
+# is absorbed PESSIMISTICALLY -- so every assertion here is that fan-out got HARDER, never that
+# it got easier, and the negative control checks the tests can actually go red.
+
+def _git(root, *args):
+    subprocess.run(("git", "-C", str(root)) + args, check=True, capture_output=True, text=True)
+
+
+def _gitproject(root, **kw):
+    """The `_project` tree, but a real repository — freshness is inert without one."""
+    root = _project(root, **kw)
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "t@t")
+    _git(root, "config", "user.name", "t")
+    return root
+
+
+def _snap(root, msg="c"):
+    _git(root, "add", "-A")
+    _git(root, "commit", "-q", "-m", msg)
+    return subprocess.run(("git", "-C", str(root), "rev-parse", "HEAD"),
+                          capture_output=True, text=True).stdout.strip()
+
+
+def _stamp(root, item, base, count=None):
+    """Add the freshness fields to an already-written plan."""
+    path = os.path.join(str(root), ".workflow", "items", item, "plan.md")
+    with open(path) as fh:
+        body = fh.read()
+    extra = "- **base_sha** — `%s`\n" % base
+    if count is not None:
+        extra += "- **refresh_count** — %d\n" % count
+    with open(path, "w") as fh:
+        fh.write(body.replace("## Goal\n", "## Goal\n" + extra, 1))
+
+
+def test_a_stale_plan_is_read_at_two_hops_and_loses_the_batch(tmp_path):
+    """`b` declares only its own file and would fan out beside `a`. Its plan is stale, and the
+    file that moved under it imports `a`'s — so the pessimistic read reaches `a` and `b` is
+    held. Nothing about `b`'s declaration changed; only our trust in it did."""
+    root = _gitproject(tmp_path, rows=[("a", "none"), ("b", "none")],
+                       graph=_graph(["x.py", "m.py", "y.py"],
+                                    edges=[("y.py", "m.py"), ("m.py", "x.py")]))
+    _code(root, "x.py", "m.py", "y.py")
+    _plan(root, "a", files=["x.py"])
+    _plan(root, "b", files=["y.py"])
+    base = _snap(root)
+    _stamp(root, "a", base)
+    _stamp(root, "b", base)
+    assert wi.scan(str(root), [], 5)["batch"] == ["a", "b"]        # fresh: two hops apart, both go
+
+    _code(root, "y.py")                                            # y.py moves under b's plan
+    with open(os.path.join(str(root), "y.py"), "w") as fh:
+        fh.write("changed\n")
+    _snap(root, "move y")
+    res = wi.scan(str(root), [], 5)
+    assert res["batch"] == ["a"]
+    held = [c for c in res["candidates"] if c["id"] == "b"][0]
+    assert held["freshness"] == "suspect"
+    assert held["widened"] == ["m.py"]
+    assert held["held_by_widening_only"] is True                   # and it says so
+
+
+def test_the_widening_hold_is_reported_not_silent(tmp_path):
+    """Starvation nobody can see is indistinguishable from a busy queue."""
+    root = _gitproject(tmp_path, rows=[("a", "none"), ("b", "none")],
+                       graph=_graph(["x.py", "m.py", "y.py"],
+                                    edges=[("y.py", "m.py"), ("m.py", "x.py")]))
+    _code(root, "x.py", "m.py", "y.py")
+    _plan(root, "a", files=["x.py"])
+    _plan(root, "b", files=["y.py"])
+    base = _snap(root)
+    _stamp(root, "a", base)
+    _stamp(root, "b", base)
+    with open(os.path.join(str(root), "y.py"), "w") as fh:
+        fh.write("changed\n")
+    _snap(root, "move y")
+    out = wi.render(wi.scan(str(root), [], 5))
+    assert "held ONLY by pessimistic widening" in out
+
+
+def test_widening_never_admits_a_pair_a_bare_read_rejects(tmp_path):
+    """The direction that matters. Two items on the same file must stay serial no matter how
+    stale either plan is — widening is allowed to hold, never to release."""
+    root = _gitproject(tmp_path, rows=[("a", "none"), ("b", "none")],
+                       graph=_graph(["x.py"]))
+    _code(root, "x.py")
+    _plan(root, "a", files=["x.py"])
+    _plan(root, "b", files=["x.py"])
+    base = _snap(root)
+    _stamp(root, "a", base)
+    _stamp(root, "b", base)
+    with open(os.path.join(str(root), "x.py"), "w") as fh:
+        fh.write("changed\n")
+    _snap(root, "move x")
+    assert wi.scan(str(root), [], 5)["fan_out"] is False
+
+
+def test_a_replan_verdict_holds_the_item_and_names_the_remedy(tmp_path):
+    """A plan past the refresh cap is not refreshable, so the gate must not spend a worker on
+    it — and must say *re-plan*, since "not eligible" is unactionable."""
+    root = _gitproject(tmp_path, rows=[("a", "none"), ("b", "none")],
+                       graph=_graph(["x.py", "y.py"]))
+    _code(root, "x.py", "y.py")
+    _plan(root, "a", files=["x.py"])
+    _plan(root, "b", files=["y.py"])
+    base = _snap(root)
+    _stamp(root, "a", base)
+    _stamp(root, "b", base, count=2)
+    res = wi.scan(str(root), [], 5)
+    assert res["batch"] == ["a"]
+    held = [c for c in res["candidates"] if c["id"] == "b"][0]
+    assert held["freshness"] == "replan"
+    assert any("RE-PLANNED" in r["detail"] for r in held["reasons"])
+
+
+def test_a_plan_with_no_base_sha_cannot_be_dispatched_in_a_repo(tmp_path):
+    """The migration case, and it must fail towards work rather than towards trust."""
+    root = _gitproject(tmp_path, rows=[("a", "none")], graph=_graph(["x.py"]))
+    _code(root, "x.py")
+    _plan(root, "a", files=["x.py"])
+    _snap(root)
+    res = wi.scan(str(root), [], 5)
+    assert res["batch"] == []
+    assert [c for c in res["candidates"] if c["id"] == "a"][0]["freshness"] == "replan"
+
+
+def test_the_selected_batch_names_what_must_be_refreshed_first(tmp_path):
+    """Order B: choose the wave pessimistically, then refresh only what it means to spend."""
+    root = _gitproject(tmp_path, rows=[("a", "none"), ("b", "none")],
+                       graph=_graph(["x.py", "y.py"]))
+    _code(root, "x.py", "y.py")
+    _plan(root, "a", files=["x.py"])
+    _plan(root, "b", files=["y.py"])
+    base = _snap(root)
+    _stamp(root, "a", base)
+    _stamp(root, "b", base)
+    with open(os.path.join(str(root), "y.py"), "w") as fh:
+        fh.write("changed\n")
+    _snap(root, "move y")
+    res = wi.scan(str(root), [], 5)
+    assert res["batch"] == ["a", "b"]            # no shared neighbourhood, so both still fit
+    assert "REFRESH FIRST" in wi.render(res)
+    # And it is flagged even though widening added nothing: the trigger is the verdict, not
+    # its blast radius. A suspect declaration is untrustworthy whether or not it has neighbours.
+    assert [c for c in res["candidates"] if c["id"] == "b"][0]["widened"] == []
+
+
+def test_neutering_the_freshness_read_reddens_the_widening_test(tmp_path, monkeypatch):
+    """Negative control. A green test that cannot go red is not evidence: if the gate stopped
+    consulting freshness, the stale item would sail into the batch — so make it stop, and check
+    that it does."""
+    root = _gitproject(tmp_path, rows=[("a", "none"), ("b", "none")],
+                       graph=_graph(["x.py", "m.py", "y.py"],
+                                    edges=[("y.py", "m.py"), ("m.py", "x.py")]))
+    _code(root, "x.py", "m.py", "y.py")
+    _plan(root, "a", files=["x.py"])
+    _plan(root, "b", files=["y.py"])
+    base = _snap(root)
+    _stamp(root, "a", base)
+    _stamp(root, "b", base)
+    with open(os.path.join(str(root), "y.py"), "w") as fh:
+        fh.write("changed\n")
+    _snap(root, "move y")
+    assert wi.scan(str(root), [], 5)["batch"] == ["a"]
+
+    import plan_freshness
+    monkeypatch.setattr(plan_freshness, "classify",
+                        lambda wf, item, cap=None: {"id": item, "state": plan_freshness.FRESH,
+                                                    "moved": [], "why": ""})
+    assert wi.scan(str(root), [], 5)["batch"] == ["a", "b"]
+
+
+def test_execute_max_comes_from_config(tmp_path):
+    root = str(tmp_path)
+    os.makedirs(os.path.join(root, ".workflow"))
+    with open(os.path.join(root, ".workflow", "config.json"), "w") as fh:
+        json.dump({"project_root": ".", "run": {"wave": {"execute_max": 9}}}, fh)
+    assert wi.execute_max(root) == 9
+    with open(os.path.join(root, ".workflow", "config.json"), "w") as fh:
+        json.dump({"project_root": "."}, fh)
+    assert wi.execute_max(root) == wi.DEFAULT_EXECUTE_MAX == 5

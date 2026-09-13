@@ -75,7 +75,8 @@ difference.
   --project-root PATH   where `.workflow/` lives (default `.`).
   [ID ...]              candidates to test. Default: every open backlog row that is not
                         already in flight or parked.
-  --max N               ceiling on concurrent workers (default 3); items already in flight
+  --max N               ceiling on concurrent workers (default `config.run.wave.execute_max`,
+                        shipped 5); items already in flight
                         count against it. Bounded concurrency is retained on purpose -- the
                         number of simultaneous writers a single human can still review is
                         small, and it is not the batch former's job to discover that.
@@ -104,6 +105,20 @@ CAPACITY = "capacity"         # legal, but the concurrency ceiling is full
 
 
 # ---------------------------------------------------------------- roots and config
+
+DEFAULT_EXECUTE_MAX = 5
+
+
+def execute_max(project_root):
+    """-> the concurrency ceiling. A REVIEW bound, not a machine one: it is how many
+    simultaneous writers a human can still read afterwards, which is why it is a project knob
+    (`config.run.wave.execute_max`) rather than a function of cores or of anything measurable
+    here. Unreadable or nonsense config falls back to the shipped default rather than to
+    something permissive."""
+    cfg = _read_json(os.path.join(project_root, CONFIG_REL), {}) or {}
+    v = (cfg.get("run") or {}).get("wave", {}).get("execute_max")
+    return v if isinstance(v, int) and v >= 1 else DEFAULT_EXECUTE_MAX
+
 
 def _read_json(path, default=None):
     try:
@@ -400,11 +415,20 @@ def resolve_scope(wf, code_root, graph_nodes, tokens):
     return out
 
 
-def item_scope(wf, code_root, graph_nodes, item):
-    """-> (scope, why). The full read for one item: plan -> tokens -> resolved paths."""
+def item_scope(wf, code_root, graph_nodes, item, extra_tokens=()):
+    """-> (scope, why). The full read for one item: plan -> tokens -> resolved paths.
+
+    `extra_tokens` WIDENS the declared scope, and is how an untrustworthy declaration is
+    absorbed in the safe direction. A plan whose files have moved since it was written no
+    longer describes what its item will do, so `plan_freshness` hands in the paths that moved
+    and they are read as if the plan had claimed them. A bigger footprint can only make
+    disjointness HARDER to prove, never easier -- which is what lets a wave choose its batch
+    before paying to refresh anything, and refresh only the plans it means to spend.
+    """
     toks, why = plan_tokens(wf, item)
     if why:
         return None, why
+    toks = list(toks) + [t for t in extra_tokens if t not in toks]
     scope = resolve_scope(wf, code_root, graph_nodes, toks)
     if scope["unresolved"]:
         return scope, ("scope entries this gate cannot resolve to a path: %s"
@@ -440,6 +464,28 @@ def _witness_overlap(a, b):
             if os.path.dirname(pa) == os.path.dirname(pb):
                 return "`%s` and `%s` can name the same files" % (pa, pb)
     return None
+
+
+def _pessimistic(moved, nbr):
+    """-> the extra paths an UNTRUSTWORTHY declaration is read as also claiming.
+
+    A stale plan's danger is not that its files changed -- it is that its DECLARATION may now
+    be incomplete, because the ground the planner reasoned over has shifted. So the pessimistic
+    read is the one-hop code-map neighbourhood of the declared paths that actually moved: those
+    are the parts of the plan whose collaborators may have changed, and a refreshed plan is
+    likeliest to grow along exactly those edges. Churn elsewhere in the repo is not this plan's
+    business and is deliberately not folded in -- a widening that grows with unrelated activity
+    would hold everything the moment the project got busy, which is a gate that stops working
+    precisely when it is needed.
+
+    Stated as a rule: an item whose plan cannot be trusted is tested at TWO hops instead of
+    one. It composes with clause 3 rather than fighting it, and it can only ever hold an item
+    back -- a bigger footprint never admits a pair that a smaller one rejected.
+    """
+    out = set()
+    for f in moved:
+        out.update(nbr.get(f, ()))
+    return sorted(out - set(moved))
 
 
 def _witness_adjacency(a, b, nbr):
@@ -554,6 +600,12 @@ def scan(project_root, candidates=None, max_batch=3):
     # the backlog never mentions, which sorts after every row it does.
     wanted.sort(key=lambda i: (by_id[i]["order"] if i in by_id else len(rows) + 1, i))
 
+    # FRESHNESS IS COMPUTED HERE, NOT PASSED IN. A caller that forgot the flag would get a
+    # gate reading declared scopes it has no reason to trust -- permissive by omission, the one
+    # way this gate must not be able to fail. So it asks for itself.
+    import plan_freshness
+    fresh = {r["id"]: r for r in plan_freshness.scan(wf, list(wanted))["results"]}
+
     considered = []
     for ident in wanted:
         entry = {"id": ident, "eligible": False, "reasons": [], "files": [],
@@ -565,7 +617,17 @@ def scan(project_root, candidates=None, max_batch=3):
                  "detail": "no backlog row for `%s`, so its dependencies are unknown" % ident})
         else:
             entry["reasons"].extend(dependency_reasons(wf, row))
-        scope, why = item_scope(wf, code_root, gnodes, ident)
+        fr = fresh.get(ident) or {}
+        entry["freshness"] = fr.get("state", "")
+        widen = []
+        if fr.get("state") == plan_freshness.REPLAN:
+            entry["reasons"].append(
+                {"clause": SCOPE, "against": None,
+                 "detail": "plan must be RE-PLANNED, not refreshed: %s" % fr.get("why", "")})
+        elif fr.get("state") == plan_freshness.SUSPECT:
+            widen = _pessimistic(fr.get("moved", ()), nbr)
+        entry["widened"] = sorted(widen)
+        scope, why = item_scope(wf, code_root, gnodes, ident, widen)
         if why:
             entry["reasons"].append({"clause": SCOPE, "against": None, "detail": why})
         if scope:
@@ -617,6 +679,29 @@ def scan(project_root, candidates=None, max_batch=3):
         members[entry["id"]] = mine
         batch.append(entry["id"])
 
+    # HELD ONLY BECAUSE WE DID NOT TRUST IT. Widening is deliberately pessimistic, so it will
+    # sometimes hold an item that a refresh would have shown to be perfectly separable. That is
+    # an accepted trade -- refreshing every candidate to avoid it would spend planner calls on
+    # plans this wave is about to leave behind and invalidate. But it must not be SILENT: an
+    # item in a high-churn area could be widened out of the batch wave after wave, and
+    # starvation nobody can see is indistinguishable from a queue that is simply busy. So the
+    # counterfactual is computed and reported -- would this have entered the batch had we read
+    # its plan literally? -- and the operator gets to decide whether to force a refresh.
+    for entry in considered:
+        if entry["eligible"] or not entry["widened"]:
+            continue
+        clauses = {r["clause"] for r in entry["reasons"]}
+        if not clauses or clauses - {OVERLAP, ADJACENCY}:
+            continue                     # held for a reason widening had nothing to do with
+        bare, why = item_scope(wf, code_root, gnodes, entry["id"])
+        if why or bare is None:
+            continue
+        if not any(_witness_overlap(bare, members[o])
+                   or _witness_adjacency(bare, members[o], nbr)
+                   or _witness_adjacency(members[o], bare, nbr)
+                   for o in members if o != entry["id"]):
+            entry["held_by_widening_only"] = True
+
     for entry in considered:
         entry.pop("_scope", None)
     return {"batch": batch,
@@ -642,6 +727,10 @@ def render(res):
                      "considered)%s"
                      % (len(res["candidates"]),
                         ("; `%s` may go alone" % res["batch"][0]) if res["batch"] else ""))
+    stale = [c["id"] for c in res["candidates"]
+             if c["eligible"] and c.get("freshness") == "suspect"]
+    if stale:
+        lines.append("  REFRESH FIRST (then re-run this gate on the batch): %s" % ", ".join(stale))
     for b in res["blocked"]:
         lines.append("  BLOCKED: %s" % b)
     if res["held"]["in_flight"]:
@@ -656,12 +745,17 @@ def render(res):
         if c["eligible"]:
             extra = (" [%d file(s) not yet on disk: adjacency for those is unknowable]"
                      % len(c["prospective"])) if c["prospective"] else ""
+            if c.get("freshness") == "suspect":
+                extra += " [plan NOT FRESH -- refresh before dispatch%s]" % (
+                    "; read at 2 hops via %d path(s)" % len(c["widened"]) if c["widened"] else "")
             lines.append("  OK   %s -- %d file(s)%s" % (c["id"], len(c["files"]), extra))
             continue
         if shown >= 20:
             continue
         shown += 1
-        lines.append("  HOLD %s" % c["id"])
+        lines.append("  HOLD %s%s" % (c["id"],
+                     "  <- held ONLY by pessimistic widening; refresh its plan and it fits"
+                     if c.get("held_by_widening_only") else ""))
         for r in c["reasons"]:
             lines.append("       %s%s: %s"
                          % (r["clause"],
@@ -679,11 +773,14 @@ def main(argv=None):
     ap.add_argument("candidates", nargs="*",
                     help="item ids to test (default: the open backlog)")
     ap.add_argument("--project-root", default=".")
-    ap.add_argument("--max", type=int, default=3, dest="max_batch",
-                    help="ceiling on concurrent workers, in-flight included (default 3)")
+    ap.add_argument("--max", type=int, default=None, dest="max_batch",
+                    help="ceiling on concurrent workers, in-flight included; default is "
+                         "`config.run.wave.execute_max` (shipped default 5)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
-    res = scan(os.path.abspath(args.project_root), args.candidates, args.max_batch)
+    root = os.path.abspath(args.project_root)
+    res = scan(root, args.candidates,
+               args.max_batch if args.max_batch is not None else execute_max(root))
     print(json.dumps(res, indent=2, sort_keys=True) if args.json else render(res))
     return 0 if res["fan_out"] else 1
 

@@ -21,7 +21,7 @@ from each section below. Read it when that situation arises, not every turn.
 | `create-demo` | demo approved (checkpoint pass) | `planner:decompose` |
 | `create-demo` | gate not triggered | `planner:decompose` |
 | `planner:decompose` | roadmap → backlog | `prioritize` |
-| `prioritize` | next wave emitted | `planner:plan-one` (per item in the wave) |
+| `prioritize` | plan batch emitted | `planner:plan-one` (per item in the batch) |
 | `prioritize` | maintenance due (retention, drift, or doc-size threshold) | `document:audit` / `align` / `doc-budget` |
 | `prioritize` | backlog empty | `idle` (await steering) |
 | `idle` | steering arrives / new backlog item (a `create-issue` side-door) | `prioritize` (re-pick) |
@@ -80,7 +80,9 @@ call by itself while other viable work exists.** Both `execute` items that do no
 (research a queued item needs, an unblocked plan) go in the same batch — neither is subordinate.
 
 **Eligibility is not a judgement call.** Run `python3 .claude/scripts/check_wave_independence.py`: only its batch
-may fan out, a rejected candidate **runs serially**, and missing evidence never reads as "probably fine".
+may fan out, a rejected candidate **runs serially**, and missing evidence never reads as "probably fine". It
+judges plan **freshness** too — a plan whose tree moved under it is read pessimistically and must go through
+`planner:refresh` before dispatch; re-run the gate on the batch afterwards.
 
 → **Batch formation, what counts as viable, build-once-per-wave, and interleaving while one item is parked:
 `loop-detail.md § the dispatch boundary`.**
