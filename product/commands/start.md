@@ -105,7 +105,9 @@ loop's normal `state.json` takes over when the motion ends.
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
    `bundles/` (org mode's review bundles — regenerable from git at any time, so they are a hand-off artifact
    rather than a record; the history they summarise is already committed), 
-   `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, and the per-ticket worktrees (created at runtime by the
+   `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
+   material — the one runtime path that sits *inside* a committed directory, so it needs its own line or the
+   allowlist's commit-by-default rule takes it; `shared/schemas.md § scratch`), and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,
    `checks.env`, `codemap.sh`, `handoff.md`, `backlog.md`, `items/`, and `docs/`) are committed. **`secrets/` holds live
    credentials** a human hands over at a setup checkpoint — it must be gitignored *and* live on a filesystem that
@@ -267,8 +269,11 @@ loop's normal `state.json` takes over when the motion ends.
        helper both hooks call** (so the two gates enforce it identically; it fails closed and derives the item from
        the staged diff, immune to state.json shape/path drift), plus `dispatch_guard.py`, the **dispatch gate**
        (a loop node is never handed to a general worker that would arrive with none of these rules and improvise
-       the difference — it reads the node names from this project's own `.workflow/loop.md`).
-       `build-once-per-wave` is deferred.
+       the difference — it reads the node names from this project's own `.workflow/loop.md`), plus
+       `dispatch_return.py`, its **after** counterpart — a `PostToolUse` detector that notices a dispatched worker
+       returning a pasted file body instead of a result. It **warns and never blocks**, deliberately: the work is
+       already done by the time it runs, so the only thing left worth changing is what the orchestrator carries
+       forward from it. `build-once-per-wave` is deferred.
    - **Trust the workspace so the shipped allowlist is live.** *(The user-facing explanation of the whole
      permission posture — broad local allow, `ask` on outward, the hard floor that survives bypass, and why
      `--dangerously-skip-permissions` is the wrong reach — is `shared/trust-model.md`. Point the user at it in

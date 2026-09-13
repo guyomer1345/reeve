@@ -330,3 +330,39 @@ def test_the_live_repo_is_measurable():
     assert res["files"], "the real package must produce measurable rows"
     assert all(r["role"] in (db.ALWAYS, db.ONDEMAND) for r in res["files"])
     assert isinstance(tb.failed(res), bool)
+
+
+def test_the_shared_contracts_are_measured_at_source(tmp_path):
+    """The hole this gate was extended to close. `product/shared/*.md` ships as a plugin glob
+    with no `install[]` entry — capabilities read it in place, on demand, by relative path — so
+    the SHIPPED gate cannot see it (it walks an installed `.workflow/`, where these never land)
+    and this gate could not either while it was scoped to `templates/`. Measured consequence:
+    `schemas.md` sat at 94% of the Read ceiling and one slice pushed it 404 tokens OVER with
+    every meta-gate green."""
+    res = tb.scan()
+    shared = {r["template"]: r for r in res["files"] if r["template"].startswith("product/shared/")}
+    assert shared, "the shared contracts are not being measured"
+    assert "product/shared/schemas.md" in shared
+    for r in shared.values():
+        assert r["role"] == db.ONDEMAND, (
+            "a shared contract is read on demand, never every turn — giving it the always-loaded "
+            "budget would be a second, wrong owner")
+        assert r["hard"] == db.DEFAULTS["ondemand_hard"], (
+            "the hard number here is the Read tool's own ceiling, not a preference")
+
+
+def test_a_shared_contract_over_the_read_wall_fails(tmp_path):
+    """Not a style note: past the Read ceiling a capability cannot load its own contract in one
+    call, so this must FAIL rather than advise."""
+    res = tb.scan(budgets=dict(db.DEFAULTS, ondemand_hard=100, ondemand_advisory=50))
+    over = {r["template"] for r in res["files"] if r["tier"] == "over"}
+    assert any(t.startswith("product/shared/") for t in over)
+    assert tb.failed(res) is True
+
+
+def test_the_shared_contracts_do_not_enter_the_always_loaded_total(tmp_path):
+    """They are on-demand, so counting them as rent would fail the package for owning its own
+    contracts — the same reason the shipped gate does not total the on-demand tier."""
+    res = tb.scan()
+    assert res["total"]["files"] == 3, "only the three always-loaded templates are rent"
+    assert res["total"]["tokens"] < db.DEFAULTS["always_total_hard"]

@@ -83,8 +83,9 @@ human's verdict.
   the tunnel. Vendor it locally or drop it.
 - **Never spawn sub-agents** (leaf worker), never park a checkpoint, never file a ticket, never open a
   conversation with the human — all four belong to the caller.
-- **The return is bounded**: the bundle path, the lint result, the refine round, and the list of `provisional`
-  spec fields the caller must file debt for. Never paste the bundle back.
+- **The return is bounded** — `shared/schemas.md § dispatch-return`, the owner of the rule for every dispatched
+  agent, including where heavy raw material goes. Here: the bundle path, the lint result, the refine round, and
+  the list of `provisional` spec fields the caller must file debt for. Never paste the bundle back.
 
 ## Output
 A linted sandbox bundle at `.workflow/demos/<item-id>/` + its `.refine.json` ledger, and a thin return: the

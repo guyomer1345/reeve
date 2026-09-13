@@ -73,8 +73,10 @@ Keeps disk + context high-signal:
 - **Never** flag divergence for `provisional` items, or the drift alarm chases ghosts.
 - **Never touch product code**, the plan, or the backlog — you record, you don't build.
 - **Never spawn sub-agents** (leaf worker).
-- **The return is bounded.** The durable output is the files you wrote; return a thin summary (nodes touched,
-  whether the architecture doc moved, what was distilled or pruned) — never the node contents.
+- **The return is bounded** — `shared/schemas.md § dispatch-return`, the owner of the rule for every dispatched
+  agent, including where heavy raw material goes. Here: the durable output is the files you wrote, so return a
+  thin summary (nodes touched, whether the architecture doc moved, what was distilled or pruned) and never the
+  node contents.
 
 ## Output
 Updated `docs/knowledge/` (nodes, graph, Sessions) + the architecture doc — and, in audit mode, the staged

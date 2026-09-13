@@ -28,6 +28,11 @@ A `checkpoint` (kind=setup) needs precise third-party steps.
 - **No screenshots or screen-share cues** — a screenshot can't be produced accurately without a live browser and
   goes stale silently; live screen-share is a user-present terminal escalation, not part of this async guidance.
 - You guide only — you don't perform the action or record the verdict.
+- **The return is bounded** — `shared/schemas.md § dispatch-return`, the owner of the rule for every dispatched
+  agent. The `how` array below *is* your deliverable, so keep it to the steps and their links; the pages you read
+  to build it never come back with it. You have **no write tool**, so the scratch half of that contract is not
+  available to you and reading narrowly is your only lever: fetch the page that answers the step, not the section
+  index around it.
 
 ## Output
 Step-by-step setup guidance for the `checkpoint` to surface, as the `request.how` array — **`[{ step, url?,

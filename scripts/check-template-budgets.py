@@ -77,6 +77,10 @@ import check_doc_budget as db          # noqa: E402  the sizer, the roles, the n
 import update_reconcile as ur          # noqa: E402  the template -> destination mapping
 
 TEMPLATE_DIR_REL = os.path.join("product", "templates")
+# The shared contracts ship as a plugin glob and are read IN PLACE, on demand, by relative
+# path -- there is no `install[]` entry to derive a destination from, so they are their own row
+# source rather than a mapping.
+SHARED_DIR_REL = os.path.join("product", "shared")
 
 # The brief's SOURCE path is a literal inside `render_brief`, not a module constant, so it is
 # read out of that function's own source rather than copied. Anchored on `plugin_root` and the
@@ -164,8 +168,43 @@ def scan(repo_root=ROOT, budgets=None):
                              "why": "no installed destination — no owner in "
                                     "update_reconcile maps it"})
 
+    # THE SHARED DOCS ARE MEASURED TOO, and their absence here was the same hole one level over.
+    # `product/shared/*.md` ships as a plugin glob with no `install[]` entry: capabilities read it
+    # in place, on demand, by relative path. So nothing in the shipped budget gate can see it --
+    # `check_doc_budget.py` walks an installed `.workflow/` and these files never land there -- and
+    # nothing here saw it either, because this gate was scoped to `templates/`. The consequence was
+    # measured, not imagined: `shared/schemas.md` sat at 94% of the ceiling and one slice's edits
+    # pushed it 404 tokens OVER while all six meta-gates reported green.
+    #
+    # For these the hard number is not a preference at all -- it is the Read tool's 25 000-token
+    # wall, past which a capability CANNOT load its own contract in one call. That makes this a
+    # correctness gate, not a style note.
+    #
+    # WHY HERE AND NOT IN THE SHIPPED GATE: widening the shipped classifier would start failing
+    # `checks.sh` in every target project over PACKAGE files that project cannot edit -- the same
+    # deadlock `check_doc_budget.py` already reasons about for an org-mode `CLAUDE.md`. Measuring
+    # at source, in the meta-repo, costs a target nothing and catches it before it ships.
+    shared_rel = _posix(os.path.join(SHARED_DIR_REL))
+    shared_rows = []
+    for path in sorted(glob.glob(os.path.join(repo_root, SHARED_DIR_REL, "*.md"))):
+        rel = _posix(os.path.relpath(path, repo_root))
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError:
+            problems.append({"template": rel, "kind": "missing",
+                             "why": "a shared doc that cannot be read is one no capability can "
+                                    "load either"})
+            continue
+        est = db.estimate_tokens(text, b["chars_per_token"])
+        shared_rows.append({"template": rel, "installs_to": "(read in place from %s)" % shared_rel,
+                            "role": db.ONDEMAND, "tokens": est,
+                            "hard": b["ondemand_hard"], "advisory": b["ondemand_advisory"],
+                            "tier": "over" if est > b["ondemand_hard"]
+                                    else ("advisory" if est > b["ondemand_advisory"] else "ok")})
+
     roles = roles_for(pairs, repo_root)
-    rows = []
+    rows = list(shared_rows)
     for src_rel, dest_rel in sorted(pairs):
         path = os.path.join(repo_root, src_rel.replace("/", os.sep))
         try:

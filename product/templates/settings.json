@@ -86,6 +86,17 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch_return.py"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "startup",

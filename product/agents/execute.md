@@ -49,9 +49,11 @@ names, never from the caller's paraphrase of it.
 - **Never spawn sub-agents** (leaf worker).
 - **You have no web tools, deliberately.** Anything you would have looked up is missing plan input — return it
   as a blocker so the caller gathers it. An executor that can browse is an executor that improvises.
-- **The return is bounded.** The `changelog` is written to disk under the item directory; what you return is a
-  thin summary — what ran, what diverged, what blocked, and the path. Never paste the diff or the whole
-  changelog back. Heavy reading and writing happen in *this* window and stay here.
+- **The return is bounded, and so is your own window** — `shared/schemas.md § dispatch-return`, which owns the
+  rule for every dispatched agent. Here that means: the `changelog` goes to disk under the item directory and
+  you return a thin summary (what ran, what diverged, what blocked, the path), and heavy raw material — build
+  output, test logs, long dumps — is redirected into `.workflow/items/<id>/scratch/` and grepped rather than
+  printed. You are the longest-running dispatch in the loop, so you pay most for anything left in context.
 
 ## Output
 A `changelog` referencing the plan, written under the item's directory — plus the thin summary above (including

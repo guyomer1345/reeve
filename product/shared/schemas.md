@@ -677,6 +677,38 @@ the one place the loop keeps a secret.
   It is a defined field precisely because it wasn't — every driven session improvised its own section here, in a
   committed file.
 
+## dispatch-return  · produced by every DISPATCHED agent (`execute` · `document` · `create-demo` · `research` · `setup-guide`), consumed by the caller that dispatched it · *in-context only — never a file, never persisted; the heavy material it stands for is written to `scratch/` (§ per-item artifacts) and stays there*
+**One contract for every dispatched worker, so the rule has one owner instead of five paraphrases that drift.**
+Which nodes dispatch is not this file's call — the orchestrator brief's *How to run a node* owns that list, and
+this covers exactly the agents it names. Each agent file points here; none restates it.
+
+**A return is a CONDENSED RESULT PLUS POINTERS.** Paths, line anchors, ids, counts, the verdict, the blocker —
+what the caller needs in order to *route*, and nothing it could re-read for itself. Never a whole file body,
+never long raw tool output, never a transcript, never the diff. The caller carries this for the rest of the item,
+so anything re-derivable from a path is rent charged on every turn after the dispatch.
+
+**The worker's OWN window is the scarcer half, and it is the half that is easy to get backwards.** Measured on a
+real drive: an `execute` dispatch runs ~66 turns and a worker's entire context is re-read on every one of them,
+so a token it accumulates early is re-read **~41 times** and costs roughly **4.1× its base input** before the
+dispatch ends — two thirds of everything a worker costs is those re-reads. The caller's window is a real
+constraint too, but under a third of a drive's tokens. That puts the halves in their true order: **bounding the
+return is second-order; keeping bulk out of the worker is first-order.** So "heavy reading happens in here and
+stays here" is half the rule. Nothing a worker has read can be un-read:
+- **Write heavy output; never print it.** A long draft, a generated file, a big report goes out through `Write`
+  into `scratch/` and the tool result is a filename. The same bytes echoed into the transcript buy nothing and
+  are then paid for on every remaining turn.
+- **Redirect, then grep.** A command with large output is redirected into `scratch/` and searched, not run bare —
+  raw stdout lands in the window permanently.
+- **Read narrowly, and point at disk rather than re-carrying.** Grep for the anchor and read the range around it;
+  once material is in `scratch/` it is addressable by path, and a second copy in the window is the same bytes at
+  4.1×.
+
+**What is enforced, and what is not — a judgement wearing a gate's clothes is worse than an honest advisory.**
+This contract is **ADVISORY**: nothing stops a worker pasting a body back or loading one it did not need. One
+half of it has a **detector** — `hooks/dispatch_return.py` sizes what came back and warns — and it cannot block,
+is an absurdity ceiling rather than a budget, and cannot see the worker-window half at all. What it does, what it
+deliberately ignores, and the gap it leaves: [`schemas-runtime.md § dispatch_return.py`](schemas-runtime.md).
+
 ## per-item artifacts  · on disk
 **The filenames are FIXED, because they are anchors, not just storage.** Under `.workflow/items/<id>/`:
 `plan.md` · `promises.json` · `changelog.md` · `verify-verdict.md` · `debug-report.md` · `plan-delta.md` ·
@@ -684,6 +716,24 @@ the one place the loop keeps a secret.
 `promises.json`, and the **forecast anchor table** (below) derives "did this event happen?" from the *presence*
 of the artifact its node produces. An artifact written under a different name is an event that silently reads as
 never having happened.
+
+### scratch  · written by whichever dispatched agent is working the item, read by nobody but its writer
+`.workflow/items/<id>/scratch/` — the **heavy working material** the dispatch-return contract (above) exists to
+keep out of a context window: raw command output, intermediate dumps, long drafts, gathered source text. Created
+on demand by its writer; nothing scaffolds it.
+
+**RUNTIME and gitignored**, unlike every other name under the item dir — raw material, not a record, and
+committing it would put back into the repo exactly the bulk the contract keeps out of a window, then hand it to
+every later reader of that item's history. **Not** relocated to the native-filesystem runtime tree the way
+`parked/` and `secrets/` are: it holds no credential and needs no atomic rename, so it stays under the item dir
+on the repo mount where its writer already is.
+
+**It inherits promote-then-prune rather than getting a TTL of its own.** `retention.py`'s `prune_items` removes
+the whole item directory — `scratch/` with it — once `document` has written `promoted.json`, and skips the
+directory entirely until then. So scratch lives exactly as long as its item, an un-promoted item never has its
+working material collected out from under it, and there is no second deletion rule to keep correct forever.
+**Not an anchor** (below): its presence proves nothing about which node ran, which is why the directory name is
+fixed and the names *inside* it are the only free ones here.
 
 ### the forecast ANCHOR TABLE  · read by `forecast.py reality`, written by nobody
 Reality is **derived**, never recorded — there is no second ledger to keep in step, and no writer to forget. Each

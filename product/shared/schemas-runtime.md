@@ -224,6 +224,61 @@ resolves here — the name is the anchor, and the two files are one schema.*
     installs and no `.gitignore` edits reach the owner's checkout; and `verify` degrades to **artifact
     conformance**, with all runtime checking moved to a human `qa` checkpoint in the operator's own checkout.
 
+## dispatch_return.py  · a `PostToolUse(Agent|Task)` detector, run by the harness after every dispatch · *writes nothing; its whole output is a warning in the caller's transcript*
+The mechanical half of `schemas.md § dispatch-return`, which owns the contract itself and is where the reasoning
+lives. **The contract is advisory; this is a detector, not its enforcement** — and the distance between those two
+words is the whole reason this section exists rather than a sentence claiming the rule is gated.
+
+- **It cannot block, and does not pretend to.** The harness runs `PostToolUse` *after* the tool returns, so there
+  is nothing left to prevent. The available act — and it is worth doing — is to tell the caller, in its own
+  transcript at the moment it happens, not to carry the payload forward, and to leave a mark rather than have the
+  breach absorbed silently. It exits 2 with the reason on stderr, which the harness shows to the model as a
+  warning and which blocks nothing.
+- **It is an ABSURDITY CEILING, not a budget,** and it is measured in **characters** because a shipped hook cannot
+  assume a tokenizer. No distribution of return *sizes* has ever been measured here; what has been measured is
+  that a dispatched node's median contribution to the caller's window is 0.0k against an inline node's 12.0k — so
+  returns are already small at the median, and a threshold placed near one would strangle the normal case to catch
+  nothing. The ceiling sits where the only plausible way to reach it is a file body, a diff, or raw tool output
+  pasted back. The number lives in the hook, its one owner; if it ever fires on a legitimate return the honest
+  fix is to measure and move it, not to soften the wording.
+- **Two silences are deliberate.** A dispatch to anything that is not one of the five package agents is ignored —
+  the contract is this package's, and warning about an ordinary search dispatch would train the caller to skip
+  the warning that matters. (The complementary PreToolUse rule, *a loop node never goes to a general worker*, is
+  `dispatch_guard.py`'s.) And any `tool_response` whose text it cannot positively extract is **not measured**: the
+  documented schema does not pin down that shape for a subagent dispatch, so an unknown shape must read as
+  silence. A detector that guesses a size emits a warning its reader cannot falsify.
+- **The gap, stated rather than papered over.** The expensive half of the contract — what a worker *read, printed
+  or redirected inside its own window*, the half that costs ~4.1× — is invisible from outside the worker and is
+  not checkable by anything. This hook watches returns only. A reader who takes "there is a hook" to mean the
+  discipline is covered has been misled, which is why the limit is written here next to the mechanism.
+
+## subagentPromptCacheTtl  · a HARNESS setting a project MAY set, deliberately NOT set by this package · *`.claude/settings.json` (or `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL`, or a per-agent `experimental.cacheTtl` in an agent's frontmatter)*
+Recorded here because it looks like free money and is not, and because the arithmetic that decides it is
+**workload-specific** — so a project that measures differently from this package's reference workload should set
+it, and one that does not should leave it alone.
+
+**What it does.** A dispatched worker's prompt prefix is cached; when the worker idles longer than the cache TTL
+its whole prefix is re-written on the next turn. The subagent bucket defaults to **5 minutes regardless of plan**
+(measured: across ten thousand-plus subagent cache-creation turns on the reference workload, every single one was
+a 5-minute write and not one was an hour-long write). Raising it to `"1h"` makes those stall re-writes rarer.
+
+**Why it is not on by default — the break-even test, stated so it can be re-run rather than re-argued.** A 1h
+cache write costs **2.0×** base input against a 5m write's **1.25×**; a cache *read* is **0.1×** either way. So
+the longer TTL trades a permanent 60% premium on **every** write for the removal of **some** re-writes, and it
+wins only when stall re-writes exceed roughly **39%** of all cache writes. On the reference workload they are
+**40%** — one point over the line, which measured out as a **−0.4%** total saving. That is inside the error bar,
+and it is *optimistic*: it assumes every idle gap would fit inside an hour, while a third of the stalled
+dispatches ran longer than an hour overall, so some gaps would expire at 1h anyway and be paid for at 2×.
+
+**And it moves the wrong way as the rest of the discipline works.** The `dispatch-return` contract
+(`schemas.md`) exists to keep bulk out of a worker's window. A smaller window is a smaller prefix, so it is a
+smaller stall re-write — which is the only thing the longer TTL recovers — while the 2× write premium is
+unchanged. A default that has to be re-examined the moment the neighbouring rule takes effect is not a default.
+
+**To decide it for a real project:** take that project's own share of cache writes that are stall re-writes. Over
+~39% → `"1h"` pays; under → it costs. Set it per-agent (`experimental.cacheTtl` on the one agent that actually
+stalls) before setting it globally, because the premium applies to every worker and the stalls usually do not.
+
 ## runtime.json  · written by `rebind.py` (`bind` at `/start` step 3, `apply` at `/rebind`), read by every process that touches a runtime path · *`.workflow/runtime.json`; RUNTIME, gitignored, atomic write; deliberately NOT on a native filesystem — it is the pointer TO it*
 - `{ runtime_root }` — an absolute path. The workflow tree spans **two filesystems** whenever the repo lives on a
   mount whose file-mode or `rename` guarantees are weak: the atomicity- and mode-sensitive runtime paths are
