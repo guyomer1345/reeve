@@ -5876,7 +5876,7 @@ state-publishing), and `loop.md` § Maintenance items, which promised the straig
 `product/skills/prioritize/SKILL.md`, `product/commands/start.md`, `scripts/check_enum_coherence.py`,
 `scripts/test_check_enum_coherence.py`.
 
-## D183 — `building` with no current item is LEGAL at a boundary, so the gate stops asking about status and the receipt generalizes to every non-item commit motion **[DECIDED 2026-08-09, NOT BUILT — settles the question `07` § the `/update` onto D182 named as upstream of the rest. Fixes are deferred to the post-harvest fix pass]**
+## D183 — `building` with no current item is LEGAL at a boundary, so the gate stops asking about status and the receipt generalizes to every non-item commit motion **[DECIDED 2026-08-09 · BUILT 2026-09-13 in D188 (`2936d19`) — settles the question `07` § the `/update` onto D182 named as upstream of the rest]**
 
 **The call, in one line: `status: building` with `current_item: null` at a boundary node is a correct description
 of the loop, and `idle` is not available as a synonym for it.** The three statuses describe the loop's **mode**,
@@ -5927,7 +5927,7 @@ member of the set this decision names), **D182** (the receipt, which this genera
 → Files (fix pass): `product/hooks/verify_check.py`, `product/shared/schemas.md`, `product/templates/loop.md`,
 `product/commands/update.md`, `product/templates/orchestrator-CLAUDE.md`, `scripts/check_enum_coherence.py`.
 
-## D184 — the always-loaded budget caps the wrong thing: per-file, with an advisory no always-loaded file has ever been under **[DECIDED 2026-08-09, NOT BUILT — the cap stays, the numbers and the unit change. Numbers are set in the fix pass, after relocation, and only to values the shipped package actually meets]**
+## D184 — the always-loaded budget caps the wrong thing: per-file, with an advisory no always-loaded file has ever been under **[DECIDED 2026-08-09 · BUILT 2026-09-13 in D188 (`9830c4e` relocation, `156ace2` the rest) — the cap stayed at 4000, the unit gained a TOTAL, and the advisory became a band. Numbers were set after relocation, to values the shipped package meets]**
 
 Measured at source, both always-loaded files sit against the same 4000 `always_hard`: `templates/loop.md` **4219**
 (3984 before D182 — sixteen tokens of headroom) and `templates/orchestrator-CLAUDE.md` **3926**. `always_advisory`
@@ -6144,3 +6144,136 @@ beside it is absolute.
 constrained window, which is what orders `12b` before `12c`), **D183**/**D184** (the two unbuilt entries this
 places), **D185** (the phase this sequences).
 → `11` (`### The ordered build sequence` — the owner), `07` (the open sub-questions, unchanged).
+
+## D187 — Step 0 MEASURED: the `execute` blow-out is a TAIL not a median, the router is looser than assumed, and the live signal exists — but the dominant cost is a cache TTL nobody owns **[MEASURED 2026-09-13 over 114 transcripts / 364 subagent runs / 381 dispatches of `agentic cyber`. Read-only, no drive. Answers all three of D186 Step 0's questions and CHANGES the justification for Steps 3–4. Two instrument defects found]**
+
+D186 put measurement first because it is the only step whose answer can change a later step's design, and it
+cost nothing — the transcripts were already on disk. All three questions are answered, and one answer was not
+among the options either D180 or D186 had in view.
+
+**1. Is the observed 300–400k per `execute` real, or the artifact D180 already corrected? Neither — it is a
+TAIL.** Medians net of cache-stall re-write, over a sample 2.7× larger than D180's: `execute` (n=138) **194.1k**
+net median · p90 385.7k · max 726.1k · peak context 151.5k median, 284.1k p90. `research` (n=75) 100.9k ·
+`document` (n=112) 95.1k. **21% of `execute` dispatches exceed 300k net; 32% peak above 200k.** So the headline
+number is real for a fifth of dispatches and wrong for the median. **The consequence is a design consequence,
+not a footnote:** a per-agent *budget* set anywhere near the median strangles the normal case, while an
+**absurdity ceiling** catches the 21% that actually misbehave. `07`'s guess at the instrument's shape is
+confirmed with a number under it.
+
+**2. Where does the router's per-item cost go? It is 32% of the drive, not 43–53%.** Router window 35.4M fed in
+against 75.6M across all 364 workers; peak 484k; 9 428 calls. Median **inline node 12.0k vs dispatched 0.0k** —
+the dispatch rule's central claim, measured and confirmed rather than asserted. The 43–53% in D180 came from a
+smaller, earlier sample; this is not a contradiction but it *is* a looser constraint than Step 3 and Step 4 were
+justified against.
+
+**3. Can a live signal observe a running subagent's token count? YES — so the fallback `07` reserved is not
+needed.** Subagent transcripts are at `<project>/<session-uuid>/subagents/agent-<id>.jsonl`, every assistant
+line carries full `usage`, and they are **appended during the run** — proven by six files that end mid-flight on
+a `tool_result` with no following assistant turn, one of them 236 lines deep; a flush-at-completion writer
+cannot leave that. Occupancy = `cache_read + cache_creation + input_tokens` of the last assistant line, latency
+one turn. Each line self-describes via `attributionAgent`, so a poller needs **nothing from the parent** — it
+watches the directory by mtime. An absurdity ceiling can therefore be a real daemon term rather than a
+self-report plus a post-hoc gate.
+
+**THE FINDING NOBODY ASKED FOR, AND THE LARGEST SINGLE COST IN THE DRIVE: the 300-second prompt-cache TTL.**
+**30.4M of 83.5M worker tokens — 36% overall, and 50% of `execute`'s — are re-writes of a prefix nobody
+supplied.** A worker idles past the TTL and repays its whole context. This is bigger than anything return
+contracts can recover, and **it has no owner in the sequence**: `12b` bounds what flows *into the router* and
+does nothing about a worker stalling. It also sharpens Step 4's risk in a way D186 did not state — fanning out
+N workers does not only multiply simultaneous returns into the router, **it multiplies stalls**, because more
+workers wait on a coordinator that serialises. The `12b`-before-`12c` order is right for a stronger reason than
+the one written, and it means `12b` must bound **stall exposure**, not only return size.
+
+- **Rejected — treating the 300–400k figure as either "real" or "the artifact" and moving on.** Both readings
+  are wrong in the same way: they assume a single number describes the node. The distribution is the finding.
+- **Rejected — re-deriving `12b`/`12c` from the looser 32% router share.** The share fell, the ordering did not
+  change, and the stall finding independently reinforces it. Re-opening a settled order on a number that moved
+  in the *permissive* direction is how a sequence becomes a backlog again.
+
+*Two instrument defects, both found by running it, neither affecting the answers above (they were computed
+around):* `measure-dispatch.py` hardcodes `PLUGIN = "reeve"` at line 51, so the rename in `c8b5755` made the
+recogniser blind to all pre-rename history — its `128 LOOP NODES ON A GENERAL WORKER <-- must be 0` is
+**entirely false**, being exactly the 56+52+20 `dev-autonomous-workflow:*` dispatches. Real general-worker
+violations: **29** (Explore 17, general-purpose 10, fork 2). And `off-plan` scored `no plan` for **every** node,
+so the hunting signal is not being measured at all — workers run in `.claude/worktrees/<agent-id>/`, so plan
+paths do not resolve against the project root. Real violations that stand: 12 web calls in 2 non-gatherer
+workers.
+**Builds on:** **D180** (the instrument and the correction this re-measures at scale), **D186** (Step 0).
+→ `11` (`### The ordered build sequence` — Steps 3/4 justification), `07` (the live-signal sub-question, now
+answered; the `warn_pct`-for-the-router sub-question, still open).
+
+## D188 — the fix pass is CLOSED: the always-loaded set has a ceiling and a gate that can see the package, and `/update` has a legal commit **[BUILT 2026-09-13, `156ace2` + `2936d19` — completes D184 and D183, the whole of D186 Step 1. 948 tests (938→948), 6 meta-gates green. THREE defects found by doing it, all fixed here. One item deferred by dependency, one deliberately not migrated]**
+
+D184 and D183 were decided on 2026-08-09 and deferred to this pass. Both are built. What follows is what the
+building added to what was decided — the decisions themselves are not restated.
+
+**D184, the unit and the numbers.** `always_total_hard` 8000 / `always_total_advisory` 6400 now bound the
+always-loaded **set**, and fail `checks.sh` exactly as a per-file breach does; the on-demand tier is
+deliberately not totalled, because nothing loads it until something needs it and a sum over it would fail a
+project for owning documentation. Per-file `always_hard` stays **4000** — the package now meets it with 25% room,
+and the standing rule forbids raising a cap, not holding one. `always_advisory` 1200 → **3200**, a band at 80% of
+hard instead of a floor no always-loaded file had ever been under. **8000 is anchored on the 8145 the pair
+actually weighed the day this was noticed**: the ceiling means "never again as bad as that", which is a number
+with a story rather than a round one.
+
+**The relocation remainder was all D80 dedup, not prose trimming**, and that distinction did the work. The
+mermaid diagram left `loop.md` (the routing table directly above it is strictly richer — every diagram edge
+appears in it, plus the `answer`/`status` side doors and `checkpoint:setup`, which the diagram never had).
+`orchestrator-CLAUDE.md` went 3915 → 3066 by discovering that five of its sections were second copies: the
+per-kind drain list was a **third** copy of `loop-detail.md § the boundary drain, by kind`; the launcher rule a
+third copy of `schemas-runtime.md § orchestrator.lock`; the protected-branch policy a second copy of
+`§ config.json → guard`; the interactive reset a second copy of the `/dispatch` command; and "Where things live"
+a second copy of paths-and-tiers that every `schemas.md` section heading already declares. The mechanics that
+were genuinely **only** in the brief were moved down, not deleted. Always-loaded set: **8134 → 5394**.
+
+**The meta-gate is the part that makes any of it real.** `scripts/check-template-budgets.py` measures
+`product/templates/*` at source in the pre-commit chain, deriving the template→destination mapping from
+`update_reconcile.py` and asking the shipped gate itself for each role rather than restating either. Run against
+`ea1dc8e` it prints 4219 over per-file and 8134 over total — **D184's numbers to the token, found by a gate
+instead of by installing.**
+
+**D183, and the sentence that turned out to matter most.** The receipt generalised (`MAINT_KINDS` →
+`RECEIPT_KINDS`, `maintenance-receipt` → `§ commit-receipt`, `/update` joining as `kind: update`), the
+`building` + null pair is now declared legal in the schema, and flip-commit-flip is banned in three places. But
+the load-bearing change is the **block message**, which now names the cause instead of listing the escapes it
+knows. The old one read as *"pick one of these"*, and the first human to hit it went looking for a receipt to
+imitate rather than asking whether the motion was sanctioned — then disarmed the gate to get past it. A safety
+gate that explains itself badly gets worked around by exactly the people it is protecting.
+
+- **The directory stays `.workflow/maintenance/` though the name is now narrower than the set it holds.**
+  Relocating it would put a migration inside `/update` — the very motion that joining the set exists to unblock.
+  Stated in the schema rather than left for a reader to trip on.
+- **Rejected — adding `update` to `loop.md` to satisfy `check_enum_coherence`.** Adding the kind made the gate
+  demand it appear in `loop.md` too, which routes loop NODES and has no `update` node. Dropping `loop.md` as a
+  consumer would have lost the check that a maintenance node is routable; adding a non-node to an always-loaded
+  file to satisfy a gate is the budget defect committed to satisfy the coherence gate. So the gate gained a
+  **declared per-consumer exemption**, and a **stale** exemption — one naming a value the owner no longer
+  declares — is itself reported. An exemption is a hole; it may not outlive what it exempts.
+- **NOT migrated, deliberately:** bootstrap's `phase: bootstrap` escape stays its own mechanism. It is the right
+  shape for the receipt, but `/start` is the most-driven motion in the package and changing how its commits pass
+  a gate does not belong in the same slice as everything else here.
+
+*Three defects found by doing it, all fixed here, none of them in the decisions:*
+1. **`check_doc_budget.py` could admit one file TWICE.** `project_root` is commonly spelled `./project`, which
+   `os.path.join` carries into the glob while a split-pointer target is resolved through `normpath`; the two
+   spellings denote one file and compare unequal. Measured live on `agentic cyber`: **333 rows for 327 files.**
+   It inflated advisories and would have double-counted a file in the new TOTAL — i.e. the defect was latent
+   under the very feature this pass added. Regression test verified to fail without the fix.
+2. **The statusline command was the same cwd-relative bug as the hooks, and cannot take the same fix.**
+   `CLAUDE_PROJECT_DIR` is documented for hooks and **not** for statusLine, which receives its root on stdin as
+   `workspace.project_dir` — no use to a shell that must locate the script before python starts. It now resolves
+   `${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel || echo .)}`: correct if the platform ever sets the
+   var, correct anywhere inside the repo either way, never worse than today. Tested from a subdirectory, where
+   the old command exits 2. `statusline.py` itself already read `workspace.project_dir` correctly.
+3. **The budget bit its own author.** Adding D183's `state.json` ban to the brief pushed it from 2993 to 3135,
+   eating most of the headroom the relocation had just bought; the rule stayed and the *rationale* moved to
+   `§ commit-receipt`, where it already lived. Worth recording because it is the gate working on the first
+   change after it shipped, which is the only real test a budget gets.
+
+*Deferred by dependency, not dropped:* the target-side `doc_budget.always_hard: 4400` in `agentic cyber` comes
+out only after that project is `/update`d onto this package. It currently measures **8180** always-loaded — D184's
+complaint reproduced live, and now over the new ceiling — and `/update` is exactly what D183 unblocked, so the
+order is forced rather than chosen.
+**Builds on:** **D183** and **D184** (built here), **D80** (every relocation in this pass was a second-copy
+removal), **D182** (the receipt this generalises), **D186** (Step 1).
+→ `11` (`### The ordered build sequence` — Step 1 closed, Step 2 next).

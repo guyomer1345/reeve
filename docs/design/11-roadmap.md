@@ -1079,37 +1079,36 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
-### The ordered build sequence (set 2026-09-13, D186) — the fix pass, then Phase 12
+### The ordered build sequence (set 2026-09-13, D186; Steps 0–1 CLOSED 2026-09-13, D187/D188) — the fix pass, then Phase 12
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied. A step that is merely *nice*
 before another is called that; a step that is a **prerequisite** says why. Phase 12's per-slice content lives
 in `### Phase 12` below — this section owns only the ORDER.
 
-**Step 0 — Measure. Read-only, free, and first.**
-Run `scripts/measure-dispatch.py --writer-scope` over the existing `agentic cyber` transcripts (they are on disk;
-no new drive is needed). It answers three things every later step would otherwise guess: whether the observed
-300–400k per `execute` is real or the artifact D180 already corrected (the instrument read **2.8–3.5× high**);
-where the router's 98–179k per item actually goes; and whether any live signal can observe a running subagent's
-token count at all. **First because it is the only step whose answer can change a later step's design**, and it
-costs nothing — it reads transcripts that already exist. Feeds Step 2 and the `warn_pct` question.
+**Step 0 — Measure. ✅ CLOSED 2026-09-13 — `D187`.** Ran over 114 `agentic cyber` transcripts (364 subagent
+runs, 381 dispatches), read-only. All three questions answered; **full numbers and what they change live in
+`D187`, which is their owner — not restated here.** In one line each: the 300–400k `execute` is a **tail, not a
+median** (194.1k net median, 21% over 300k), so the instrument is an absurdity ceiling rather than a budget; the
+router is **32%** of the drive, a looser constraint than Steps 3–4 were argued against, and the inline-vs-dispatch
+claim is confirmed (12.0k vs 0.0k median); and a **live signal exists** — a running subagent's context is readable
+from its own transcript with nothing needed from the parent, so `07`'s self-report fallback is not needed.
+**It also found what nothing had asked about: 36% of all worker tokens — 50% of `execute`'s — are 300-second
+prompt-cache TTL re-writes.** That is larger than anything `12b` can recover and **has no owner in this
+sequence**; it is carried into Step 3 below rather than left as a note. Two instrument defects were found and are
+listed in `D187` (a hardcoded plugin name that made 128 reported invariant violations entirely false, and an
+`off-plan` signal that has never actually been measured).
 
-**Step 1 — Finish the fix pass: D184's remainder, then D183.**
-Not tidiness. Three of its pieces are **prerequisites** for what follows:
-- The **always-loaded TOTAL ceiling** + the **meta-gate that measures `product/templates/*` at source** must exist
-  *before* `12a` adds a third always-loaded file. Without them the directive channel ships new per-turn rent that
-  no gate can see — which is precisely the defect D184 exists to fix, committed a second time by the slice that
-  read the lesson.
-- The **mermaid diagram** (a second copy of the routing table it sits under, which D80 forbids outright) comes out
-  *before* `12c`, which rewrites routing. Deleting a stale second copy *after* editing the primary is exactly how
-  the two disagree.
-- **D183 unblocks `/update`**, which today has **no legal commit path at all** — and every later step reaches a
-  real install through `/update`. Phase 12 cannot be driven on a real project until it lands.
-Order *within* the step: D184's relocation is already done (`9830c4e`); its **numbers are set after** the rest of
-the relocation, never before, under the standing rule that **a cap is set to a value the shipped package meets and
-never raised to accommodate what it happens to weigh**. Then D183. Then the target-side `always_hard: 4400`
-accommodation comes back out of `agentic cyber`, since a target-owned knob is never the fix for a package-owned
-defect. Carries one loose end found in the tree: `settings.json`'s hooks are now `$CLAUDE_PROJECT_DIR`-absolute
-while the **statusline command is still cwd-relative** — decide whether that is deliberate or the same bug.
+**Step 1 — Finish the fix pass. ✅ CLOSED 2026-09-13 — `D188` (`156ace2`, `2936d19`).** D184 and D183 are
+both BUILT; their entries carry the calls and `D188` carries what building them added. The three pieces that were
+**prerequisites** for what follows are all in place: the always-loaded **TOTAL ceiling** exists and the
+**meta-gate measures `product/templates/*` at source**, so `12a` cannot add a third always-loaded file unseen
+(the set is at 5394/8000, and `12a`'s `directives.md` lands inside that ceiling); the **mermaid diagram is gone**
+before `12c` rewrites routing; and **D183 unblocks `/update`**, which had no legal commit path at all and is how
+every later step reaches a real install. The statusline loose end was the same bug as the hooks but could not
+take the same fix, and is resolved — see `D188`. 948 tests, 6 meta-gates green.
+**One item is deferred by dependency, not dropped:** the target-side `doc_budget.always_hard: 4400` in
+`agentic cyber` comes out once that project is `/update`d onto this package. It measures **8180** always-loaded
+today — the original complaint reproduced live, and now over the new ceiling.
 
 **Step 2 — `12a`, the directive channel.** First of the phase because it is the phase's premise: the mechanical
 slices below persist as *code* and are safe, but the residue that cannot be mechanized — *"notify me when X"*, and
@@ -1117,8 +1116,15 @@ the judgment half of the autonomy boundary — has nowhere to live and decays at
 precede `12d`/`12e` on safety grounds: **an autonomous driver with no decided autonomy boundary is the one
 combination in this phase that can do damage unattended.** Depends on Step 1's ceiling.
 
-**Step 3 — `12b`, return contracts + scratch retention.** Cheapest slice, pure contract work, and it buys router
-headroom that Step 4 immediately spends. Uses Step 0's numbers rather than guessed ones.
+**Step 3 — `12b`, return contracts + scratch retention — NOW ALSO OWNS STALL EXPOSURE.** Cheapest slice, pure
+contract work, and it buys router headroom that Step 4 immediately spends. Uses Step 0's measured numbers rather
+than guessed ones — and **Step 0 changed this slice's scope.** The dominant cost in a real drive is not return
+size at all: **36% of all worker tokens, and 50% of `execute`'s, are 300-second prompt-cache TTL re-writes**
+(`D187`). Return contracts bound what flows *into the router* and do nothing about a worker that idles past the
+TTL and repays its whole prefix. That cost had no owner; it is this slice's, because it is the slice that bounds
+what a worker does between turns. **It also re-justifies Step 4's ordering more strongly than D186 stated:**
+fanning out N workers multiplies *stalls*, not only simultaneous returns, since more workers wait on a
+coordinator that serialises. Parallelism before stall exposure is bounded makes the scarce resource scarcer.
 
 **Step 4 — `12c`, the wave coordinator + continue-while-parked.** The largest speed win, on a predicate decided
 back in D91. **Must follow Step 3, and this corrects an earlier reading that it could jump ahead cheaply:** fanning
