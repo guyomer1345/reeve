@@ -71,6 +71,11 @@ BRIEF_KEY = "CLAUDE.md#brief"
 # Package-owned template copies that are not manifest `install[]` entries.
 TEMPLATES = [
     (os.path.join("templates", "loop.md"), os.path.join(".workflow", "loop.md")),
+    # The on-demand half of the routing graph. Installed BESIDE loop.md, not under shared/,
+    # because the doc-budget split marker resolves relative to the referring file -- a
+    # `shared/`-relative pointer would dangle in every installed project and be reported
+    # unresolved on every run.
+    (os.path.join("templates", "loop-detail.md"), os.path.join(".workflow", "loop-detail.md")),
     (os.path.join("templates", "checks.sh"), os.path.join(".workflow", "checks.sh")),
     (os.path.join("templates", "settings.json"), os.path.join(".claude", "settings.json")),
 ]

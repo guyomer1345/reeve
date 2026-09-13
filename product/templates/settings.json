@@ -70,13 +70,19 @@
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "bash .claude/hooks/guard.sh" }
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard.sh"
+          }
         ]
       },
       {
         "matcher": "Agent|Task",
         "hooks": [
-          { "type": "command", "command": "python3 .claude/hooks/dispatch_guard.py" }
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch_guard.py"
+          }
         ]
       }
     ],
@@ -84,19 +90,28 @@
       {
         "matcher": "startup",
         "hooks": [
-          { "type": "command", "command": "python3 .claude/hooks/session_start.py" }
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_start.py"
+          }
         ]
       },
       {
         "matcher": "resume",
         "hooks": [
-          { "type": "command", "command": "python3 .claude/hooks/session_start.py" }
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_start.py"
+          }
         ]
       },
       {
         "matcher": "clear",
         "hooks": [
-          { "type": "command", "command": "python3 .claude/hooks/session_start.py" }
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_start.py"
+          }
         ]
       }
     ],
@@ -104,13 +119,19 @@
       {
         "matcher": "manual",
         "hooks": [
-          { "type": "command", "command": "python3 .claude/hooks/precompact.py" }
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/precompact.py"
+          }
         ]
       },
       {
         "matcher": "auto",
         "hooks": [
-          { "type": "command", "command": "python3 .claude/hooks/precompact.py" }
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/precompact.py"
+          }
         ]
       }
     ]

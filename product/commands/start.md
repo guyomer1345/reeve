@@ -73,6 +73,7 @@ loop's normal `state.json` takes over when the motion ends.
    .workflow/
      config.json       # project_root + run config      (committed)
      loop.md           # routing graph + diagram        (committed)
+     loop-detail.md    # the on-demand half of loop.md — split-and-pointer sibling, same dir (committed)
      checks.sh         # mechanical-gate runner — installed FIXED from templates/ (--fix / --check) (committed)
      checks.env        # per-stack commands checks.sh reads — data /start writes (committed)
      codemap.sh        # code-map runner — a thin stack-independent wrapper (one auto-dispatching call into the shipped engine; writes docs/knowledge/graph.json) (committed)
@@ -165,7 +166,12 @@ loop's normal `state.json` takes over when the motion ends.
        `CLAUDE.md`, and *concatenates* rather than overriding — so the brief still loads every session while the
        owner's own root `CLAUDE.md` stays **byte-untouched**. It is still read as a primary ingest source; it is
        simply never written. Set `project_root: .` and `docs_root: .workflow` (§3a).
-   - Copy `${CLAUDE_PLUGIN_ROOT}/templates/loop.md` → **`.workflow/loop.md`** and write
+   - Copy `${CLAUDE_PLUGIN_ROOT}/templates/loop.md` → **`.workflow/loop.md`** **and
+     `${CLAUDE_PLUGIN_ROOT}/templates/loop-detail.md` → `.workflow/loop-detail.md`** — the routing graph is a
+     split-and-pointer pair, and the two halves must land **in the same directory**: `loop.md`'s
+     `<!-- doc-budget: detail split -> loop-detail.md -->` marker resolves relative to the referring file, so a
+     missing sibling is reported unresolved on every `checks.sh` run. Copy `loop.md` alone and the loop is
+     routable but every pointer in it dangles. Then write
      **`.workflow/config.json`** (`project` — the same name you just filled `<project>` with, so `/update`
      re-renders the brief without renaming the project — plus `project_root` + run config).
    - **Capture any pre-existing statusline *before* the copy (composition — never clobber).** The template
