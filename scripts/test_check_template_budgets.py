@@ -57,13 +57,20 @@ def _write(root, rel, tokens, head=""):
     return path
 
 
-def _repo(tmp_path, loop=1000, detail=1000, brief=1000, marker=True):
+def _repo(tmp_path, loop=1000, detail=1000, brief=1000, marker=True, directives=200):
     """A fixture repo carrying only `product/templates/` — the mapping and the sizer still come
-    from the real checkout, because those are the LOGIC under test, not the data."""
+    from the real checkout, because those are the LOGIC under test, not the data.
+
+    EVERY mapped template must be written here, seeds included: an owner that maps a file this
+    fixture does not create is a `MISSING` finding, and the gate is right to say so. So the
+    fixture tracks the owner rather than the owner tracking the fixture — `directives.md` is
+    small by default because it is a seed, and because its size is not what any of these tests
+    are about."""
     root = str(tmp_path)
     _write(root, "loop.md", loop, head=MARKER if marker else "")
     _write(root, "loop-detail.md", detail)
     _write(root, "orchestrator-CLAUDE.md", brief)
+    _write(root, "directives.md", directives)
     return root
 
 
@@ -137,6 +144,7 @@ def test_the_role_is_whatever_the_shipped_classifier_gives_the_destination(tmp_p
     res = tb.scan(_repo(tmp_path))
     assert _roles(res) == {"loop.md": db.ALWAYS,
                            "orchestrator-CLAUDE.md": db.ALWAYS,
+                           "directives.md": db.ALWAYS,
                            "loop-detail.md": db.ONDEMAND}
 
 
@@ -174,7 +182,7 @@ def test_the_always_loaded_total_fails_when_every_file_is_under_its_own_cap(tmp_
     files each comfortably under `always_hard` still cost the sum of both before a word is
     typed, and only the TOTAL bound can see that number."""
     b = _budgets(always_hard=4000, always_total_hard=7000, always_total_advisory=6400)
-    root = _repo(tmp_path, loop=3900, brief=3900)
+    root = _repo(tmp_path, loop=3900, brief=3900, directives=0)
     res = tb.scan(root, budgets=b)
 
     assert res["over"] == [], "no single file is over its own cap"
@@ -191,9 +199,9 @@ def test_the_always_loaded_total_fails_when_every_file_is_under_its_own_cap(tmp_
 def test_the_total_sums_the_always_loaded_tier_only(tmp_path):
     """The on-demand tier is deliberately not totalled: nothing loads it until something needs
     it, so summing it would fail a package for owning documentation."""
-    res = tb.scan(_repo(tmp_path, loop=1000, brief=1000, detail=9000))
-    assert res["total"]["files"] == 2
-    assert res["total"]["tokens"] == 2000
+    res = tb.scan(_repo(tmp_path, loop=1000, brief=1000, detail=9000, directives=500))
+    assert res["total"]["files"] == 3
+    assert res["total"]["tokens"] == 2500
 
 
 # ---------------------------------------------------------------- coverage

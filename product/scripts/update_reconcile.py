@@ -80,6 +80,25 @@ TEMPLATES = [
     (os.path.join("templates", "settings.json"), os.path.join(".claude", "settings.json")),
 ]
 
+# SEEDED ONCE, THEN PROJECT-OWNED FOREVER -- a THIRD category, and it had to be added rather
+# than borrowed. `TEMPLATES` above means *package-owned*: refreshed on every `/update`, because
+# the package is the author and a local edit to one is a finding. `.workflow/directives.md` is
+# the exact inverse. The package ships its starting content (the file must exist, and it must
+# arrive already carrying the autonomy boundary), but from the moment it lands the OPERATOR is
+# its author -- adding a standing directive by hand is the whole reason the channel exists.
+# Putting it in `TEMPLATES` would refresh an operator's directives away on every update; leaving
+# it out of the package entirely would mean no gate ever measures what an always-loaded file
+# costs a session. So: created when absent, never touched when present.
+#
+# DELIBERATELY ABSENT FROM THE LEDGER (`expected_files` does not know about these). The ledger
+# exists to prove a package-owned file pristine; a seed is *expected* to diverge, so recording
+# its hash would make every edited directives.md read as `LOCAL-EDIT` -- and dropping a seed
+# from a future package would make the operator's own file a removable `ORPHAN`. Nothing about
+# a seed is the package's to prove or to reclaim after it lands.
+SEEDS = [
+    (os.path.join("templates", "directives.md"), os.path.join(".workflow", "directives.md")),
+]
+
 # Package-owned but HUMAN-FACING: an overwrite that would discard local edits blocks until
 # confirmed, rather than trusting the driver to remember to ask.
 CONFIRM_REQUIRED = {os.path.join(".claude", "settings.json"), BRIEF_KEY}
@@ -367,6 +386,13 @@ def compute_plan(plugin_root, project_root):
         actions.append({"kind": kind, "path": dest,
                         "confirm": dest in CONFIRM_REQUIRED and kind in ("LOCAL-EDIT", "REFRESH?")})
 
+    # Seeds: present is the terminal state. `SEEDED` is rendered as a no-op like `SAME`, because
+    # "the operator's directives file is where they left it" is not news; `SEED` says a file the
+    # package expects to exist is about to be created for the first time.
+    for _src_rel, dest in SEEDS:
+        kind = "SEEDED" if os.path.exists(os.path.join(project_root, dest)) else "SEED"
+        actions.append({"kind": kind, "path": dest, "confirm": False})
+
     # The orchestrator brief's managed block.
     new_body = render_brief(plugin_root, project_root)
     cur_body, found = read_brief_block(project_root)
@@ -420,7 +446,7 @@ def render_plan(plan):
     counts = {}
     for a in plan["actions"]:
         counts[a["kind"]] = counts.get(a["kind"], 0) + 1
-        if a["kind"] == "SAME":
+        if a["kind"] in ("SAME", "SEEDED"):
             continue
         note = {
             "ADD": "new in this version",
@@ -430,6 +456,7 @@ def render_plan(plan):
             "ORPHAN": "recorded-old − new manifest — removable",
             "ORPHAN-EDITED": "retired but locally modified — FLAG ONLY, never removed",
             "BRIEF-UNMARKED": "no managed block in CLAUDE.md — flag only, not modified",
+            "SEED": "absent — seeded once with the package's starting content, then yours",
         }.get(a["kind"], "")
         flag = "  [CONFIRM]" if a["confirm"] else ""
         lines.append("%-14s %-46s (%s)%s" % (a["kind"], a["path"], note, flag))
@@ -468,6 +495,14 @@ def do_apply(plugin_root, project_root, confirm):
                              or os.access(src, os.X_OK)) else None
             _atomic_write(abs_dest, data, mode)
             written.append(dest)
+        elif kind == "SEED":
+            # Reached only when the file is absent (see `compute_plan`), so this cannot clobber
+            # an operator's directives. Written through the same atomic path as everything else.
+            src = next(os.path.join(plugin_root, s_rel) for s_rel, d in SEEDS if d == dest)
+            if os.path.isfile(src):
+                with open(src, "rb") as fh:
+                    _atomic_write(os.path.join(project_root, dest), fh.read())
+                written.append(dest)
         elif kind == "ORPHAN":
             abs_dest = os.path.join(project_root, dest)
             try:

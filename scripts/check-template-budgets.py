@@ -17,7 +17,9 @@ not `checks.sh`, and it is deliberately absent from `product/MANIFEST.json`.
 TWO FACTS, TWO OWNERS, NEITHER RESTATED HERE (D80).
 
   1. WHERE A TEMPLATE LANDS is owned by `product/scripts/update_reconcile.py`: its `TEMPLATES`
-     list (`templates/loop.md` -> `.workflow/loop.md`, and so on) plus the orchestrator brief,
+     list (`templates/loop.md` -> `.workflow/loop.md`, and so on), its `SEEDS` list (shipped
+     once, then project-owned — budgeted here all the same, because what `/update` does to a
+     file later says nothing about what it costs a session), plus the orchestrator brief,
      which that module handles separately because it is a managed BLOCK inside the target's
      root `CLAUDE.md` rather than a whole-file copy. `TEMPLATES` is imported. The brief pair is
      *parsed* out of `render_brief`'s source, and the reason is worth stating rather than
@@ -97,7 +99,15 @@ def template_map():
     `template_rel` is relative to the repo root (`product/templates/...`); `installed_rel` is
     relative to a driven project's root, which is the form `workflow_docs()` classifies.
     """
-    pairs = [(_posix(os.path.join("product", src)), _posix(dest)) for src, dest in ur.TEMPLATES]
+    # `TEMPLATES` AND `SEEDS`, because for THIS gate they are the same fact. The two differ in
+    # what `/update` does to them afterwards -- a template is refreshed, a seed is written once
+    # and then belongs to the operator -- and that difference is invisible here: both are
+    # markdown this package ships into a project, so both are context the package causes every
+    # driven session to pay for. Budgeting only the refreshed half would have let
+    # `.workflow/directives.md`, an ALWAYS-LOADED file, install unmeasured -- the exact defect
+    # this gate exists to close, one category further along.
+    pairs = [(_posix(os.path.join("product", src)), _posix(dest))
+             for src, dest in list(ur.TEMPLATES) + list(getattr(ur, "SEEDS", []))]
 
     m = _BRIEF_SRC_RE.search(inspect.getsource(ur.render_brief))
     if not m:

@@ -82,6 +82,7 @@ loop's normal `state.json` takes over when the motion ends.
      install-set.json  # what this install wrote + the hashes — /update's ledger (committed)
      handoff.md        # durable resume anchor          (committed)
      backlog.md        # live OPEN queue (issues + roadmap; closed leave) (committed)
+     directives.md     # standing operator directives about how the LOOP behaves — ALWAYS-LOADED; SEEDED once from the package, then PROJECT-OWNED (committed)
      outbox/           # RUNTIME — pending outward-action queue (push/issue awaiting a console release); add to .gitignore
    <project_root>/     # the product (greenfield: project/ ; brownfield + org: repo root)
    <docs_root>/        # where the DERIVED docs below live. = project_root everywhere except
@@ -174,6 +175,16 @@ loop's normal `state.json` takes over when the motion ends.
      routable but every pointer in it dangles. Then write
      **`.workflow/config.json`** (`project` — the same name you just filled `<project>` with, so `/update`
      re-renders the brief without renaming the project — plus `project_root` + run config).
+   - **Seed `.workflow/directives.md` — once, and only if it is absent.** Copy
+     `${CLAUDE_PLUGIN_ROOT}/templates/directives.md` → **`.workflow/directives.md`**, guarded:
+     `[ -f .workflow/directives.md ] || cp "${CLAUDE_PLUGIN_ROOT}/templates/directives.md" .workflow/directives.md`.
+     This is the **seed** tier, not the template tier, and the guard is the whole difference: the package
+     authors the *starting* content (it ships already carrying the autonomy boundary) but the moment it lands the
+     **operator** is its author — adding a standing directive by hand is the entire reason the channel exists, and
+     a re-run of `/start` that overwrote it would delete exactly what it was built to keep. `/update` honours the
+     same rule through `update_reconcile.py`'s `SEEDS`. It is **ALWAYS-LOADED**, so every entry in it is rent this
+     project pays before a word is typed: `check_doc_budget.py` budgets it per-file and inside the always-loaded
+     TOTAL, and `check_directives.py` holds each entry to `shared/schemas.md` § directive on every commit.
    - **Capture any pre-existing statusline *before* the copy (composition — never clobber).** The template
      `settings.json` wires the interactive context governor's `statusLine`, and a project `statusLine` shadows
      the user's global one; so the governor **delegates** to whatever statusline already existed rather than

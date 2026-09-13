@@ -826,18 +826,29 @@ itself — **a legitimate motion with no sanctioned path through a gate that is 
 Opened by lived use rather than by audit or measurement. The phase's *calls* are settled in D185; these are the
 sub-questions deferred to the build, in the order the slices need them.
 
-- **What is a directive, structurally, and what retires one? `[12a]`** D185 settles the owner and the
+- **What is a directive, structurally, and what retires one? `[12a]` — ANSWERED 2026-09-13, built; see `D189`.** D185 settles the owner and the
   mechanical-first triage; it does not settle the entry shape. Needs: a type (so the triage is decidable rather
   than vibes), a retire path that is not "a human remembers", and a budget interaction — this file is
   **always-loaded**, so it lands inside D184's unbuilt total ceiling and cannot be sized independently of it.
   Sharpest sub-question: **what stops a directive being stated twice, once as prose here and once as the hook it
   was supposed to become?** That is a D80 second-copy hazard on the file whose whole purpose is to be obeyed.
-- **Can the goal-preserving autonomy floor be computed, or only approximated? `[12a]`** The floor is "touches a
+- **Can the goal-preserving autonomy floor be computed, or only approximated? `[12a]` — ANSWERED 2026-09-13:
+  computed, as a *spec-diff* floor, with the second half a LOCATION rule rather than a semantic one; see `D189`.** The floor is "touches a
   `locked` spec element, or alters what an acceptance criterion demands". The first half is decidable from the
   spec's inline commitment markers. The second is **not obviously decidable** — `check_criterion_discharge.py`
   computes which criteria a change *discharges*, which is not the same as which criteria a change *redefines*. If
   the second half cannot be made mechanical, say so plainly and let the floor be the first half alone rather than
   shipping a floor that is really a judgment wearing a gate's clothes.
+- **What makes the autonomy floor fire when the loop does NOT consult it? `[12a-residual, opened by building 12a]`**
+  The floor is built, mechanical and decision-time: `loop.md` tells the orchestrator to run
+  `check_autonomy_floor.py` before acting on a goal-affecting decision, exit 1 ⇒ `checkpoint`. **That is a
+  consultation, not an enforcement**, and the whole premise of the floor is that a loop grading its own decisions
+  drifts toward "not fundamental" — so a loop that simply does not run it is precisely the case the floor exists
+  for. The obvious backstop, a commit-time gate in `checks.sh`, was **deliberately not built**: it would block
+  every legitimate commit of a locked-spec change that HAD been routed and approved, and giving it an escape
+  means a second receipt — which is real design, not a wiring line. The receipt shape from the non-item commit
+  work is the strongest candidate (a routed-and-approved spec change carries its checkpoint verdict as evidence),
+  and that is a slice, not a follow-up. Until then this is a consultation and must be described as one.
 - **Can any live signal observe a running subagent's token count? `[measurement]`** If a hook can see it, the
   absurdity-ceiling is enforceable. If not — the likelier answer — it is a **self-reported** budget in the agent
   brief plus a post-hoc `measure-dispatch.py` gate, which is a materially weaker mechanism and must be described as

@@ -66,6 +66,7 @@ def _plugin(root, version="0.2.0", extra_install=(), drop=()):
         json.dumps({"permissions": {"allow": ["Bash"]}, "version": tag}, indent=2) + "\n")
     (root / "templates" / "orchestrator-CLAUDE.md").write_text(
         "# <project> — Orchestrator\nv%s\nroot=<project_root>\n" % tag)
+    (root / "templates" / "directives.md").write_text("# Directives\nseed v%s\n" % tag)
     return root
 
 
@@ -86,12 +87,21 @@ def _project(root, project_root=".", project=None):
     return root
 
 
-def _install(plugin, project, brief=True):
-    """Simulate /start step 4+7: copy the package in, wrap the brief, record the ledger."""
+def _install(plugin, project, brief=True, seeds=True):
+    """Simulate /start step 4+7: copy the package in, wrap the brief, record the ledger.
+
+    `seeds` is a knob because both states are real and they must both be tested: /start seeds
+    `.workflow/directives.md`, but a project installed BEFORE seeds existed has no such file
+    and /update is what must create it."""
     for dest, src in ur.expected_files(str(plugin), str(project)).items():
         d = project / dest
         d.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, d)
+    if seeds:
+        for src_rel, dest in ur.SEEDS:
+            d = project / dest
+            d.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(plugin / src_rel, d)
     body = ur.render_brief(str(plugin), str(project))
     text = "# my project\n\nMy own notes above.\n\n"
     if brief:
@@ -156,7 +166,9 @@ def test_same_version_same_content_is_a_noop(env):
     _tmp, plugin, project = env
     plan = ur.compute_plan(str(plugin), str(project))
     assert plan["noop"] is True
-    assert set(_kinds(plan).values()) == {"SAME"}
+    # `SEEDED` is the seed tier's own no-op: the file is present, so it is the operator's and
+    # nothing happens to it. Grouped with SAME here because "nothing to do" is the assertion.
+    assert set(_kinds(plan).values()) == {"SAME", "SEEDED"}
 
 
 def test_new_version_refreshes_changed_and_adds_new(tmp_path, env):
@@ -350,9 +362,65 @@ def test_apply_is_idempotent(tmp_path, env):
     ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project)])
     after_first = _snapshot(project)
     plan = ur.compute_plan(str(new), str(project))
-    assert set(_kinds(plan).values()) == {"SAME"} and plan["noop"] is True
+    assert set(_kinds(plan).values()) == {"SAME", "SEEDED"} and plan["noop"] is True
     ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project)])
     assert _snapshot(project) == after_first
+
+
+# ------------------------------------------------- seeds: written once, then not ours
+
+def test_a_seed_is_created_when_it_is_absent(tmp_path):
+    """The half that makes `/update` able to introduce a seed at all. A project installed before
+    `.workflow/directives.md` existed has no such file, and the channel is useless until one is
+    there — so an absent seed is an ADD-shaped event, reported as `SEED`."""
+    plugin = _plugin(tmp_path / "pkg", version="0.1.0")
+    project = _project(tmp_path / "proj")
+    _install(plugin, project, seeds=False)
+    dest = project / ".workflow" / "directives.md"
+    assert not dest.exists()
+
+    assert _kinds(ur.compute_plan(str(plugin), str(project)))[
+        os.path.join(".workflow", "directives.md")] == "SEED"
+    ur.main(["apply", "--plugin-root", str(plugin), "--project-root", str(project)])
+    assert dest.read_text() == (plugin / "templates" / "directives.md").read_text()
+
+
+def test_a_seed_is_never_refreshed_over_the_operators_edits(tmp_path):
+    """The half the whole category exists for, and the one a `TEMPLATES` entry would have got
+    WRONG. `.workflow/directives.md` is package-supplied but PROJECT-OWNED: an operator adding a
+    standing directive by hand is the entire point of the channel, so an update that refreshed it
+    would delete exactly the thing the file was built to keep. Present is terminal, even when the
+    new package ships different seed content."""
+    old = _plugin(tmp_path / "pkg", version="0.1.0")
+    project = _project(tmp_path / "proj")
+    _install(old, project)
+    mine = "# Directives\n\n## mine\n- type: behavioural\n- entered: 2026-01-01\n- retire: standing\n\nstop at 30%.\n"
+    (project / ".workflow" / "directives.md").write_text(mine)
+
+    new = _plugin(tmp_path / "pkg_new", version="0.2.0")   # ships DIFFERENT seed content
+    plan = ur.compute_plan(str(new), str(project))
+    assert _kinds(plan)[os.path.join(".workflow", "directives.md")] == "SEEDED"
+    ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project)])
+    assert (project / ".workflow" / "directives.md").read_text() == mine
+    # And it is not reported as a local edit needing confirmation — it is not a local edit, it
+    # is the file doing what it is for.
+    assert not any(a["confirm"] for a in plan["actions"]
+                   if a["path"].endswith("directives.md"))
+
+
+def test_a_seed_is_kept_out_of_the_ledger_so_it_can_never_become_an_orphan(tmp_path):
+    """Two failures at once if it were recorded: an edited seed would read as `LOCAL-EDIT` on
+    every update, and a package that later stopped shipping the seed would see the operator's own
+    file as a provable `ORPHAN` and delete it. The ledger proves package files pristine; a seed is
+    EXPECTED to diverge, so it is not the ledger's business."""
+    plugin = _plugin(tmp_path / "pkg", version="0.1.0")
+    project = _project(tmp_path / "proj")
+    _install(plugin, project)
+    ur.main(["apply", "--plugin-root", str(plugin), "--project-root", str(project)])
+    ledger = json.loads((project / ".workflow" / "install-set.json").read_text())
+    assert os.path.join(".workflow", "directives.md") not in ledger["files"]
+    assert os.path.join(".workflow", "directives.md") not in ur.expected_files(
+        str(plugin), str(project))
 
 
 def test_checks_sh_stays_executable(tmp_path, env):

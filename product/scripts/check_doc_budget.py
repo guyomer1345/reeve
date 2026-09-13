@@ -252,7 +252,17 @@ def workflow_docs(project_root, proot, droot=None, org=False):
     # gate no one here is allowed to satisfy. Its context cost is real but it is theirs, in the
     # same class as the size of their code; this gate's scope is what the WORKFLOW owns, which is
     # exactly what it says when it reports "workflow-owned doc(s)".
-    always = [p(".claude", "CLAUDE.md"), p(".workflow", "loop.md")]
+    #
+    # `.workflow/directives.md` is ALWAYS-LOADED and is here for a reason worth stating: it is the
+    # one file in this set a HUMAN adds to freely, in prose, whenever an instruction needs to
+    # outlive a `/clear`. The other two are package-authored and move only when the package
+    # moves; this one grows by hand, one standing directive at a time, in the most expensive place
+    # in the system. Budgeting it per-file AND inside the always-loaded TOTAL is what makes that
+    # growth cost something visible -- `check_directives.py` holds each ENTRY to its shape, and
+    # nothing in that gate can see the bill the file as a whole is running up. Two gates, two
+    # facts: one asks whether an entry is legitimate, this one asks what the set weighs.
+    always = [p(".claude", "CLAUDE.md"), p(".workflow", "loop.md"),
+              p(".workflow", "directives.md")]
     if not org:
         always.insert(0, p("CLAUDE.md"))
     for path in always:

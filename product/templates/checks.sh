@@ -181,6 +181,16 @@ case "$MODE" in
     echo "+ doc budget" >&2
     python3 "$SCRIPTS/check_doc_budget.py" --project-root . || fail=1
 
+    # The directive gate. Same class as the budget gate above and deliberately beside it — both
+    # read `.workflow/` only, both are cheap, decidable and always-whole. They ask different
+    # questions about the same always-loaded file and neither can answer the other's: this one
+    # asks whether each ENTRY is legitimate (typed, pointed at a mechanism that exists, carrying
+    # a retire path that has not yet fired), the budget gate asks what the file WEIGHS. It rides
+    # the commit gate rather than a schedule because a retire condition fires by the passage of
+    # time or by a hook landing — neither of which is an event anything else would notice.
+    echo "+ directives" >&2
+    python3 "$SCRIPTS/check_directives.py" --project-root . || fail=1
+
     exit "$fail"
     ;;
   *)

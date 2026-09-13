@@ -27,6 +27,8 @@
     { "src": "scripts/check_decision_coverage.py", "dest": ".claude/scripts/check_decision_coverage.py" },
     { "src": "scripts/check_demo_bundle.py", "dest": ".claude/scripts/check_demo_bundle.py" },
     { "src": "scripts/check_doc_budget.py", "dest": ".claude/scripts/check_doc_budget.py" },
+    { "src": "scripts/check_autonomy_floor.py", "dest": ".claude/scripts/check_autonomy_floor.py" },
+    { "src": "scripts/check_directives.py", "dest": ".claude/scripts/check_directives.py" },
     { "src": "scripts/forecast.py", "dest": ".claude/scripts/forecast.py" },
     { "src": "scripts/project_state.py", "dest": ".claude/scripts/project_state.py" },
     { "src": "scripts/review_bundle.py", "dest": ".claude/scripts/review_bundle.py" },

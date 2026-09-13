@@ -16,14 +16,17 @@ md = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(md)
 
 
-def _turn(usage=None, tools=(), ts="2026-08-07T10:00:00.000Z", msg_id=None):
+def _turn(usage=None, tools=(), ts="2026-08-07T10:00:00.000Z", msg_id=None, cwd=None):
     content = [dict({"type": "tool_use", "name": n, "input": i},
                     **({"id": i.get("_id")} if isinstance(i, dict) and i.get("_id") else {}))
                for n, i in tools]
     msg = {"content": content or [{"type": "text", "text": "ok"}], "usage": usage or {}}
     if msg_id:
         msg["id"] = msg_id
-    return {"type": "assistant", "timestamp": ts, "message": msg}
+    rec = {"type": "assistant", "timestamp": ts, "message": msg}
+    if cwd:
+        rec["cwd"] = str(cwd)      # where the worker actually stood — a worktree, in the real
+    return rec                     # shape, and the only record of it in the transcript
 
 
 def _result(tool_id, text, ts="2026-08-07T10:00:01.000Z"):
@@ -72,6 +75,52 @@ def test_a_namespaced_dispatch_counts_as_the_role_arriving(tmp_path, capsys):
     assert subs[0]["node"] == "execute"
     assert md.report(subs, skills, n) == 0
     assert "1/1  role reached the worker" in capsys.readouterr().out
+
+
+# ------------------------------------------------------- the package's own former name
+
+def test_a_pre_rename_dispatch_is_the_same_node_and_not_a_general_worker(tmp_path, capsys):
+    """The rename in `c8b5755` made this instrument blind to its own history.
+
+    `dev-autonomous-workflow:execute` declared its node just as loudly as `reeve:execute`
+    does; a recogniser that knows only the current name reads all 128 pre-rename dispatches
+    as loop nodes running on a general worker — a violation report that is entirely false.
+    """
+    _subagent(tmp_path, "s1", "old", "dev-autonomous-workflow:execute", "Execute", "go",
+              [_turn()])
+    _subagent(tmp_path, "s1", "new", "reeve:execute", "Execute", "go", [_turn()])
+    subs, skills, n, _ = md.scan(str(tmp_path))
+    assert [s["node"] for s in subs] == ["execute", "execute"]      # ONE population
+    assert all(s["attribution"] == "declared" for s in subs)
+    assert all(s["capability"] == "reeve:execute" for s in subs)
+    assert md.report(subs, skills, n) == 0                          # no violation at all
+    out = capsys.readouterr().out
+    assert "0      LOOP NODES ON A GENERAL WORKER" in out
+    assert "2  reeve:execute" in out                                # folded onto one row
+    assert "c8b5755" in out                                         # and the fold is declared
+
+
+def test_a_genuinely_general_worker_is_still_the_violation_it_always_was(tmp_path, capsys):
+    """The fold must not become an amnesty: these three are what the count is FOR."""
+    for i, t in enumerate(("general-purpose", "Explore", "fork")):
+        _subagent(tmp_path, "s1", f"a{i}", t, "Execute the item", "go", [_turn()])
+    subs, skills, n, _ = md.scan(str(tmp_path))
+    assert md.report(subs, skills, n) == 2
+    assert "3      LOOP NODES ON A GENERAL WORKER" in capsys.readouterr().out
+
+
+def test_skill_loads_are_counted_per_capability_not_per_historical_spelling(tmp_path):
+    """The same split-population bug on the read side: the first real run listed `46 Skill
+    dev-autonomous-workflow:planner` and `43 Skill reeve:planner` as two different skills."""
+    (tmp_path / "s1").mkdir()
+    (tmp_path / "s1.jsonl").write_text("\n".join(json.dumps(x) for x in [
+        _turn(tools=[("Skill", {"skill": "dev-autonomous-workflow:planner"})], msg_id="m1"),
+        _turn(tools=[("Skill", {"skill": "reeve:planner"})], msg_id="m2"),
+        _turn(tools=[("Skill", {"skill": "some-other-plugin:planner"})], msg_id="m3"),
+    ]), encoding="utf-8")
+    _, skills, _, _ = md.scan(str(tmp_path))
+    assert skills["reeve:planner"] == 2
+    assert skills["some-other-plugin:planner"] == 1     # a foreign namespace is NOT folded
 
 
 def test_a_skill_load_inside_a_general_subagent_also_counts_as_arrival(tmp_path, capsys):
@@ -263,14 +312,92 @@ def test_reads_are_scored_against_the_plans_declared_files(tmp_path):
     assert s["scope"]["off_plan_reads"] == 1
 
 
-def test_no_plan_is_reported_as_unscored_not_as_zero_off_plan(tmp_path, capsys):
+def test_an_unscorable_node_says_WHY_rather_than_one_word_for_every_reason(tmp_path, capsys):
+    """`no plan` for everything hid this script's OWN failure among the legitimate absences.
+
+    A dispatch that was never item-scoped (`research`) and a dispatch whose plan the
+    instrument simply could not find are opposite readings: the first is the metric working,
+    the second is the metric broken. They must never print as the same word.
+    """
     transcripts = tmp_path / "tx"
-    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute", "go",
+    _subagent(transcripts, "s1", "a1", "reeve:research", "Research", "go",
+              [_turn(tools=[("Read", {"file_path": "/p/a.py"})])])
+    _subagent(transcripts, "s1", "a2", "reeve:execute", "Execute",
+              "work .workflow/items/IT-NOWHERE/plan.md",
               [_turn(tools=[("Read", {"file_path": "/p/a.py"})])])
     subs = md.scan(str(transcripts))[0]
-    assert "off_plan_reads" not in subs[0]["scope"]
+    by_node = {s["node"]: s for s in subs}
+    assert "off_plan_reads" not in by_node["research"]["scope"]
+    assert by_node["research"]["scope"]["plan_status"] == "no item"
+    assert by_node["execute"]["scope"]["plan_status"] == "plan?"   # an INSTRUMENT failure
     md.report_writer_scope(subs)
-    assert "no plan" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "no item" in out and "plan?" in out
+
+
+def test_an_id_shaped_word_in_prose_is_not_an_item(tmp_path):
+    """`CVE-Bench` in a research prompt is not a work item, and a missing plan behind it is
+    not this instrument failing to find one. A guessed id counts only if it exists."""
+    project = tmp_path / "proj"
+    _plan(project, "IT-1", ["src/a.py"])
+    _plan(project, "IT-2", ["src/b.py"])    # two, so the single-item fallback cannot fire
+    transcripts = tmp_path / "tx"
+    _subagent(transcripts, "s1", "a1", "reeve:research", "Research",
+              "is CVE-Bench a known benchmark? compare with WITHIN-SUBJECT designs",
+              [_turn(cwd=project, tools=[("Read", {"file_path": "/p/a.py"})])])
+    _subagent(transcripts, "s1", "a2", "reeve:execute", "Execute", "work IT-1 now",
+              [_turn(cwd=project, tools=[("Read", {"file_path": str(project / "src/a.py")})])])
+    by_id = {s["agent_id"]: s for s in md.scan(str(transcripts))[0]}
+    assert by_id["a1"]["item"] is None
+    assert by_id["a1"]["scope"]["plan_status"] == "no item"      # NOT `plan?`
+    assert by_id["a2"]["item"] == "IT-1"                         # a real one still resolves
+    assert by_id["a2"]["scope"]["on_plan_reads"] == 1
+
+
+# ---------------------------------------------------------------- the per-agent worktree
+
+def test_a_plan_is_found_through_the_worktree_the_worker_actually_ran_in(tmp_path):
+    """The reason `off-plan` printed `no plan` for every node on the first real run.
+
+    A dispatched worker runs in `<project>/.claude/worktrees/agent-<id>/`, so every path it
+    records is under there and none of them is under the project root. Resolving against the
+    project root found no plan and no product file — and the report said so as if the node
+    had nothing to score, rather than as if the instrument had missed. The project path is
+    NOT passed here, exactly as under `--dir`: the root is recovered from the worker's `cwd`.
+    """
+    project = tmp_path / "agentic cyber"          # a real project path has a space in it
+    _plan(project, "IT-1", ["src/a.py"])
+    worktree = project / ".claude" / "worktrees" / "agent-a1"
+    transcripts = tmp_path / "tx"
+    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute",
+              "work .workflow/items/IT-1/plan.md", [
+                  _turn(cwd=worktree, tools=[
+                      ("Read", {"file_path": str(worktree / "src/a.py")}),
+                      ("Read", {"file_path": str(worktree / "src/hunted.py")}),
+                      ("Read", {"file_path": str(worktree /
+                                                 ".workflow/items/IT-1/plan.md")})]),
+              ])
+    scope = md.scan(str(transcripts))[0][0]["scope"]
+    assert scope["plan_status"] == "scored"
+    assert scope["on_plan_reads"] == 1
+    assert scope["off_plan_reads"] == 1           # a real reading, not `no plan`
+    assert scope["scaffolding_reads"] == 1
+    assert sorted(scope["files_read"]) == [".workflow/items/IT-1/plan.md",
+                                           "src/a.py", "src/hunted.py"]
+
+
+def test_the_same_file_read_from_the_worktree_and_the_project_is_one_file(tmp_path):
+    """Otherwise the worktree splits every file in two and the re-read tax reads as zero."""
+    project = tmp_path / "proj"
+    worktree = project / ".claude" / "worktrees" / "agent-a1"
+    transcripts = tmp_path / "tx"
+    _subagent(transcripts, "s1", "a1", "reeve:execute", "Execute", "go", [
+        _turn(cwd=worktree, tools=[("Read", {"file_path": str(worktree / "src/a.py")}),
+                                   ("Read", {"file_path": str(project / "src/a.py")})]),
+    ])
+    scope = md.scan(str(transcripts))[0][0]["scope"]
+    assert scope["distinct_files_read"] == 1
+    assert scope["reread_calls"] == 1
 
 
 def test_boot_is_the_first_responses_cache_write(tmp_path):

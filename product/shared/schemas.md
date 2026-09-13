@@ -144,6 +144,59 @@ the motion *says which one it is*.
   `prioritize`, never forecast, so an anchor for them would fire for a node no chain ever named — which that table
   reads as a **structural divergence** and would re-forecast the tail on every routine maintenance pass.
 
+## directive  · written by a human (or by the orchestrator on their instruction), validated by `check_directives.py` · *`.workflow/directives.md`; **COMMITTED** and **ALWAYS-LOADED**, so it is budgeted in the always-loaded set and inside its TOTAL ceiling (§ commit-receipt's sibling law in `memory-model.md`); PROJECT-OWNED — `/start` seeds it and no update ever overwrites it*
+**A standing operator instruction about how the LOOP behaves.** Neither `docs/decisions/` (build decisions,
+append-only, on-demand — a directive the loop does not see every turn is not in force) nor `rules/**` (about
+product CODE, each carrying an `— enforced by:` tag). Without this file such an instruction lives in the
+conversation and dies at the next `/clear`, which is why it is re-typed every session.
+
+**MECHANICAL-FIRST IS THE ENTRY RULE, and it is decidable rather than a matter of taste.** One question decides
+the type: *does the directive name a condition a script could evaluate?* A threshold, a file state, an event —
+then it is mechanizable, and it **is wired** as a hook, a `config.json` knob, a gate or a daemon term. Only a
+directive with no observable trigger stays as text. Prose is the fallback, never the default: an always-loaded
+file that accepts anything is unbounded growth in the most expensive place in the system.
+
+- `type` ∈ `{ mechanized, behavioural }` · `entered` — `YYYY-MM-DD` · `retire` — see below ·
+  `mechanism` — **required iff `type: mechanized`, forbidden otherwise**: the path or config key where the rule
+  actually lives.
+- **A `mechanized` entry states what it ACHIEVES and never restates the rule.** This is the second-copy hazard at
+  its sharpest, on a file whose whole purpose is to be obeyed — a directive written once here as prose and once
+  there as a hook gives the loop two masters that drift apart. The entry is an **index row**: a pointer, not a
+  copy, which is exactly what the one-owner law permits and what a restatement violates. It
+  is held to that mechanically — a `mechanized` body is capped at **one line**, and a one-line body cannot be a
+  second copy of a hook's logic. The mechanism is also checked to EXIST; a dangling pointer is how an index rots.
+- **Every entry carries a retire path, and none of them is "a human remembers":**
+  - `on:YYYY-MM-DD` — expires. `check_directives.py` FAILS once the date has passed, so an expired directive
+    stops the build rather than quietly staying in force.
+  - `when:<path>` — retires when that mechanism exists. The gate fails once the path is present, which is what
+    makes mechanical-first hold *over time* rather than only at entry: the prose is a placeholder that is
+    forced out the day its hook lands.
+  - `standing` — no expiry. Permitted, and deliberately the least convenient: standing entries are listed on
+    every `--report` so they are re-confirmed rather than accumulated.
+- **Why not `state.json` or `handoff.md`:** `handoff.md` is prose for a stranger, rewritten whole at every
+  `/dispatch`, so nothing in it survives as an instruction; `state.json` is volatile and gitignored, and a
+  standing instruction that does not survive a crash is not standing.
+
+### the autonomy floor  · read by the orchestrator before taking a decision, computed by `check_autonomy_floor.py`
+**The loop takes every decision that does not change the goal, and routes anything that may.** That criterion is
+sharper than reversibility × blast-radius, which grades *how carefully to decide* rather than *whose decision it
+is*, and it already has an owner: the spec's commitment model. *Goal-affecting* ≈ *would change a `locked`
+element, or change what an acceptance criterion demands.*
+
+**The judgment does not stand alone, because a loop grading its own decisions drifts toward "not fundamental" —
+that is the direction that lets it keep working.** So there is a mechanical floor, and judgment may escalate
+above it and never below it. The floor is computed from the **spec diff**:
+- a changed hunk in `docs/spec.md` whose enclosing block carries a `locked` commitment marker;
+- a hunk that removes or weakens a `locked` marker;
+- a changed hunk inside an `acceptance_criteria` region — editing a criterion's text *is* altering what it demands.
+Either condition ⇒ **auto-route to the human, regardless of the model's read.**
+
+**Its limit is stated rather than implied, because a floor that is really a judgment in a gate's clothes is worse
+than no floor.** This is a *spec-diff* floor: it catches a change that rewrites the goal **in the spec**. A code
+change that quietly abandons a locked behaviour **without touching the spec** is not caught here — that is
+`align`'s drift scan and `verify`'s conformance check, and it is exactly the case judgment is expected to
+escalate on. The floor is a minimum, not a cap.
+
 ## decision-record  · produced by `decision-engineer` · *append-only — one record per decision; a reversal is a NEW record that supersedes (status flip), never an edit; global under `<project_root>/docs/decisions/`*
 - `id` — stable id (e.g. `D-001`); `plan.decisions[]` reference these, and coverage is checked id → step
 - `status` ∈ `{ active, superseded }` · `supersedes` / `superseded_by` — the reversal chain; a flip writes a

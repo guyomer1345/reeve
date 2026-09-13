@@ -6193,11 +6193,24 @@ the one written, and it means `12b` must bound **stall exposure**, not only retu
 *Two instrument defects, both found by running it, neither affecting the answers above (they were computed
 around):* `measure-dispatch.py` hardcodes `PLUGIN = "reeve"` at line 51, so the rename in `c8b5755` made the
 recogniser blind to all pre-rename history — its `128 LOOP NODES ON A GENERAL WORKER <-- must be 0` is
-**entirely false**, being exactly the 56+52+20 `dev-autonomous-workflow:*` dispatches. Real general-worker
-violations: **29** (Explore 17, general-purpose 10, fork 2). And `off-plan` scored `no plan` for **every** node,
+**entirely false**, being exactly the 56+52+20 `dev-autonomous-workflow:*` dispatches. **CORRECTED on repair:
+the true violation count is 4, not the 29 first written here** — 29 is the general-worker *dispatch* count
+(Explore 17, general-purpose 10, fork 2), which is a different measurement. The line counts general workers
+whose prompt attributes to a LOOP NODE, and only four do (`ingest`/Explore · `commit`/general-purpose ×2 ·
+`execute`/Explore); the other 25 are ordinary search dispatches. Verified by running the pre-fix logic on the
+same data, which reported **132** = the 128 false ones plus these same 4 — so the four were always real and the
+repair did not move the metric to make the number nicer. And `off-plan` scored `no plan` for **every** node,
 so the hunting signal is not being measured at all — workers run in `.claude/worktrees/<agent-id>/`, so plan
-paths do not resolve against the project root. Real violations that stand: 12 web calls in 2 non-gatherer
-workers.
+paths do not resolve against the project root. **Both defects are repaired**, and the repair found two more
+underneath the second: the plan parser understood only one of the two `## Files touched` spellings real plans
+use, and the bare-ID regex was inventing items out of prose (`CVE-Bench`, `WITHIN-SUBJECT`), which alone made 90
+dispatches misreport as instrument failures. `off-plan` now reads for the first time — **execute 62% · document
+84% · research 72%** — and, because a reading is worthless without knowing what it covers, coverage prints
+beside it (execute 114/142 · document 94/113 · **research 7/82**, the last being a real reading of seven
+dispatches and labelled as one rather than presented as a node-wide figure). Unscorable dispatches now separate
+into `no item` / `no scope` / `plan?`, the last flagged as a fault in the INSTRUMENT rather than a clean node.
+Per-node costs above are unchanged in substance but were previously split across two namespace spellings.
+Real violations that stand: 12 web calls in 2 non-gatherer workers.
 **Builds on:** **D180** (the instrument and the correction this re-measures at scale), **D186** (Step 0).
 → `11` (`### The ordered build sequence` — Steps 3/4 justification), `07` (the live-signal sub-question, now
 answered; the `warn_pct`-for-the-router sub-question, still open).
@@ -6277,3 +6290,73 @@ order is forced rather than chosen.
 **Builds on:** **D183** and **D184** (built here), **D80** (every relocation in this pass was a second-copy
 removal), **D182** (the receipt this generalises), **D186** (Step 1).
 → `11` (`### The ordered build sequence` — Step 1 closed, Step 2 next).
+
+## D189 — `12a` BUILT: the directive channel, and an autonomy floor that is computed rather than asserted — with the one thing it is NOT stated plainly **[BUILT 2026-09-13 — D186 Step 2. Answers both `[12a]` sub-questions in `07`. 1021 tests (948→1021), 6 meta-gates green. Opens ONE residual, deliberately: the floor is a CONSULTATION, not an enforcement]**
+
+D185 settled 12a's calls and left two questions to the build: what a directive *is* structurally and what retires
+one, and whether the goal-preserving floor can be computed at all. Both are answered, and the second answer is
+narrower than it first looks.
+
+**What a directive is.** `.workflow/directives.md`, committed, always-loaded, hard-budgeted, **project-owned**.
+Typed `mechanized | behavioural`, with `entered`, a `retire` path, and `mechanism` **required iff mechanized and
+forbidden otherwise**. `check_directives.py` enforces the shape on every commit.
+
+**The sharpest sub-question — what stops a directive being stated twice, once as prose and once as the hook it
+was supposed to become — gets a MECHANICAL answer rather than a convention.** A `mechanized` entry's body is
+capped at **one line**. A one-line body cannot be a second copy of a hook's logic; it can only be an index row,
+which is what the one-owner law permits. The named mechanism must also **exist** — a dangling pointer is how an
+index rots into a second source.
+
+**Retirement is mechanical too, and one of the three paths is the interesting one.** `on:<date>` fails once the
+date passes. `standing` is legal and deliberately the least convenient (listed on every `--report` so it is
+re-confirmed rather than accumulated). **`when:<path>` fails the day that path EXISTS** — so a prose directive
+written as a placeholder for a hook is *forced out* the moment its hook lands. That is what makes mechanical-first
+hold **over time** rather than only at entry, which is where such rules normally rot.
+
+**The floor is computed, and its second half is a LOCATION rule, not a semantic one.** `07` asked whether "alters
+what an acceptance criterion demands" could be made mechanical and instructed that if not, the floor should be the
+first half alone rather than "a judgment wearing a gate's clothes". The honest answer is in between and is worth
+stating precisely: *where a criterion lives* is decidable (an `acceptance_criteria` region, or a labelled field
+with its indentation scope); *whether a reworded criterion demands something different* is not, and the gate does
+not try. It treats **any** edit inside a criteria region as a crossing. That is an over-route by construction,
+which is the correct failure direction, and it is described as a location rule everywhere it is documented.
+The first half (`locked` markers) is genuinely decidable. Parser judgment calls both went the same way: a nested
+sub-bullet **inherits** its ancestor list items' markers (a sub-bullet of a locked feature is part of it), while
+**sections do not** inherit — a section-wide rule would fire on every edit anywhere in the spec, and a gate that
+always fires is one a human learns to skip. The resulting under-route (an unmarked sibling paragraph inside a
+section whose other paragraph is locked) is documented rather than hidden.
+
+- **The floor is a MINIMUM, not a cap, and every artifact says so.** It is a *spec-diff* floor: a change that
+  abandons a `locked` behaviour **without touching the spec** is not caught, and that is `align`'s drift scan and
+  `verify`'s conformance check. Judgment escalates above it and never below.
+- **`SEEDS` — a third ownership tier in `update_reconcile.py`, added rather than faked.** `TEMPLATES` means
+  *package-owned, refreshed every update*, which would delete an operator's standing directives on every
+  `/update` — the exact opposite of the file's purpose. Leaving it out of the package entirely would have made it
+  invisible to the source-budget meta-gate, i.e. the always-loaded rent defect this slice was sequenced behind.
+  So: created when absent, untouched when present, and deliberately **outside** `expected_files()` and the ledger
+  — a recorded seed would read as `LOCAL-EDIT` on every update once edited, and as a removable `ORPHAN` the day
+  the package stopped shipping it.
+- **Rejected — a commit-time gate in `checks.sh` for the floor.** It is the obvious backstop and it is wrong
+  without more design: it would block every legitimate commit of a locked-spec change that **had** been routed and
+  approved. Giving it an escape means a second receipt, which is a slice rather than a wiring line.
+- **Rejected — carrying the autonomy boundary as prose in the always-loaded brief.** The boundary is the seed
+  file's first resident and the brief merely points at it; putting the rule in both is the second copy this slice
+  exists to prevent, on the two most expensive files in the system.
+- **Rejected — treating "always-loaded" as self-executing.** Nothing auto-loads `.workflow/directives.md`; the
+  existing convention (how `loop.md` is already "always-loaded") is that the brief instructs the read. Found by
+  building — the file would otherwise have been pure rent with no reader.
+
+*ONE RESIDUAL, OPENED NOT HIDDEN:* the floor is wired at **decision-time only** — `loop.md` tells the orchestrator
+to run it before acting on a goal-affecting decision, exit 1 ⇒ `checkpoint`. **That is a consultation, not an
+enforcement**, and a loop that simply does not run it is precisely the case the floor exists for. Carried in `07`
+as `[12a-residual]` with the receipt shape named as the strongest candidate.
+
+*Evidence:* verified against the live `agentic cyber` spec — a locked feature edit routes and names the element;
+`locked`→`provisional` routes with the marker-weakened row; a nested sub-bullet routes as inherited; a
+mixed-marker element routes saying which aspect is not decidable; whitespace re-wrap inside a locked block is
+clear; and the header prose `(8 gates A–H, locked 2026-08-06)` does **not** produce a false marker — a dash
+introducer requires a backticked token precisely so that line cannot mark the whole header locked forever.
+Always-loaded set 5394 → **6086**/8000 (advisory 6400), the brief at 3102/3200 with 98 tokens of headroom.
+**Builds on:** **D185** (the calls), **D184** (the total ceiling this lands inside — the sequencing was real, not
+ceremonial), **D106** (the commitment model the floor reads), **D129** (mechanical floor, judgment above it).
+→ `11` (Step 2 closed, Step 3 next), `07` (both `[12a]` questions answered; one residual opened).

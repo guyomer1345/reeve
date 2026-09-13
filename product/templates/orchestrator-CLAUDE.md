@@ -136,6 +136,7 @@ What you touch every turn:
 |---|---|---|
 | `.workflow/config.json` | `project_root` (the product dir) + run config | stable |
 | `.workflow/loop.md` | the routing graph (detail in `loop-detail.md`) | stable |
+| `.workflow/directives.md` | standing operator directives about how you behave — **in force; read them** | stable |
 | `.workflow/state.json` | live position (item / phase / wave) | volatile, gitignored |
 | `.workflow/handoff.md` | durable resume anchor | volatile |
 | `.workflow/backlog.md` | live open queue: issues + roadmap (closed entries leave) | volatile |

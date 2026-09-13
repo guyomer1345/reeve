@@ -135,6 +135,24 @@ def test_a_brief_in_dot_claude_is_budgeted_as_always_loaded(tmp_path):
     assert _tiers(res)[".claude/CLAUDE.md"] == "over"
 
 
+def test_the_directives_file_is_budgeted_as_always_loaded_and_inside_the_total(tmp_path):
+    """`.workflow/directives.md` is ALWAYS-LOADED, and it is the one file in that set a HUMAN
+    grows by hand — a standing operator directive is added whenever one needs to outlive a
+    `/clear` (D185). `check_directives.py` holds each ENTRY to its shape and structurally cannot
+    see what the file as a whole weighs, so BOTH bounds have to reach it: its own per-file cap,
+    and the always-loaded TOTAL. Pinning the total membership is the half that matters most —
+    per-file alone would let the directive channel add rent no bound could see, which is exactly
+    the defect the total ceiling was built for."""
+    root = _project(tmp_path)
+    _write(root, "CLAUDE.md", tokens=1000)
+    _write(root, ".workflow/directives.md", tokens=1500)
+    res = _scan(root)
+    roles = {r["path"]: r["role"] for r in res["files"]}
+    assert roles[".workflow/directives.md"] == db.ALWAYS
+    assert res["total"]["files"] == 2
+    assert res["total"]["tokens"] == 2500, "it is counted in the bill, not only shape-checked"
+
+
 def test_a_foreign_root_claude_md_cannot_block_a_commit_in_org_mode(tmp_path):
     """Found by RENDERING an org-shaped brain, not by reading the code. The owner's root
     `CLAUDE.md` is always-loaded, so it was scanned — but the hard tier FAILS the commit and its

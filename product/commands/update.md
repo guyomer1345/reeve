@@ -20,12 +20,16 @@ code**, and leave everything else exactly as it is.
 which Claude Code guards **above** the settings allowlist, so a non-interactive session has no
 grant path and would silently skip those writes.
 
-## The 3-way taxonomy this implements
+## The ownership taxonomy this implements
+
+Four rows, and the count is not the point — *who authors the file after it lands* is. Everything below
+follows from that one question.
 
 | | What | What happens |
 |---|---|---|
 | **(a) package-owned** | manifest `install[]` scripts + hooks; the copied `loop.md`, `checks.sh`, `settings.json`; the orchestrator brief's **managed block** | **refreshed** from the new package |
 | **(b) target-owned** | `[D]` bodies (`# Sessions` / `Purpose` / edge-`why`), adopted docs, the spec, decision records, human-set `config.json` knobs, `checks.env`, `codemap.sh`, and all live loop state (`backlog` · `handoff` · `state` · `items` · `parked` · `outbox` · `inbox` · `secrets`) | **never touched** |
+| **(b′) seeded-then-owned** | `.workflow/directives.md` — the package ships its starting content, the **operator** grows it | **created if absent, never refreshed** |
 | **(c) regenerate-from-code** | `docs/knowledge/graph.json` + the `[G]` node frontmatter | **regenerated** by `codemap.sh`; `[D]` bodies preserved and re-attached |
 
 ## 0. Refuse the wrong situations
@@ -75,6 +79,13 @@ It prints one line per package-owned path. Read them as:
   wrote ⇒ **provably ours** ⇒ removed. `ORPHAN-EDITED` is flagged and never removed.
 - `BRIEF-UNMARKED` — the root `CLAUDE.md` has no managed block, so the orchestrator brief is left
   alone (see §4).
+- `SEED` / `SEEDED` — a **seed** (`update_reconcile.py`'s `SEEDS`): `SEED` means it is absent and will be
+  created from the package for the first time; `SEEDED` means it is already there and is **left alone**. There
+  is deliberately no third state. A seed is package-*supplied* but project-*owned*, so it is never hashed into
+  the ledger: an operator's edits to `.workflow/directives.md` must never read as a `LOCAL-EDIT` to confirm
+  away, and a package that later stopped shipping the seed must never see their file as a removable `ORPHAN`.
+  If you find yourself wanting to refresh one, the answer is no — the refresh would delete the standing
+  directives the channel exists to keep alive across a `/clear`.
 - `STAMP old -> new` — the version transition. `old == new` is a **no-op update**: report the
   summary and stop unless the human explicitly wants a re-sync.
   **What these values are:** the package ships **no** `version` field, so Claude Code keys
@@ -102,7 +113,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/update_reconcile.py" apply \
 Add `--confirm-overwrite` only after the human has seen the diffs and agreed. Exit `2` means it
 refused for exactly that reason — do not work around it by copying files yourself.
 
-Apply writes the package files, removes proven orphans, stamps
+Apply writes the package files, **creates any absent seed** (and touches no present one), removes proven orphans, stamps
 `.workflow/config.json` → `workflow_version`, and rewrites `.workflow/install-set.json` (the
 ledger the *next* update reads). It touches nothing else — that is enforced by the runner, not by
 this prose.
@@ -139,7 +150,8 @@ Once marked, every later update refreshes it automatically.
 ## 5. Verify, summarize, commit
 1. **Verify the install the same way `/start` step 7 does** — every manifest `install[].dest`
    present, no excluded test file leaked. Re-run `plan`: it should now report `SAME` for every
-   package-owned path (and the ledger present). A leftover `ADD`/`REFRESH` means a write was
+   package-owned path — and `SEEDED`, never `SEED`, for every seed (the ledger present too). A
+   leftover `ADD`/`REFRESH`/`SEED` means a write was
    skipped — the signature of a non-interactive session hitting the `.claude/` guard. Report it and
    **do not commit**.
 2. **Restart the daemon on the new code.** The console daemon is a long-lived process still running

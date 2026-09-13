@@ -61,6 +61,17 @@ Side doors (callable from anywhere): `create-issue` → backlog · `research` (s
 edge. `status` is the same shape: a pure read of where the project is, mutating nothing and returning to
 wherever it was called from.
 
+## The autonomy boundary — who owns the decision
+Take every decision that does not change the goal; **route anything that may**. Before acting on a decision that
+could change what the project is committed to, run
+`python3 .claude/scripts/check_autonomy_floor.py --project-root .` — **exit 1 ⇒ `checkpoint` (human), regardless
+of your own read.** A loop grading its own decisions drifts toward "not fundamental", because that is the
+direction that lets it keep working, so the floor is mechanical and judgment may escalate **above** it and never
+below. It is a *spec-diff* floor and therefore a minimum, not a cap: what it cannot see (a change that abandons a
+`locked` behaviour without touching the spec) is `align`'s and `verify`'s, and is exactly where escalating is
+expected. The standing directive is in `.workflow/directives.md`; the rules are in
+`shared/schemas.md § the autonomy floor`.
+
 **The gated rows (`create-demo?`) are the router's call, before any dispatch** — default **no demo**, decided
 per work-item. Its three conditions live once in the `create-demo` capability's *sandbox gate* section: read
 them there (this file is read every turn; that one is not).

@@ -49,6 +49,16 @@ import sys
 from collections import Counter, defaultdict
 
 PLUGIN = "reeve"
+# The dispatch namespaces this instrument recognises as ITS OWN — current first, then the
+# HISTORICAL ones. The package was renamed `dev-autonomous-workflow` -> `reeve` in `c8b5755`,
+# and the transcripts on disk are older than the rename, so a recogniser that knows only the
+# current name is blind to its own history: every pre-rename dispatch reads as a general
+# worker. MEASURED, and it is why this list exists — the first real run reported `128 LOOP
+# NODES ON A GENERAL WORKER`, all 128 of them `dev-autonomous-workflow:*` dispatches that had
+# in fact declared their node. The true count was 29.
+# A name goes in here ONLY if it is a real former name of this package: every entry added
+# turns a general worker into a declared loop node and hides the violation this report counts.
+PLUGIN_NAMESPACES = (PLUGIN, "dev-autonomous-workflow")  # [0] current · [1] pre-`c8b5755`
 DISPATCH_TOOLS = {"Agent", "Task"}
 WEB_TOOLS = {"WebSearch", "WebFetch"}
 # ---- the writer-scope attribution (11f) ----------------------------------------------
@@ -205,13 +215,33 @@ def api_calls(records):
     return [groups[k] for k in order]
 
 
+def is_ours(label):
+    """Does this `subagent_type` / skill name belong to the package, under ANY of its names?"""
+    s = str(label or "")
+    return any(s.startswith(ns + ":") for ns in PLUGIN_NAMESPACES)
+
+
+def capability_of(label):
+    """`dev-autonomous-workflow:planner` -> `reeve:planner` — one capability, one row.
+
+    The rename split every per-node aggregate across two spellings of the same thing, in the
+    report as well as in the recogniser: the first real run listed `46 Skill
+    dev-autonomous-workflow:planner` and `43 Skill reeve:planner` as if they were two skills.
+    Counting is done on the capability; the raw spelling is kept on the row for the record.
+    """
+    s = str(label or "")
+    return PLUGIN + ":" + s.split(":", 1)[1] if is_ours(s) else s
+
+
 def node_of(agent_type, description, prompt):
     """(node, how) — the loop node a dispatch was aimed at, and how confidently we know.
 
     A namespaced dispatch NAMES its node; anything else has to be inferred from the title
-    the orchestrator typed, and inference that fails says so rather than guessing.
+    the orchestrator typed, and inference that fails says so rather than guessing. Every
+    namespace in `PLUGIN_NAMESPACES` declares the SAME node, so a pre-rename `execute` and a
+    post-rename one aggregate together instead of being two half-populations.
     """
-    if agent_type.startswith(PLUGIN + ":"):
+    if is_ours(agent_type):
         return agent_type.split(":", 1)[1], "declared"
     head = ((description or "") + " || " + (prompt or "")[:300]).lower()
     for node in sorted(NODES, key=len, reverse=True):
@@ -247,20 +277,74 @@ def tool_results(records):
     return sizes
 
 
-def _rel(path, project_root):
-    """A worker's absolute path as the plan would have written it — repo-relative."""
+# A dispatched worker runs in its OWN git worktree, `<project>/.claude/worktrees/agent-<id>/`,
+# so every path it recorded is under that and not under the project root. Resolving them
+# against the project root finds nothing — which is exactly why `off-plan` read `no plan` for
+# every node on the first real run of this report: the signal was never measured, not clean.
+WORKTREE_SEGMENT = re.compile(r"^(?P<root>.*?)/\.claude/worktrees/[^/]+(?:/|$)")
+
+
+def _roots(roots):
+    """Accept one root or several, drop the empties — callers have between zero and three."""
+    if not roots:
+        return []
+    if isinstance(roots, str):
+        return [roots]
+    return [r for r in roots if r]
+
+
+def repo_of(path):
+    """The project a worktree path belongs to, or None if it is not a worktree path."""
+    m = WORKTREE_SEGMENT.match(str(path or "").replace("\\", "/"))
+    return m.group("root") or None if m else None
+
+
+def _rel(path, roots):
+    """A worker's absolute path as the plan would have written it — repo-relative.
+
+    Tries every root it was given, longest first, so a file read inside a per-agent worktree
+    relativises to the same name as the identical file read from the project root. Without
+    that, one file reads as two and neither matches the plan. A worktree path whose project
+    root we never learned is still cut at the worktree segment rather than left absolute.
+    """
     if not path:
         return ""
     p = str(path)
-    if project_root:
-        root = os.path.abspath(os.path.expanduser(project_root))
-        ap = os.path.abspath(os.path.expanduser(p))
-        if ap.startswith(root + os.sep):
-            return os.path.relpath(ap, root)
+    ap = os.path.abspath(os.path.expanduser(p))
+    for root in sorted(_roots(roots), key=len, reverse=True):
+        r = os.path.abspath(os.path.expanduser(root))
+        if ap.startswith(r + os.sep):
+            return os.path.relpath(ap, r)
+    m = WORKTREE_SEGMENT.match(p.replace("\\", "/"))
+    if m:
+        return p.replace("\\", "/")[m.end():]
     return p.lstrip("./")
 
 
-def attribute(records, project_root=None):
+def worker_roots(records, project_root=None):
+    """[run root, project root] — where a dispatched worker actually ran, and its project.
+
+    Recovered from the worker's OWN recorded `cwd`, which is the one place the transcript
+    says where it stood. That is what makes the attribution work under `--dir`, where no
+    project path was passed at all, and under a worktree, where the path that WAS passed is
+    the wrong one. Deliberately a list rather than a single answer: the plan may survive in
+    either place — in the worktree while it still exists, in the project after it is pruned.
+    """
+    roots = []
+    for r in records:
+        cwd = (r.get("cwd") or "").strip()
+        if not cwd or cwd in roots:
+            continue
+        roots.append(cwd)
+        repo = repo_of(cwd)
+        if repo and repo not in roots:
+            roots.append(repo)
+    if project_root and project_root not in roots:
+        roots.append(project_root)
+    return roots
+
+
+def attribute(records, roots=None):
     """Where a worker's fed-in tokens came from, and what it wrote — the 11f attribution.
 
     Three buckets, deliberately not summed:
@@ -285,8 +369,7 @@ def attribute(records, project_root=None):
             inp = use.get("input") if isinstance(use.get("input"), dict) else {}
             got = sizes.get(use.get("id"), 0)
             if name in READ_TOOLS:
-                reads.append(_rel(inp.get("file_path") or inp.get("notebook_path"),
-                                  project_root))
+                reads.append(_rel(inp.get("file_path") or inp.get("notebook_path"), roots))
                 read_chars += got
             elif name in SEARCH_TOOLS:
                 search_calls += 1
@@ -301,7 +384,7 @@ def attribute(records, project_root=None):
             elif name in WRITE_TOOLS:
                 write_calls += 1
                 written_paths.append(_rel(inp.get("file_path") or inp.get("notebook_path"),
-                                          project_root))
+                                          roots))
                 produced_chars += len(str(inp.get("content") or ""))
                 produced_chars += len(str(inp.get("new_string") or ""))
                 for e in inp.get("edits") or []:
@@ -323,32 +406,59 @@ def attribute(records, project_root=None):
     }
 
 
-def plan_files(project_root, item):
-    """The `files_touched` set from an item's plan, as glob patterns.
+def plan_files(roots, item):
+    """(patterns, why) — the `files_touched` set from an item's plan, as glob patterns.
 
     The plan's own `## Files touched` table is the declaration of scope; a read outside it is
     a read the plan did not anticipate. Placeholders (`<entry>`) become wildcards, so a plan
     that names a directory's contents generically is not scored as if it named nothing.
+
+    `why` is the reason there is nothing to score against, and the three reasons are NOT the
+    same reading — conflating them is how this metric spent its whole life printing one word
+    for a state it had never actually reached:
+      `no item`  — the dispatch was never item-scoped. `research` and `status` are not
+                   plan-driven; this is the honest, expected absence.
+      `plan?`    — the item is named but no `plan.md` was found under any root the worker
+                   ran in. That is an INSTRUMENT failure, never a clean reading.
+      `no scope` — a plan exists but declares no files: no `Files touched` section at all,
+                   or one this parser found nothing nameable in.
     """
-    if not project_root or not item:
-        return None
-    path = os.path.join(project_root, ".workflow", "items", item, "plan.md")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
-    except OSError:
-        return None
-    m = re.search(r"^#+\s*Files touched\s*$(.*?)(?=^#+\s)", text, re.M | re.S)
+    if not item:
+        return None, "no item"
+    text = None
+    for root in _roots(roots):
+        try:
+            with open(os.path.join(root, ".workflow", "items", item, "plan.md"),
+                      encoding="utf-8") as fh:
+                text = fh.read()
+            break
+        except OSError:
+            continue
+    if text is None:
+        return None, "plan?"
+    # Both real spellings of the heading: `## Files touched` and `## files_touched`. MEASURED
+    # on the drive — plans in the same repo use each, and a parser that knows one scores the
+    # other as if it had declared nothing.
+    m = re.search(r"^#+\s*files[ _]touched\b[^\n]*$(.*?)(?=^#+\s)", text,
+                  re.M | re.S | re.I)
     if not m:
-        return None
+        return None, "no scope"
     pats = []
     for line in m.group(1).splitlines():
-        if not line.strip().startswith("|"):
-            continue
-        cell = line.split("|")[1] if line.count("|") >= 2 else ""
+        row = line.strip()
+        if row.startswith("|"):
+            cell = line.split("|")[1] if line.count("|") >= 2 else ""
+        elif row.startswith(("-", "*", "+")):
+            # The other real shape: a bullet per file, `path` first and prose after a dash.
+            # Only the head is taken — the prose routinely backquotes symbols and function
+            # names, and folding those into the declared scope would silently widen the plan
+            # until nothing could read off it.
+            cell = re.split(r"—|--", row.lstrip("-*+ "), maxsplit=1)[0]
+        else:
+            continue                       # a wrapped continuation line is prose, not a row
         for tok in re.findall(r"`([^`]+)`", cell):
             pats.append(re.sub(r"<[^>]*>", "*", tok.strip()).lstrip("./"))
-    return pats or None
+    return (pats, "") if pats else (None, "no scope")
 
 
 def is_scaffolding(path):
@@ -382,20 +492,26 @@ def off_plan(files_read, patterns):
     return on, off, scaffold
 
 
-def item_of(prompt, project_root=None):
+def item_of(prompt, roots=None):
     """The item a dispatch was about — from the runtime path in its own prompt."""
     m = re.search(r"\.workflow[/\\]items[/\\]([A-Za-z0-9._-]+)", prompt or "")
     if m:
         return m.group(1)
-    m = re.search(r"\b([A-Z][A-Z0-9]*-[A-Za-z0-9]+)\b", prompt or "")
-    if m:
-        return m.group(1)
-    if project_root:
-        d = os.path.join(project_root, ".workflow", "items")
+    # A bare ID-shaped token in the prose is only an item if an item by that name EXISTS.
+    # MEASURED: without the check, `WITHIN-SUBJECT`, `JSON-mode` and `CVE-Bench` out of a
+    # research prompt all became "items", and the missing plan behind each was then reported
+    # as this instrument having failed to find one — the exact confusion the honest states in
+    # `plan_files` exist to prevent.
+    for m in re.finditer(r"\b([A-Z][A-Z0-9]*-[A-Za-z0-9]+)\b", prompt or ""):
+        for root in _roots(roots):
+            if os.path.isdir(os.path.join(root, ".workflow", "items", m.group(1))):
+                return m.group(1)
+    for root in _roots(roots):
+        d = os.path.join(root, ".workflow", "items")
         try:
             items = [x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x))]
         except OSError:
-            return None
+            continue
         if len(items) == 1:
             return items[0]
     return None
@@ -448,9 +564,14 @@ def scan_subagent(jsonl_path, meta_path, since, project_root=None):
     for r in records:
         for use in tool_uses(r):
             tools[use.get("name")] += 1
-    item = item_of(prompt, project_root)
-    scope = attribute(records, project_root)
-    patterns = plan_files(project_root, item)
+    # Where this worker stood, recovered from its own records — see `worker_roots`. The
+    # project path (when one was passed) is only the last candidate: under a worktree it is
+    # the one root none of the worker's paths are under.
+    roots = worker_roots(records, project_root)
+    item = item_of(prompt, roots)
+    scope = attribute(records, roots)
+    patterns, why = plan_files(roots, item)
+    scope["plan_status"] = why or "scored"
     if patterns is not None:
         on, off, scaffold = off_plan(scope["files_read"], patterns)
         scope["plan_patterns"] = patterns
@@ -460,8 +581,10 @@ def scan_subagent(jsonl_path, meta_path, since, project_root=None):
     return {
         "agent_id": meta.get("agentId") or os.path.basename(jsonl_path),
         "item": item,
+        "roots": roots,
         "scope": scope,
         "agent_type": agent_type or "(none)",
+        "capability": capability_of(agent_type) or "(none)",
         "description": meta.get("description") or "",
         "spawn_depth": meta.get("spawnDepth"),
         "node": node,
@@ -536,7 +659,10 @@ def scan(root, since=None, project_root=None):
                     main_dispatches += 1
                 elif use.get("name") == "Skill":
                     skill = (use.get("input") or {}).get("skill") or "(unnamed)"
-                    main_skills[skill] += 1
+                    # counted per CAPABILITY, not per spelling: `dev-autonomous-workflow:
+                    # planner` and `reeve:planner` are one skill loaded 89 times, not two
+                    # skills loaded 46 and 43 times.
+                    main_skills[capability_of(skill)] += 1
         for u in api_calls(records):
             main_cost["fed_in"] += _int(u, "cache_creation_input_tokens")
             main_cost["written"] += _int(u, "output_tokens")
@@ -558,19 +684,27 @@ def report(subagents, main_skills, main_dispatches, out=None):
               file=out)
         return 1
 
-    by_type = Counter(s["agent_type"] for s in subagents)
+    by_type = Counter(s.get("capability") or s["agent_type"] for s in subagents)
+    renamed = Counter(s["agent_type"] for s in subagents
+                      if is_ours(s["agent_type"])
+                      and not s["agent_type"].startswith(PLUGIN + ":"))
     declared = [s for s in subagents if s["attribution"] == "declared"]
-    general = [s for s in subagents if not s["agent_type"].startswith(PLUGIN + ":")]
+    general = [s for s in subagents if not is_ours(s["agent_type"])]
     loop_general = [s for s in general if s["node"] != "(unattributed)"]
     role_arrived = [s for s in subagents if s["attribution"] == "declared" or s["skill_loads"]]
 
     print(f"DISPATCH FIDELITY — {n} subagent transcripts, "
           f"{main_dispatches} dispatches seen in the main window\n", file=out)
 
-    print("dispatches by subagent_type", file=out)
+    print("dispatches by subagent_type (historical namespaces folded onto the capability "
+          "they name)", file=out)
     for t, c in by_type.most_common():
-        mark = "  " if t.startswith(PLUGIN + ":") else " <"
+        mark = "  " if is_ours(t) else " <"
         print(f"  {c:4d}  {t}{mark}", file=out)
+    if renamed:
+        print(f"     ^ {sum(renamed.values())} of these were dispatched under a former "
+              f"name of the package ({', '.join(sorted(renamed))}) — renamed in c8b5755; "
+              f"same capability, one row", file=out)
 
     print(f"\nrole delivery", file=out)
     print(f"  {len(declared):4d}/{n}  dispatched by capability name (the role IS the "
@@ -708,13 +842,26 @@ def report_writer_scope(subagents, out=None, top=8, main_cost=None, trace=None):
         scored = on + off
         ratio = f"{disc/prod:.1f}x" if prod else "—"
         rr = f"{rereads/reads:.0%}" if reads else "—"
-        op = f"{off/scored:.0%}" if scored else "no plan"
+        op = f"{off/scored:.0%}" if scored else _unscored(rs)
         print(f"  {node:<18} {len(rs):>3} {_k(disc):>10} {_k(ex):>9} {_k(prod):>9} "
               f"{ratio:>10} {reads:>6} {rr:>8} {op:>9} {scaffold:>6}", file=out)
+    partial = [f"{node} {k}/{len(rs)}" for node, rs in per.items()
+               for k in [sum(1 for r in rs if "off_plan_reads" in r["scope"])]
+               if 0 < k < len(rs)]
+    if partial:
+        # A percentage over a subset must say which subset. `research 7/82` is a real reading
+        # of seven dispatches, not a property of the node.
+        print("  off-plan is scored only over the dispatches that HAD a plan to score "
+              "against: " + " · ".join(partial) + " — the rest are the states below, which "
+              "are absences of a plan, not zeroes", file=out)
     print("  discovery = Read/Grep/Glob + read-shaped Bash · exec = test/gate/git output "
           "(feedback, not context) · produced = bytes the worker authored", file=out)
     print("  off-plan = share of PRODUCT read calls on files the plan never named — the "
-          "hunting signal (`no plan` = nothing to score against)", file=out)
+          "hunting signal. When it cannot be scored the REASON is printed, never one word "
+          "for all of them: `no item` = the dispatch was not item-scoped (research is not "
+          "plan-driven) · `no scope` = the plan declared no files · `no reads` = a scored "
+          "plan the worker read no product file against · `plan?` = the plan was not found, "
+          "which is a FAULT in this instrument, not a clean node", file=out)
     print("  loop = reads of .workflow/.claude the worker was told to make; never scored "
           "against a plan that does not list them", file=out)
 
@@ -767,6 +914,19 @@ def report_writer_scope(subagents, out=None, top=8, main_cost=None, trace=None):
                   file=out)
 
 
+def _unscored(rows):
+    """Why a node has no off-plan reading — the most common reason among its dispatches.
+
+    A node can be unscorable for opposite reasons and the report used to print `no plan` for
+    all of them, including the one case that is this script's own fault. See `plan_files`.
+    """
+    reasons = Counter(r["scope"].get("plan_status") or "no item" for r in rows)
+    top, n = reasons.most_common(1)[0]
+    if top == "scored":            # a plan was read; the worker just read no product file
+        top = "no reads"
+    return top if len(reasons) == 1 else f"{top}*"   # * = the node is mixed
+
+
 def _median(xs):
     xs = sorted(xs)
     if not xs:
@@ -798,9 +958,11 @@ def main(argv=None):
               f"  (derived from {args.project!r} — pass --dir to point at it directly)",
               file=sys.stderr)
         return 1
-    # The attribution needs the project tree itself (its plans name the declared scope), so it
-    # is only offered when the transcripts were derived FROM a project rather than pointed at
-    # with --dir. Silently scoring against no plan would report 0% off-plan on every node.
+    # The attribution needs the project tree itself (its plans name the declared scope). A
+    # path passed here is only a HINT now: each worker's real root is recovered from its own
+    # recorded `cwd` (see `worker_roots`), because a dispatched worker runs in a per-agent
+    # worktree and not in the project directory at all. That is what makes `--dir` — which
+    # passes no project path whatsoever — score against real plans rather than against none.
     project_root = args.project if not args.dir else None
     subagents, main_skills, main_dispatches, main_cost = scan(root, args.since,
                                                                  project_root)

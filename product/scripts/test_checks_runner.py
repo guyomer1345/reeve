@@ -21,12 +21,15 @@ RUNNER_SRC = HERE.parent / "templates" / "checks.sh"
 # (glob-guarded, so an empty tree skips them); `check_doc_budget.py` runs UNCONDITIONALLY on
 # every `--check`, which is why it has to be present here for even the empty-tree cases to
 # pass. That is not a fixture quirk — it is the dependency the runner really has, and both
-# files are package-owned so `/update` refreshes them together.
+# files are package-owned so `/update` refreshes them together. `check_directives.py` is the
+# same shape: unconditional, and it passes cleanly with no `.workflow/directives.md` present
+# (a project may simply have no standing directives).
 COVERAGE_SCRIPTS = (
     "check_promise_coverage.py",
     "check_criterion_discharge.py",
     "check_decision_coverage.py",
     "check_doc_budget.py",
+    "check_directives.py",
 )
 
 

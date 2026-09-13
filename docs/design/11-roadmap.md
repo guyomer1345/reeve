@@ -1110,7 +1110,16 @@ take the same fix, and is resolved — see `D188`. 948 tests, 6 meta-gates green
 `agentic cyber` comes out once that project is `/update`d onto this package. It measures **8180** always-loaded
 today — the original complaint reproduced live, and now over the new ceiling.
 
-**Step 2 — `12a`, the directive channel.** First of the phase because it is the phase's premise: the mechanical
+**Step 2 — `12a`, the directive channel. ✅ CLOSED 2026-09-13 — `D189`.** Built: `.workflow/directives.md`
+(typed, retire-pathed, project-owned via a new `SEEDS` tier), `check_directives.py`, and a **computed** autonomy
+floor (`check_autonomy_floor.py`) wired at decision-time in `loop.md`. Both `[12a]` sub-questions in `07` are
+answered — including the sharpest one, which got a mechanical answer: a `mechanized` entry's body is capped at
+one line, so it *cannot* restate the hook it points at. **One residual is open and is carried in `07`, not
+buried: the floor is a CONSULTATION, not an enforcement.** The always-loaded ceiling from Step 1 did its job
+here — the set went 5394 → 6086/8000 and every addition had to be paid for. *(Superseded framing: the original
+Step 2 text below described this as unbuilt.)*
+
+**Step 2 (as originally written) — `12a`, the directive channel.** First of the phase because it is the phase's premise: the mechanical
 slices below persist as *code* and are safe, but the residue that cannot be mechanized — *"notify me when X"*, and
 the judgment half of the autonomy boundary — has nowhere to live and decays at every `/clear`. It also has to
 precede `12d`/`12e` on safety grounds: **an autonomous driver with no decided autonomy boundary is the one
