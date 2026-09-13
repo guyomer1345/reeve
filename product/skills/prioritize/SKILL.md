@@ -69,5 +69,14 @@ The next **wave** — the independent items to run together (+ the updated order
 wave of one.
 
 ## Route
-→ the orchestrator runs each item in the wave through `planner` / its sub-loop. Build/test hooks run **once
-per wave**, not once per item — parallel agents sharing a build otherwise collide on it.
+→ the orchestrator runs each item in the wave through `planner` / its sub-loop. The authoritative build/test
+gate runs **once per wave**, not once per item — parallel agents sharing a build otherwise collide on it
+(one build cache, one set of ports, one set of fixtures).
+
+**That is now a mechanism, not a convention you have to remember.** `checks.sh --check` takes the **wave build
+slot** before it runs the stack commands: an `flock` on the repo's common git dir — the one path every worktree
+resolves to identically — so two authoritative gates never run at once, plus a memo keyed on `state.json`'s
+`wave` + a digest of the tree, so a tree state this wave already passed is not gated a second time. Every
+unknown (no wave id, no lock, an unreadable memo) falls the same way: it builds. An agent running the project's
+tests inside its own worktree to check **its own** work is a different act and is not governed by this at all.
+→ `shared/schemas.md § wave-build slot`.

@@ -94,8 +94,9 @@ not a lost *update*. If a session is already driving this repo, do not start a s
   prompt, so they only ever run with a human present.
 
 **Disposition (hold to these):**
-- **Build once per wave.** Run build/test tools once per wave, not once per parallel agent.
-  *(Not yet enforced — matters only once parallel waves run.)*
+- **Build once per wave.** `checks.sh --check` takes the wave's build slot — one at a time
+  across every worktree, never re-run for a tree state the wave already passed. A worker
+  testing its own work in its own worktree is a different act and is untouched by it.
 - **Hub-and-spoke.** Only you and skills fan out. Agents are leaves — never expect one to
   spawn another.
 - **Pure queue.** Never preempt in-flight work. A problem that **blocks the current item's DoD** is handled

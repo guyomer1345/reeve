@@ -30,6 +30,12 @@ COVERAGE_SCRIPTS = (
     "check_decision_coverage.py",
     "check_doc_budget.py",
     "check_directives.py",
+    # Not a coverage gate: the wave build slot, invoked once per `--check` that has stack
+    # commands to run. It belongs in this fixture for the same reason the two above do — it is
+    # a dependency the shipped runner really has, and a tree without it must still gate, by
+    # falling toward building. Its absence is silently safe, which is exactly why a test tree
+    # that omitted it would be testing the fallback forever without saying so.
+    "wave_build.py",
 )
 
 
@@ -315,3 +321,189 @@ def test_fix_with_only_runtime_files_never_invokes_the_fixer_at_all(tmp_path):
     root = _project(tmp_path, 'FMT_FIX="false"\n')   # would fail the run if invoked
     r = _run(root, "--fix", ".workflow/items/IT-1/promises.json")
     assert r.returncode == 0
+
+
+# --- the wave build slot: "build once per wave" as a mechanism --------------------------
+# The two acts these tests keep apart: a worker running the project's tests inside its own
+# worktree to check its OWN work (unbounded, untouched, not exercised here), and the
+# AUTHORITATIVE gate a commit hangs on — `checks.sh --check`, which is what takes the slot.
+
+
+def _counting_build(tmp_path, exit_code=0):
+    """A stack TEST command that records each invocation OUTSIDE the repo.
+
+    Outside is load-bearing rather than tidy: a log written inside the tree would change the
+    tree's own fingerprint on every run, so the memo could never hit and these tests would
+    pass for entirely the wrong reason.
+    """
+    outside = tmp_path.parent / (tmp_path.name + "-build")
+    outside.mkdir(exist_ok=True)
+    log = outside / "runs.txt"
+    script = outside / "build.sh"
+    script.write_text('#!/usr/bin/env bash\necho run >> "%s"\nexit %d\n' % (log, exit_code))
+    return 'TEST="bash %s"\n' % script, log
+
+
+def _runs(log):
+    return len(log.read_text().split()) if log.exists() else 0
+
+
+def _wave_project(tmp_path, checks_env, wave):
+    """A git project whose `state.json` names a wave — and gitignores it, as /start does.
+
+    The gitignore is not decoration. An untracked, unignored `state.json` would be part of
+    the tree fingerprint, so flipping the wave id would change the KEY as well as the wave
+    and the new-wave test would pass without the wave ever being read.
+    """
+    root = _git_project(tmp_path, checks_env, {"README.md": "# spec\n"})
+    (root / ".gitignore").write_text(".workflow/state.json\n")
+    subprocess.run(["git", "add", ".gitignore"], cwd=root, check=True)
+    _set_wave(root, wave)
+    return root
+
+
+def _set_wave(root, wave):
+    (root / ".workflow" / "state.json").write_text(
+        json.dumps({"status": "building", "current_item": None, "wave": wave}))
+
+
+def _slot_paths(root):
+    return (root / ".git" / "reeve-wave-build.lock", root / ".git" / "reeve-wave-build.json")
+
+
+def test_a_wave_of_one_builds_every_time_exactly_as_before(tmp_path):
+    """The degenerate case, which is still the common one. `wave: null` names no wave, so
+    there is no key, so there is no memo — the gate runs on every commit exactly as it did
+    before the slot existed. It pays one uncontended flock and nothing else."""
+    env, log = _counting_build(tmp_path)
+    root = _wave_project(tmp_path, env, None)
+    assert _run(root, "--check").returncode == 0
+    assert _run(root, "--check").returncode == 0
+    assert _runs(log) == 2, "a wave of one must not start reusing a verdict"
+
+
+def test_the_same_wave_never_re_gates_an_unchanged_tree(tmp_path):
+    """The mechanism itself: inside one wave, a second authoritative gate over a
+    byte-identical tree is not run — re-running it could not produce a different answer. This
+    is the duplicate the loop pays today on EVERY item, since the commit skill runs `--check`
+    and then the git hook runs it again over the same tree."""
+    env, log = _counting_build(tmp_path)
+    root = _wave_project(tmp_path, env, "wave-1")
+    assert _run(root, "--check").returncode == 0
+    second = _run(root, "--check")
+    assert second.returncode == 0, second.stderr
+    assert _runs(log) == 1, "the same wave re-gated a tree state it had already passed"
+    assert "SKIPPING the stack gate" in second.stderr   # never silent about a skipped build
+
+
+def test_a_changed_tree_is_re_gated_inside_the_same_wave(tmp_path):
+    # The memo is a cache with an exact key, never a permission slip: a changed tree is a
+    # different question, and gets asked.
+    env, log = _counting_build(tmp_path)
+    root = _wave_project(tmp_path, env, "wave-1")
+    assert _run(root, "--check").returncode == 0
+    (root / "project" / "mod.py").write_text("def add(a, b):\n    return a + b\n")
+    assert _run(root, "--check").returncode == 0
+    assert _runs(log) == 2, "a changed tree reused a verdict that was never about it"
+
+
+def test_a_new_wave_drops_the_memo(tmp_path):
+    # The wave id bounds the memo's life. A tree state can recur across waves (a revert, a
+    # branch switch) and a cache that outlived its wave would answer a question nobody asked.
+    env, log = _counting_build(tmp_path)
+    root = _wave_project(tmp_path, env, "wave-1")
+    assert _run(root, "--check").returncode == 0
+    _set_wave(root, "wave-2")
+    assert _run(root, "--check").returncode == 0
+    assert _runs(log) == 2, "a later wave inherited an earlier wave's verdict"
+
+
+def test_a_failing_gate_is_never_memoized(tmp_path):
+    """Only passes are remembered. The commonest red stack gate is a machine that never got
+    the toolchain `checks.env` names — repaired without changing a byte of the tree, so a
+    remembered failure would keep reporting the old verdict after the cure."""
+    env, log = _counting_build(tmp_path, exit_code=1)
+    root = _wave_project(tmp_path, env, "wave-1")
+    assert _run(root, "--check").returncode != 0
+    assert _run(root, "--check").returncode != 0
+    assert _runs(log) == 2, "a failure was memoized; the machine-repair case is now unfixable"
+
+
+def test_an_unreadable_marker_falls_toward_building(tmp_path):
+    # The fail direction, proven: if the wave-build state cannot be read, the answer is
+    # "build again" (wasteful, correct), never "skip it" (fast, unverified).
+    env, log = _counting_build(tmp_path)
+    root = _wave_project(tmp_path, env, "wave-1")
+    assert _run(root, "--check").returncode == 0
+    _, marker = _slot_paths(root)
+    marker.write_text("{ not json at all")
+    r = _run(root, "--check")
+    assert r.returncode == 0, r.stderr
+    assert _runs(log) == 2
+    assert "marker unreadable" in r.stderr    # reported, never a silent rebuild forever
+
+
+def test_two_concurrent_authoritative_gates_never_overlap(tmp_path):
+    """The collision this exists to stop. The stack command takes a lock of its own (an
+    atomic mkdir OUTSIDE the repo) and fails if anyone else holds it, so an overlap is a red
+    gate rather than a judgement call. `wave: null` deliberately disables the memo here: both
+    runs must really build, which is what leaves the exclusion as the only thing under test."""
+    outside = tmp_path.parent / (tmp_path.name + "-slot")
+    outside.mkdir(exist_ok=True)
+    script = outside / "build.sh"
+    script.write_text('#!/usr/bin/env bash\nmkdir "%s/busy" || exit 1\nsleep 0.5\n'
+                      'rmdir "%s/busy"\n' % (outside, outside))
+    root = _wave_project(tmp_path, 'TEST="bash %s"\n' % script, None)
+    procs = [subprocess.Popen(["bash", ".workflow/checks.sh", "--check"], cwd=root,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+             for _ in range(2)]
+    results = [(p.wait(timeout=120), p.communicate()) for p in procs]
+    assert [rc for rc, _ in results] == [0, 0], \
+        "two authoritative gates ran at once: %r" % (results,)
+
+
+def test_the_slot_leaves_nothing_in_the_working_tree(tmp_path):
+    """Why the anchor is the common git dir and not `.workflow/`: a lock there would need a
+    `.gitignore` line to earn, and a lock inside a per-ticket worktree could not be contended
+    on at all. Inside `.git/` it is uncommittable by construction."""
+    env, _log = _counting_build(tmp_path)
+    root = _wave_project(tmp_path, env, "wave-1")
+    assert _run(root, "--check").returncode == 0
+    lock, marker = _slot_paths(root)
+    assert lock.exists() and marker.exists()
+    dirty = subprocess.run(["git", "status", "--porcelain", "-uall"], cwd=root,
+                           capture_output=True, text=True).stdout
+    assert "reeve-wave-build" not in dirty
+
+
+def test_no_stack_commands_means_no_slot_at_all(tmp_path):
+    # No ceremony where there is nothing to serialize: a coverage-only gate never reaches for
+    # git, flock or the marker.
+    root = _wave_project(tmp_path, "", "wave-1")
+    assert _run(root, "--check").returncode == 0
+    lock, marker = _slot_paths(root)
+    assert not lock.exists() and not marker.exists()
+
+
+def test_fix_never_takes_the_build_slot(tmp_path):
+    # `--fix` is a worker repairing its own staged files in its own worktree — the other side
+    # of the line. It is not the authoritative gate and must not queue behind one.
+    root = _wave_project(tmp_path, 'FMT_FIX="true"\nTEST="true"\n', "wave-1")
+    assert _run(root, "--fix", "a.py").returncode == 0
+    lock, _marker = _slot_paths(root)
+    assert not lock.exists()
+
+
+def test_a_chmod_alone_re_gates_the_tree(tmp_path):
+    """The narrow case the content hash alone would miss: `chmod +x` on a file the gate runs
+    changes what the gate DOES while changing no byte of it. The index carries mode for
+    tracked files; the fingerprint carries it for the worktree side too."""
+    env, log = _counting_build(tmp_path)
+    root = _wave_project(tmp_path, env, "wave-1")
+    hook = root / "project" / "hook.sh"
+    hook.write_text("#!/usr/bin/env bash\ntrue\n")
+    assert _run(root, "--check").returncode == 0
+    assert _runs(log) == 1
+    hook.chmod(0o755)
+    assert _run(root, "--check").returncode == 0
+    assert _runs(log) == 2, "a mode-only change reused a verdict taken before it"

@@ -40,6 +40,13 @@ vmsg="$(python3 .claude/hooks/verify_check.py 2>&1)"; vrc=$?
 [ "$vrc" -eq 0 ] || block "${vmsg:-verify-before-commit could not run (python3?). Failing closed.}"
 
 # --- mechanical check runner in CHECK-ONLY mode (never rewrites the tree here) ---
+# This is the WAVE's authoritative gate, so the runner takes the wave build slot around its
+# repo-wide stack commands: under a fanned-out wave this call can WAIT (queued behind another
+# worker's build) rather than start a colliding second build. That is not a hang — it is
+# bounded, and it falls toward building rather than blocking. It is also why the same tree
+# gated moments ago by the commit skill is not re-built here. See `shared/schemas.md §
+# wave-build slot`. Note the stash above: with unstaged work present this hook's tree is
+# honestly different from the skill's, and is gated on its own merits.
 runner=".workflow/checks.sh"
 if [ -f "$runner" ]; then
   # The second clause is a ROUTE, not a diagnosis. A gate that fails because its

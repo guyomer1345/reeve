@@ -53,6 +53,45 @@ rejection routes — and that half stays with the orchestrator. `record` recompu
 low-watermark: every message at or below it is consumed, so the bus may collect it) and **prunes the
 consumed-set to ids above it**, which is what keeps `handoff.md` bounded — a cold start reads that file whole.
 
+## the dispatch boundary
+`loop.md` carries the rule. This is how the batch is actually formed, and why the failure direction is what it is.
+
+**Form the batch, then dispatch it once.** Concurrency in this harness exists **only** for work dispatched in the
+same turn — while a `Task` is in flight the orchestrator is blocked on its result and cannot interleave. So there
+is no such thing as "using the wait": the lever is *not waiting alone in the first place*. Judged **at the
+boundary, never per turn** — the answer only changes at a boundary, and re-deciding it every turn spends the
+router's window (the scarcest thing in a drive) to re-derive a constant.
+
+**Two kinds of member, neither subordinate to the other.**
+- **Homogeneous — N `execute` items at once.** When several items' work genuinely does not overlap, running their
+  `execute` calls concurrently is the plain intended use and the largest throughput win available. It is not a
+  by-product of the rule below and must not be treated as one: the first question at a boundary is *how many
+  independent items can run right now*, and the answer is allowed to be several.
+- **Heterogeneous — never wait alone.** Before dispatching anything blocking, establish that there is genuinely
+  nothing else worth doing, and put what there is in the same batch: research a **queued** item will need, a plan
+  already unblocked. **`Viable` means the backlog already implies it** — not invented exploration. Unbounded
+  speculative work is its own defect: it spends on output that may be discarded *and* pollutes the knowledge base
+  with findings nobody asked for.
+
+**Eligibility, and why it fails towards serial.** `check_wave_independence.py` decides, on the retained predicate:
+**dependency-ready ∧ file-disjoint ∧ ¬1-hop code-map neighbour**. It reports, per rejected candidate, which clause
+rejected it and against which other member — enough to act on without re-deriving it. A candidate whose
+independence cannot be *proven* — no plan, no `files_touched`, no code map, an unparseable entry — is **not
+eligible** and runs serially. **The burden of proof is on fanning out, never on staying serial:** a wrong "serial"
+costs wall-clock, a wrong "parallel" costs correctness, and those are not comparable. Note this is narrower than
+the predicate's original grading, which admitted a near-miss as a *flagged* start with raised integration rigor —
+that concession made sense when the candidate would run **later**, and does not when it runs **concurrently**.
+
+**Build once per wave.** The authoritative gate (`checks.sh --check`, the one a commit depends on) runs **once per
+wave**, not once per member — N workers each triggering it collide on shared build state, caches, ports and
+fixtures. That is distinct from a worker validating its own work inside its own worktree, which is legitimate and
+may happen many times.
+
+**Interleaving is the degenerate case, not a separate feature.** While an item is parked on a human verdict, the
+next *independent* item starts rather than the loop idling — the same predicate, the same boundary, a batch of one.
+A whole-loop park is simply "nothing eligible". Non-preemptive and item-level throughout: the human is still the
+only thing that preempts.
+
 ## forecast divergence check
 If the item being picked has a frozen `.workflow/forecasts/<id>.json`, run it **before starting work**:
 ```bash

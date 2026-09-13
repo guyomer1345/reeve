@@ -65,16 +65,25 @@ wherever it was called from.
 Take every decision that does not change the goal; **route anything that may**. Before acting on a decision that
 could change what the project is committed to, run
 `python3 .claude/scripts/check_autonomy_floor.py --project-root .` — **exit 1 ⇒ `checkpoint` (human), regardless
-of your own read.** A loop grading its own decisions drifts toward "not fundamental", because that is the
-direction that lets it keep working, so the floor is mechanical and judgment may escalate **above** it and never
-below. It is a *spec-diff* floor and therefore a minimum, not a cap: what it cannot see (a change that abandons a
-`locked` behaviour without touching the spec) is `align`'s and `verify`'s, and is exactly where escalating is
-expected. The standing directive is in `.workflow/directives.md`; the rules are in
-`shared/schemas.md § the autonomy floor`.
+of your own read.** Judgment may escalate **above** that floor, never below it; it is a minimum, not a cap.
+→ **Why, and what the floor cannot see: `shared/schemas.md § the autonomy floor`** (the standing directive lives
+in `.workflow/directives.md`).
 
 **The gated rows (`create-demo?`) are the router's call, before any dispatch** — default **no demo**, decided
 per work-item. Its three conditions live once in the `create-demo` capability's *sandbox gate* section: read
 them there (this file is read every turn; that one is not).
+
+## Dispatch boundary — form the batch, and never wait alone
+Concurrency exists only for work dispatched **together**, so the batch is the speed lever. Before any
+long-running dispatch: form the **largest legal batch** and send it in **one turn**. **Never dispatch a blocking
+call by itself while other viable work exists.** Both `execute` items that do not overlap and other viable work
+(research a queued item needs, an unblocked plan) go in the same batch — neither is subordinate.
+
+**Eligibility is not a judgement call.** Run `python3 .claude/scripts/check_wave_independence.py`: only its batch
+may fan out, a rejected candidate **runs serially**, and missing evidence never reads as "probably fine".
+
+→ **Batch formation, what counts as viable, build-once-per-wave, and interleaving while one item is parked:
+`loop-detail.md § the dispatch boundary`.**
 
 ## Scheduler boundary — the inbox drain
 Between items (and before any pick) the orchestrator **drains `.workflow/inbox/`** — the console's typed

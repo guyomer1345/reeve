@@ -50,6 +50,12 @@ After `document`, per completed phase/item.
 - One commit for the item's planned change; a recorded `prerequisite-repair` rides its **own** preceding
   commit (the only split). Never bundle otherwise-unrelated items.
 - The message must trace back to the item — no bare "wip"/"fix" subjects.
+- **`--check` is the WAVE's gate, not this item's, and it takes the wave build slot.** Under a fanned-out
+  wave it may sit for a while before it starts: that is not a hang, it is queued behind another worker's
+  build, and it never waits forever (it builds unserialized rather than block a commit). If it reports
+  *SKIPPING the stack gate*, this wave already gated this exact tree and re-running could not change the
+  answer — that is a pass, not a bypass. Running the project's own tests inside your worktree to check your
+  own work is a different act and is never gated by this. → `shared/schemas.md § wave-build slot`.
 - The mechanical gate auto-fixes only zero-judgment issues; it **never decides which side of a doc↔code
   contradiction is right** — that authority call is deferred to the loop (the filed ticket routes through
   `prioritize` → planning). The installed git pre-commit hook re-runs the same check as the

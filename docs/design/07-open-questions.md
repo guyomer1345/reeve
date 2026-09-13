@@ -839,6 +839,17 @@ sub-questions deferred to the build, in the order the slices need them.
   computes which criteria a change *discharges*, which is not the same as which criteria a change *redefines*. If
   the second half cannot be made mechanical, say so plainly and let the floor be the first half alone rather than
   shipping a floor that is really a judgment wearing a gate's clothes.
+- **Homogeneous fan-out needs PLAN-AHEAD, and that is a change to the loop's shape, not a coordinator detail.
+  `[12c, found by building the independence gate]`** A backlog row has **no plan until it is picked**, and the
+  independence predicate reads `files_touched` from the plan — so "the open backlog" is almost never a set of
+  dispatchable candidates. Measured on the real project: **106 candidates, zero eligible, 95 of them for *no
+  plan*.** The gate is not at fault and the predicate discriminates properly — exercised directly against the
+  real code map (376 nodes / 164 edges), 64 items with clean scope yield 276 overlapping pairs, 8 one-hop
+  adjacent and **1732 independent**. So to fan out N `execute` calls the coordinator must first run
+  `planner:plan-one` for N items, which means **planning is the thing that fans out first**, and the shape of a
+  wave becomes plan-N-then-execute-N rather than pick-then-plan-then-execute. Open: whether that planning batch
+  is itself dispatched in parallel (it is heterogeneous-batch work and looks eligible), and what it costs to plan
+  an item that then proves ineligible and is never dispatched.
 - **`schemas-runtime.md` is now the tightest file in the package, at 14 503/15 000 advisory (97%). `[carried from
   D193]`** The three-way split of `schemas.md` deliberately left it untouched, so it is the next one to trip — and
   unlike `schemas.md` it has no obvious second belonging already latent in it. Decide the axis *before* it is

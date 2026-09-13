@@ -14,8 +14,8 @@ read law) live in `shared/memory-model.md`.*
 > siblings own the other three belongings:
 > - [`schemas-runtime.md`](schemas-runtime.md) — the records the package's own **processes** own, never authored
 >   by a skill as work: `config.json` · `runtime.json` · `.workflow-runtime` · `install-set.json` ·
->   `orchestrator-brief managed block` · `statusline.delegate` · `bus.lock` · `orchestrator.lock` · `bus.json` ·
->   `remote_token` · `alerts.json` · `session-start warn-once markers`.
+>   `orchestrator-brief managed block` · `statusline.delegate` · `bus.lock` · `orchestrator.lock` ·
+>   `wave-build slot` · `bus.json` · `remote_token` · `alerts.json` · `session-start warn-once markers`.
 > - [`schemas-bus.md`](schemas-bus.md) — the records that cross the **console↔orchestrator boundary**, where the
 >   other end is a human: `parked-ticket` · `inbox-message` · `conversation-thread` · `refine-ledger` ·
 >   `demo-approvals` · `outbox / pending-outward-action` · `secret store`.

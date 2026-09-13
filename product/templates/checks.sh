@@ -15,6 +15,11 @@
 #                     stack defines), then the plan-coverage gates over EVERY open item's
 #                     promises.json. Exits non-zero on any drift — used by the git
 #                     pre-commit hook and by the commit skill after --fix.
+#                     THIS is the wave's authoritative gate, so its repo-wide stack half runs
+#                     in the wave build slot (see --check below): one at a time across every
+#                     worktree, and not re-run for a tree state this wave already passed. A
+#                     worker testing its own work in its own worktree is a different act and
+#                     is not governed here at all.
 #
 # checks.env contract (all optional; empty/unset = skip that check):
 #   FMT_FIX   formatter, write mode   — a command PREFIX; the staged file list is appended
@@ -25,6 +30,9 @@
 #   TEST      test runner             — runs repo-wide
 #   STACK_GATE_NONE  a REASON string — the third stack-gate state (see --check below).
 #                    Non-empty means the executable stack gate is off BY DECLARATION.
+#   WAVE_BUILD_WAIT  seconds this run waits for the wave build slot before giving up and
+#                    building unserialized anyway (default 1800). A ceiling, not a policy:
+#                    it exists so a wedged machine cannot block a commit forever.
 # The coverage gates below are stack-AGNOSTIC (they read only .workflow/) and ship fixed
 # in .claude/scripts/ — they are never part of checks.env.
 #
@@ -140,13 +148,65 @@ case "$MODE" in
       fi
     fi
 
+    # --- the wave's AUTHORITATIVE build slot ------------------------------------------------
+    # THE LINE THIS DRAWS: a worker running the project's tests inside its own worktree to check
+    # its OWN work is not this, and is untouched — it may do that as often as it likes. THIS is
+    # the gate a commit hangs on, and the stack commands below run REPO-WIDE. Fan a wave out and
+    # N workers in N worktrees reach it at once, sharing one build cache, one set of ports and
+    # one set of fixtures. So the stack half runs inside a slot that is EXCLUSIVE (one at a time
+    # across every worktree of this repo) and DEDUPLICATED (never re-run for a tree state this
+    # same wave already passed). Everything after it still runs on every commit, every time.
+    #
+    # Every unknown here falls the SAME way — BUILD: no git, no `flock`, a lock waited for and
+    # never got, no wave id (the serial case), an unreadable marker. A gate fails closed, and
+    # closed for this one means RUNNING: a needless build costs time, a skipped one costs the
+    # verdict a commit is standing on. Mechanism, crash-safety and artifacts:
+    # `.claude/scripts/wave_build.py` + `shared/schemas.md § wave-build slot`.
+    wb_fd=0; wb_fp=""; wb_reuse=0
+    if [ -n "${FMT_CHECK:-}${LINT:-}${TYPECHECK:-}${TEST:-}" ]; then
+      # Anchored on the repo's COMMON git dir: the one path every worktree of this repo resolves
+      # to identically, uncommittable by construction (it is inside `.git/`), and gone when the
+      # repo is. A lock under `.workflow/` could not do this job — that half is gitignored, so a
+      # per-ticket worktree has no copy of it to contend on.
+      wb_dir="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+      # `exec` on a redirection that FAILS exits a non-interactive bash, so creatability is
+      # probed in a subshell first: taking the slot must never be what kills the gate.
+      if [ -n "$wb_dir" ] && command -v flock >/dev/null 2>&1 \
+         && ( : >>"$wb_dir/reeve-wave-build.lock" ) 2>/dev/null; then
+        exec 9>>"$wb_dir/reeve-wave-build.lock"; wb_fd=1
+        flock -w "${WAVE_BUILD_WAIT:-1800}" 9 || echo "  (wave build slot: waited" \
+          "${WAVE_BUILD_WAIT:-1800}s without getting it — building anyway, unserialized)" >&2
+      fi
+      # Claimed INSIDE the lock, which is what makes the dedup real rather than a race: a worker
+      # that waited asks only after the worker that held the slot has recorded its result.
+      # An install that predates the slot keeps the EXCLUSION (the lock above needs no script)
+      # and simply loses the dedup — named, because a silently missing half is how a mechanism
+      # decays back into the assertion it replaced.
+      if [ -f "$SCRIPTS/wave_build.py" ]; then
+        wb_fp="$(python3 "$SCRIPTS/wave_build.py" claim)" && wb_reuse=1
+      else
+        echo "  (wave build slot: $SCRIPTS/wave_build.py not installed — building; run /update)" >&2
+      fi
+    fi
+
     # Each stack command runs in a SUBSHELL. This is load-bearing, not tidiness: a natural
     # command like `cd project && pytest` would otherwise `cd` THIS shell, and the coverage-gate
     # loop below (paths relative to CWD) would then find zero items and SILENTLY skip every gate.
-    [ -n "${FMT_CHECK:-}" ] && { echo "+ $FMT_CHECK" >&2; ( eval "$FMT_CHECK" ) || fail=1; }
-    [ -n "${LINT:-}" ]      && { echo "+ $LINT" >&2;      ( eval "$LINT" )      || fail=1; }
-    [ -n "${TYPECHECK:-}" ] && { echo "+ $TYPECHECK" >&2; ( eval "$TYPECHECK" ) || fail=1; }
-    [ -n "${TEST:-}" ]      && { echo "+ $TEST" >&2;      ( eval "$TEST" )      || fail=1; }
+    if [ "$wb_reuse" = 0 ]; then
+      [ -n "${FMT_CHECK:-}" ] && { echo "+ $FMT_CHECK" >&2; ( eval "$FMT_CHECK" ) || fail=1; }
+      [ -n "${LINT:-}" ]      && { echo "+ $LINT" >&2;      ( eval "$LINT" )      || fail=1; }
+      [ -n "${TYPECHECK:-}" ] && { echo "+ $TYPECHECK" >&2; ( eval "$TYPECHECK" ) || fail=1; }
+      [ -n "${TEST:-}" ]      && { echo "+ $TEST" >&2;      ( eval "$TEST" )      || fail=1; }
+      # ONLY A PASS IS REMEMBERED. A remembered failure would outlive its cause: the commonest
+      # red stack gate is a machine that never got the toolchain `checks.env` names, and that is
+      # repaired without changing a byte of the tree — so the memo would keep reporting the old
+      # verdict after the cure. A failing tree is therefore re-gated until it passes.
+      [ "$fail" = 0 ] && [ -n "$wb_fp" ] && \
+        python3 "$SCRIPTS/wave_build.py" record --fingerprint "$wb_fp" >/dev/null
+    fi
+    # Release the slot before the stack-agnostic gates: they only read `.workflow/`, they collide
+    # with nothing, and holding a repo-wide lock across them would serialize N workers for free.
+    [ "$wb_fd" = 1 ] && exec 9>&-
     fi
 
     # Plan-coverage gates over every OPEN item (its dir is committed while open). Stack-

@@ -395,6 +395,19 @@ runner's own defect). **Distinct from `bus.lock`** — that is the *daemon's* el
   starts bare `claude` instead of `loop.sh` is invisible to the runner, which may then spawn a duplicate. Documented,
   not fenced — the same footing as the single-orchestrator run-constraint itself.
 
+## wave-build slot  · taken by `checks.sh --check` around the repo-wide stack gate · *`<git-common-dir>/reeve-wave-build.lock` + `reeve-wave-build.json`; RUNTIME, uncommittable by construction; lock = `flock`, marker = atomic write. Rationale and fail-direction: `scripts/wave_build.py`*
+**"Build once per wave", mechanically.** A fanned-out wave puts N workers in N worktrees at the gate a commit
+hangs on, whose stack half runs **repo-wide** over one shared cache, port set and fixture set. The slot makes
+that gate **exclusive** (one at a time across every worktree — the common git dir is the one path they all
+resolve to identically) and **deduplicated** (never re-run for a tree state this same wave already passed).
+**The line:** a worker testing **its own** work in its own worktree is not this and is never blocked by it.
+- **`.lock`** — `flock`'d around the stack commands only. **The kernel drops it on death**, so a dead worker
+  cannot wedge the wave: `orchestrator.lock`'s property, reused rather than a second locking discipline.
+- **`.json`** — `{ wave, passed: { <fingerprint>: { at, pid } } }`. `wave` is `state.json`'s id, never a second
+  notion of it; a different one drops the memo whole. The fingerprint is `git ls-files -s` plus a hash of each
+  worktree/untracked delta. **Only a PASS is written**, and every unknown (no wave, no lock, an unreadable
+  marker) **falls toward building** — so a wave of one builds every time, exactly as before.
+
 ## bus.json  · written by the bus daemon at boot, read by `/start` + the browser · *`.workflow/bus.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ pid, port, token, started_at, remote_port?, remote_token? }` — the daemon's discovery + auth record. `port` =
   a dynamic **loopback** port (bind `127.0.0.1:0`, read back — the port is **not** a secret). `token` = the CSPRNG
