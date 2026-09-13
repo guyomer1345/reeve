@@ -20,13 +20,32 @@ it (D170), not by this file.
 A rename that breaks the anchors below is the CORRECT failure — same philosophy as
 `test_bus._js_function`: run the real shipped source, never a copy of it that can drift.
 """
+import sys
 from pathlib import Path
 
 import pytest
 
 HERE = Path(__file__).resolve().parent                       # product/scripts
 SKILL = HERE.parent / "skills" / "answer" / "SKILL.md"
-SCHEMAS = HERE.parent / "shared" / "schemas.md"
+
+# `schemas.md` is SPLIT -- it outgrew the 25 000-token Read ceiling twice, and
+# `conversation-thread` (every anchor this file asserts on) now lives in the
+# `schemas-bus.md` half. Reading the survivor alone would fail every assertion below and
+# read as "the spec dropped the rule", which is the opposite of what happened. So this
+# reads the schema the way every other machine consumer does: through the function that
+# owns following the marker. Same reason `check_contracts.py` and the meta-repo's
+# `check_enum_coherence.py` do. Never `Path.read_text` on a doc that can split.
+sys.path.insert(0, str(HERE))
+from check_doc_budget import read_with_splits            # noqa: E402
+
+
+def _schemas():
+    """The WHOLE schema -- survivor plus every live split half. Unresolved halves are
+    SAID, never swallowed: a silently short read is how a passing assertion stops meaning
+    anything."""
+    text, unresolved = read_with_splits(str(HERE.parent / "shared" / "schemas.md"))
+    assert not unresolved, "unfollowable schemas.md split pointer(s): %s" % unresolved
+    return text
 
 
 def _steps(text):
@@ -105,7 +124,7 @@ def test_the_post_rotation_idempotency_story_is_written_down():
 def test_the_schema_and_the_skill_do_not_disagree_about_the_order():
     """`schemas.md` POINTS at this order (it does not own it). A silent drift between the
     two is how a reader ends up trusting whichever they opened first."""
-    assert "Rotation happens only after `drain.py record`" in SCHEMAS.read_text(encoding="utf-8")
+    assert "Rotation happens only after `drain.py record`" in _schemas()
 
 
 def test_the_handoff_carry_list_forbids_project_prose():
@@ -115,7 +134,7 @@ def test_the_handoff_carry_list_forbids_project_prose():
     the rule survives in the two places that state it, because the fix IS the rule.
     """
     skill = SKILL.read_text(encoding="utf-8")
-    schemas = SCHEMAS.read_text(encoding="utf-8")
+    schemas = _schemas()
     assert "none of your own prose answers" in skill
     assert "It carries NO project prose answer" in schemas
     assert "the human's turns verbatim" in schemas

@@ -12,7 +12,7 @@ re-injects it). Run `/dispatch`, confirm it reports the handoff is written, then
 You (the orchestrator) do this now, in this turn:
 
 1. **Rewrite `.workflow/handoff.md` whole**, as the durable resume anchor for a session that
-   knows *nothing* — write it for a stranger. Use the `handoff.md` schema (`shared/schemas.md`).
+   knows *nothing* — write it for a stranger. Use the `handoff.md` schema (`shared/schemas.md § handoff.md`).
    Capture the live state as it is **right now**:
    - the `bootstrap:` ledger line if the bootstrap motion is still in progress (`installed` /
      `ingesting` / `discussing` / `reconcile-parked` / `complete`) — omit only once the loop drives;

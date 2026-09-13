@@ -62,7 +62,7 @@ and each `ingest` stage on brownfield), publish `.workflow/state.json` (atomic w
 `{"status": "building", "phase": "bootstrap", "node": "start:<step>", "note": "<one human-readable line, e.g.
 'installing package (step 4)' or 'seeding knowledge nodes 40/95'"}`, and print the same one-line banner in the
 terminal. The console's "Now" panel renders exactly these fields, so the human sees the bootstrap move instead of
-a silent half hour. `phase: "bootstrap"` is present only during this motion (`schemas.md` owns the shape); the
+a silent half hour. `phase: "bootstrap"` is present only during this motion (`schemas.md § state.json` owns the shape); the
 loop's normal `state.json` takes over when the motion ends.
 
 1. **repo-setup:** ensure git is initialised (`git init -b main`), a git identity is set, and a

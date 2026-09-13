@@ -134,7 +134,7 @@ schema or new node frontmatter, and the only correct way to get it is to re-run 
 - `.workflow/checks.env` is **target-owned** and not refreshed. If the new package added a gate
   that needs a new key, say so and offer to add it — never rewrite the human's stack commands.
 - **`.gitignore` is target-owned too, and `/update` does not write it.** If the new package introduced a runtime
-  path (`shared/schemas.md` names each one as RUNTIME + gitignored), the existing project's ignore file predates
+  path (`shared/schemas.md` and its `schemas-bus.md` half name each one as RUNTIME + gitignored), the existing project's ignore file predates
   it and will happily commit it. Name the missing line, offer to add it, and let the human say yes — the same
   posture as `checks.env`. Do not silently edit the file: it is frequently hand-curated, and a runtime path left
   out is a tidiness bug, while a rewritten `.gitignore` can start tracking or untracking product code.

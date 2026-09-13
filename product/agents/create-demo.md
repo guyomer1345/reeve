@@ -58,7 +58,7 @@ human's verdict.
      park → resume → possibly a fresh relaunched session, and nothing accumulates in anyone's context across
      those, so the count **cannot** live in memory or the parked record (deleted on resolve): it lives on disk
      beside the bundle, whose lifetime is exactly the refine loop. Its shape is declared in
-     `shared/schemas.md`: `{ round: N, rounds: [{ round, spec_ref: { path, sha256 }, note? }] }` — each round
+     `shared/schemas.md § refine-ledger`: `{ round: N, rounds: [{ round, spec_ref: { path, sha256 }, note? }] }` — each round
      naming the spec file it was regenerated **from** and that file's hash at the time.
    - **`check_demo_bundle.py` enforces both**, so neither is a promise: it refuses a round whose `spec_ref` is
      missing, whose latest hash does not match the spec on disk, or **whose hash is unchanged from the previous

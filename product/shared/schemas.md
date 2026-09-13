@@ -6,20 +6,36 @@ new-record-supersede · create-per-item) and **tier** (see `shared/memory-model.
 read law) live in `shared/memory-model.md`.*
 
 <!-- doc-budget: detail split -> schemas-runtime.md -->
+<!-- doc-budget: detail split -> schemas-bus.md -->
+<!-- doc-budget: detail split -> schemas-loopstate.md -->
 
-> **The runtime substrate lives in [`schemas-runtime.md`](schemas-runtime.md).** This file owns the artifacts
-> the loop *produces and consumes*; the sibling owns the records the package's own **processes** own — the
-> config `/start` writes, the runtime-root pointer, the daemon's locks and published state, the hook markers.
-> Split when this file crossed the **25 000-token Read ceiling** and could no longer be loaded in one call
-> (`check_doc_budget.py`). The sibling is **live**, not an archive — those schemas are still edited there, which
-> is why the marker above carries no `@ <sha>`.
+> **This file is one of FOUR parts, split by who the artifact belongs to.** It owns what the **build loop**
+> produces and consumes — a spec, a plan, a changelog, a verdict, a receipt, a forecast, an issue. The three
+> siblings own the other three belongings:
+> - [`schemas-runtime.md`](schemas-runtime.md) — the records the package's own **processes** own, never authored
+>   by a skill as work: `config.json` · `runtime.json` · `.workflow-runtime` · `install-set.json` ·
+>   `orchestrator-brief managed block` · `statusline.delegate` · `bus.lock` · `orchestrator.lock` · `bus.json` ·
+>   `remote_token` · `alerts.json` · `session-start warn-once markers`.
+> - [`schemas-bus.md`](schemas-bus.md) — the records that cross the **console↔orchestrator boundary**, where the
+>   other end is a human: `parked-ticket` · `inbox-message` · `conversation-thread` · `refine-ledger` ·
+>   `demo-approvals` · `outbox / pending-outward-action` · `secret store`.
+> - [`schemas-loopstate.md`](schemas-loopstate.md) — not artifacts at all, but **where the loop keeps its own
+>   working set**: `state.json` · `handoff.md` · `per-item artifacts` (with `scratch` and the
+>   `forecast ANCHOR TABLE`).
 >
-> **A consumer that _parses_ these schemas must read both halves**, and the marker is machine-followable for
-> exactly that reason — read it through `check_doc_budget.read_with_splits`, as the contract linter does.
-> Parsing the survivor alone reads strictly less than the schema declares; measured on this split, that costs
-> two `kind:` values and every `kept on a native filesystem` claim below.
+> Split — three times — when this file reached the **25 000-token Read ceiling** and could no longer be loaded in
+> one call (`check_doc_budget.py`). All three siblings are **live**, not archives — those schemas are still edited
+> there, which is why no marker above carries an `@ <sha>`.
 >
-> Moved there: `config.json` · `runtime.json` · `.workflow-runtime` · `install-set.json` · `orchestrator-brief managed block` · `statusline.delegate` · `bus.lock` · `orchestrator.lock` · `bus.json` · `remote_token` · `alerts.json` · `session-start warn-once markers`.
+> **A consumer that _parses_ these schemas must read all four parts**, and the markers are machine-followable
+> for exactly that reason — read them through `check_doc_budget.read_with_splits`, as the contract linter and the
+> meta-repo's enum gate do. Parsing the survivor alone reads strictly less than the schema declares, and the
+> splits have made that progressively worse: the first cost two `kind:` values, the bus split took two more enums
+> (`inbox.kind`, `inbox.control.op`), and after the loopstate split **not one** `kept on a native filesystem`
+> claim remains in this file — all eleven now sit in the three siblings. Measured rather than assumed: with the
+> pointers unfollowed, `check_enum_coherence.py` fails **closed** with 13 errors — two enum anchors it can no
+> longer find, plus the *entire* `layout.pin` set reported as unclaimed. That it fails loudly is the only reason
+> a split can't ship past the gate unnoticed; it is not a reason any reader may parse one part and stop.
 
 ## spec  · *rewrite-in-place · STABLE (changes only with the code it specifies) · on disk at `<project_root>/docs/spec.md`*
 The product definition `discuss` produces and the whole build runs against.
@@ -286,7 +302,7 @@ the loop can't reach: `setup` — the verdict is "I did it" + a returned artifac
   - **qa** — approve → `document`/`commit` · reject → `debug` (`changes` ≡ reject here).
   - **setup** — approve|changes → the orchestrator **verifies the external precondition actually works** (probe the
     key/webhook) *before* proceeding; reject → replan or hard-stop. Every `returns` value is written to
-    the gitignored **secret store** (`.workflow/secrets/`, below), **never logged**, and its inbox record **unlinked
+    the gitignored **secret store** (`.workflow/secrets/`; § secret store), **never logged**, and its inbox record **unlinked
     immediately after that write** — the field is what triggers this, not a marker on the entry.
     **The console's setup form is the producer** — the per-task rows (outcome + one labelled input per
     `request.tasks[].secrets[]` name) are what emit a conforming `returns`, and they are the *only* shipped way to
@@ -304,209 +320,6 @@ the loop can't reach: `setup` — the verdict is "I did it" + a returned artifac
   - **reconcile** — approve → `prioritize` · else → `ingest`/`discuss`.
   A **timeout never auto-proceeds** — it re-surfaces + reminds (a missing credential can't be skipped). A rejection is
   not always a defect — hence routing by kind, not a universal `debug` sink.
-
-## parked-ticket  · composed by the orchestrator, **written by `bus.py park`** · *`.workflow/parked/<id>.json`; RUNTIME, gitignored, kept on a native filesystem; projected onto `handoff.md`'s **`parked` machine block** for cold-start rebuild*
-- `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request, demo_id?, forecast_id?}, predicted_outcome, deadline, opened_at, summary, answered_at? }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile`/`forecast` checkpoint parks before any build worktree exists); a build-stage park always carries them. **`checkpoint.demo_id`** is present only for `kind: demo` — the id of the served bundle under `demos/`, so the console builds the `/demo/<id>/` iframe (validated to the served-id shape before it is rendered). **`checkpoint.forecast_id`** is the same passthrough for `kind: forecast` — a **pointer** to the committed `forecasts/<id>.json`, never the chain itself, because `unpark` deletes *this* record at the instant of approval and approval is exactly when the forecast must be frozen (see § forecast). Both are shape-validated before the console is allowed to resolve them. The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
-- **`bus.py park` is the writer, and the split is the usual one.** The orchestrator composes the **judgment**
-  (`token`, `checkpoint.request`, `predicted_outcome`, `loop_position`) and pipes the record in on **stdin**; the
-  runner does the **arithmetic** — resolves the runtime root through `Paths`, stamps `deadline` + `opened_at`,
-  writes atomically at `0600`, and re-projects the mirror. It **refuses** a record that cannot do its job (no
-  `ticket_id`, no `token`, an unknown `kind`, an empty `request`) and writes nothing on refusal. Before this the
-  skill hand-wrote the JSON *and* resolved the runtime root itself — a second owner for a rule `Paths` already
-  owns, and the reason the mirror could never become a mechanism.
-- `deadline` — an **absolute** timestamp stamped at park time as *now + `config.checkpoint.deadline_hours`*
-  (default 24h). Absolute, not a duration, because the process that *acts* on it is the console daemon, which
-  compares against wall-clock and was not present when the ticket parked. Past it → the daemon **escalates**
-  (never auto-proceeds). Stamped at **microsecond** precision: it is the alert-dedup key, and second-resolution
-  let two machine-speed re-parks of one ticket collide into "already alerted" — i.e. silence.
-- `opened_at` + `summary` — stamped by the runner, and they exist **for the mirror**: they are the two fields the
-  projection needs that are not already on the record. `summary` is a one-line label (capped, backticks
-  neutralized so it cannot break out of the block's JSON fence), defaulting to `checkpoint.request.what`.
-- **`answered_at`** — stamped by the **daemon** the moment a verdict quoting this `token` lands durably on the inbox,
-  and published on the console snapshot so the card renders as answered with its form closed. It exists because the
-  ticket stays parked until the *orchestrator* drains and unparks it, so "still listed" is correct while "looks
-  unanswered" is not — and a setup card that looks unanswered invites a human to type a live credential a second
-  time. It is a **timestamp only**: the reply never touches this record (a credential belongs in the secret store or
-  nowhere), it is written *after* the message is durable so a display fact can never cost an answer, and the first
-  answer wins so a re-send is not a new event. Server-side deliberately, so the state survives a reload and holds on
-  a second device — a verdict sent from a paired phone reads as answered on the laptop.
-- **A verdict SUPERSEDES an undrained earlier verdict for the same token**, and the console offers "answer again" on
-  exactly that condition. Without it, two verdicts for one ticket both sat on the inbox and the drain applied
-  **whichever it reached first** — so a human correcting a mistyped credential would leave the *typo* live and
-  believe it fixed. Replacement is bounded by the only window in which it can be honest: once the orchestrator has
-  consumed the answer it is applied, a later verdict dead-letters against the closed token, and the page stops
-  offering to replace it. The superseded inbox record is **unlinked, which is also its shred** (it may hold a live
-  credential the human has just replaced), and the new record is durable *before* the old is removed — a failure
-  mid-way leaves two answers, never none.
-- **This record is the alert trigger.** Writing it *is* the signal: the daemon watches `parked/`, raises the alert
-  on a new open checkpoint, re-alerts every `config.checkpoint.reminder_hours`, and escalates once overdue. The
-  parking skill sends nothing itself.
-- **`bus.py unpark --id <ticket_id>` closes it**, at the drain that applies the verdict: it removes the record —
-  which is what makes the "already-closed token" anchor real — and re-projects the mirror. Idempotent, so a
-  re-applied verdict no-ops. Not optional: without it the mirror only ever **grows**, and a machine block that
-  reads as authoritative would report answered checkpoints as open forever.
-
-## inbox-message  · appended to the inbox by the bus when the console POSTs · *`.workflow/inbox/<ts>-<uuid>-<pid>.json`; append-only, durable (atomic write+rename), at-least-once; RUNTIME, kept on a native filesystem*
-Every console→orchestrator message is **typed** — `kind: verdict|intake|control|release|question` — one uniform durable
-transport, dispatched at a scheduler boundary **by kind**. **Single consumer** (the one orchestrator) → no `processing/`
-claim-by-rename needed; matched **idempotently, single-shot** (duplicate → no-op). The bus returns `202 Accepted` +
-a `Location` ticket at POST time; any result surfaces via orchestrator-written state the console re-reads by ticket —
-the orchestrator **never responds synchronously** (it is a boundary batch-consumer, not an HTTP responder).
-
-**`message_id`** — the filename stem (`<ts>-<uuid>-<pid>`) **is** the message's canonical, bus-assigned id. **One id,
-no second one:** it is the `Location` ticket the `202` returns, the console's `localStorage` key, the consumed-set
-entry, and the `source` stamp on a promoted item. A client-supplied `ticket` field is therefore *not* carried — the
-caller cannot know the id at POST time, and a second id would correlate "my requests" against the wrong one.
-
-**Ids are issued in VISIBILITY order, and the watermark depends on it.** The bus allocates a message's name and
-publishes it under one lock, and never re-issues a name at or below the last (its floor is the higher of the newest
-name on the inbox and the published `consumed_through` — the inbox's steady state is *empty*, so the disk alone is
-not a floor). Without this a message can become visible carrying a ts *below* one already visible, the orchestrator
-publishes a watermark over a message it never saw, and the bus GCs a message nobody consumed — measured, and silent.
-
-**Consume = record, never delete.** The bus is the sole writer of `inbox/`, so the consumer **never removes a
-message** (delete-on-consume would make the inbox two-writer). Instead the orchestrator keeps a durable
-**consumed-set** of `message_id`s in its own partition (`handoff.md`): at each boundary it lists `inbox/`, **skips
-ids already in the set**, applies the rest, adds their ids, and atomically republishes. A cold start re-lists
-`inbox/` and the set makes the re-read a no-op — this is what stops a restart from re-promoting an
-already-consumed intake or re-firing a control op.
-
-**The drain is split, and only one half is prose.** *Which* messages are new, in what order they apply, what the
-watermark is, and what may be pruned is a pure function of (`inbox/`, `handoff.md`) with exactly one right answer —
-that half is `scripts/drain.py` (`list` → apply → `record`), which also gives `handoff.md` the atomic+durable
-publish a text-writing tool cannot express. *Applying* a message is judgment and stays in the orchestrator's brief.
-The line is measured, not stylistic: driven against real sessions the apply half was right every time, while the
-bookkeeping half silently produced an unbounded set.
-
-**Two idempotency layers.** The consumed-set covers the normal path. Because apply-then-record has a crash window
-(crash in between → re-apply on restart), **each kind's *effect* must also be idempotent** — its anchor is named
-per kind below. Layer 1 = the consumed-set (single-shot); Layer 2 = the per-kind effect anchor (crash-window
-safety). Neither alone is sufficient.
-
-**Bounded.** The orchestrator publishes a low-watermark (`consumed_through`) once every message at-or-below it is
-consumed; the **bus** GCs inbox files ≤ that watermark (staying the sole writer of its own partition), and the
-consumed-set is pruned to ids above it — bounding both the inbox and the set. Volume is human-interaction-paced
-(the autonomous loop never writes the inbox), so this is hygiene, not a hot path.
-- **`kind: verdict`** — `{ token, verdict: {outcome, notes, returns?} }` (a `setup` reply carries `tasks[]` instead
-  of the single `outcome`; `returns` is the **name-keyed map** declared above and is validated on the way in) — resumes a parked ticket; `token` matches a
-  `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume). **Anchor:** the parked
-  `token` — a re-applied verdict finds the ticket already resumed (token closed) → dead-letter/no-op. A non-empty
-  `returns` (a setup credential — the field *is* the marker) is written to the gitignored secret store and this inbox record is
-  **shredded immediately after consume** — a secret is never retained on the durable inbox or echoed to
-  `state.json`/logs. This shred is the **one exception** to *consume = record, never delete*: the orchestrator may
-  `unlink` a single consumed record **that carried a sensitive payload**, right after extracting it to the store, so
-  a secret's latency-to-zero never waits on the bus's GC pass. Nothing else in `inbox/` is ever consumer-deleted.
-- **`kind: intake`** — `{ ask, node_ids? }` — a new-work request; the orchestrator **promotes** it into
-  `backlog.md` through triage — **never a direct backlog write** (that would make the backlog two-writer).
-  `node_ids` present when the project-map screen emitted it. **Anchor:** promotion **stamps the source `message_id`
-  into the new item's `source`**, and re-promotion is skipped when an item already carries it — the same stamp that
-  lets the console's "my requests" surface correlate an intake to the item it became.
-- **`kind: control`** — `{ op: reprioritize|pause|resume }` — a loop-control command honored at the next
-  boundary (non-preemptive). **Anchor:** none is possible (a control op leaves no durable artifact to check), so
-  **control ops MUST be idempotent** — re-applying one is a no-op by construction (`reprioritize` re-orders the same
-  backlog to the same order; `pause`/`resume` each re-set a flag). The enum is therefore **closed and
-  bus-validated**: a non-idempotent op cannot be added without bringing its own anchor, and an open set would admit
-  one through the front door.
-- **`kind: release`** — `{ action_ids[] }` — a human **batch-approval** of pending outward actions; the
-  orchestrator executes each named `outbox` entry (re-run through `guard.sh`) at the next boundary and marks it
-  `executed`. **Always by explicit `action_ids`** (a snapshot of what the human saw — items enqueued after the glance
-  are simply not in the set); never an "approve-all-pending" wildcard. Distinct from `verdict`: it resumes **no**
-  parked ticket (an outward action never parked the loop), it just fires a deferred side-effect. **Anchor:** the
-  outbox entry's `status` — an entry already `executed` is skipped, so a re-applied release is a no-op. (The
-  *message* dedups here; an external side-effect with no natural idempotency — `issue-create` — carries its own
-  key on the outbox entry.)
-- **`kind: question`** — `{ question }` — a human **asks the project something** and wants prose back, as opposed to
-  `intake`, which asks the project to *do* something and wants a ticket back. The two are separated **at the console
-  by the human**, not classified by a model: the human already knows which one they meant, and every automatic scheme
-  pays a cold start to rediscover it. The orchestrator answers from the knowledge base, the spec and the decision
-  record (the `answer` skill) and appends the reply to the **conversation-thread** below. **Anchor:** the thread turn
-  **stamps the source `message_id`**, and a re-applied question finds a reply already carrying it → no-op. Same shape
-  as `intake`'s promotion stamp, and it is what makes the crash window between *append* and `drain.py record` safe.
-  **It is the only kind that changes no build state**, which is why it sorts LAST at a boundary — answering must
-  never delay resuming a parked ticket or promoting an item. **Loopback-only** (absent from the bus's remote
-  allowlist): the reply path runs the question into `claude -p`, so a question *is* an authoritative prompt — the
-  same reason a forecast verdict never rides the remote surface, and strictly sharper, because a verdict's `notes` is
-  free text bolted to a bounded decision while a question is the whole prompt.
-
-## conversation-thread  · appended by the orchestrator (or a runner-spawned answerer) when a `question` is drained, read by the bus for the console's thread panel · *`.workflow/thread/thread.json`; RUNTIME, gitignored, atomic write, kept on a native filesystem*
-- `{ session_id, turns: [{ message_id, role: human|project, text, at, session_id }], rotations: N }` — one rolling
-  conversation, oldest turn first. `role: human` is the question as POSTed; `role: project` is the answer. Every turn
-  carries the `message_id` of the question that produced it, which is both the idempotency anchor and the key the
-  console's "my requests" surface correlates on — the same id the `202` handed back.
-- **RUNTIME, not committed, and the reason is not size.** A committed transcript would be a **second copy of every
-  decision it contains**, and the decision record, the spec and the backlog already own those facts — so the thread
-  keeps the *conversation* and durable outcomes land with their existing owner (a backlog item, a spec edit, a
-  knowledge node). The transcript is a **render**, not the state: the conversation Claude actually resumes lives in
-  its own session file, which is machine-local and keyed to the launch directory. Committing the thread would
-  therefore buy a readable log and **not** a resumable conversation — a machine move ends the conversation either
-  way. Free human prose is also unlintable for secrets, unlike the machine-generated `forecast` record that is
-  committed precisely because its safety *is* checkable.
-- **`session_id` is the load-bearing field.** Each answer runs `claude -p --resume <session_id>` so follow-ups work;
-  a fresh thread has none and the first answer establishes it.
-- **Rotation — the thread is cleared and handed off, it is not capped.** Resume **re-sends the accumulated history**,
-  so thread length is a *per-message cost*, not merely disk — the one retention arm in this package that governs
-  spend rather than bytes. When the estimated context crosses `config.thread.rotate_at_tokens`, the answerer writes a
-  **thread handoff** (`.workflow/thread/handoff.md`) — distilling the conversation so far **under the carry-list
-  below** — drops `session_id`, clears `turns`, and increments `rotations`; the next question starts a fresh session
-  primed with that handoff. **Rotation happens only after `drain.py record`** (`skills/answer` steps 5→6): clearing
-  `turns` destroys the idempotency anchor, so rotating first opens a window where the message is unrecorded *and*
-  unanchored, and the retry answers twice. This is the same
-  disposable-conversation law the orchestrator already runs on (`handoff.md` + rehydrate), applied to the thread —
-  and it is deliberately a **separate file**, because `handoff.md` already has two authors (the orchestrator's prose
-  and `drain.py`'s machine block) and a third writer on it would break that split.
-- **What the thread handoff may CARRY — it keeps only what is not re-derivable.** Rotation is the one distillation
-  in this package whose source is **destroyed** (the thread is RUNTIME and gitignored, so the cleared `turns` are
-  gone, not archived), which makes `memory-model.md § the distillation law` binding here rather than advisory. The
-  handoff carries exactly: **the human's turns verbatim** (once the watermark GCs the inbox message this is the only
-  record they were ever asked); **open threads** — what an exchange surfaced that nobody filed, so the next session
-  does not re-raise it as new; **outcomes that landed with a real owner, as a POINTER** (backlog id, spec section,
-  decision id, knowledge node) and never a summary of what that owner says; **contradictions in the record as the
-  two pointers that contradict** ("`state.json` says X, `parked/A.json` says Y"), never a verdict on which is right;
-  and **`rotations` plus the number of turns dropped**, so the next session knows it inherited a conversation.
-- **It carries NO project prose answer, and that is the structural part.** Every answer came from this project's own
-  record by construction (`skills/answer` step 3), so it is **re-derivable** — and an answer that is *not*
-  re-derivable is exactly an invented one. Restating answers here would hand the next session the inventions among
-  them with the record's authority and none of the doubt, *after* the turns holding the evidence were cleared —
-  the failure `memory-model.md § the distillation law` records. Dropping the prose makes it impossible rather than
-  policed. A follow-up after a rotation re-derives from the record instead of inheriting a summary: the point, not
-  the cost.
-- **Estimated, not measured.** Token count comes from the shared `chars_per_token` calibration (`config.doc_budget`),
-  the same estimator the context-budget law uses — there is no way to read the live session's true count from
-  outside it, and a stdlib-only package has no tokenizer.
-
-## refine-ledger  · written by `create-demo` on every regeneration, enforced by `check_demo_bundle.py` · *`.workflow/demos/<item-id>/.refine.json`; RUNTIME, gitignored, lives and dies with its bundle; a dotfile so the daemon never serves it*
-- `{ round: N, rounds: [{ round, spec_ref: { path, sha256 }, note? }] }` — `round` is the count of regenerations
-  (the circuit-breaker against `config.demo.max_refine_rounds`), and `rounds[]` holds one entry per round.
-  **`spec_ref` names the spec file that round was regenerated FROM, and its `sha256` at that moment** (`path` is
-  repo-relative — a brownfield project's adopted spec is not `docs/spec.md`). `note` is the human's verdict note
-  that drove the round, kept for the escalation's refine history.
-- **Why the hash and not just a counter.** `create-demo` says a `changes` verdict edits the **spec** first and
-  regenerates from it, and that was prose with nothing behind it. A terminal `approve` **deletes the bundle**, so a
-  decision that reached only the demo bytes is destroyed at the moment it is approved and the locked spec never
-  learns it — silent, permanent, and precisely the decision the checkpoint existed to capture. The hash is what a
-  producer cannot satisfy by remembering to set a flag: `check_demo_bundle.py` refuses a round whose latest
-  `spec_ref.sha256` does not match the file on disk, and one whose hash is **unchanged from the previous round**.
-  Only the latest round is pinned to current bytes — earlier rounds legitimately describe superseded revisions.
-- The lint also refuses `round` over the cap, so the cap stops being a number two documents state and no code reads.
-- **It dies with its bundle, so its summary is promoted out first.** On a terminal verdict the route runs
-  `check_demo_bundle.py --promote` before deleting the directory, folding `{item_id, approved_at, rounds, spec_ref}`
-  into the committed **`demo-approvals.json`** (below). Otherwise nothing later can tell an item that was checked
-  from one approved before this floor existed.
-
-## demo-approvals  · written by `check_demo_bundle.py --promote` on a terminal demo verdict, read by `align` · *`.workflow/demo-approvals.json`; **COMMITTED** (ids, counts and a hash — no bytes, no values, so it is small and carries nothing that needs protecting); atomic write; append-with-replace, keyed on `item_id`*
-- `{ approvals: [{ item_id, approved_at, rounds, spec_ref: { path, sha256 } | null }] }` — one entry per item whose
-  demo reached a **terminal** verdict, written **immediately before the bundle is deleted**. `spec_ref` is the last
-  round's, or `null` for a demo approved at round 0 (never refined, so there is no spec-moving claim to record).
-- **Why it exists: the refine ledger dies with the bundle.** `.refine.json` is what proves a refine round moved the
-  spec, and it lives *inside* `demos/<item-id>/`, which the terminal `approve` deletes. So the moment an item is
-  approved, every trace that it was ever checked is gone — and "approved with no ledger" becomes true of **every**
-  approved item that has ever existed. That is not a detectable condition, it is a tautology, and a backwards-looking
-  check built on it would re-read the whole history on every scan and never clear anything.
-- **What it buys.** An item **with** an entry is settled mechanically (the lint already refused any round that did
-  not move the spec). An item **without** one was approved before this floor existed, and is the only kind `align`'s
-  approved-demo lens has to read by judgment. The set is finite and shrinks to nothing; the promote is a **command
-  the route runs**, not a step it is asked to remember. Idempotent on `item_id`, because applying a verdict is
-  itself re-appliable after a crash and two entries would later read as two approvals.
 
 ## forecast  · written by `create-forecast`, frozen by `forecast.py freeze`, read by the bus's Forecast-chains panel · *`.workflow/forecasts/<id>.json`; **COMMITTED** (key NAMES only — no bytes, no values); atomic write; the item-dir lifecycle — committed while the change is open, pruned by the `audit` pass when it closes, history in git*
 The loop's **prediction of its own routing** for one change: an ordered chain of events shown to the human before
@@ -552,30 +365,6 @@ the machine walks it. It de-risks the **process** question, the orthogonal axis 
   `forecast.py`. The **prune** is neither: it lives with every other prune in `retention.py`, keyed off the *same*
   `promoted.json` marker that closes the item dir — which is what "copies the item-dir lifecycle exactly" means.
 
-## outbox / pending-outward-action  · written by the orchestrator when a skill defers an outward action, cleared by the `release` consumer · *`.workflow/outbox/<id>.json`; RUNTIME, gitignored, single-writer (orchestrator), kept on a native filesystem; read by the bus to render the console's release panel; the mirror of the bus-owned `inbox/`*
-The **transactional-outbox** queue behind the "never stalls — queue the outward action, one approval releases a
-batch" rule. An outward action (`push`, `issue-create`, `issue-close`, later `deploy` / `send`) is **not** a
-checkpoint — it doesn't park the ticket (the commit is local, the ticket completes, the loop advances). When the
-skill's `config.outward` check (below) yields `ask`, it appends a record here and continues; a console `release`
-fires it.
-- `{ id, action ∈ { push, issue-create, issue-close, deploy, send }, args, item_ref, created_at, ttl, state_binding, status ∈ { pending, executed, rejected, dropped } }`.
-- **`state_binding`** — what the action was queued against, re-validated at release (TOCTOU defense): `push` binds
-  `{ branch, floor_sha }` (release re-scans the outgoing range through `guard.sh`; a rebased-away floor →
-  invalidate + re-surface); `issue-create` binds the local backlog item (closed meanwhile → **drop**); `issue-close`
-  is idempotent. **Divergent state invalidates + re-surfaces, never silently fires.**
-- **`ttl`** — a queued action **drops on expiry** (never silently fires stale); drop ≠ escalate (an outward action
-  isn't blocking). Config-overridable.
-- **Two-layer gate:** **Layer 1** = `guard.sh`, the non-overridable mechanical floor — secret-scan +
-  verify-before-commit + the command-chaining block, **plus the push floor** (resolve the refspec — including
-  `HEAD:main`, a leading `+`, `--all`/`--mirror` and a bare `git push` via upstream/`push.default` — and **block
-  any push to a protected branch**, plus secret-scan the outgoing range). It fires on execute regardless of config
-  and cannot be waived, because `guard.sh` exits non-zero *ahead of* the permission decision. **Layer 2** =
-  `config.outward` (below), the overridable human-approval layer. Standing pre-auth waives the human, never the
-  checks.
-- **No durable ledger:** single-user = author-is-approver → segregation-of-duties moot → the action's own external
-  consequence (moved git ref / GitHub issue event / deploy record) is the audit; the away-run digest is the console
-  activity feed + `handoff.md`, not a new artifact.
-
 ## issue  · produced by `create-issue`, closed by `close-issue` · *filed into `backlog.md` — a **live open queue** (rewrite-in-place; closed entries leave, GC'd by `prioritize`), not append-only*
 - `{ title, kind: bug|feature|debt, description, severity, source, depends_on[] }` — `prioritize` orders on all
   of `depends_on` × `kind` × `severity`; `depends_on` is `[]` for a standalone issue. **Roadmap-derived backlog
@@ -591,91 +380,6 @@ fires it.
   `state`). **A local-only item (no `github_ref`) is closed by its backlog `done`-flip** (which rides the
   item-tail `commit`); `prioritize` GCs on the done-flip, so a greenfield issue with no ref is still closeable +
   collectable — `close-issue` just exits quietly (nothing outward to close).
-
-## secret store  · written by the orchestrator when a `setup` verdict carries a `returns` value, read when the loop needs that credential · *`.workflow/secrets/`; RUNTIME, gitignored, kept on a native filesystem; each entry created `0600` (restricted ACL on Windows) with an atomic write*
-The home for the **live credentials** a human hands over at a `setup` checkpoint (an API key, a webhook secret) —
-the one place the loop keeps a secret.
-- **Owner:** the orchestrator **writes** it (on consuming any non-empty `returns`) and **reads** it (the setup
-  verify-probe). Nothing else writes it.
-- **Never** logged, never echoed to `state.json`/`handoff.md`, never committed. The inbox record that carried the
-  value is **unlinked immediately** after the write (the one consumer-delete carve-out).
-- **These are credentials, not memory — the retention/`audit` prune never sweeps them.** Retention bounds the
-  append-only *memory* tier; a cap deleting a live key would break a working setup. Removal is **explicit**
-  (rotation / teardown), never automatic.
-- **An entry is named by the `message_id` that carried it, so which credentials it holds is read from the
-  `returns` maps inside it — EXACTLY, never by guessing.** `/rebind` collects the **keys of `returns` nodes only**
-  (never every key in the record, which would sweep in `token`/`value`/`id` and let a project that declares a secret
-  named `token` match falsely — a false match reports a *lost* credential as present, which is silence). Values are
-  read into memory and never returned, printed, or filed. A record whose `returns` does not conform is **not**
-  folded into the loss: it is reported separately as an unreadable-shape entry, because "I cannot read this" and
-  "this is gone" are different facts and only one of them is an emergency.
-- Same atomic-`0600`-create discipline as the bus token (create *with* the mode, never write-then-`chmod`) **and the
-  same verification**: the achieved mode is `stat`'d, because the create-with-mode discipline is a no-op on a mount
-  that ignores mode — the WSL repo mount returns `0777` for a `0600` create, silently. That is not a Windows-only
-  gap (the original framing); it is **any mount that ignores mode**, and it is why this path is pinned. Windows has
-  no `0600` → explicit ACLs, the same target-OS/FS family as the other runtime pins.
-
-## state.json  · the live loop pointer (volatile, gitignored) · *`.workflow/state.json`; published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
-- `status` ∈ `{ intake, building, idle }` — the loop's **MODE, never item occupancy**. `intake` is gathering
-  requirements, `building` is the autonomous loop driving, `idle` is **backlog empty, awaiting steering** (owned
-  by `loop.md`'s `prioritize | backlog empty | idle (await steering)` row). So **`building` with
-  `current_item: null` is a legal and expected pair** at a scheduler boundary — at `prioritize` with a full
-  backlog the loop is driving and has not yet picked, and `idle` is not available as a synonym for it. Publishing
-  `idle` there would tell the console a human must act while a wave is in flight. Nothing may flip this field to
-  obtain a commit: see § commit-receipt.
-- `phase` — **present only during the `/start` bootstrap motion**, value `bootstrap`; absent once the loop
-  drives. It is not a second mode field: `status` already carries the mode, so there is no `phase: normal-ops`
-  or any other steady-state value, and the orchestrator does not write one. A second, redundant mode field that
-  no consumer reads is how the next invented value gets depended on. With it, `node` carries the bootstrap stage (`start:<step>` / `ingest:<stage>`) and `note` the
-  human-readable step marker (`"seeding knowledge nodes 40/95"`) — the console's "Now" panel renders these, so
-  the motion is visible from the first minute. Written at every stage boundary, same atomic publish.
-- `node` — current loop node; value ∈ the `loop.md` node labels (e.g. `planner:plan-one`, `verify`)
-- `current_item` — backlog id or `null` · `wave` — wave id or `null` · `note` — human-readable cursor.
-  `current_item` (top-level) is the canonical active-item key. **The verify-before-commit gate does not depend on
-  it:** it derives the item(s) under commit from the staged `.workflow/items/<id>/` diff and reads state.json only
-  runtime-resolved (via `runtime.json`) and tolerantly (`current_item` **or** a nested `position.item`), and it
-  fails **closed** — so neither a state.json shape slip nor a relocated runtime tree can silently disarm it.
-
-## handoff.md  · the durable resume anchor (committed) · *`.workflow/handoff.md`; rewritten whole each handoff, never appended. **Atomicity is real but harness-provided:** the orchestrator rewrites the prose with the `Write`/`Edit` tools, which publish via a temp-file + `rename` (the inode changes on overwrite), so a session killed mid-write leaves the **previous** file whole, never torn. The model cannot *express* the atomic `rename`/`fsync`, but the tool provides it — the one thing it must never do is rewrite this file via a `Bash` `>`/`tee` redirect, which truncates in place and **would** tear. **Durable floor = git:** the file is committed each item, so the one case a bare `rename` may not survive — power-loss/kernel-panic before the pages flush — recovers from `git show HEAD:.workflow/handoff.md`, the same `handoff.md + git log` a cold start already rebuilds from. Committed, so it stays on the repo mount (never relocated); `drain.py` writes its own machine block fully durably (write-temp → `fsync` → `rename` → `fsync(dir)`); the bus reads the file for the `consumed_through` watermark, and a torn read can only make inbox GC lag, never over-collect*
-- `bootstrap` ∈ `{ installed, ingesting, discussing, reconcile-parked, complete }` — the bootstrap-motion
-  ledger `/start` §0 keys its re-run guard on ("initialised" = bootstrap-complete, not install-complete).
-  Written at each phase boundary: step 7 writes `installed`; §2/§3 advance it; the session that consumes the
-  reconcile verdict (brownfield) or lands the spec (greenfield) writes `complete`. Absent = an older install —
-  treated as bootstrap-incomplete, resume the motion.
-- `current_item`, `loop_position`, `base_sha` — the commit it was written against; a cold start
-  reads this + `git log <base_sha>..HEAD` (bounded to one session's delta) and rebuilds position. **Prose, written
-  by the orchestrator.**
-- **Two machine blocks** — fenced, delimited regions a SCRIPT owns, each rewritten independently of the prose and
-  of each other. **Three authors, one file:** each writer rewrites only its own region, and none touches another's.
-  The orchestrator **never hand-writes or deletes either block**.
-  - `<!-- drain:begin -->` … `<!-- drain:end -->` (**`drain.py`**) — `consumed[]`, `consumed_through`,
-    `dead_letters[]`. A session that rewrites the file wholesale and drops it loses the *set* — recoverable only in
-    the sense that each kind's effect anchor then catches the re-application; the block structure itself is rebuilt.
-  - `<!-- parked:begin -->` … `<!-- parked:end -->` (**`bus.py park`/`unpark`/`mirror`**) — `parked[]` as
-    `{ ticket_id, kind, summary, opened_at }` plus `projected_at`, capped at 50 with the overflow reported as
-    `not_mirrored`. This replaces the prose `parked[]` a session used to write by hand. It is a **PROJECTION of
-    `parked/`, re-derived on every mutation**, never patched: prose was accidentally self-correcting (the whole file
-    was rewritten each handoff, so a resolved checkpoint simply stopped being written) and a persisted block is
-    not. It carries **ids + kind + summary + opened-at ONLY — never a `request` body and never the `token`**,
-    because a `setup` checkpoint's body is exactly where a credential appears and this file is **committed**. The
-    record does not *move* to the committed half, it *projects* onto it. (Which is also why `parked/` itself stays
-    uncommitted: committing it would put that body in git, and the runtime tree exists for `rename`/`0600` reasons
-    committing does not satisfy.) **`bus.py mirror` re-projects on demand** — `/dispatch` runs it before writing
-    the anchor, which is what makes the block *exist* on an install that parked a checkpoint before the block did.
-    An **empty** block is a positive statement ("nothing is parked"); an **absent** one means only that nothing has
-    projected yet, which is why `/dispatch` projects rather than assuming.
-- `consumed[]` + `consumed_through` — the inbox **consumed-set** (bus-assigned `message_id`s already applied) and
-  its low-watermark. Lives here because this is the durable anchor a cold start rebuilds from — exactly the moment
-  the set is load-bearing (it makes the post-restart inbox re-read a no-op). Ids only, never message bodies, so it
-  stays small and carries no secret; **pruned to ids above `consumed_through`** — which is what bounds it, and is
-  the rule a prose brief demonstrably did not carry. **An id at or below the mark counts as consumed even though the
-  set no longer lists it** — that is what the mark means, and a walk that reads only the set freezes the watermark
-  permanently the first time pruning drops an id beneath it.
-- `dead_letters[]` — `{ message_id, reason, at }` for a message that applied to nothing (a verdict whose token is
-  unknown or already closed). **Capped (20) and deliberately NOT pruned by the watermark**: this is the one message
-  a human most needs told about, and collecting it when the mark passes would erase the notice before it was read.
-  It is a defined field precisely because it wasn't — every driven session improvised its own section here, in a
-  committed file.
 
 ## dispatch-return  · produced by every DISPATCHED agent (`execute` · `document` · `create-demo` · `research` · `setup-guide`), consumed by the caller that dispatched it · *in-context only — never a file, never persisted; the heavy material it stands for is written to `scratch/` (§ per-item artifacts) and stays there*
 **One contract for every dispatched worker, so the rule has one owner instead of five paraphrases that drift.**
@@ -708,75 +412,3 @@ This contract is **ADVISORY**: nothing stops a worker pasting a body back or loa
 half of it has a **detector** — `hooks/dispatch_return.py` sizes what came back and warns — and it cannot block,
 is an absurdity ceiling rather than a budget, and cannot see the worker-window half at all. What it does, what it
 deliberately ignores, and the gap it leaves: [`schemas-runtime.md § dispatch_return.py`](schemas-runtime.md).
-
-## per-item artifacts  · on disk
-**The filenames are FIXED, because they are anchors, not just storage.** Under `.workflow/items/<id>/`:
-`plan.md` · `promises.json` · `changelog.md` · `verify-verdict.md` · `debug-report.md` · `plan-delta.md` ·
-`promoted.json`. Two mechanisms read them by name and neither can guess: the coverage gates key off
-`promises.json`, and the **forecast anchor table** (below) derives "did this event happen?" from the *presence*
-of the artifact its node produces. An artifact written under a different name is an event that silently reads as
-never having happened.
-
-### scratch  · written by whichever dispatched agent is working the item, read by nobody but its writer
-`.workflow/items/<id>/scratch/` — the **heavy working material** the dispatch-return contract (above) exists to
-keep out of a context window: raw command output, intermediate dumps, long drafts, gathered source text. Created
-on demand by its writer; nothing scaffolds it.
-
-**RUNTIME and gitignored**, unlike every other name under the item dir — raw material, not a record, and
-committing it would put back into the repo exactly the bulk the contract keeps out of a window, then hand it to
-every later reader of that item's history. **Not** relocated to the native-filesystem runtime tree the way
-`parked/` and `secrets/` are: it holds no credential and needs no atomic rename, so it stays under the item dir
-on the repo mount where its writer already is.
-
-**It inherits promote-then-prune rather than getting a TTL of its own.** `retention.py`'s `prune_items` removes
-the whole item directory — `scratch/` with it — once `document` has written `promoted.json`, and skips the
-directory entirely until then. So scratch lives exactly as long as its item, an un-promoted item never has its
-working material collected out from under it, and there is no second deletion rule to keep correct forever.
-**Not an anchor** (below): its presence proves nothing about which node ran, which is why the directory name is
-fixed and the names *inside* it are the only free ones here.
-
-### the forecast ANCHOR TABLE  · read by `forecast.py reality`, written by nobody
-Reality is **derived**, never recorded — there is no second ledger to keep in step, and no writer to forget. Each
-`loop.md` node is resolved through the durable effect it leaves behind:
-
-| node | anchor | proves |
-|---|---|---|
-| `planner` | `items/<id>/plan.md` | the item was planned |
-| `execute` | `items/<id>/changelog.md` | the plan was carried out |
-| `verify` | `items/<id>/verify-verdict.md` | the artifacts were checked |
-| `debug` | `items/<id>/debug-report.md` | something failed and was diagnosed |
-| `refine` | `items/<id>/plan-delta.md` | a correction was routed |
-| `document` | `items/<id>/promoted.json` | the essence was folded into knowledge |
-| `create-demo` | `demos/<id>/` | a sandbox was built |
-| `create-forecast` | this record's `frozen_at` | the chain itself was approved |
-| `checkpoint:<kind>` | a `parked/` record of that kind — `answered_at` set ⇒ **done**, unset ⇒ **open** | the human was asked |
-
-This table is **exhaustive**: a node not listed here has no anchor and resolves to `unknown` (below). In
-particular **`commit` is deliberately unanchored** — it is divergence-exempt, so a probe would buy one column
-cell and never a signal; `document`'s `promoted.json` runs *before* it and already says the item reached its
-tail; and every anchor here is a pure presence check in a module the console daemon imports, which a `git`
-subprocess is not. If it is ever wanted, the exact probe is `git log --grep='^Refs: item #<id>$'` — the trailer
-`commit` actually pins, not the subject.
-
-- **`state.json` is deliberately NOT the source.** It is volatile and holds only the *current* node — never a
-  history — so "which events have happened" is not a question it can answer at all.
-- **Four states, and the fourth is the honest one.** `done` (the anchor is there) · `open` (a checkpoint is parked
-  and unanswered) · `pending` (the node has an anchor and it is absent — it has not happened yet) · **`unknown`**
-  (the node has *no* anchor in this table, e.g. `decision-engineer`, whose output is a global decision record that
-  cannot be tied to one item). `unknown` renders as unknown and never as "did not happen".
-- **Divergence is the same table read the other way.** An anchor that fired for a node the forecast never
-  named is a **structural divergence** — the machine took a turn nobody saw coming. It does not silently
-  continue: the tail is re-forecast and re-shown. The item-complete tail (`commit`, `document`, `close-issue`,
-  `prioritize`) is exempt, because it runs for every item and its absence from a chain is the horizon talking,
-  not a surprise.
-- **The check fires at the SCHEDULER BOUNDARY only, never mid-item** — which is what keeps non-preemption and
-  never-stall intact, and is why it is plain control-flow in `loop.md` rather than a routing edge.
-
-`plan` / `changelog` / `verify-verdict` / `debug-report` live under `.workflow/items/<id>/` — `planner`
-`mkdir`s the dir on demand when it writes `plan.md`; the dir is **item-scoped**, committed while the item
-is open (crash-survival) and **pruned once closed** by the `audit` pass — but **only** after `document` folds
-its essence and writes a `promoted.json` (`{ "promoted": true }`) marker into the dir; without it the prune
-skips the dir, so retention never deletes un-promoted memory. `decision-record`s stay global +
-append-only under `<project_root>/docs/decisions/`, with a VOLATILE `index.md` + superseded bodies GC'd to git;
-the previously-reserved `checkpoints/` is **retired → `outbox/`** (the pending-outward-action queue). Rule: per-item
-ephemeral artifacts are item-scoped; cross-item memory is type-scoped.

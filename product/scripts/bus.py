@@ -826,7 +826,7 @@ def stamp_deadline(paths, given=None):
     """The absolute deadline. Supplied wins; otherwise now + the configured hours.
 
     Deriving it here is not convenience — it is arithmetic that was being done by hand.
-    `schemas.md` states the rule (now + `config.checkpoint.deadline_hours`) and every
+    `schemas.md § parked-ticket` states the rule (now + `config.checkpoint.deadline_hours`) and every
     park was re-implementing it in a model's head, where a wrong answer is invisible:
     the daemon compares this value against wall-clock and simply never escalates.
     """

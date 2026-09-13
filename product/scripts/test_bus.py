@@ -1828,7 +1828,7 @@ class Parking(Tmp):
         self.assertNotIn(bus.PARKED_BEGIN, open(self.paths.handoff).read())
 
     def test_a_re_park_stamps_a_fresh_deadline_for_alert_dedup(self):
-        """schemas.md: (ticket_id + deadline) is the daemon's alert-dedup key, so a
+        """schemas.md § parked-ticket: (ticket_id + deadline) is the daemon's alert-dedup key, so a
         ticket that parks, resolves and re-parks must not read as already-seen."""
         first = bus.write_park(self.paths, a_park())
         bus.remove_park(self.paths, "item-1")
