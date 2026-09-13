@@ -701,8 +701,9 @@ lifecycle.
   `ingest`/`start.md` state plainly that the motion ends the context window at the park.
   **[ctx — BUILT (D134); RE-DRIVEN (D138)]**
 - **Version-stamped installs (D135)** — `/start` step 7 writes `workflow_version` into
-  `.workflow/config.json`; `schemas-runtime.md` owns the field (the `config.json` section moved there at the D168
-  split). **Since 8a it is the commit SHA, not a semver**: D164
+  `.workflow/config.json`; **`schemas-config.md`** owns the field (the `config.json` section moved to
+  `schemas-runtime.md` at the D168 split, then to `schemas-config.md` when the operator's knobs were split out of
+  the machinery in `12c`). **Since 8a it is the commit SHA, not a semver**: D164
   deleted `version` from `plugin.json` so the platform keys delivery on the commit, and D165 built the four-rung
   resolver that reads it. **[fwd — BUILT (D135); the stamp became a SHA in 8a (D164/D165)]**
 - **`/update` — BUILT (D139)** — constraints pinned by D135 (regenerate `[G]`/`graph.json` under the new schema ·
@@ -723,8 +724,9 @@ lifecycle.
   live in the statusline (the one surface the running token count reaches). **BUILT 2026-07-26** (`product/**`):
   `scripts/statusline.py` (composes over a `/start`-captured `statusline.delegate`, never clobbers), `commands/dispatch.md`,
   `hooks/session_start.py` (SessionStart `clear` → re-inject `handoff.md`), `hooks/precompact.py` (both `manual`+`auto`,
-  never blocks); `config.context.warn_pct` + `statusline.delegate` are owned by `schemas-runtime.md` (both moved
-  there at the D168 split); 20 governor tests + full
+  never blocks); `config.context.warn_pct` is owned by **`schemas-config.md`** and `statusline.delegate` by
+  `schemas-runtime.md` (both moved to the latter at the D168 split; the knob moved on again in `12c`, when the
+  operator's control surface was split out of the machinery); 20 governor tests + full
   321-test suite + 5 meta-gates green. **[ctx — BUILT (D136); CYCLE DRIVEN 2026-08-02 (D151) — banner → `/dispatch` (a real `claude -p`; both machine blocks preserved byte for byte) → `SessionStart(clear)` rehydrate → a fresh session resumed from the anchor alone and carried a decision that had existed only in the pre-clear conversation]**
 
 **Sequence (set 2026-07-26) — COMPLETE.** Build the governor (D136) **[BUILT 2026-07-26]** → forced-reinstall the
@@ -1079,7 +1081,7 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
-### The ordered build sequence (set 2026-09-13, D186; Steps 0–1 CLOSED 2026-09-13, D187/D188) — the fix pass, then Phase 12
+### The ordered build sequence (set 2026-09-13, D186; Steps 0–4 CLOSED 2026-09-13, D187/D188/D189/D191/D198) — the fix pass, then Phase 12
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied. A step that is merely *nice*
 before another is called that; a step that is a **prerequisite** says why. Phase 12's per-slice content lives
@@ -1154,15 +1156,21 @@ what a worker does between turns. **It also re-justifies Step 4's ordering more 
 fanning out N workers multiplies *stalls*, not only simultaneous returns, since more workers wait on a
 coordinator that serialises. Parallelism before stall exposure is bounded makes the scarce resource scarcer.
 
-**Step 4 — `12c`. ⚠️ PARTIAL 2026-09-13 — `D194`. BUILT but NOT CLOSED.** The two halves that must be mechanical
-before any fan-out is safe are done: the **independence gate** (D91's predicate computed, failing towards serial,
-with no flagged-start path) and **one build per wave** (an `flock` + pass-memo on the git common dir, drawing the
-line so that `execute` testing its own worktree is untouched). The coordinator's behaviour is wired in
-`loop.md` / `loop-detail.md`. **What is missing is the proof.** Three things block closing, all carried in `07`:
-nothing yet writes a non-null `wave` id, so the slot's dedup half is dormant; **homogeneous fan-out needs
-plan-ahead** — a backlog row has no plan until picked, so the real project shows 106 candidates / 0 eligible and a
-wave must become *plan-N-then-execute-N*; and **the coherence exit test `D192` demands has not been run**, which
-means the D91 reversal is implemented but **not validated**. No real fan-out has yet run.
+**Step 4 — `12c`. ✅ CLOSED 2026-09-13 — `D194` (partial) → `D195`/`D196`/`D197`/`D198`.** The two mechanical
+halves landed first (the **independence gate** computing D91's predicate and failing towards serial, and **one
+build per wave** on the git common dir). All three things D194 named as blockers are now cleared, and the entries
+own the detail rather than this line: **`D195`** built plan-ahead, whose real subject turned out not to be the
+cost of a surplus plan (durable, so it is prefetch) but **staleness**, which nothing in the package had a notion
+of — freshness is now a routing verdict with three mechanical tripwires and no distance threshold, and the wave
+**chooses pessimistically before it pays to refresh**, because refresh-ahead races your own wave. It also minted
+the wave id (dedup half awake) and demoted `prioritize`. **`D196`** moved `planner` to a leaf agent: the spawn
+that kept it inline was avoidable, and N inline planning passes would have spent the router's window on the very
+work fan-out removes from it — half of D180's fan-out-controller question, answered. **`D197`** is a bug the slice
+exposed rather than caused. **`D198`** drove the exit test D192 demanded: **31 checks, 0 failed, stable over four
+runs**, a re-runnable harness rather than a paragraph about a run. **One validation remains and is carried in `07`
+rather than here:** the drive's writers are scripted, so the *mechanism* is proven and the *loop* is not — real
+`planner`/`execute` agents through a live `/start` is still outstanding. That is not a `12c` blocker; the
+objection `12c` had to answer was coherence, and coherence is what was shown.
 
 **Step 4 (charter) — `12c`, the wave coordinator. REPLACED 2026-09-13 by `D192`, which REVERSES D91's
 "interleaving, not parallelism".** Opening this step surfaced a contradiction: D91 decided against real
@@ -1182,8 +1190,11 @@ out N workers multiplies *simultaneous returns into the router*, which is the co
 drive's fed-in tokens, D180). Parallelism before the returns are bounded makes the scarce resource scarcer — it
 would buy wall-clock by spending the exact budget the phase is trying to protect.
 
-**Step 5 — `12d`, goal-drive with convergence measurement.** Needs `12a`'s autonomy boundary to know what to route
-and what to take, and needs a measure before `12e` can know when to stop.
+**Step 5 — `12d`, goal-drive with convergence measurement. ← NEXT.** Needs `12a`'s autonomy boundary to know what
+to route and what to take, and needs a measure before `12e` can know when to stop. **Plan it with the
+always-loaded ceiling in hand:** the set stands at **6350 against a 6400 advisory**, 50 tokens, and the standing
+rule forbids raising a cap to fit what the package weighs — the next slice needing per-turn space must
+**relocate**, not grow. `12c` paid its own rent that way (`D196`) rather than discovering it at integration.
 
 **Step 6 — `12e`, the `loop.sh` session driver.** Last, and the ordering is a safety call rather than a
 convenience: it multiplies any defect in Steps 2–5 across unattended sessions, and **an autonomous driver without a

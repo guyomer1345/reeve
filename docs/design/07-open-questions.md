@@ -839,18 +839,27 @@ sub-questions deferred to the build, in the order the slices need them.
   computes which criteria a change *discharges*, which is not the same as which criteria a change *redefines*. If
   the second half cannot be made mechanical, say so plainly and let the floor be the first half alone rather than
   shipping a floor that is really a judgment wearing a gate's clothes.
-- **Nothing writes a non-null `wave` id, so half the wave-build slot is dormant. `[12c residual, D194]`**
-  `rebind.py` writes `null`; `bus.py` and `project_state.py` only read it. The **exclusion** half (one build at a
-  time) is fully mechanical today; the **dedup** half (don't re-gate an unchanged tree in the same wave) cannot
-  fire until the coordinator publishes a wave id. Correct coupling — no second notion of "which wave is this" was
-  invented — but whoever builds the coordinator owns closing it.
-- **The coherence exit test D192 demands has NOT been run. `[12c, blocks closing Step 4]`** D192 is explicit that
-  `12c`'s exit test is **coherence, not throughput** — that is the objection D91 actually raised, and nothing in
-  `D194` touches it. Until a fanned-out wave has been driven on a real project and its **merged result shown
-  correct**, the D91 reversal is decided and implemented but **not validated**. Combined with the two residuals
-  above, **no real fan-out has yet run.** This is the single thing standing between Step 4 and closed.
-- **Homogeneous fan-out needs PLAN-AHEAD, and that is a change to the loop's shape, not a coordinator detail.
-  `[12c, found by building the independence gate]`** A backlog row has **no plan until it is picked**, and the
+- ~~**Nothing writes a non-null `wave` id, so half the wave-build slot is dormant.**~~ **DISCHARGED 2026-09-13
+  by `D195`** — `wave_build.py mint` derives the id from the sorted batch plus `HEAD` (no counter, no clock, no
+  registry), the coordinator writes it at dispatch, and `D198`'s drive exercises it across two waves.
+- ~~**The coherence exit test D192 demands has NOT been run.**~~ **DISCHARGED 2026-09-13 by `D198`** — driven,
+  31 checks, 0 failed, stable over four runs, as a **re-runnable harness**
+  (`scripts/exit_test_wave_coherence.py`) rather than a paragraph about a run.
+  **What it leaves open, and this is a real residual rather than a footnote: the drive's writers are SCRIPTED.**
+  Coherence is a property of the coordination — predicate, worktree isolation, build slot, merge — and scripting
+  the writers removes model variance so a red run indicts the mechanism rather than a worker's bad day. That
+  makes it a sharper test of the **mechanism** and **no test of the loop**. Driving real `planner`/`execute`
+  agents through a live `/start` on a real project is still outstanding. Deliberately **not** a `12c` blocker:
+  the objection `12c` had to answer was coherence and coherence was shown. It is the natural companion to the
+  `agentic cyber` `/update` already owed from Step 1, and it would also retire that project's stale
+  `doc_budget.always_hard: 4400` override.
+- **~~Homogeneous fan-out needs PLAN-AHEAD~~ — ANSWERED 2026-09-13 by `D195`/`D196`, and the question below was
+  the wrong one.** The worry was the cost of planning an item that proves ineligible; the answer is that a plan is
+  durable, so a surplus plan is **prefetch**, not waste. The real exposure was **staleness**, which nothing in the
+  package had a notion of, and which plan-ahead creates. Selection is head-of-queue with **no separability
+  judgement** — a backlog row carries no file scope to judge with, and planning far from dispatch accrues
+  staleness debt. `planner` became a leaf agent so the planning half can actually fan out. *Original text
+  retained below, because the measurement in it is still the evidence:* A backlog row has **no plan until it is picked**, and the
   independence predicate reads `files_touched` from the plan — so "the open backlog" is almost never a set of
   dispatchable candidates. Measured on the real project: **106 candidates, zero eligible, 95 of them for *no
   plan*.** The gate is not at fault and the predicate discriminates properly — exercised directly against the
@@ -860,8 +869,12 @@ sub-questions deferred to the build, in the order the slices need them.
   wave becomes plan-N-then-execute-N rather than pick-then-plan-then-execute. Open: whether that planning batch
   is itself dispatched in parallel (it is heterogeneous-batch work and looks eligible), and what it costs to plan
   an item that then proves ineligible and is never dispatched.
-- **`schemas-runtime.md` is the tightest file in the package, at 14 962/15 000 advisory — 38 tokens. `[carried
-  from D193, worsened by `12c`]`** The `12c` build had to trim its schema section three times to stay under, and
+- ~~**`schemas-runtime.md` is the tightest file in the package, at 14 962/15 000 advisory — 38 tokens.**~~
+  **DISCHARGED 2026-09-13** — split on **belonging**, not size: `config.json` and `subagentPromptCacheTtl` are the
+  only things in that file a human ever *turns*, so they left for a new `schemas-config.md` (the operator's
+  control surface) and the survivor keeps its name and finally earns its title. **8167 and 7310 against 15 000**,
+  down from 99.7%. It also fixed a growth-rate mismatch that would have re-tripped the wall — knobs accumulate
+  every slice, machinery only when new machinery appears. *Original text below:* The `12c` build had to trim its schema section three times to stay under, and
   parked the rationale in `wave_build.py`'s docstring instead. That is the split-and-pointer remedy being applied
   by hand under pressure, which is the signal that the file needs the real remedy.** The three-way split of `schemas.md` deliberately left it untouched, so it is the next one to trip — and
   unlike `schemas.md` it has no obvious second belonging already latent in it. Decide the axis *before* it is
@@ -872,7 +885,9 @@ sub-questions deferred to the build, in the order the slices need them.
   reunite the console-facing enums and dissolve the one cross-half reference the split created. Held back
   deliberately: it is a *semantic* re-home and D193 was a *size* fix. **Size is no longer an argument for it**,
   which is the right way for it to be decided.
-- **The always-loaded set has 109 tokens of advisory headroom left, and two slices still want rent. `[12d/12e]`**
+- **The always-loaded set has 50 tokens of advisory headroom left, and two slices still want rent. `[12d/12e]`**
+  *(6256 → **6350/6400** after `12c`. `D196` paid its own rent by relocating a sentence rather than growing the
+  brief, which is the pattern `12d`/`12e` must follow; the brief is back to exactly 3137/3200.)*
   Step 1 created that headroom (8134 → 5394); Phase 12 has been spending it (`12a`'s directive channel, `12c`'s
   dispatch rule) and it now stands at **6256/6400 advisory**. The standing rule forbids raising a cap to
   accommodate what the package weighs, so the next slice needing per-turn space must **relocate**, not grow. The
@@ -934,3 +949,33 @@ sub-questions deferred to the build, in the order the slices need them.
   *loop* boundary, and the wrapper's gap is a *session* boundary. Two different boundaries, and a human who pauses
   expects the stronger one. Decide whether the wrapper drains `control` itself before spawning session N+1 — which
   makes the interrupt guaranteed — or whether it trusts the session to have honored it.
+
+## Newly open from building and driving `12c` (2026-09-13 — D195–D198)
+Three of these were opened by the build finding something nobody had asked about; the fourth is a limit of a gate
+written in the same session, recorded next to the gate rather than left for whoever trips it.
+
+- **The install-closure gate only understands Python. `[opened by D197]`** It walks every installed `.py` and
+  reads its imports from the AST, which is exactly the shape of the bug that prompted it. It says nothing about
+  `checks.sh` sourcing a sibling, a hook referencing a script by path, or a template naming a file that never
+  installs — all the same failure (works here, absent there) in a language the gate cannot parse. Not built now
+  because the Python case was the live bug and speculative coverage is how a gate acquires false confidence; but
+  a reader who sees "install closure: OK" should not conclude the install set is closed, only that its Python
+  half is. Decide whether the path-reference case is worth a second pass or whether the release build should
+  grow it.
+- **Should a wave plan in TWO half-rounds rather than one? `[12c tuning lever, not a defect]`** Planners are
+  blind to each other by design, and the wave manifest can only hand them *ids and titles* — real file scope does
+  not exist until their plans do. A deterministic two-round shape (plan the first half, then plan the second with
+  the first half's **actual declared scopes** in the manifest) would give half the batch real information at the
+  cost of one serialization point, and it stays reproducible because queue order defines the halves. Deliberately
+  not built: the single-round version is simpler, and yield has never been measured on a real wave. **Measure the
+  eligible-per-planned ratio before spending anything here** — if it is high, this buys nothing.
+- **`prioritize`'s plan batch is model-selected against a cap no script reads. `[minor, 12c]`**
+  `config.run.wave.plan_max` is documented and consumed only by a skill's judgement, unlike its siblings
+  `execute_max` (read by the gate) and `refresh_max` (read by the classifier). That is legitimate — ordering has
+  always been `prioritize`'s judgement — but it means the one wave knob with no mechanical reader is the one
+  governing spend. Worth a look if wave cost surprises anyone.
+- **D180's fan-out-controller question is now HALF answered, and the remaining half is a different shape.**
+  `D196` moved `planner` out of the router's window by finding its spawn avoidable. `verify` and `debug` fan out
+  for real — they dispatch adjudication views — so the same trick does not apply, and they stay inline as the
+  router's remaining expensive nodes. Whether that is acceptable or whether adjudication itself should be
+  restructured is the open half, and it is a Phase-13 candidate rather than a `12d`/`12e` prerequisite.

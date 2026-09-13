@@ -6680,3 +6680,203 @@ predicate exercised directly on the live `graph.json`; budget after the slice �
 **Builds on:** **D192** (the charter and the reversal), **D91** (predicate + worktree isolation, retained),
 **D186** (Step 4), **D184** (the budget discipline that shaped where the prose landed).
 → `11` (Step 4 — partial, not closed), `07` (the wave-id residual, plan-ahead, and the two tight files).
+
+## D195 — plan-ahead: a plan can now rot, so freshness becomes a first-class verdict; and the wave chooses pessimistically before it pays to refresh **[BUILT 2026-09-13, `a4d2b54` — D186 Step 4, closing D194's plan-ahead residual. 1116 tests (1091→1116), gates green]**
+
+D194 left plan-ahead as an open shape: a wave must be *plan-N-then-execute-M*, because the independence
+predicate reads `files_touched` from a plan and a backlog row has none until it is picked (measured on the real
+project: **106 candidates, 0 eligible, 95 of them for no plan**). What that shape needs was not obvious, and the
+question D194 posed — *what does it cost to plan an item that then proves ineligible?* — turned out to be the
+wrong one.
+
+**Surplus plans are not waste; they are prefetch.** A plan is durable, so an item planned and not built keeps
+its plan and enters the next wave already eligible. The pool of provably-independent work grows monotonically
+and only the first wave pays full price. **The real exposure is staleness**, and nothing in the package had any
+notion of it: a plan written and immediately spent has no window in which to rot, and plan-ahead opens one.
+`execute` is built to stop dead on an untrue assumption rather than improvise, so a stale plan does not produce
+a wrong build — it produces a **dead dispatch**, a worker paid for and returned as a blocker.
+
+**Freshness is a ROUTING decision, not a distance measurement.** `plan_freshness.py` answers fresh / suspect /
+replan. Every threshold design was rejected — commits, files changed, elapsed time — because each is wrong in
+both directions at once: a mechanical rename across forty files is trivially refreshable and one commit
+inverting a module's contract is fatal. What is mechanical is *who gets asked*; whether a patch is honest is
+`planner:refresh`'s judgement, and it can answer `cannot refresh`. The bar for that answer is deliberately low,
+because patching steps over a dead premise yields a plan that **looks fine and is wrong** — strictly worse than
+a stale one, since staleness is detectable and a quietly-patched plan is not.
+
+- **Three tripwires skip refresh entirely.** A declared file **deleted** (scope void, not dated) — with renames
+  explicitly excluded, since git detects them free and a rename is the cheap case refresh exists for; getting
+  that backwards would send every refactor through a full re-plan. **No `base_sha`**, never inferred from git
+  (the last commit touching `plan.md` is a decent guess, and a guess is what this must not be) — so every plan
+  predating the field re-plans once, which is the correct migration. And **`refresh_count` at
+  `config.run.wave.refresh_max`** — the honest mechanical stand-in for "too stale to patch", counting how often
+  we have papered over the tree rather than pretending to measure how far the tree moved.
+- **NO GIT is a separate verdict from stale, and the distinction is load-bearing.** Everywhere else in this
+  design an absence routes to the conservative answer because absence means *cannot tell*. Here it means the
+  premise is missing: no commits, no waves, nothing that could have moved. Routing it to REPLAN would re-plan
+  every item forever in a tree where staleness cannot occur. The limit is stated rather than papered over —
+  uncommitted working-tree edits are invisible, and they belong to an in-flight worker the gate already holds.
+
+**ORDER B — choose the wave pessimistically, then refresh only what it means to spend.** The alternative
+(refresh every suspect candidate, then gate on accurate data) is simpler and was rejected on a specific
+argument: **refresh-ahead races your own wave.** The gate proves the batch disjoint from *itself*, not from the
+candidates it declined, so the wave you dispatch is likely to land on the plans you left behind and undo any
+refresh bought for them. Plan-ahead banks permanent value; refresh-ahead banks value the next wave destroys.
+
+- **The gate computes freshness itself** rather than accepting it as a flag. A caller who forgot would get a
+  gate trusting declarations it has no reason to trust — permissive by omission, the one way this gate must not
+  be able to fail.
+- **A suspect plan is read at TWO code-map hops instead of one.** The danger is not that its files changed, it
+  is that its **declaration may now be incomplete**, so the pessimistic read is the neighbourhood of the paths
+  that actually moved. Unrelated churn is deliberately excluded: a widening that grew with project activity
+  would hold everything the moment the project got busy, which is a gate that stops working exactly when needed.
+  Widening can only ever hold an item back, never admit one.
+- **Held-only-by-widening is reported.** Widening is over-cautious by construction and an item in a churning
+  area could be pushed out wave after wave; starvation nobody can see is indistinguishable from a busy queue.
+
+**Two design errors, both caught by tests rather than by review, both recorded because the shape of the mistake
+is instructive.** (1) The first widening was **hollow**: `moved` is by construction a subset of the declared
+scope, so "declared ∪ moved" widened nothing at all — the real pessimism needs the code map, which lives in the
+gate, so the classifier now stops at naming what moved. (2) "Refresh before dispatch" was keyed off the widening
+being **non-empty**, so a suspect plan whose moved files have no neighbours widened by nothing and **would have
+been dispatched stale**. The trigger is the verdict, not its blast radius.
+
+*Also in this slice, each closing something D194 left open or something the build exposed:*
+- **`wave_build.py mint` closes the dormant dedup half.** A wave id is **derived** from the sorted batch plus
+  `HEAD` — no counter, no clock, no registry, and re-deriving it gives the same answer, which is what the build
+  memo requires. Two waves collide only when they dispatch the same items at the same commit, and that is one
+  wave.
+- **`prioritize` is demoted.** It emitted "the independent items that can run together" on an admitted
+  conservative heuristic; the gate now computes that properly, and one fact with two owners is the drift D80
+  exists to stop. It emits a **plan batch** — head of the queue, up to `plan_max` — with **no separability
+  judgement**, for two reasons: a backlog row carries `{title, kind, severity, depends_on}` and **no file
+  scope** to judge with (the code-map figures in D194 came from synthetic scopes, not real items), and
+  **planning far from dispatch accrues staleness debt** — a plan ten waves out is refreshed repeatedly, hits the
+  cap and is re-planned from scratch. Head-of-queue keeps each plan close to the moment it is spent.
+- **`verify` treats a wave diff outside `files_touched[]` as a HARD finding.** In a wave that declaration
+  stopped being documentation: the gate proved disjointness with it. And the wave manifest gives a planner an
+  *incentive* to under-declare — the cheapest way to look separable is a shorter list, not a better design — so
+  the answer has to be mechanical rather than a judgement call.
+- **The wave manifest is a tiebreaker, never an objective.** Planners are handed their co-members and told:
+  equivalent approaches prefer to stay clear, non-equivalent ones take the better design and **declare the
+  overlap**. *Separability is a constraint, not a goal* — a plan that picks a worse architecture to win a
+  dispatch slot has been corrupted by the scheduler. A declared overlap is signal, usually that two backlog
+  items are one item.
+- **Rejected — a semantic staleness judge**, and **rejected — letting the worker re-validate a suspect plan
+  itself**. The first pays a dispatch to save a dispatch and puts judgement back inside a gate; the second leans
+  on the worker's judgement, which is the one thing `execute` is designed not to have.
+
+*Evidence:* 1116 tests including negative controls (neutering the gate's freshness read reddens the widening
+test; a broken `changed_since` lands on not-fresh). Two-hop geometry pinned directly. Budget after the slice:
+always-loaded 6350/8000.
+**Builds on:** **D194** (the residual this closes), **D192** (the charter), **D91** (the predicate), **D190**
+(the ~41× re-read that makes a wasted dispatch expensive), **D80** (one owner per fact).
+→ `11` (Step 4), `07` (the residuals it clears).
+
+## D196 — `planner` becomes a leaf agent: the spawn that kept it inline was avoidable, and a wave cannot plan N items in the router's window **[BUILT 2026-09-13, `4ba20a1`. 1121 tests. Roster 17+5 → 16+6]**
+
+Fan-out was blocked by a rule rather than an oversight. `orchestrator-CLAUDE.md` says a node that must fan out
+stays inline **even when it is heavy**, and named `planner` — which was inline for exactly one reason: it
+spawned `decision-engineer` when a plan hit an undecided question.
+
+**The spawn is avoidable, and removing it is an improvement on its own terms.** An open build decision now
+returns as a **blocker** for the orchestrator to route, which is the boundary `execute` has always held.
+Routing belongs to the node whose job is routing, and a leaf that can resolve its own blockers is a leaf that
+improvises. So `planner` fans out to nobody and is a leaf after all.
+
+**It had to move for a second reason the earlier measurement could not see.** A wave is plan-N-then-execute-M,
+and N heavy planning passes running **inline** spend the router's window on precisely the work the fan-out
+exists to move off it. D180 had already found `planner` to be the router's most expensive inline node — *above*
+`verify` — declined to reclassify it because a leaf cannot spawn, and logged it in `07` as the
+fan-out-controller question. **This answers that question for `planner`'s half.** `verify` and `debug` genuinely
+fan out and stay skills.
+
+**Planners are deliberately blind to each other.** Each writes only its own item directory so they cannot
+collide, and where two claim the same source file the independence gate catches it downstream — which is *why*
+blindness is safe, and why the wave manifest is advisory. Coordinating them would make a wave plan differently
+depending on who finished first, and a wave that cannot be reproduced cannot be reviewed.
+
+**The roster's frontmatter invariants were prose claiming to be mechanical.** Adding a sixth agent was the wrong
+moment to keep believing that, so `test_agent_roster.py` pins them: no agent may hold `Task`/`Agent` (a leaf
+that spawns is not a leaf, and it quietly acquires authority it was built not to have), no writer may hold web
+tools, and a `## Calls` section on a leaf must say *none* rather than name a capability. Negative control run.
+
+- **Rejected — an agent twin beside the skill.** Two forms of one node is two owners of "what a plan is".
+- **Rejected — planning serially inside the orchestrator.** It re-introduces the exact bottleneck the slice
+  exists to remove and makes a wave not worth running.
+- **Budget:** adding `planner` to the dispatch list and removing it from the inline list is token-neutral; the
+  sentence explaining *why* was relocated to the on-demand sibling rather than paying always-loaded rent for a
+  reason. Brief back to **3137/3200** exactly, set **6350/8000**.
+
+*Blast radius swept:* roster table + spine + the D180 paragraph it falsified, README counts, `dispatch-return`'s
+producer list, the dispatch guard's message, `decision-engineer` (which no longer claims `planner` invokes it).
+**Builds on:** **D84** (the skill/agent context-isolation axis — this is one of the physical moves it deferred),
+**D180** (the inline-cost measurement), **D27** (hub-and-spoke), **D195** (the wave shape that forced it).
+→ `10` (roster), `07` (the fan-out-controller question, half answered).
+
+## D197 — the install set was never checked for closure, and a shipped gate imported a module that does not install **[FOUND + FIXED 2026-09-13, `5683de7`. New meta-gate; 1126 tests]**
+
+`check_wave_independence.py` learned to read plan freshness, `plan_freshness.py` was added beside it, and
+`MANIFEST.json` was not touched. In this repo every file sits together, so **1121 tests passed**; on any real
+install the module is simply absent from `.claude/scripts/` and the gate dies on the import. Reproduced on a
+simulated install before fixing, re-verified after.
+
+**The saving grace is named precisely because it is not a design.** The crash exits 1, and 1 is that gate's
+conservative answer, so a caller branching on status alone still stayed serial. **Luck standing in for a
+fail-direction.**
+
+**Why nothing caught it.** The leak gate and the release build police one direction — *nothing may ship that
+should not*. Nothing policed the other: **that what ships is COMPLETE**. A closure is not a boundary and needs
+its own check. `scripts/check_install_closure.py` walks every installed `.py`, reads its imports **from the
+AST**, and blocks when one resolves to a sibling that is not itself installed. From the AST rather than by
+regex so a module name in a string or comment is not mistaken for a dependency — and **deferred imports count**,
+since an import inside a function is exactly the one that survives every test and fails in the field. The real
+bug was one of those. Wired into the pre-commit dispatcher.
+
+**Builds on:** **D125** (the manifest as the single ship boundary — this is its missing second direction).
+→ `CLAUDE.md` (meta-tooling list).
+
+## D198 — `12c` CLOSED: the coherence exit test is written, re-runnable, and green **[DRIVEN 2026-09-13. 31 checks, 0 failed, stable over four runs. `scripts/exit_test_wave_coherence.py`]**
+
+D192 was explicit that `12c`'s exit test must demonstrate **coherence, not throughput** — that is the objection
+D91 actually raised, and D194 shipped PARTIAL for its absence. It has now been driven.
+
+**It is a harness, not a one-off run.** `scripts/exit_test_wave_coherence.py` builds a throwaway repo from
+scratch, performs the **real install derived from the manifest**, and drives two waves. Making it re-runnable
+was the point: an exit test that exists only as a paragraph describing something that once happened is not
+evidence anyone can re-check.
+
+*Wave 1 — fan out, contend, merge.* The gate proves a batch on real plans; **all four rejection clauses are
+exercised on real data** (dependency · file-overlap · adjacency · capacity); the wave is minted; three **real
+git worktrees** run **genuinely concurrent** writers behind a barrier; each runs the authoritative
+`checks.sh --check`; the branches merge. Coherence is then asserted directly: the merge is clean, **every
+worker's change survived intact**, every changelog is present, **the merged tree passes the project's own
+tests**, and **no worker wrote outside its declared scope** — the `verify` invariant, checked mechanically.
+
+*Wave 2 — the freshness lifecycle across a real wave boundary.* A plan wave 1 landed under is detected SUSPECT
+from a real merge; an untouched plan stays FRESH (staleness is not contagious); the gate **refuses to spend the
+stale one**; a refresh restores it and carries its count; at the cap it routes to a full re-plan on an untouched
+tree; a **deleted** declared file voids a plan rather than dating it; the next wave gets a different name.
+
+**The fixture is part of the result, and getting it wrong twice is the finding worth recording.**
+1. **Queue order is load-bearing.** Selection is a greedy first-fit walk and the **capacity check precedes
+   overlap and adjacency**, so once the ceiling fills, every later candidate is rejected for capacity and the
+   interesting clauses are never reached. The first run "passed" four clauses that had never executed. D and E
+   now sit high in the queue where the batch still has room and their own clause must do the work.
+2. **The first timing instrument measured the wrong window.** It timed the whole `checks.sh` run, but the slot
+   is **released before the stack-agnostic coverage gates** — those overlap by design, so an outer timer sees
+   overlap on a perfectly working lock. The stack command is now its own stopwatch, with a deliberate dwell so
+   three instantaneous runs cannot pass by finishing back to back. **Negative control:** the identical workload
+   with no slot around it *does* overlap, so the check measures the lock rather than the clock.
+
+**WHAT A GREEN RUN DOES NOT EARN, stated so nobody reads more into it.** The writers are **scripted, not
+dispatched models**. That is deliberate: coherence is a property of the *coordination* — predicate, worktree
+isolation, build slot, merge — and scripting the writers removes model variance, so a red run means the
+mechanism is wrong rather than that a worker had a bad day. It is a **sharper test of the mechanism and no test
+of the loop.** Driving real `planner`/`execute` agents through a live `/start` on a real project remains
+outstanding and this does not stand in for it — it is carried in `07` as the remaining validation, not as a
+`12c` blocker, because the objection `12c` had to answer was coherence and coherence is what was shown.
+
+**Builds on:** **D192** (coherence, not throughput), **D194** (the PARTIAL this closes), **D195** (freshness,
+wave 2's subject), **D196** (which the drive needed to be real).
+→ `11` (Step 4 CLOSED), `07` (the residuals cleared, and the one that remains).
