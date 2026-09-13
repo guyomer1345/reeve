@@ -396,7 +396,7 @@ the machine walks it. It de-risks the **process** question, the orthogonal axis 
   item-tail `commit`); `prioritize` GCs on the done-flip, so a greenfield issue with no ref is still closeable +
   collectable — `close-issue` just exits quietly (nothing outward to close).
 
-## dispatch-return  · produced by every DISPATCHED agent (`execute` · `document` · `create-demo` · `research` · `setup-guide`), consumed by the caller that dispatched it · *in-context only — never a file, never persisted; the heavy material it stands for is written to `scratch/` (§ per-item artifacts) and stays there*
+## dispatch-return  · produced by every DISPATCHED agent (`planner` · `execute` · `document` · `create-demo` · `research` · `setup-guide`), consumed by the caller that dispatched it · *in-context only — never a file, never persisted; the heavy material it stands for is written to `scratch/` (§ per-item artifacts) and stays there*
 **One contract for every dispatched worker, so the rule has one owner instead of five paraphrases that drift.**
 Which nodes dispatch is not this file's call — the orchestrator brief's *How to run a node* owns that list, and
 this covers exactly the agents it names. Each agent file points here; none restates it.

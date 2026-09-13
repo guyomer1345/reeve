@@ -1,6 +1,6 @@
 ---
 name: decision-engineer
-description: Resolve an open build decision — tech stack, library, architecture — by gathering the options and current market practice and weighing them against the project's spec, returning a confidence-scored verdict. The project's decision authority of last resort; invoked by planner (or anything) when it hits a decision it must not guess.
+description: Resolve an open build decision — tech stack, library, architecture — by gathering the options and current market practice and weighing them against the project's spec, returning a confidence-scored verdict. The project's decision authority of last resort; run by the orchestrator when a leaf worker returns a decision it must not guess.
 ---
 
 # Decision-engineer — resolve an open build decision
@@ -9,8 +9,10 @@ Core principle: an `adjudicate` specialization (views = {option A, option B, …
 engineering choices) — the deciding end of the gather-then-judge pattern.
 
 ## When
-An open decision blocks planning — a `TBD → decision-engineer` pointer in the `spec`, or a blocker raised
-by `planner` / `execute`.
+An open decision blocks planning — a `TBD → decision-engineer` pointer in the `spec`, or a **blocker returned**
+by `planner` / `execute`. Both are dispatched leaves and neither can spawn: they stop and hand the undecided
+question back, and the **orchestrator** runs this. That is the boundary that lets a wave plan several items at
+once without any of them quietly settling a question the project has not settled.
 
 ## Inputs
 The open decision + the constraints from the `spec` (audience, runtime, scale, integrations) + the code-map
@@ -43,7 +45,7 @@ step 4; absent it, the decision is treated as reversible tier-0).
 tombstone on supersede). The spec's `TBD` flips to `locked`.
 
 ## Route
-→ back to the caller (`planner` / `execute`) with the decision resolved.
+→ the orchestrator re-dispatches the blocked worker (`planner` / `execute`) against the resolved decision.
 
 ## Calls
 `research`.

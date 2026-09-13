@@ -87,7 +87,12 @@ independence predicate reads `files_touched` from a plan and a backlog row has n
 planning has to run ahead of dispatch for there to be anything to prove disjoint. Order:
 
 1. `prioritize` emits the **plan batch**: the head of the queue, up to `config.run.wave.plan_max`.
-2. **Plan the batch.** Hand each `planner:plan-one` the **wave manifest** — the other members' ids, titles and
+2. **Plan the batch — dispatched, in one turn.** `planner` is a leaf agent for exactly this reason: an open
+   build decision comes back to you as a **blocker** to route rather than being resolved by a spawn, and that
+   is what lets several planners run at once. They are deliberately blind to each other — each writes only its
+   own item directory, so they cannot collide, and where two claim the same source file the independence gate
+   catches it in step 3. Coordinating them would make a wave plan differently depending on who finished first,
+   which cannot be reproduced or reviewed. Hand each one the **wave manifest** — the other members' ids, titles and
    dependencies — which is a *tiebreaker only*: equivalent approaches prefer to stay out of each other's way,
    non-equivalent ones take the better design and declare the overlap. Never let a plan narrow `files_touched`
    to look separable; `verify` treats a wave diff outside the declaration as a hard finding.

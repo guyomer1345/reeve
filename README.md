@@ -138,7 +138,7 @@ capabilities you can call by name when you want them; the loop also reaches for 
 
 ## Skills and agents
 
-The package ships **17 skills** and **5 agents**, and the split between them is deliberate rather than
+The package ships **16 skills** and **6 agents**, and the split between them is deliberate rather than
 cosmetic.
 
 A **skill** runs *inline*, in the session you are already in. It sees your conversation and can talk back to

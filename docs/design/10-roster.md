@@ -60,9 +60,14 @@ own `.claude-plugin/marketplace.json` (D125). The repo is **both** the construct
   **0.3–2.6k** of its own window, an **inline** one **9–29k** (`research` excepted at +22.5k — its findings are
   read in the hub by design). So "an agent returns a thin pointer" is now a measurement, not a premise. The same
   numbers put the strain where D84 did not look: the router carries **43–53%** of a drive's fed-in tokens and
-  **`planner`** is its most expensive inline node — *above* `verify`. That does not reclassify anything here
-  (both are fan-out controllers, and a leaf cannot spawn), and D180 deliberately did not build a fix; it is
-  logged in `07` as the fan-out-controller question. **The token figures in the D178 amendment above — including
+  **`planner`** was its most expensive inline node — *above* `verify`. D180 declined to reclassify it (both are
+  fan-out controllers, and a leaf cannot spawn) and logged it in `07` as the fan-out-controller question.
+  **`planner` is now an AGENT, which answers that question for its half.** What changed is not the cost
+  argument — it is that the *spawn* turned out to be avoidable: an open build decision returns as a **blocker**
+  the orchestrator routes, exactly as `execute` already does, so `planner` fans out to nobody and is a leaf
+  after all. It had to move for a second reason D180 could not see: a wave has to plan N items before anything
+  can be proven independent, and N heavy planning passes inline is the router's window spent on the very work
+  the fan-out was meant to remove from it. `verify` and `debug` still genuinely fan out and stay skills. **The token figures in the D178 amendment above — including
   `document`'s 40.0k — predate D180's correction of the instrument (2.8–3.5x over-count); the classification they
   supported is unaffected, but the corrected numbers live in D180.**
 
@@ -83,7 +88,7 @@ overlap into one adjudicator.
 | create-demo | agent *(D178)* | throwaway sandbox for product approval (the gate is the router's — `loop.md`) | `agents/create-demo` |
 | create-forecast | skill | the chain of events the loop proposes, before it walks it | `skills/create-forecast` |
 | prioritize | skill | order the backlog, emit the next wave | `skills/prioritize` |
-| planner | skill | decompose → `roadmap` / plan one item → `plan` | `skills/planner` |
+| planner | agent | decompose → `roadmap` / plan one item → `plan` / refresh a stale plan | `agents/planner.md` |
 | decision-engineer | skill | resolve an open build decision (adjudicate) | `skills/decision-engineer` |
 | research | agent | gather info (Investigation worker) | `agents/research` |
 | execute | agent *(D178)* | run a plan, decide nothing → `changelog`; the loop's single writer | `agents/execute` |
@@ -109,7 +114,7 @@ resolve phase — brownfield entry, per-item demo, fail-**by-kind**, `debug`/`ve
 brownfield: /start → ingest → checkpoint(reconcile) → prioritize    ┐ intake (09)
 greenfield: /start → discuss → create-demo (if the gate fires)      ┘
   → prioritize (pick next)
-  → planner ──► decision-engineer ──► research   [per-item demo gate → create-demo → execute]
+  → planner (blocker ──► decision-engineer ──► research, then re-dispatch)  [demo gate → create-demo → execute]
   → execute (→ changelog; structural divergence → re-plan)
   → verify ──on-fail──► debug ──► refine (routes correction back to planner→execute)
       └ debug/verify no-resolution → escalate → checkpoint (human)
@@ -123,7 +128,7 @@ research                  (service, callable from anywhere)
 ```
 
 ## Call-graph (who calls whom)
-- `planner` → `decision-engineer` → `research`
+- `decision-engineer` → `research` *(the orchestrator runs `decision-engineer` on a blocker returned by `planner`/`execute`; neither leaf calls it)*
 - `create-demo` → `checkpoint`
 - `checkpoint`(setup) → `setup-guide`  *(leaf: does its own research)*
 - `verify` → `debug` → `refine` → `planner` → `execute`

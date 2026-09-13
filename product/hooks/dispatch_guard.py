@@ -138,7 +138,7 @@ def main():
         f"`{subagent or '(unnamed)'}` — a worker that arrives with none of this package's "
         f"rules and improvises whatever the prompt left out.\n"
         f"  Run it by name instead: dispatch the AGENT `{PLUGIN}:{node}` if it is one of the "
-        f"heavy leaves (execute · document · create-demo · research · setup-guide), otherwise "
+        f"heavy leaves (planner · execute · document · create-demo · research · setup-guide), otherwise "
         f"run the SKILL `{PLUGIN}:{node}` inline in this session.\n"
         f"  Pass inputs — paths, ids, the item — not a description of how to do the job."
     )
