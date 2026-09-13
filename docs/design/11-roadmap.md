@@ -1125,7 +1125,16 @@ the judgment half of the autonomy boundary — has nowhere to live and decays at
 precede `12d`/`12e` on safety grounds: **an autonomous driver with no decided autonomy boundary is the one
 combination in this phase that can do damage unattended.** Depends on Step 1's ceiling.
 
-**Step 3 — `12b`, return contracts + scratch retention. RE-JUSTIFIED by `D190`, and its two halves have
+**Step 3 — `12b`. ✅ CLOSED 2026-09-13 — `D191`.** Built to `D190`'s weighting. The slice's real job turned out
+to be **four near-copies of the return bound collapsed into one owner**, not one bound generalized to five — and
+two of those copies were instructing the *expensive* behaviour outright (*"heavy reading and writing happen in
+this window and stay here"*), which under the ~41× re-read is exactly backwards. Scratch inherits
+promote-then-prune, verified rather than assumed. Enforcement is a `PostToolUse` **detector at an absurdity
+ceiling**, and the contract is labelled ADVISORY because the expensive half — what a worker accumulates inside
+its own window — is not observable from outside it. It also found a **budget hole one level over D184's**:
+`product/shared/*.md` was invisible to every gate, and `schemas.md` had reached 94% of the Read wall unseen.
+
+**Step 3 (as originally written) — `12b`, return contracts + scratch retention. RE-JUSTIFIED by `D190`, and its two halves have
 swapped priority.** The headline number is not the router (32%) and not the stall re-write (36% of worker
 tokens): it is that **a token left in an `execute` worker's context is re-read ~41 times and therefore costs
 ~4.1× base input over the dispatch**, with cache reads being **66%** of all worker cost. So the **scratch

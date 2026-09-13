@@ -6421,3 +6421,64 @@ one that must not be compromised for convenience.
 **Builds on:** **D187** (the stall finding this corrects the weighting of), **D180** (the router-window framing
 this puts in proportion), **D185** call 5 (the slice itself).
 → `11` (Step 3 — re-justified and re-prioritized), `07` (the `warn_pct`-for-the-router question is untouched).
+
+## D191 — `12b` BUILT: four near-copies of the return bound became one owner, and two of them had been instructing the EXPENSIVE behaviour **[BUILT 2026-09-13, `78ba410` — D186 Step 3, built to D190's weighting. 1043 tests (1021→1043), 6 meta-gates green. Found a shipped defect in the package's own advice, and a budget hole one level over D184's]**
+
+D185 call 5 asked for `research`'s return bound generalized to every dispatched agent, with heavy work in
+item-scoped scratch. D190 then inverted which half matters. Both halves are built; what the building found is
+more interesting than either.
+
+**The premise was stale, and the correction is the finding.** `research` was *not* the only agent carrying a
+return bound — `execute`, `document` and `create-demo` each already had one. So the job was never *one bound
+generalized to five*; it was **four near-copies collapsed into one owner**, which is a different and more
+familiar defect. And two of those copies **said the wrong thing**: `execute.md` instructed *"Heavy reading and
+writing happen in **this** window and stay here"*, and `research.md` the same of raw reading. Under D190's ~41×
+re-read that is the expensive choice, stated as guidance, shipped. A second copy is not merely redundant — these
+two drifted into advising the behaviour the slice exists to stop, and nothing could see it because no owner
+existed to disagree with.
+
+**"Return less" is not actionable, so the rule got verbs.** What a worker can actually do is: **write heavy
+output rather than print it · redirect, then grep · read narrowly and point at disk rather than re-carrying.**
+Nothing a worker has read can be un-read, which is why the lever is at the moment of reading, not at the return.
+
+**Scratch inherits promote-then-prune, verified rather than assumed.** `prune_items` `rmtree`s the item dir so
+`scratch/` dies with it, and an item without `promoted.json` is **skipped** — a live dispatch's working material
+is never collected from under it. `retention.py` needed no change; both directions are now tested. That is the
+whole reason D185 scoped scratch under `.workflow/items/<id>/` rather than inventing a TTL that must then be
+kept correct forever.
+
+- **Enforcement is honest about which half it covers.** `PostToolUse(Agent|Task)` does see `tool_response` and
+  explicitly **cannot block** — the right semantic, since by then the work is done and the useful act is telling
+  the router not to carry it. So `dispatch_return.py` is a **detector at an absurdity ceiling, not a budget**:
+  the measured dispatched-node contribution to the router is **0.0k at the median**, so a near-median threshold
+  would strangle the normal case (the same shape as D187's `execute` tail). It stays **silent** rather than
+  guessing when it cannot positively read the payload shape — a detector that invents a size emits a warning the
+  reader cannot falsify. **The 4.1× half is not externally observable at all** — what a worker read inside its
+  own window is invisible from outside it — so the contract is labelled ADVISORY and the hook is described as a
+  detector, never as its enforcement.
+- **Rejected — `SubagentStop` as the hook.** It carries `last_assistant_message`, but `PostToolUse` sees the
+  payload **as the router receives it**, which is the quantity the contract actually bounds.
+- **Rejected — sizing the ceiling from the median.** See above; the median return is already tiny.
+
+*A BUDGET HOLE ONE LEVEL OVER D184's, found the same way D184 was — by exceeding it.* `product/shared/*.md` ships
+as a plugin **glob** with no `install[]` entry: capabilities read it **in place**, on demand, by relative path.
+So the shipped gate cannot see it (it walks an installed `.workflow/`, where these files never land) and the
+meta-gate could not either while it was scoped to `templates/`. The consequence was measured, not imagined:
+`schemas.md` sat at **94%** of the Read ceiling and this slice's first draft pushed it **404 tokens over** with
+all six meta-gates green. It is measured at source now, and for these the hard number is the **Read tool's own
+25 000-token wall** — past it a capability cannot load its own contract in one call — so this is a correctness
+gate rather than a style note. **Deliberately NOT added to the shipped classifier:** that would start failing
+`checks.sh` in every target project over package files the project cannot edit, the same deadlock
+`check_doc_budget.py` already reasons about for an org-mode `CLAUDE.md`. The gate immediately reported what it
+had been blind to — `schemas.md` at **24 881/25 000**, 119 tokens from the wall — which is handled as its own
+change rather than folded in here.
+
+*Two more found and NOT silently fixed:* `setup-guide`'s `tools:` line is `WebSearch, WebFetch, Read` — **it has
+no write tool, so it cannot use scratch at all**; its bullet says so and gives read-narrowly as its only lever,
+and whether that agent should get a write tool is a real open question rather than an oversight. And **`/update`
+never reconciles `.gitignore`**, so every already-started project would commit `scratch/`; `.gitignore` is
+target-owned, so `/update` names the missing line and asks rather than writing it — a target-owned knob is not
+the package's to set, the same rule D184 applied in the other direction.
+**Builds on:** **D190** (the weighting), **D185** call 5 (the call), **D184** (the budget-hole shape this
+repeats), **D80** (four near-copies → one owner).
+→ `11` (Step 3 closed, Step 4 next).
