@@ -147,7 +147,7 @@ loop's normal `state.json` takes over when the motion ends.
    command). Always copy *out* of the plugin into the project — never invoke a shipped script in place, because
    `${CLAUDE_PLUGIN_ROOT}` is replaced on every plugin update.
    - **Orchestrator brief** (the driver). **The brief is always the filled template wrapped in the managed-block
-     markers**; only its FILE differs by mode (root `CLAUDE.md`, except org — see below) — `shared/schemas.md`
+     markers**; only its FILE differs by mode (root `CLAUDE.md`, except org — see below) — `shared/schemas-runtime.md`
      owns the exact strings:
      ```
      <!-- reeve:brief:begin -->

@@ -839,6 +839,32 @@ sub-questions deferred to the build, in the order the slices need them.
   computes which criteria a change *discharges*, which is not the same as which criteria a change *redefines*. If
   the second half cannot be made mechanical, say so plainly and let the floor be the first half alone rather than
   shipping a floor that is really a judgment wearing a gate's clothes.
+- **`schemas-runtime.md` is now the tightest file in the package, at 14 503/15 000 advisory (97%). `[carried from
+  D193]`** The three-way split of `schemas.md` deliberately left it untouched, so it is the next one to trip — and
+  unlike `schemas.md` it has no obvious second belonging already latent in it. Decide the axis *before* it is
+  urgent; the D193 lesson is that a split chosen to clear a number needs re-splitting next slice, while one chosen
+  on belonging holds.
+- **Should `checkpoint` move to `schemas-bus.md`? `[live proposal, carried from D193]`** The console renders its
+  `request`/`verdict` and the already-moved `parked-ticket` embeds `checkpoint: {kind, request, …}`, so it would
+  reunite the console-facing enums and dissolve the one cross-half reference the split created. Held back
+  deliberately: it is a *semantic* re-home and D193 was a *size* fix. **Size is no longer an argument for it**,
+  which is the right way for it to be decided.
+- **The always-loaded set has 144 tokens of advisory headroom left, and two slices still want rent. `[12d/12e]`**
+  Step 1 created that headroom (8134 → 5394); Phase 12 has been spending it (`12a`'s directive channel, `12c`'s
+  dispatch rule) and it now stands at **6256/6400 advisory**. The standing rule forbids raising a cap to
+  accommodate what the package weighs, so the next slice needing per-turn space must **relocate**, not grow. The
+  brief is the obvious candidate at 3102/3200 — but it has already crept 2993 → 3066 → 3102 and its remaining
+  content is genuinely every-turn, so the next cut there is a real judgement call rather than the dedup the earlier
+  ones were. Plan `12d`/`12e` with this in hand rather than discovering it at integration.
+- **Should `setup-guide` get a write tool? `[carried from D191]`** Its `tools:` line is `WebSearch, WebFetch,
+  Read`, so it is the one dispatched agent that **cannot use scratch at all** — it has no way to park a fetched
+  page and must carry everything in context, which is precisely what the ~41× re-read makes expensive. Read-narrowly
+  is its only lever today. Not an oversight to fix silently: giving a research-shaped agent write access is a trust
+  decision.
+- **`/update` never reconciles `.gitignore`. `[carried from D191]`** So every already-started project would commit
+  `items/*/scratch/`. `.gitignore` is target-owned, so `/update` names the missing line and asks rather than
+  writing it — the same rule that says a target-owned knob is never the fix for a package-owned defect. Open:
+  whether the ownership boundary should bend for a path the package itself introduced.
 - **What makes the autonomy floor fire when the loop does NOT consult it? `[12a-residual, opened by building 12a]`**
   The floor is built, mechanical and decision-time: `loop.md` tells the orchestrator to run
   `check_autonomy_floor.py` before acting on a goal-affecting decision, exit 1 ⇒ `checkpoint`. **That is a

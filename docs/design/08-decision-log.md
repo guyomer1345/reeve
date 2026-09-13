@@ -6558,3 +6558,65 @@ that dissolves it); `orchestrator-CLAUDE.md`'s own "not yet enforced" admission 
 retained), **D185** (call 4 promoted; its backfill rejection reversed on its own terms), **D26** (pure queue —
 untouched: this is not preemption), **D190/D191** (the return bound that makes simultaneous returns affordable).
 → `11` (Step 4 — charter replaced), `07` (a coherence question, to be opened by the build).
+
+## D193 — `schemas.md` splits THREE ways on belonging, not on size — and the one consumer that read it directly proves why the marker is load-bearing **[BUILT 2026-09-13, `44a995e` — forced by the gate D191 added, which found the file 119 tokens from a HARD wall. Corrects a stale claim in D147's "both halves" wording. Found a real latent bug]**
+
+The budget hole D191 closed reported its first finding immediately: `shared/schemas.md` at **24 881 against a
+25 000 ceiling**. That ceiling is the **Read tool's own wall** — past it a capability cannot load its own contract
+in one call — and nearly every slice of work touches that file, so this was a live blocker rather than hygiene.
+
+**The axis is BELONGING, and that is the whole reason the result holds.** Splitting to clear a number produces a
+file that needs splitting again next slice. Three-way:
+`schemas.md` = what the **build loop produces and consumes** · `schemas-bus.md` = what the **console and bus
+carry** · `schemas-loopstate.md` = **where the loop keeps its own working set**. The third belonging was already
+latent: `state.json`, `handoff.md` and `per-item artifacts` are not artifacts the loop *produces*.
+
+| file | before | after | vs 15 000 advisory |
+|---|---|---|---|
+| `schemas.md` | 24 881 | **12 635** | 84% |
+| `schemas-bus.md` | — | 8 970 | 60% |
+| `schemas-loopstate.md` | — | 4 687 | 31% |
+| `schemas-runtime.md` | 14 503 | 14 503 | **97% — now the tightest file in the package** |
+
+The whole package reported **0 advisories for the first time**. No new mechanism was invented: the sanctioned
+`SPLIT_MARKER_SIBLING` (no sha — a live sibling), which `read_with_splits` follows recursively.
+
+**THE LATENT BUG, and it is the best available evidence for the law it breaks.** `test_answer_skill.py` read
+`schemas.md` **directly** rather than through `read_with_splits` — the only such consumer in the repo. All three of
+its assertions target `conversation-thread`, which moved, so it would have failed reading *"the spec dropped the
+carry-list rule"* — **the inverse of the truth.** A doc-level refactor would have been reported as a spec
+regression. Fixed, and the failure mode was then *measured* rather than asserted: with the pointers stubbed out, a
+survivor-only read fails **closed** with 13 errors (2 enum anchors unfindable, the entire `layout.pin` set
+unclaimed). That measurement is the sharpest proof the marker is load-bearing, and it is why *"every machine
+consumer reads through `read_with_splits`"* is a rule and not a preference.
+
+- **The repointing rule, which is the part that scales:** `schemas.md § <section>` references are **left alone**.
+  The law makes the section name the anchor and it resolves across every part, so repointing them would manufacture
+  a second fact to re-verify at every future split. Only three narrow classes were touched — *bare* refs naming a
+  moved artifact (they gain a `§` anchor so they resolve at all), refs to the file *as a document*, and
+  *positional* (`above`/`below`) phrasing the move invalidated. Every `§` anchor in `product/`, `scripts/` and
+  `docs/` was then mechanically verified against the union of all four parts.
+- **`checkpoint` was deliberately NOT moved,** though the case is good (the console renders its `request`/`verdict`
+  and the already-moved `parked-ticket` embeds it). That is a **semantic** re-home and this was a **size** fix;
+  bundling a judgement call inside a mechanical change hides it. **Size is no longer an argument for it**, which is
+  the right way for it to be decided — it stands as a live proposal.
+- **Rejected — the cheaper cut** (moving `checkpoint` alone, which also cleared the numbers). It left ~7% slack.
+  A split that clears a wall by a hair reproduces the problem in one slice, which is the D184 lesson applied to
+  documentation rather than to budgets.
+- **A stale claim corrected, not edited:** an earlier entry describes the `§` reference form as resolving *"across
+  both halves by design"*. It is **four parts** now. The form's semantics are unchanged; only the count in that
+  sentence is stale, and this entry is where that is recorded.
+- **Also fixed, pre-existing from the FIRST split:** two `config.outward (below)` refs that had pointed into
+  `schemas-runtime.md` since it was carved out, plus four bare `shared/schemas.md` references whose content now
+  lives in `schemas-runtime.md` (the brief markers, `config.doc_budget`) or `schemas-loopstate.md` (`handoff.md` +
+  `state.json`). A machine consumer resolved these correctly through the union; a **human** following them landed
+  in the wrong file.
+
+*Evidence:* content-loss proof — `HEAD:schemas.md` diffed against the union of the parts, 16 lines differing and
+all accounted for (11 the replaced pointer block, 5 intentional positional fixes); 39 `##` sections before and
+after; `split_pointers` returns all three targets with `unresolved == []`. 1043 tests unchanged, 6 meta-gates
+green, 71 shipped files (both siblings ship via the `shared` glob with no MANIFEST edit).
+**Builds on:** **D191** (the gate that found it), **D184** (don't clear a wall by a hair; the standing rule on
+caps), **D80** (one owner; the `§`-anchor semantics), the split-and-pointer convention in `shared/memory-model.md`.
+→ `07` (**`schemas-runtime.md` at 97% of advisory is the next to trip**; the `checkpoint` re-home is a live
+proposal).

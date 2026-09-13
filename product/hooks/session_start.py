@@ -69,7 +69,7 @@ MARKER = os.path.join(".git", "hooks", ".disciplined-builder-assert")
 # about THIS machine, so committing it would let one machine's install silence the warning
 # on every other. `.git/hooks/` needs no `.gitignore` entry (git cannot track it), survives
 # a `/rebind` (it is not in the relocatable runtime tree), and is bounded at one small file
-# rewritten in place — so nothing has to prune it. `shared/schemas.md` owns both.
+# rewritten in place — so nothing has to prune it. `shared/schemas-loopstate.md` owns both.
 STALE_MARKER = os.path.join(".git", "hooks", ".disciplined-builder-stale")
 
 PLUGIN_NAME = "reeve"

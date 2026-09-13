@@ -121,7 +121,7 @@ its **role's** budget, **in tokens** (model-window-agnostic, like `context.warn_
   detail moved out — but the detail file *is* budgeted, as its own row and always as **on-demand**, so the remedy
   cannot produce a file this gate stopped watching.
 - **It does not re-check truth.** `align` owns "is this doc *wrong*"; this owns "is this doc *too big*". Two
-  owners, no overlap. `config.doc_budget` (`shared/schemas.md`) owns the numbers, decoupled from `retention` and
+  owners, no overlap. `config.doc_budget` (`shared/schemas-runtime.md`) owns the numbers, decoupled from `retention` and
   `align` because doc size is neither memory pressure nor drift risk.
 - The **VOLATILE tier is out of scope on purpose**: `handoff.md` is already capped mechanically at injection
   time by the `SessionStart` hook, and one bound with two owners is a bound that drifts.

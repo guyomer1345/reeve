@@ -60,7 +60,7 @@ UNKNOWN_VERSION = "unknown"
 # The orchestrator brief is a MANAGED BLOCK inside the target's root CLAUDE.md: /update replaces
 # only what is between these markers, so project notes around it are never touched. Both /start
 # modes write them (greenfield wraps its whole brief in them too) so /update has one shape to
-# find. `shared/schemas.md` owns these strings -- they are a compatibility contract and must
+# find. `shared/schemas-runtime.md` owns these strings -- they are a compatibility contract and must
 # stay byte-stable across versions.
 BRIEF_BEGIN = "<!-- reeve:brief:begin -->"
 BRIEF_END = "<!-- reeve:brief:end -->"
