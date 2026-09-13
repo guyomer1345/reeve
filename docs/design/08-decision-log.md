@@ -5978,3 +5978,103 @@ D182, section weights 1340/1192/567/535/432/83, `orchestrator-CLAUDE.md` 3926, d
 invents), **D182** (whose paragraph tipped the file).
 → Files (fix pass): `product/templates/loop.md`, `product/templates/orchestrator-CLAUDE.md`,
 `product/scripts/check_doc_budget.py`, `product/shared/memory-model.md`, the meta-repo pre-commit.
+
+## D185 — The operator's standing instructions have no owner, so they are re-typed every session — a directive channel, and the goal-drive loop that four of them turn out to describe **[DECIDED 2026-09-13, NOT BUILT — opens `### Phase 12`. Sourced from LIVED USE across many sessions of driving real projects, not from a premise re-check and not from a measurement]**
+
+Phase 11 closed with two named successors and no phase declared. This is the phase, and its origin is a third
+kind: neither a stale-claim sweep (D175) nor an instrument reading (D178), but **the maintainer noticing what he
+keeps doing by hand.** Five behaviours were being re-established conversationally, session after session — *stop
+and `/dispatch` at 30–35%* · *prefer parallel work where it is safe* · *use the idle windows* · *keep driving to
+the goal across sessions* · *notify me when X happens*. Every one of them decays at the next `/clear`.
+
+**The root cause is one thing, and it is a missing owner.** The package has `docs/decisions/` (build decisions,
+`decision-engineer`-produced, append-only) and `rules/*.md` (engineering rules about product code, each carrying an
+`— enforced by:` tag). A **standing operator directive about how the LOOP behaves** belongs to neither, so it lives
+in the conversation — and `handoff.md` is prose-for-a-stranger, rewritten whole at every `/dispatch`, so it is not
+a carrier either. The re-typing is not a discipline failure; it is the absence of a durable channel, and the four
+other asks in this phase die the same death for the same reason. That is why the channel is built **first**.
+
+**Calls.**
+
+1. **A directive channel with its own owner** — a committed, typed `.workflow/directives.md`, always-loaded and
+   therefore **hard-budgeted**, each entry carrying a retire path. Entry is **mechanical-first**: a directive that
+   *can* become a hook, a gate or a daemon alert is wired as one and never stored as prose. Only genuinely
+   behavioural directives stay as text. Prose is the fallback, not the default — an always-loaded file that accepts
+   anything is unbounded growth in the most expensive place in the system.
+2. **The autonomy boundary is goal-preserving, with a mechanical floor.** The loop takes every decision that does
+   not change the goal, and routes anything that may change it. This is a *sharper* criterion than D69's
+   reversibility × blast-radius, which grades **how carefully to decide** rather than **whose decision it is**, and
+   it already has a home: the spec's commitment model (`locked`/`provisional`/`unspecified`, spec as sole owner,
+   D106). *Goal-affecting* ≈ *would change a locked element, or change what an acceptance criterion demands.*
+   **The judgment does not stand alone.** A loop grading its own decisions will drift toward "not fundamental",
+   because that is the direction that lets it keep working — the same erosion the re-typing was fighting. So a
+   change that touches a locked spec element, or alters what an acceptance criterion demands, **auto-routes
+   regardless of the model's read**; judgment may escalate above that floor and never below it (D129's shape).
+3. **The goal-drive loop is hosted on `loop.sh`, not on the daemon.** `loop.sh` today ends in `exec claude "$@"` —
+   one session, then the process is gone. It becomes a driver: hold the lock, run a session, and when that session
+   writes its handoff and exits, start the next against the same goal until the goal is met or a gate is hit.
+   **A fresh process is a better `/clear` than `/clear` is** (zero context, no compaction residue), and the package
+   already proves the pattern — the relaunch-runner's `RUNNER_RESUME_PROMPT` is exactly a "continue" handed to a
+   cold session. Interruption is **at the boundary**, through machinery that is already built: console reads are
+   instant, `kind: question` is answered without advancing anything, `kind: control` carries `pause|resume|
+   reprioritize`. The between-sessions gap the wrapper owns is a *guaranteed* interrupt point, and it gains a
+   **drop-in window** — a brief keypress offer that releases the lock and hands over an interactive session, which
+   is the one thing going non-interactive otherwise costs.
+4. **Parallelism is judged at the boundary, never per turn.** The predicate is already decided (D91:
+   dependency-ready ∧ file-disjoint ∧ ¬1-hop-neighbour) and `prioritize` already emits waves; what has never
+   existed is the coordinator — `prioritize/SKILL.md` says so in its own words ("fanning a wave out in parallel is
+   the coordinator's job, still to come") and `orchestrator-CLAUDE.md` says build-once-per-wave is "not yet
+   enforced". Concurrency in this harness exists **only** for work dispatched in the same turn, so the speed lever
+   is batching the dispatch, not backfilling idle time.
+5. **Return contracts and scratch with a deletion rule.** `research`'s charter already bounds `findings` to a
+   condensed summary plus pointers, never whole file bodies — and it is **the only dispatched capability with such
+   a bound**. Generalize it to every agent as a `schemas.md` contract, with heavy work written to item-scoped
+   scratch. Scratch is scoped to `.workflow/items/<id>/scratch/` precisely so it inherits the promote-then-prune
+   rule `retention.py` already runs, rather than inventing a TTL that must then be kept correct forever.
+6. **The per-agent token cap is a MEASUREMENT, not a design call, and it is sequenced as one.** The observed
+   300–400k may be the same artifact D180 already corrected: the instrument summed counters over transcript records
+   rather than API responses and read **2.8–3.5× high**, putting real `execute` at 119.1k fed-in over a context
+   peaking at 60.5k. `scripts/measure-dispatch.py` exists to settle this; it runs before anything is built on it.
+
+- **Rejected — `rules/` as the directive home.** It is the cheap answer and the fit is wrong in both directions:
+  `rules/` is about **product code** (`code-style`/`ops`/`security`/`testing`) and its whole design is *enforced by
+  a tool*. A directive about loop behaviour has neither property, and mixing them would make the `— enforced by:`
+  tag meaningless for half the file — which is the tag that gives `rules/` its teeth.
+- **Rejected — `docs/decisions/` as the directive home.** It buys supersede-not-edit semantics for free, which is
+  genuinely attractive. But decision-records are **on-demand** reads; a directive that the loop does not see every
+  turn is a directive that is not in force, so it would need a separate always-loaded index — i.e. the new file,
+  plus a second copy to drift against it (D80).
+- **Rejected — judging parallelism every turn.** The router is already the constrained window (43–53% of a drive's
+  fed-in tokens, 98–179k per item, D180). Spending the scarcest resource per turn to answer a question whose answer
+  only changes at a boundary is the wrong trade, and it would put non-preemption at risk for nothing.
+- **Rejected — speculative backfill during a blocked dispatch** ("use the hang for small researches"). Two reasons,
+  one mechanical and one about discipline. Mechanically there is no window: while a `Task` is in flight the
+  orchestrator is blocked on its result and cannot interleave — concurrency requires same-turn dispatch, so this
+  ask collapses into call 4. And as policy, unbounded spend on work that may be discarded also **pollutes the
+  knowledge base with findings nobody asked for**. The genuinely idle windows are different — waiting on a human
+  checkpoint and waiting on a commit gate — and D91's continue-while-parked interleaving already addresses the
+  first and remains unbuilt.
+- **Rejected — an agent that self-dispatches at a token cap.** No mechanism exists: a subagent cannot `/clear`
+  itself and cannot hand to a successor; it returns to its caller or it does not return. The implementable inverse
+  is an agent that **stops at its budget and returns a partial plus a continuation ticket** for the caller to
+  re-dispatch. Also note D180 already priced the naive split and rejected it — every extra dispatch costs a fixed
+  7–10k of boot, discovery is flat with item size, production scales sub-linearly.
+- **Rejected — changing `context.warn_pct` before measuring.** The shipped default is already **30** and it is a
+  *percentage* deliberately (model-window-agnostic, so a 200k and a 1M window warn at the same fraction full). The
+  maintainer's instinct that the router should hand off earlier than a single-purpose leaf is likely right, but it
+  is a number, and this repo sets numbers to values it has measured (D167, D184).
+- **Org mode is explicitly parked** at the maintainer's word — no slice here touches it.
+
+*Evidence:* the shipped defaults are real and do fire (`align` absent ⇒ `every_n_commits` 20 / `max_agents` 6,
+`schemas-runtime.md`; `doc_budget` `check_doc_budget.py` `DEFAULTS`; `context.warn_pct` absent ⇒ 30) — so the
+question "do these happen if I set nothing" is answered **yes**, and the real gap is elsewhere. Counter-evidence in
+the same breath: `doc_budget`'s advisory tier is 1200 against files that have never measured under ~3.9k, i.e.
+permanently tripped and silent by habit (D184, unbuilt). The runner's trigger is `RUNNER_KINDS = ("verdict",
+"intake", "question")` — inbox work only, never goal-continuation — and it already carries the stall precedent this
+phase generalizes (`RUNNER_MAX_ATTEMPTS = 5` consecutive no-progress relaunches → hard-stop + alert).
+**Builds on:** **D91** (the collision predicate this finally builds a coordinator for), **D106** (spec as sole
+commitment owner — the autonomy floor's anchor), **D113/D123** (the relaunch-runner and `loop.sh`, whose pattern
+call 3 extends rather than invents), **D129** (fail closed; never let the volatile read decide), **D136** (the
+governor whose banner this makes enforced rather than advisory), **D180** (the corrected instrument, and the router
+as the constrained window), **D184** (the always-loaded budget the directive file must live inside).
+→ `11` (`### Phase 12` opened), `07` (the open sub-questions).

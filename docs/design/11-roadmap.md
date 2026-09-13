@@ -1079,6 +1079,70 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
+### Phase 12 — Standing intent: make the operator's recurring instructions part of the machine **[OPEN 2026-09-13 — designed D185, NOT BUILT. Opened from LIVED USE, not from a premise re-check (Phase 10) or an instrument reading (Phase 11): the maintainer noticed what he keeps re-typing. Org mode is explicitly parked and no slice here touches it]**
+Five behaviours were being re-established conversationally, session after session, and every one of them decays at
+the next `/clear`. They have **one root cause** — there is no owner in the package for a standing operator
+directive about how the *loop* behaves (`docs/decisions/` is build decisions, `rules/` is product code enforced by
+a tool, `handoff.md` is prose rewritten whole each dispatch). So the channel is built first and everything below
+registers itself in it; otherwise this phase ships five features that are forgotten exactly as their predecessors
+were. Full call, rejected alternatives and evidence: **D185**.
+
+*The two questions that opened this phase are answered and are not work items.* The shipped defaults **do** fire
+with no config (`align` ⇒ `every_n_commits` 20 / `max_agents` 6 · `doc_budget` ⇒ `check_doc_budget.py` `DEFAULTS`,
+hard tier on every commit · `context.warn_pct` ⇒ **30**, a percentage so a 200k and a 1M window warn at the same
+fraction full). And the decision log **is** mirrored into a target as `docs/decisions/` — but only for
+`decision-engineer`-produced build decisions, which is the wrong half for a standing directive. That mismatch is
+`12a`.
+
+- **12a — the directive channel.** A committed, typed `.workflow/directives.md` with its own owner: always-loaded
+  and therefore **hard-budgeted**, each entry carrying a retire path, and **mechanical-first on entry** — a
+  directive that can become a hook, a gate or a daemon alert is wired as one and never stored as prose (*"notify me
+  every time X"* is a `config.notify` arm or a daemon term, not a sentence). Prose is the fallback, not the
+  default. Carries the **autonomy boundary** as its first resident: the loop takes every decision that does not
+  change the goal and routes anything that may, anchored on the spec's commitment model (D106) with a **mechanical
+  floor** — a change touching a `locked` element or altering what an acceptance criterion demands auto-routes
+  regardless of the model's read. **First, because 12b–12e all depend on it.** **[core]**
+- **12b — return contracts + scratch retention.** Generalize `research`'s bound (condensed summary + pointers,
+  never whole file bodies) — today **the only** dispatched capability that has one — to every agent as a
+  `schemas.md` contract, with heavy work written to item-scoped `.workflow/items/<id>/scratch/` so it inherits the
+  promote-then-prune rule `retention.py` already runs rather than inventing a TTL to keep correct forever. Cheapest
+  slice, pure contract work, and it directly relieves the router window that 12c–12e all spend. **[core]**
+- **12c — the wave coordinator + continue-while-parked.** Build D91's decided predicate (dependency-ready ∧
+  file-disjoint ∧ ¬1-hop-neighbour) into a real fan-out, with `build-once-per-wave` enforced rather than asserted.
+  `prioritize` already emits waves and has said "fanning a wave out in parallel is the coordinator's job, still to
+  come" since it was written; `orchestrator-CLAUDE.md` still says build-once is "not yet enforced". Judged **at the
+  boundary, never per turn** (D185 call 4). Includes D91's continue-while-parked interleaving, which is the only
+  *genuinely* idle window — concurrency here exists only for same-turn dispatch, so "use the hangs" is this slice
+  and not a separate one. **[core]**
+- **12d — goal-drive with convergence measurement.** A goal record above the item level, and a progress measure
+  that is **acceptance-derived, not effort-derived** — a loop that counts sessions spent will churn happily, while
+  `check_criterion_discharge.py` already computes which acceptance criteria a change discharges. Stall ⇒ stop,
+  read back what was attempted and why it did not move, re-research, re-plan — never retry. Generalizes the
+  runner's existing precedent (`RUNNER_MAX_ATTEMPTS = 5` consecutive no-progress relaunches → hard-stop + alert)
+  from the relaunch to the goal. **[core]**
+- **12e — autonomous session hand-off, hosted on `loop.sh`.** `loop.sh` ends in `exec claude "$@"` — one session,
+  then gone. It becomes a driver: hold the lock, run a session, and when that session writes its handoff and exits,
+  start the next against the same goal until the goal is met or a gate is hit. **A fresh process is a better
+  `/clear` than `/clear` is** — and `/clear` cannot be self-invoked at all, so this is not a second-best but the
+  only mechanism. The pattern is already proven: `RUNNER_RESUME_PROMPT` is exactly a "continue" handed to a cold
+  session. The session-side half is what does not exist — **stopping itself at a clean boundary and releasing the
+  lock**. Interruption rides built machinery (console reads instant · `kind: question` answers without advancing ·
+  `kind: control` `pause|resume|reprioritize` at the boundary), plus a **drop-in window** between sessions that
+  releases the lock and hands over an interactive session. Goal met ⇒ capture, notify, stop for re-steering.
+  **LAST — it multiplies any defect in 12a–12d across unattended sessions.** **[core]**
+- **Measurement, not a slice — the per-agent token budget.** Runs beside 12b and feeds it. The observed 300–400k
+  per `execute` may be the artifact D180 already corrected (the instrument read **2.8–3.5× high**; real `execute`
+  was 119.1k fed-in over a 60.5k peak). `scripts/measure-dispatch.py` settles it before anything is built on it.
+  Two sub-questions carried in `07`: whether any live signal can observe a running subagent's token count (if not,
+  an absurdity-ceiling is self-reported plus a post-hoc gate), and whether the router should hand off earlier than
+  a single-purpose leaf — i.e. whether `warn_pct` 30 is right for the one node that touches every surface.
+
+*Sequencing:* **12a → 12b → 12c → 12d → 12e**, and it is not merely tidy. 12a is the carrier every later slice
+registers in. 12b is the cheapest and buys router headroom the rest spend. 12c is the largest speed win and its
+predicate is already decided. 12d needs a measure, and 12e needs 12d to know when to stop — an autonomous driver
+without a convergence test is a churn engine with a lock.
+
+
 ## The one-liner
 The engine **drives**, is **self-maintaining** (retention + freshness + docs-root), **disciplined** (skill deltas +
 `rules/` + the drift gate), **knowledge-complete** (code-map generation → brownfield ingest), **visible + reachable**
@@ -1141,7 +1205,7 @@ same day; self-hosting was split off as a later experiment on a clone — and is
 (D167), and **`9c` (org mode) is BUILT + DRIVEN** (D174, 2026-08-05) — so **Phase 9 is COMPLETE**. It was the last
 phase *as planned*; **`### Phase 10` (D175, 2026-08-05) then sequenced** the part of the by-space
 `[stageable]`/`[later]` menu that survived a premise re-check, and **is itself COMPLETE (D176)**. **`### Phase 11`
-(D178, 2026-08-07) is the live pointer — dispatch fidelity.** It was not picked from the deferred
+(D178, 2026-08-07) — dispatch fidelity — is now CLOSED.** It was not picked from the deferred
 menu: measuring a real drive to size the execution agent found that the shipped skills never reach the workers
 (51 subagent transcripts, **0** `Skill` invocations), which makes every judgment-layer contract in the package
 advisory in practice. It supersedes the `[stageable]`/`[later]` framing of the **D84 reclassification** wherever
@@ -1154,3 +1218,4 @@ the instrument itself was 2.8–3.5x high, the writer's discovery is flat with i
 sub-linearly, and the constrained window turns out to be the **router's** (43–53% of a drive's fed-in tokens,
 98–179k per item) — where an inline node costs 9–29k against a dispatched node's 0.3–2.6k, and `planner` outweighs
 `verify`. That question is logged in `07`, not scheduled here.
+**`### Phase 12` (D185, 2026-09-13) is the live pointer — standing intent.** It is the third kind of phase-opening this repo has had: not a stale-claim sweep (Phase 10) and not an instrument reading (Phase 11), but **lived use** — the maintainer noticing which instructions he re-types every session. Five of them, one root cause: the package has no owner for a standing operator directive about how the *loop* behaves, so each one decays at the next `/clear`. The channel is built first and everything else registers in it; then return contracts, the wave coordinator D91's predicate has been waiting on since it was decided, an acceptance-derived convergence measure, and last — because it multiplies every defect above it — a `loop.sh` that drives session after session toward a goal on its own.

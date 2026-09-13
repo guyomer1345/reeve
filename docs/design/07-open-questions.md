@@ -821,3 +821,42 @@ itself — **a legitimate motion with no sanctioned path through a gate that is 
   state was legal. A block reason that lists its sanctioned escapes reads as *"pick one of these"*, and a motion that
   belongs to none of them gets a forced fit. Same family as the two 2026-08-06 findings above: the mechanism worked
   and the human learned the wrong thing.
+
+## Newly open from the standing-intent phase opening (2026-09-13 — D185, `11`'s `### Phase 12`)
+Opened by lived use rather than by audit or measurement. The phase's *calls* are settled in D185; these are the
+sub-questions deferred to the build, in the order the slices need them.
+
+- **What is a directive, structurally, and what retires one? `[12a]`** D185 settles the owner and the
+  mechanical-first triage; it does not settle the entry shape. Needs: a type (so the triage is decidable rather
+  than vibes), a retire path that is not "a human remembers", and a budget interaction — this file is
+  **always-loaded**, so it lands inside D184's unbuilt total ceiling and cannot be sized independently of it.
+  Sharpest sub-question: **what stops a directive being stated twice, once as prose here and once as the hook it
+  was supposed to become?** That is a D80 second-copy hazard on the file whose whole purpose is to be obeyed.
+- **Can the goal-preserving autonomy floor be computed, or only approximated? `[12a]`** The floor is "touches a
+  `locked` spec element, or alters what an acceptance criterion demands". The first half is decidable from the
+  spec's inline commitment markers. The second is **not obviously decidable** — `check_criterion_discharge.py`
+  computes which criteria a change *discharges*, which is not the same as which criteria a change *redefines*. If
+  the second half cannot be made mechanical, say so plainly and let the floor be the first half alone rather than
+  shipping a floor that is really a judgment wearing a gate's clothes.
+- **Can any live signal observe a running subagent's token count? `[measurement]`** If a hook can see it, the
+  absurdity-ceiling is enforceable. If not — the likelier answer — it is a **self-reported** budget in the agent
+  brief plus a post-hoc `measure-dispatch.py` gate, which is a materially weaker mechanism and must be described as
+  one rather than implied to be a cap.
+- **Is `warn_pct` 30 right for the ROUTER specifically? `[measurement]`** The default is a single number for every
+  session, but 11f measured the router as the constrained window (43–53% of fed-in tokens, 98–179k per item) while
+  a leaf is single-purpose. The maintainer's instinct is that the router should hand off earlier. Plausible, and it
+  is a **number** — this repo sets numbers to measured values (D167, D184), so it waits on the measurement rather
+  than on the instinct.
+- **How does a session stop ITSELF at a clean boundary? `[12e]`** The whole hand-off rests on this and it is the
+  one piece with no precedent: the runner's sessions end by running out of ready work, not by choosing to stop with
+  work remaining. Needs a boundary definition that cannot strand a half-done item, and it must interact correctly
+  with the `orchestrator.lock` release — the lock is held by the *launcher's* fd, so what the session controls is
+  its own exit, not the lock.
+- **What does "the goal is met" read off? `[12d/12e]`** The driver stops on it, so it cannot be a judgment call
+  made by the thing that wants to keep running. Candidate: every acceptance criterion of the goal's phases
+  discharged, which is mechanical — but it inherits whatever gaps `check_criterion_discharge.py` has, and those
+  have never been probed for this use.
+- **Does a `pause` arriving mid-session reach the `loop.sh` gap? `[12e]`** `control` is honored at the next
+  *loop* boundary, and the wrapper's gap is a *session* boundary. Two different boundaries, and a human who pauses
+  expects the stronger one. Decide whether the wrapper drains `control` itself before spawning session N+1 — which
+  makes the interrupt guaranteed — or whether it trusts the session to have honored it.
