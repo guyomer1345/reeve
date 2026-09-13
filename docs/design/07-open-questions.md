@@ -853,7 +853,21 @@ sub-questions deferred to the build, in the order the slices need them.
   absurdity-ceiling is enforceable. If not — the likelier answer — it is a **self-reported** budget in the agent
   brief plus a post-hoc `measure-dispatch.py` gate, which is a materially weaker mechanism and must be described as
   one rather than implied to be a cap.
-- **Is `warn_pct` 30 right for the ROUTER specifically? `[measurement]`** The default is a single number for every
+- **Is `warn_pct` 30 right for the ROUTER specifically? `[measurement]` — SHARPENED 2026-09-13 by the D187/D190
+  pass; the question as posed may be the wrong one.** Measured over 104 real router sessions of `agentic cyber`:
+  peak context **median 257k, max 488k**, with **71%** of sessions above 200k and 30% above 300k — and **zero
+  compaction boundaries** in a 40-session sample, so the window is comfortably above the maximum observed and
+  **the router never actually ran out.** Two consequences. (a) *The router is the constrained window by COST, not
+  by CAPACITY.* D180's 43–53% (D187's 32%) is a share of tokens paid, not of space used, and the two have been
+  read as one thing. (b) At a 1M window, `warn_pct` 30 ⇒ 300k, so it would fire in only the top ~30% of sessions
+  — i.e. the current default is already *later* than the maintainer's instinct, not earlier. So the real question
+  is not "30 or lower" but **whether a percentage of the window targets the right quantity for the router at all**:
+  what a router actually needs is enough remaining context to finish the current item and write a complete
+  handoff, which is a *work* budget (`(window − current) ÷ per-node cost`; the measured median inline node adds
+  **12.0k**), not a fraction. A percentage makes a 200k and a 1M window warn at the same *fraction* full while
+  leaving them 5 vs 25 nodes of runway. Still open, and now open on the right axis. Note D190's re-read finding
+  applies to the router too — its own context is re-read every turn — so handing off earlier is a cost lever even
+  where capacity is not at risk. The default is a single number for every
   session, but 11f measured the router as the constrained window (43–53% of fed-in tokens, 98–179k per item) while
   a leaf is single-purpose. The maintainer's instinct is that the router should hand off earlier. Plausible, and it
   is a **number** — this repo sets numbers to measured values (D167, D184), so it waits on the measurement rather
