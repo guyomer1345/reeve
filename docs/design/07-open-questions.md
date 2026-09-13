@@ -936,6 +936,34 @@ sub-questions deferred to the build, in the order the slices need them.
   a leaf is single-purpose. The maintainer's instinct is that the router should hand off earlier. Plausible, and it
   is a **number** — this repo sets numbers to measured values (D167, D184), so it waits on the measurement rather
   than on the instinct.
+- **The dispatch trigger must be a two-sided BAND fired in the background, not a one-sided banner. `[raised by the
+  maintainer 2026-09-13; downstream of the `warn_pct` measurement above, and a `12e` prerequisite candidate]`**
+  Stated as a requirement, not yet a design: once the router's ideal threshold is measured (say it lands at 30%),
+  something should fire **in the background** as the session approaches it and **guide when to run `/dispatch`** —
+  so the window is neither **underused** (handing off with runway left) nor **overused** (handing off with no room
+  to finish the item and write a complete handoff). Three things make this more than a re-tune of the existing
+  number:
+  - **It is one-sided today.** `statusline.py` fires on `pct >= config.context.warn_pct` and prints *"run /dispatch
+    then /clear"*; there is no floor, so nothing ever says *"you still have runway — do not hand off yet."*
+    Under-use is invisible and unpriced, and D190 says it is not free: a premature hand-off pays a cold rebuild
+    (re-read the handoff, re-orient) to buy back a window that still had work in it.
+  - **The sensor and the actuator are on opposite sides of a wall — this is the real obstacle.** `statusline.py` is
+    the **only** surface that receives token metrics (its own docstring, and `schemas-config.md`'s `context` entry,
+    both say hooks and the model receive none). So the statusline can **see** and not act; the loop can **act** and
+    not see. Nothing crosses that wall today: the statusline prints, and a **human** is the actuator who types
+    `/dispatch`. Any "background gate" therefore needs the statusline to **publish its reading** (a small durable
+    write a hook or the loop can read) before a gate can exist at all — which is a design call about giving a
+    display surface a write path, not a wiring line.
+  - **A band wants the WORK unit the question above already derived**, not two percentages. `(window − current) ÷
+    per-node cost` (measured median inline node: **12.0k**) makes both edges fall out of one measured quantity: the
+    ceiling is *enough left to finish the current item and write a complete handoff*, the floor is *still ≥ N nodes
+    of runway*. Two guessed percentages would need two separate re-measurements and would drift apart.
+  **Why it is a `12e` prerequisite candidate rather than a free-floating nice-to-have:** the open question below
+  (*How does a session stop ITSELF at a clean boundary?*) is the **same boundary seen from the other side** — the
+  driver's stopping problem has a context half and a work half. Build this as a human-facing banner only and `12e`
+  has to re-solve the context half for an unattended session, where no human is watching a statusline at all.
+  **Not scheduled** — it waits on the measurement above, and the maintainer flagged it explicitly as *not* the next
+  roadmap item.
 - **How does a session stop ITSELF at a clean boundary? `[12e]`** The whole hand-off rests on this and it is the
   one piece with no precedent: the runner's sessions end by running out of ready work, not by choosing to stop with
   work remaining. Needs a boundary definition that cannot strand a half-done item, and it must interact correctly
