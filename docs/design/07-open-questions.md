@@ -1127,7 +1127,18 @@ slice inherits whether or not anyone looks at it.
   auto-stop, and it costs no always-loaded budget) but is not a gate. A session that stops mid-item loses
   **position**, not work — the item dir is committed while open — so the failure is a re-orientation cost rather
   than lost building. Worth knowing before anyone reads the driver as bounded.
-- **Nothing has driven the driver with a REAL model. `[carried, now the dominant validation gap]`** `D200`'s and
+- **~~Nothing has driven the driver with a REAL model.~~ FIRST LIVE DRIVE RUN 2026-09-13 — `D210`.** A real
+  `/start` on a throwaway brownfield repo, live model. It found **two package defects**, one of them
+  commit-blocking and four hours old (`checks.sh` called `spec_approval.py` in an argument order argparse
+  rejects, so `D209`'s gate failed closed on every commit), and confirmed a set of documented behaviours against
+  reality for the first time. **The transferable lesson: a shipped CALLER is not covered by a test that calls the
+  same code differently** — both defects were a caller meeting a component in a context no test placed it in, and
+  scripted harnesses cannot reach that by construction.
+  **STILL OPEN, narrowed:** the drive covered **bootstrap** (`/start` → `ingest` → the reconcile checkpoint). It
+  did **not** reach the item loop — `planner` → `execute` → `verify` → `document` → `commit` with real agents —
+  nor `loop.sh --drive` end to end. Those remain unproven against a live model, and the `12d`/`12e` mechanisms are
+  what sits behind them. *(Original entry below.)*
+- **~~[first pass run — D210]~~ Nothing has driven the driver with a REAL model. `[carried, now the dominant validation gap]`** `D200`'s and
   `D202`'s harnesses both script their writers, deliberately and for the same reason (removing model variance
   makes a red run mean the *mechanism* is wrong). Two slices now rest on that choice, and the outstanding
   validation is the same one `D198` named: real `planner`/`execute` agents through a live `/start`. It has been

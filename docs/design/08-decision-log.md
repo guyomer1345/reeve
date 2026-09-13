@@ -7340,3 +7340,56 @@ own stated blind spot, which remains the alignment scan's.
 the commit it describes), **forecast freeze** (approval-by-digest).
 → `07` (the `12a` residual, closed), `schemas.md § the autonomy floor`, `schemas-runtime.md`,
 `skills/checkpoint`, `templates/checks.sh`.
+
+## D210 — the first LIVE drive: a real `/start` on a real repo, and it found a commit-blocking defect four hours old **[DRIVEN 2026-09-13 on a throwaway brownfield repo. Two package defects found + fixed; 1135 tests]**
+
+**The validation `07` has carried since `12c` — real agents through a live `/start` — was run.** Every exit test
+since `12c` scripts its writers, deliberately (removing model variance makes a red run mean the *mechanism* is
+wrong). Three slices came to rest on that choice, and `07` had promoted it to *"the largest single unknown in
+Phase 12."* A throwaway `tasklet` repo (3 source files, a `CLAUDE.md`, one commit) was built, the package
+installed from the working tree, and `/start` run against it with a live model.
+
+**FINDING 1 — `checks.sh` called `spec_approval.py` in an argument order argparse rejects, so `D209`'s gate
+failed closed on EVERY commit.** `checks.sh` writes the natural `spec_approval.py check --scripts-dir "$SCRIPTS"`;
+argparse binds a top-level flag only **before** the subcommand, so the call exited 2 and the commit gate blocked
+unconditionally. It would have broken the first commit of every project bootstrapped from that version — shipped
+four hours earlier, with a green suite.
+
+**Why the suite was green is the transferable part.** `test_spec_approval.py` invoked the same script with the
+flags **first**, which works. **The test and the real caller invoked one script two different ways, and only one
+was exercised.** That is a whole class of defect the unit suite is structurally blind to, and no amount of
+scripted exit-testing reaches it either — the scripted harnesses call the Python API, not the CLI. Fixed by
+making **both orders legal** (a shared parent parser + `SUPPRESS`, so a value on either side survives), because a
+CLI that works in one argument order is a trap that caught its own author. Pinned by a parametrised test over
+both orders **and** a test that asserts the literal call shape in `templates/checks.sh`, so the two cannot drift
+apart again.
+
+**FINDING 2 — on brownfield, the workflow reads its own machinery as the product.** `project_root` is `.` there,
+so `ruff .` returned **521 errors across 32 `.claude/scripts` files** on a three-file project — a red gate no
+change to the product could ever turn green — and the code map came back **38 nodes, 35 of them workflow
+scripts**, which would misroute every blast-radius question that reads it. Two fixes, deliberately at different
+levels: `.claude` and `.workflow` join the code map's **DEFAULT_EXCLUDE** (they are never product source on any
+project, so a bootstrap should not have to rediscover that), while the lint commands are **target-owned data**,
+so `/start` gains the instruction to scope them — with the measured number in it, because "be careful" is not an
+instruction.
+
+**WHAT WENT RIGHT, and is worth recording because a drive that only finds bugs teaches nothing about the parts
+that work.** The first, non-interactive run **halted at step 4 without committing** and said exactly why —
+confirming `start.md`'s own *"`/start` is interactive-only"* claim and the hollow-scaffold rule, against reality,
+for the first time. The resumed run **completed steps 4–7 rather than re-scaffolding**. `state.json` published
+the documented bootstrap shape verbatim (`phase: bootstrap`, `node: ingest:nodes`, `note: "seeding knowledge
+nodes 0/3"`). **`D209`'s floor fired correctly on live content** — it blocked committing the reconstructed
+`docs/spec.md`, which is right: a brownfield spec carries acceptance criteria and its approval is the reconcile
+checkpoint that had not been answered yet. And `ingest` found a **real bug in the test repo** that its author
+(this session) had not noticed: `src/cli.py` defines `main()` with no `if __name__ == "__main__"`, so every
+behaviour its `CLAUDE.md` documents is unreachable from a terminal, and the suite was green because nothing
+tested the CLI.
+
+**The lesson, stated as a rule rather than a war story: a shipped CALLER is not covered by a test that calls the
+same code differently.** Both defects here are that shape — a caller (`checks.sh`, a brownfield `ruff .`) meeting
+a component in a context no test placed it in. Scripted harnesses cannot find these, by construction. **A live
+drive is not a nicer exit test; it is the only thing that tests the seams between shipped parts.**
+
+**Builds on:** **D209** (whose defect this found), **D198**/**D200**/**D202** (whose scripted harnesses stated
+this exact limit each time).
+→ `07` (the validation gap, closed for this pass), `templates/checks.sh`, `codemap.py`, `commands/start.md`.

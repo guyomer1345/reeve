@@ -174,3 +174,47 @@ def test_cli_exit_codes(proj):
     allowed = subprocess.run([sys.executable, gate, "--project-root", str(proj),
                               "--scripts-dir", HERE, "check"], capture_output=True, text=True)
     assert allowed.returncode == 0
+
+
+# --- the CLI shape `checks.sh` actually uses ---------------------------------
+#
+# The bug a live drive found and this suite did not. `checks.sh` writes the natural order —
+# `spec_approval.py check --scripts-dir "$SCRIPTS"` — and argparse binds a top-level flag only
+# BEFORE the subcommand, so it errored and the gate failed closed on EVERY commit of every
+# project bootstrapped from that version. The tests above passed because they happened to put
+# the flags first. That is exactly how a CLI-shaped bug survives a green suite: the test and the
+# real caller invoke the same script two different ways, and only one of them is exercised.
+
+@pytest.mark.parametrize("argv_order", ["flags-first", "flags-after"])
+def test_both_argument_orders_work(proj, argv_order):
+    gate = os.path.join(HERE, "spec_approval.py")
+    _stage(proj, LOCKED_SPEC)
+    if argv_order == "flags-first":
+        argv = [gate, "--project-root", str(proj), "--scripts-dir", HERE, "check"]
+    else:
+        argv = [gate, "check", "--project-root", str(proj), "--scripts-dir", HERE]
+    r = subprocess.run([sys.executable] + argv, capture_output=True, text=True)
+    assert "unrecognized arguments" not in r.stderr, r.stderr
+    assert r.returncode == 2, r.stderr            # blocked: crosses the floor, no receipt
+
+
+def test_the_exact_invocation_checks_sh_writes(proj):
+    """Pinned literally against the template, so the two cannot drift apart again. If the
+    template changes its call, this test is the thing that should notice."""
+    tmpl = os.path.join(HERE, "..", "templates", "checks.sh")
+    body = open(tmpl, encoding="utf-8").read()
+    assert 'spec_approval.py" check --scripts-dir' in body, "checks.sh call shape changed"
+    gate = os.path.join(HERE, "spec_approval.py")
+    _stage(proj, CLEAN_SPEC)
+    r = subprocess.run([sys.executable, gate, "check", "--scripts-dir", HERE],
+                       capture_output=True, text=True, cwd=str(proj))
+    assert r.returncode == 0, r.stderr
+
+
+def test_record_also_accepts_flags_after_the_subcommand(proj):
+    gate = os.path.join(HERE, "spec_approval.py")
+    _stage(proj, LOCKED_SPEC)
+    r = subprocess.run([sys.executable, gate, "record", "--ticket", "t-1", "--token", "tok",
+                        "--project-root", str(proj)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert sa.read_receipt(str(proj))["ticket_id"] == "t-1"

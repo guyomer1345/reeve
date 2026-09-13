@@ -157,17 +157,37 @@ def check(project_root, scripts_dir):
                   % rec.get("ticket_id", "?"))
 
 
+def _common(ap):
+    """The flags that must work on BOTH sides of the subcommand.
+
+    Declared twice on purpose. argparse binds a top-level flag only BEFORE the subcommand, so
+    `… check --scripts-dir X` is an error while `… --scripts-dir X check` is fine -- a CLI that
+    works in one argument order and not the other is a trap, and this one caught its own caller:
+    `checks.sh` wrote the natural order, argparse rejected it, and the gate failed closed on
+    every commit. The unit tests missed it because they happened to use the other order, which
+    is exactly how a CLI-shaped bug survives a green suite. A shared parent makes both legal.
+    """
+    ap.add_argument("--project-root", default=argparse.SUPPRESS)
+    ap.add_argument("--scripts-dir", default=argparse.SUPPRESS,
+                    help="where check_autonomy_floor.py lives (default: beside this file)")
+    return ap
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="The autonomy floor's approval receipt.")
-    ap.add_argument("--project-root", default=".")
-    ap.add_argument("--scripts-dir", default=None,
-                    help="where check_autonomy_floor.py lives (default: beside this file)")
+    _common(ap)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    rec = sub.add_parser("record", help="stamp the approved spec's digest")
+    rec = _common(sub.add_parser("record", help="stamp the approved spec's digest"))
     rec.add_argument("--ticket", required=True)
     rec.add_argument("--token", required=True)
-    sub.add_parser("check", help="the commit gate (exit 2 = blocked)")
+    _common(sub.add_parser("check", help="the commit gate (exit 2 = blocked)"))
     args = ap.parse_args(argv)
+    # SUPPRESS keeps an unset flag out of the namespace entirely, so a value given on either
+    # side survives instead of the subparser's default overwriting the top-level one with None.
+    if not hasattr(args, "project_root"):
+        args.project_root = "."
+    if not hasattr(args, "scripts_dir"):
+        args.scripts_dir = None
 
     scripts = args.scripts_dir or os.path.dirname(os.path.abspath(__file__))
     if args.cmd == "record":

@@ -84,6 +84,14 @@ import sys
 
 DEFAULT_EXCLUDE = (
     ".git", ".hg", ".svn",
+    # The workflow's OWN substrate. Never product source on any project, by construction --
+    # `.claude/` is the installed package and `.workflow/` is the loop's working state. They are
+    # defaults rather than something each bootstrap passes, because a BROWNFIELD project has
+    # `project_root = .`, so without them the map reads the machinery as the product: measured
+    # on a real drive, a 3-file repo came back as 38 nodes, 35 of them workflow scripts. A code
+    # map whose centrality is dominated by its own tooling misroutes every blast-radius question
+    # that reads it.
+    ".claude", ".workflow",
     ".venv", "venv", "env", "node_modules", "bower_components", "__pycache__",
     "migrations", "dist", "build", "out", "target", "vendor", "Pods",
     ".next", ".nuxt", ".gradle", "bin", "obj",

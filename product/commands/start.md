@@ -395,6 +395,14 @@ loop's normal `state.json` takes over when the motion ends.
        item's staged file list in `--fix`, so `commit` scopes fixers to staged files, never a repo-wide sweep);
      - `FMT_CHECK` / `LINT` / `TYPECHECK` / `TEST` — the repo-wide `--check` gates (each carries its own path;
        omit `TYPECHECK` for a language with no typechecker).
+       - **SCOPE THEM AWAY FROM `.claude/` AND `.workflow/`, and in BROWNFIELD this is not optional.** There
+         `project_root` is `.`, so a bare repo-wide command (`ruff .`, `mypy .`) lints **the workflow's own
+         installed machinery** as if it were the product. Measured on a real bootstrap: `ruff .` returned **521
+         errors across 32 `.claude/scripts` files** on a three-file project, which is a red gate that no change
+         to the product can ever turn green. Give each command an explicit path (`ruff src tests`) or an
+         exclusion — whichever the tool prefers — and prefer naming the product's own directories, since that
+         stays right when the workflow grows a new directory. *(The code map needs no such care: `.claude` and
+         `.workflow` are in its default excludes, because they are never product source on any project.)*
      - `STACK_GATE_NONE` — a **reason string**, and the *third* stack-gate state. There are three, not two:
        **wired**, **not yet wired** (all unset — the backstop below), and **declared none**. Set it only for a
        tree whose code must never be executed on this machine; the runner then executes **nothing** from
