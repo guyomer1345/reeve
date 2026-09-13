@@ -71,3 +71,72 @@ def test_a_name_in_a_string_is_not_an_import(tmp_path):
     src = tmp_path / "a.py"
     src.write_text('MSG = "run import b to continue"\n# import b\n')
     assert cic._local_imports(str(src)) == set()
+
+
+# --- the PATH half: a shell script naming a python file ----------------------
+#
+# Python imports were only the shape of the FIRST bug. A shipped file can also name another by
+# PATH — a shell script invoking a sibling — and that fails identically: fine here, absent
+# there. It was recorded as a known limit and deliberately left unbuilt while it was
+# speculative. `loop.sh --drive` running `python3 "$HERE/drive.py"` is what made it real.
+
+def test_path_references_are_found_at_all():
+    """If this returns nothing, every assertion below passes vacuously."""
+    refs = cic._path_refs(os.path.join(ROOT, "product", "scripts", "loop.sh"))
+    assert "drive.py" in refs, refs
+
+
+def test_removing_a_path_referenced_script_reddens_it():
+    """The negative control for the path half. Run against the real manifest, restored after."""
+    orig = open(MANIFEST, encoding="utf-8").read()
+    try:
+        m = json.loads(orig)
+        m["install"] = [e for e in m["install"] if e["src"] != "scripts/drive.py"]
+        open(MANIFEST, "w", encoding="utf-8").write(json.dumps(m, indent=2) + "\n")
+        r = _gate()
+        assert r.returncode == 1
+        assert "references `drive.py` by path" in r.stderr
+    finally:
+        open(MANIFEST, "w", encoding="utf-8").write(orig)
+    assert _gate().returncode == 0
+
+
+def test_a_bare_filename_in_prose_is_NOT_a_dependency(tmp_path):
+    """The conservatism that keeps this gate switched on. A gate that guesses at what a string
+    might be produces false blocks, and a false block on a release gate is how a gate gets
+    disabled. Only references anchored on the install tree count."""
+    f = tmp_path / "sample.sh"
+    f.write_text("# see retention.py for the rule, and docs/foo.py\n"
+                 "echo 'run helper.py yourself'\n", encoding="utf-8")
+    assert cic._path_refs(str(f)) == set()
+
+
+def test_both_anchored_spellings_are_recognised(tmp_path):
+    f = tmp_path / "sample.sh"
+    f.write_text('python3 "$HERE/alpha.py"\n'
+                 'python3 "${HERE}/beta.py"\n'
+                 'python3 .claude/scripts/gamma.py\n', encoding="utf-8")
+    assert cic._path_refs(str(f)) == {"alpha.py", "beta.py", "gamma.py"}
+
+
+def test_a_reference_is_matched_by_BASENAME_across_the_two_spellings(tmp_path):
+    """A shell script says `$HERE/drive.py`; the manifest says `scripts/drive.py`. The same
+    file reached two ways, and the name is the only stable join between them."""
+    f = tmp_path / "sample.sh"
+    f.write_text('python3 "$HERE/../scripts/drive.py"\n', encoding="utf-8")
+    assert cic._path_refs(str(f)) == {"drive.py"}
+
+
+def test_an_unreadable_file_is_skipped_rather_than_fatal(tmp_path):
+    f = tmp_path / "binary.sh"
+    f.write_bytes(b"\xff\xfe\x00not text")
+    assert cic._path_refs(str(f)) == set()
+
+
+def test_the_ok_line_reports_how_many_references_resolved():
+    """A count is what stops a silently-zero scan from reading as coverage — the same reason
+    the first test here checks the finder finds anything at all."""
+    r = _gate()
+    assert "path reference(s) resolve" in r.stdout
+    n = int(r.stdout.split("path reference")[0].strip().split()[-1])
+    assert n > 0, r.stdout

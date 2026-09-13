@@ -7229,3 +7229,34 @@ window is worse than no verdict.
 **D189** (the standing-operator-instruction principle `warn_pct` is promoted under).
 → `07` (the entry the maintainer opened, answered), `05`, `schemas-runtime.md`, `schemas-config.md`,
 `commands/dispatch.md`.
+
+## D207 — the install-closure gate learns PATH references, because its known limit stopped being speculative **[BUILT 2026-09-13. `loop.sh --drive` was the live instance; 12 gate tests, negative control on both halves]**
+
+**The call.** `check_install_closure.py` now walks two kinds of dependency: Python imports (from the AST, as
+before) **and path references** — an installed text file naming an install-tree script by path.
+
+**It was correctly left unbuilt, and the trigger it was waiting for arrived.** `D197` built the import half
+against a live bug and wrote its own limit down in the same breath: *a reader who sees "install closure: OK"
+should not conclude the install set is closed, only that its Python half is.* It declined the path case because
+**speculative coverage is how a gate acquires false confidence** — a gate written for a bug nobody has had is a
+gate nobody can calibrate. `D202` supplied the bug: `loop.sh --drive` runs `python3 "$HERE/drive.py"`, a shell
+script depending on a Python file by path, with nothing checking the path installs. Identical failure shape to
+the one that prompted the gate — **fine here, absent there** — in a language the gate could not parse.
+
+**The path half is deliberately CONSERVATIVE, and that is the design rather than a shortcut.** It recognises only
+references **anchored on something that can only mean the install tree**: `.claude/scripts/…` (the install
+destination) and `$HERE/…` (the idiom our own shell scripts use for their directory). A bare `foo.py` inside a
+string is **not** matched — it could be a doc example, a target project's file, or prose. A gate that guesses at
+what a string might be produces false blocks, and **a false block on a release gate is how a gate gets switched
+off.** Under-reaching here costs a missed reference; over-reaching costs the whole gate.
+
+**Matched by BASENAME, because the two spellings never agree.** A shell script says `$HERE/drive.py` while the
+manifest says `scripts/drive.py` — the same file reached two ways, and the name is the only stable join.
+
+**The OK line now reports how many references resolved.** Without a count, a scan that silently found *nothing*
+reads exactly like one that checked everything — which is the failure mode this gate was built to stop, applied
+to itself. The test suite asserts the finder finds something before asserting anything about what it does,
+so the negative controls cannot pass vacuously.
+
+**Builds on:** **D197** (the gate and its written-down limit), **D202** (which made the limit live).
+→ `07` (the open question, answered).

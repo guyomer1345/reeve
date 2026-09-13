@@ -1006,7 +1006,13 @@ sub-questions deferred to the build, in the order the slices need them.
 Three of these were opened by the build finding something nobody had asked about; the fourth is a limit of a gate
 written in the same session, recorded next to the gate rather than left for whoever trips it.
 
-- **The install-closure gate only understands Python. `[opened by D197]`** It walks every installed `.py` and
+- **~~The install-closure gate only understands Python.~~ ANSWERED 2026-09-13 — `D207`.** The limit stopped
+  being speculative the moment `12e` shipped `loop.sh --drive` calling `python3 "$HERE/drive.py"` — a shell
+  script depending on a Python file by path, identical failure shape, unparseable language. The gate now walks
+  both halves. **Conservative by design:** only references anchored on `.claude/scripts/` or `$HERE/` count, so a
+  bare filename in prose is never a dependency — over-reaching on a release gate is how a gate gets switched off.
+  *(Original entry below; its reasoning for waiting was right.)*
+- **~~[answered by D207]~~ The install-closure gate only understands Python. `[opened by D197]`** It walks every installed `.py` and
   reads its imports from the AST, which is exactly the shape of the bug that prompted it. It says nothing about
   `checks.sh` sourcing a sibling, a hook referencing a script by path, or a template naming a file that never
   installs — all the same failure (works here, absent there) in a language the gate cannot parse. Not built now
