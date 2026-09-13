@@ -131,3 +131,48 @@ def test_no_context_window_prints_base_no_banner(tmp_path):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# --- the band: two-sided, and an absent knob must not become a ceiling -------
+
+def test_an_absent_warn_pct_does_not_become_a_ceiling(tmp_path):
+    """The regression that would make the band unreachable. A defaulted 30% ceiling fires long
+    before runway ever runs low, so an absent knob silently materialised into one would mean
+    the work-budget arithmetic never governs anything."""
+    root = _wf(tmp_path)                                   # no config.context.warn_pct
+    r = _run(_status(tokens=400_000, size=1_000_000, project_dir=str(root)), root)
+    assert "/dispatch" not in r.stdout                     # 40% full, but ~50 nodes of runway
+    assert "hand off" not in r.stdout
+
+
+def test_a_set_warn_pct_still_fires_as_an_explicit_ceiling(tmp_path):
+    """A human who sets the knob is giving a standing instruction; the band must not overrule
+    it just because the arithmetic disagrees."""
+    root = _wf(tmp_path)
+    (root / ".workflow" / "config.json").write_text(json.dumps({"context": {"warn_pct": 30}}))
+    r = _run(_status(tokens=400_000, size=1_000_000, project_dir=str(root)), root)
+    assert "hand off NOW" in r.stdout
+    assert "your instruction rather than the arithmetic" in r.stdout
+
+
+def test_low_runway_hands_off_even_on_a_huge_window(tmp_path):
+    root = _wf(tmp_path)
+    r = _run(_status(tokens=995_000, size=1_000_000, project_dir=str(root)), root)
+    assert "hand off NOW" in r.stdout
+
+
+def test_the_statusline_publishes_the_reading(tmp_path):
+    """The crossing of the wall: the statusline is the only surface with a token count, so
+    nothing else can learn it unless this file writes it down."""
+    root = _wf(tmp_path)
+    _run(_status(tokens=120_000, size=200_000, project_dir=str(root)), root)
+    published = json.loads((root / ".workflow" / "context.json").read_text())
+    assert published["used"] == 120_000 and published["window"] == 200_000
+
+
+def test_a_hold_prints_no_banner_at_all(tmp_path):
+    """A persistent "you are fine" line is how a status line teaches someone to ignore it."""
+    root = _wf(tmp_path)
+    r = _run(_status(tokens=100_000, size=1_000_000, project_dir=str(root)), root)
+    assert "hand off" not in r.stdout
+    assert "nodes left" in r.stdout          # the figure is on the base line instead

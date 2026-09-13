@@ -1239,11 +1239,10 @@ both still unscheduled — the reviewer is *promotable* now that 11e is green, a
 whatever follows Phase 12); and the standing deferred menu, each already carrying its trigger — proportional-rigor
 triage · project-map tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA ·
 the code-map observed layer. **Org mode is parked at the maintainer's word** (2026-09-13) until the company
-context is real; nothing in this sequence touches it. Also unscheduled and **raised 2026-09-13**: the
-**two-sided dispatch band** — a background signal telling the router when to hand off, so the window is neither
-underused nor overused. It is downstream of the `warn_pct` measurement and is a `12e` prerequisite *candidate*
-(the driver's clean-boundary problem has a context half, and this is it); the requirement, the one-sided-trigger
-gap and the sensor/actuator obstacle are carried in `07`, which owns it.
+context is real; nothing in this sequence touches it. *(The **two-sided dispatch band**, raised 2026-09-13 and
+listed here as unscheduled, was **BUILT the same day — `D206`**. It turned out not to be downstream of the
+`warn_pct` measurement at all: the blocker was that the statusline could see a token count and not act on it
+while the loop could act and not see, and crossing that wall needed no number.)*
 
 ### Phase 12 — Standing intent: make the operator's recurring instructions part of the machine **[OPEN 2026-09-13 — designed D185, NOT BUILT. Opened from LIVED USE, not from a premise re-check (Phase 10) or an instrument reading (Phase 11): the maintainer noticed what he keeps re-typing. Org mode is explicitly parked and no slice here touches it]**
 Five behaviours were being re-established conversationally, session after session, and every one of them decays at

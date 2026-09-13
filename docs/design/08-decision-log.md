@@ -7174,3 +7174,58 @@ a checkpoint must not conclude it was deleted.
 **Builds on:** **D193** (the belonging axis and `read_with_splits`), **D199** (whose additions made it urgent),
 **D203** (the sixth kind, which the negative control exercises).
 → `07` (the live proposal, resolved), `check_enum_coherence.py` (two owner declarations).
+
+## D206 — the dispatch trigger becomes a two-sided BAND in units of work, and the statusline finally crosses the wall it was trapped behind **[BUILT 2026-09-13, from the maintainer's own raise. `context_band.py` + `statusline.py` publishes; 25 tests; 1119 total]**
+
+**The raise, in the maintainer's words:** *once we know the ideal context limit, fire something in the background
+as we approach it, guiding when to run `/dispatch` — so we neither underuse nor overuse the window.* Three things
+had to be true for that to be buildable, and only one of them was the number.
+
+**1. The trigger was ONE-SIDED, and the missing half is the whole point.** `pct >= config.context.warn_pct`
+printed *"run /dispatch then /clear"*. There was a ceiling and **no floor**, so nothing could ever say *you still
+have runway, do not hand off yet*. Under-use was invisible and unpriced — and it is not free: handing off early
+buys a cold rebuild (re-read the anchor, re-orient) in exchange for a window that still had work in it. `hold` is
+now a real verdict.
+
+**2. The SENSOR AND THE ACTUATOR WERE ON OPPOSITE SIDES OF A WALL, and that — not the threshold — was the
+blocker.** The statusline is the **only** surface Claude Code exposes a running token count to; hooks and the
+model receive none. So the statusline could **see** and not act, while the loop could **act** and not see.
+Nothing crossed: the banner went to a human's eyes and a human typed `/dispatch`. That is a channel with no
+machine end at all, and no threshold would have fixed it. The crossing is `statusline.py` **publishing** its
+reading to `context.json`; `context_band.py` is the arithmetic over it, and everything that wants the verdict
+reads one place. **This is why the slice did not have to wait on the measurement** the maintainer thought it did.
+
+**3. A PERCENTAGE IS THE WRONG UNIT, and this is the substance rather than a second threshold.** A fraction makes
+a 200k and a 1M window warn at the same *fraction full* while leaving them 5 and 25 nodes of runway — the same
+signal for situations that are not alike. What a session actually needs is enough left to **finish what it holds
+and write a complete handoff**, which is a work budget: `runway = (window − used) ÷ per-node cost`, in **nodes**.
+The per-node cost is **measured, not guessed** (the median inline node adds ~12k, `D187`), which is this
+package's rule for numbers. Both edges then fall out of one quantity instead of two percentages that drift apart.
+A test holds two windows at **the same 97%** and asserts they get **different verdicts** — the argument stated as
+an assertion rather than a paragraph.
+
+**`warn_pct` is not retired; it is PROMOTED to an explicit operator ceiling that outranks the arithmetic.** A
+human setting it is giving a standing instruction, and a governor that quietly overruled it would reproduce the
+exact failure the directive channel exists to stop. **So the knob is now the override and the band is the
+default — which required a real fix to match:** `_warn_pct` defaulted to 30 when absent, and an absent knob
+silently materialising into a ceiling would make the band **unreachable**, since 30% fires long before runway
+ever runs low. Configured-vs-defaulted are now separate reads, and the regression is pinned by a test.
+
+**Deliberate restraint: `hold` prints NOTHING.** The runway figure sits on the base line and that is all. A
+persistent *"you are fine"* banner is how a status line teaches someone to ignore it — the same reasoning
+`Notifier` uses about re-alerting.
+
+**Honest ceiling, stated so nobody reads it as more:** this is a **governor, not an enforcement**, and cannot be
+one. Nothing can stop a session spending its window, and the signal arrives in the statusline and in a file, not
+in the model's context. **Fail direction:** an unreadable or stale reading is `unknown`, never `hold` — a wrong
+`hold` tells a session to keep filling a window it should be leaving, whose cost is a session that stops with no
+anchor written. A reading older than its staleness window is *absent*, because a verdict about a dead session's
+window is worse than no verdict.
+
+**What still waits on measurement:** only the three constants (`PER_NODE_TOKENS`, `RESERVE_NODES`,
+`COMFORTABLE_NODES`). The mechanism is complete and they are tunable in one file.
+
+**Builds on:** **D187** (the measured per-node cost), **D190** (the re-read economics that price under-use),
+**D189** (the standing-operator-instruction principle `warn_pct` is promoted under).
+→ `07` (the entry the maintainer opened, answered), `05`, `schemas-runtime.md`, `schemas-config.md`,
+`commands/dispatch.md`.

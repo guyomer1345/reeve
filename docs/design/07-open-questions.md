@@ -944,7 +944,15 @@ sub-questions deferred to the build, in the order the slices need them.
   a leaf is single-purpose. The maintainer's instinct is that the router should hand off earlier. Plausible, and it
   is a **number** — this repo sets numbers to measured values (D167, D184), so it waits on the measurement rather
   than on the instinct.
-- **The dispatch trigger must be a two-sided BAND fired in the background, not a one-sided banner. `[raised by the
+- **~~The dispatch trigger must be a two-sided BAND fired in the background~~ BUILT 2026-09-13 — `D206`.** All
+  three obstacles this entry named are cleared, and **it did not have to wait on the measurement** the entry
+  assumed it did: the blocker was the sensor/actuator wall, not the number. `statusline.py` now **publishes** its
+  reading to `context.json` and `context_band.py` is the arithmetic over it; the band is two-sided (`hold` is a
+  real verdict) and stated in **nodes of runway** rather than a fraction. `warn_pct` is promoted to an explicit
+  operator ceiling that outranks the arithmetic. **Only the three constants still want measurement**, and they
+  sit in one file. *(Original entry below, including the obstacle analysis that turned out to be the useful
+  part.)*
+- **~~[built as D206]~~ The dispatch trigger must be a two-sided BAND fired in the background, not a one-sided banner. `[raised by the
   maintainer 2026-09-13; downstream of the `warn_pct` measurement above, and a `12e` prerequisite candidate]`**
   Stated as a requirement, not yet a design: once the router's ideal threshold is measured (say it lands at 30%),
   something should fire **in the background** as the session approaches it and **guide when to run `/dispatch`** —

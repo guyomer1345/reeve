@@ -4,8 +4,15 @@ description: Write a complete, current handoff.md right now so a /clear is safe 
 
 # /dispatch — checkpoint context to disk, then it is safe to /clear
 
-The statusline warns when this session's context is filling up. `/dispatch` is the manual
-reset step: it writes a **complete, current** `.workflow/handoff.md` so that a `/clear` loses
+The statusline carries a **two-sided band** (`context_band.py`), not a one-way warning: it says
+**hold** while there is runway, **hand off at the next boundary** in the middle, and **hand off
+now** once what remains is needed to finish the item in hand and publish a complete anchor. The
+unit is *work* — nodes of runway, `(window − used) ÷ per-node cost` — rather than a fraction,
+because a 200k and a 1M window at the same percentage full leave very different amounts of room.
+**A `hold` is a real verdict:** running `/dispatch` early is not free, it pays a cold rebuild for
+a window that still had work in it. Ask any time with
+`python3 .claude/scripts/context_band.py --workflow-dir .workflow`.
+`/dispatch` is the manual reset step: it writes a **complete, current** `.workflow/handoff.md` so that a `/clear` loses
 no build state — a cleared session auto-rehydrates from that anchor (the SessionStart hook
 re-injects it). Run `/dispatch`, confirm it reports the handoff is written, then run `/clear`.
 

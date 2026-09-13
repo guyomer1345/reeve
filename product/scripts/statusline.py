@@ -8,9 +8,17 @@ no token metrics), so the context-budget warning MUST originate here. This scrip
   1. Renders the BASE status line — delegating to a pre-existing user statusline if
      `/start` captured one into `.workflow/statusline.delegate` (compose, never
      clobber); otherwise a minimal `model · dir · ctx N%` line.
-  2. Appends a persistent banner once context usage crosses `config.context.warn_pct`
-     (a PERCENTAGE, so it is model-window-agnostic — a 200k and a 1M window warn at
-     the same fraction full), telling the human to run `/dispatch` then `/clear`.
+  2. PUBLISHES the reading to `.workflow/context.json`. This is the one crossing of a
+     real wall: the statusline can SEE the token count and cannot act on it, while the
+     loop can act and cannot see it. Until this existed nothing crossed — the banner
+     went to a human's eyes and that was the whole channel. `context_band.py` is the
+     arithmetic over the published reading; this script is only its sensor.
+  3. Appends a banner carrying the BAND verdict (`context_band.py`) — two-sided, in
+     units of work rather than a fraction: hold while there is runway, hand off at the
+     next clean boundary in the middle, hand off now once what is left is needed to
+     finish the item and write a complete anchor. The old rule was a one-sided
+     `pct >= config.context.warn_pct`, which could say "go" and never "not yet", so
+     under-use was invisible and unpriced.
 
 It never crashes the status line: any failure degrades to the best line it can print
 and always exits 0 (a non-zero exit blanks the status line entirely).
@@ -20,6 +28,8 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 WARN_PCT_DEFAULT = 30
 
 
@@ -28,8 +38,28 @@ def _project_dir(status):
     return ws.get("project_dir") or ws.get("current_dir") or status.get("cwd") or "."
 
 
+def _warn_pct_configured(project_dir):
+    """config.context.warn_pct as the operator SET it, or None when they did not.
+
+    Distinct from `_warn_pct` below, and the distinction is load-bearing: an explicitly set
+    percentage is a standing instruction that outranks the band's arithmetic, while an ABSENT
+    one must not be silently materialised into a ceiling nobody asked for — that would make the
+    band unreachable, since a default 30% ceiling fires long before runway ever runs low.
+    """
+    try:
+        with open(os.path.join(project_dir, ".workflow", "config.json")) as fh:
+            cfg = json.load(fh)
+        pct = (cfg.get("context") or {}).get("warn_pct")
+        if isinstance(pct, (int, float)) and 0 < pct <= 100:
+            return float(pct)
+    except Exception:
+        pass
+    return None
+
+
 def _warn_pct(project_dir):
-    """Read config.context.warn_pct (committed, never relocated). Absent → default."""
+    """The percentage to use when runway is NOT computable (no window size reported). Absent →
+    the shipped default, because in that degraded path a coarse signal beats none."""
     try:
         with open(os.path.join(project_dir, ".workflow", "config.json")) as fh:
             cfg = json.load(fh)
@@ -39,6 +69,21 @@ def _warn_pct(project_dir):
     except Exception:
         pass
     return float(WARN_PCT_DEFAULT)
+
+
+def _tokens(status):
+    """(used, window) in tokens, or (None, None). The band needs ABSOLUTE numbers: a fraction
+    makes a 200k and a 1M window read the same while leaving them 5 and 25 nodes of runway."""
+    cw = status.get("context_window") or {}
+    used = cw.get("total_input_tokens")
+    size = cw.get("context_window_size")
+    if isinstance(used, (int, float)) and isinstance(size, (int, float)) and size > 0:
+        return float(used), float(size)
+    # Only a percentage available: reconstruct against the reported size if there is one.
+    p = cw.get("used_percentage")
+    if isinstance(p, (int, float)) and isinstance(size, (int, float)) and size > 0:
+        return float(size) * float(p) / 100.0, float(size)
+    return None, None
 
 
 def _used_pct(status):
@@ -86,10 +131,20 @@ def _minimal_base(status, pct):
     return " · ".join(parts)
 
 
-def _banner(pct, warn):
-    # Bold red so it stands out against any base line. Persistent while over threshold.
-    return ("\033[1;31m⚠ context %d%% ≥ %d%% — run /dispatch then /clear to reset\033[0m"
-            % (round(pct), round(warn)))
+# Colour by urgency rather than one alarm state: a band that shouts at every reading is one a
+# human stops reading, and `hold` is a real verdict that must not look like a warning.
+_BAND_STYLE = {"handoff-now": "1;31", "handoff-at-boundary": "1;33"}
+
+
+def _banner(verdict):
+    """The band's line, or None when there is nothing to say. `hold` prints NOTHING — the
+    runway figure is already on the base line, and a persistent "you are fine" banner is how a
+    status line teaches someone to ignore it."""
+    style = _BAND_STYLE.get(verdict.get("verdict"))
+    if not style:
+        return None
+    lead = "⚠ hand off NOW" if verdict["verdict"] == "handoff-now" else "◆ hand off at the next boundary"
+    return "\033[%sm%s — %s\033[0m" % (style, lead, verdict["reason"])
 
 
 def main():
@@ -112,8 +167,34 @@ def main():
         base = _minimal_base(status, pct)
 
     lines = [base]
-    if pct is not None and pct >= _warn_pct(project_dir):
-        lines.append(_banner(pct, _warn_pct(project_dir)))
+    # Publish first, render second. The published reading is what everything OTHER than this
+    # human's eyes depends on, so it must not be lost to a rendering failure below it.
+    verdict = None
+    try:
+        import time
+        import context_band
+        used, window = _tokens(status)
+        if used is not None:
+            context_band.publish(os.path.join(project_dir, ".workflow"), used, window,
+                                 time.monotonic())
+            verdict = context_band.band(used, window, _warn_pct_configured(project_dir))
+    except Exception:
+        verdict = None
+    if verdict is None and pct is not None and pct >= _warn_pct(project_dir):
+        # No absolute token counts, so runway in nodes is not computable. Degrade to the
+        # fraction rule rather than going quiet: a percentage is the wrong UNIT, not a wrong
+        # signal, and a silent status line is worse than a coarse one.
+        verdict = {"verdict": "handoff-now",
+                   "reason": "context %d%% ≥ %d%% — run /dispatch then /clear to reset (no "
+                             "window size reported, so runway in nodes is not computable)"
+                             % (round(pct), round(_warn_pct(project_dir)))}
+    if verdict:
+        line = _banner(verdict)
+        if line:
+            lines.append(line)
+        runway = verdict.get("runway_nodes")
+        if runway is not None and pct is not None:
+            lines[0] = lines[0] + " · ~%.0f nodes left" % runway
 
     print("\n".join(lines))
     return 0

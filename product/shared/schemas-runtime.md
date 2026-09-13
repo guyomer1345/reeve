@@ -203,6 +203,21 @@ resolve to identically) and **deduplicated** (never re-run for a tree state this
   ignores mode returns `0777` silently). **Deleting the file re-pairs everyone** — the only rotation path, and a
   deliberately visible, owner-level act.
 
+## context.json  · published by `statusline.py` every turn, read by `context_band.py` · *`.workflow/context.json`; RUNTIME, gitignored, atomic write (temp + `os.replace`); kept on a native filesystem*
+- `{ used, window, mono }` — absolute tokens and the monotonic clock at publication. **Absolute, not a
+  percentage**, because the consumer's unit is *work*: a 200k and a 1M window at the same fraction full leave
+  5 and 25 nodes of runway, which are not the same situation.
+**This file is the one crossing of a real wall.** The statusline is the **only** surface Claude Code exposes a
+running token count to — hooks and the model receive none. So the statusline can **see** and not act, while the
+loop can **act** and not see. Before this, nothing crossed: the banner went to a human's eyes and a human typed
+`/dispatch`, which is a channel with no machine end at all.
+**Read through `context_band.py`, never directly.** A reading older than its staleness window resolves to
+*absent* — it describes a session that has probably already ended, and a verdict about a dead session's window is
+worse than no verdict.
+**Published best-effort and never fatally:** it is written from inside the status line, and a status line that
+raises blanks itself. A lost reading degrades the band to `unknown`, which is the safe direction — `unknown` is
+never `hold`, because a wrong `hold` tells a session to keep filling a window it should be leaving.
+
 ## control.json  · written by `drain.py record` when a `control` pause/resume is applied, read by `drain.py paused` and the session driver · *`.workflow/control.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ paused: bool, at, by }` — `by` is the `message_id` of the control message that last set it.
 **The state `pause` did not have.** The op was validated and delivered, and then honoured only by whichever

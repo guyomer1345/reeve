@@ -59,10 +59,19 @@ anchor, and the parts are one schema.*
     locally correct and a stack of them is not, the same way repeated patches to a document drift.
   - Absent → shipped defaults (`plan_max` 10, `execute_max` 5, `refresh_max` 2).
 - `context` — the interactive context-governor knob, **read by the shipped statusline** (the one
-  surface the running token count reaches — hooks and the model receive none): `warn_pct` (the
-  context-usage **percentage** past which the statusline shows the persistent "run /dispatch, then
-  /clear" banner). A percentage, never a token count, so it is model-window-agnostic — a 200k and a
-  1M window warn at the same fraction full. Absent → shipped default (`warn_pct` 30).
+  surface the running token count reaches — hooks and the model receive none): `warn_pct`, a
+  context-usage **percentage**. **Absent → there is no ceiling, and the BAND governs**
+  (`context_band.py`): hold while there is runway, hand off at the next boundary in the middle,
+  hand off now once what is left is needed to finish the item and publish a complete anchor —
+  measured in *nodes of runway*, `(window − used) ÷ per-node cost`, because a fraction makes a
+  200k and a 1M window read identically while leaving them 5 and 25 nodes of room.
+  **Set it and it becomes an EXPLICIT OPERATOR CEILING that outranks the arithmetic**: a human
+  saying "warn me at 30%" is giving a standing instruction, and a governor that quietly
+  overruled it would reproduce the failure the directive channel exists to stop. So the knob is
+  no longer the default — it is the override — and the shipped default is *no ceiling*.
+  *(It still governs alone in one case: when the harness reports no window size, runway in nodes
+  is not computable and the statusline degrades to the fraction rule at 30. A percentage is the
+  wrong unit, not a wrong signal.)*
 - `retention` — the memory-bound knobs the `audit` pass reads: `sessions_k` (per-node `# Sessions` cap — the
   retention script's only knob) + the scheduling thresholds `prioritize` trips on (`decisions_superseded_n` —
   **superseded** decision bodies awaiting GC, the count retention actually lowers, not the active count;

@@ -102,6 +102,10 @@
       "dest": ".claude/scripts/codemap"
     },
     {
+      "src": "scripts/context_band.py",
+      "dest": ".claude/scripts/context_band.py"
+    },
+    {
       "src": "scripts/statusline.py",
       "dest": ".claude/scripts/statusline.py"
     },
