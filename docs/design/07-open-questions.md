@@ -929,7 +929,14 @@ sub-questions deferred to the build, in the order the slices need them.
   proves matches `05`'s tree. **The prompt was `D201` adding `control.json` and exposing that the old prose
   pointer had already gone stale** (it named two schema documents; the new path landed in a third), which is the
   failure shape that mattered: silent, and in the direction of committing a runtime file.
-- **What makes the autonomy floor fire when the loop does NOT consult it? `[12a-residual, opened by building 12a]`**
+- **~~What makes the autonomy floor fire when the loop does NOT consult it?~~ BUILT 2026-09-13 — `D209`.** The
+  floor now runs at **commit** time in `checks.sh --check`, so it no longer depends on the loop choosing to ask.
+  This entry called the escape "real design, not a wiring line" and that was right — it is `spec_approval.py`, a
+  receipt **bound to a digest of the approved spec** rather than to a label, so approving one version and
+  committing another blocks again. Editing the spec after approval is the move the digest exists to catch. What
+  the floor still cannot see is unchanged and still the alignment scan's: a code change that abandons a `locked`
+  behaviour **without touching the spec**. *(Original entry below.)*
+- **~~[built as D209]~~ What makes the autonomy floor fire when the loop does NOT consult it? `[12a-residual, opened by building 12a]`**
   The floor is built, mechanical and decision-time: `loop.md` tells the orchestrator to run
   `check_autonomy_floor.py` before acting on a goal-affecting decision, exit 1 ⇒ `checkpoint`. **That is a
   consultation, not an enforcement**, and the whole premise of the floor is that a loop grading its own decisions
@@ -943,7 +950,15 @@ sub-questions deferred to the build, in the order the slices need them.
   absurdity-ceiling is enforceable. If not — the likelier answer — it is a **self-reported** budget in the agent
   brief plus a post-hoc `measure-dispatch.py` gate, which is a materially weaker mechanism and must be described as
   one rather than implied to be a cap.
-- **Is `warn_pct` 30 right for the ROUTER specifically? `[measurement]` — SHARPENED 2026-09-13 by the D187/D190
+- **~~Is `warn_pct` 30 right for the ROUTER specifically?~~ ANSWERED 2026-09-13 — `D206`, and the answer is that
+  the question was the wrong one, exactly as this entry suspected.** It is not "30 or lower": **a percentage does
+  not target the right quantity at all.** What a session needs is enough left to finish what it holds and write a
+  complete handoff — a *work* budget, `(window − used) ÷ per-node cost`, which `context_band.py` now computes in
+  **nodes of runway**. `warn_pct` survives as an **explicit operator ceiling** rather than the default. **Only
+  the three constants still want measurement** (`PER_NODE_TOKENS` is already set to D187's measured 12k;
+  `RESERVE_NODES` and `COMFORTABLE_NODES` are reasoned, not measured), and they sit in one file.
+  *(Original entry below — its analysis is what the build followed.)*
+- **~~[answered by D206]~~ Is `warn_pct` 30 right for the ROUTER specifically? `[measurement]` — SHARPENED 2026-09-13 by the D187/D190
   pass; the question as posed may be the wrong one.** Measured over 104 real router sessions of `agentic cyber`:
   peak context **median 257k, max 488k**, with **71%** of sessions above 200k and 30% above 300k — and **zero
   compaction boundaries** in a 40-session sample, so the window is comfortably above the maximum observed and

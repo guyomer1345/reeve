@@ -218,6 +218,22 @@ worse than no verdict.
 raises blanks itself. A lost reading degrades the band to `unknown`, which is the safe direction — `unknown` is
 never `hold`, because a wrong `hold` tells a session to keep filling a window it should be leaving.
 
+## spec-approval.json  · written by `checkpoint` on an approve that crosses the autonomy floor, read by `checks.sh --check` · *`.workflow/spec-approval.json`; **COMMITTED** — it must ride the commit it authorises, the same law as `commit-receipt`; atomic write; rewrite-in-place (one live approval, history in git)*
+- `{ spec_sha256, ticket_id, token, spec_path }` — the digest of `docs/spec.md` **as approved**.
+**It is what turns the autonomy floor from a consultation into an enforcement.** The floor is run at decision
+time by the orchestrator, which means a loop that does not run it is unchecked — and that is exactly the case the
+floor exists for, since a loop grading its own decisions drifts toward "not fundamental". `checks.sh --check` now
+runs the floor at **commit** time. **The receipt is the escape**, and a gate with no escape is a gate that gets
+switched off: a change that crosses the floor commits only when a human approved it.
+**BOUND TO CONTENT, NOT TO A LABEL — this is the whole mechanism.** A receipt that merely said *approved* would
+licence every later spec change, and worse, would licence **editing the spec after approval**, which is the exact
+move the floor exists to catch. So the digest must match the spec **as staged**: approve v1 and commit v2 and it
+blocks again, with no way to talk it round. The fix for a blocked commit is to **re-route**, never to re-record.
+*(The same trick as `forecast.py freeze`: a digest is what makes an approval real rather than a label.)*
+**Staged, not worktree** — a gate reading the working tree could be satisfied by a file the commit does not
+contain. **Fail-closed**, like the floor: an unreadable receipt, an unreadable spec, or a floor that will not run
+all land on BLOCKED, because an escape hatch that opens when the mechanism malfunctions is not an escape hatch.
+
 ## control.json  · written by `drain.py record` when a `control` pause/resume is applied, read by `drain.py paused` and the session driver · *`.workflow/control.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ paused: bool, at, by }` — `by` is the `message_id` of the control message that last set it.
 **The state `pause` did not have.** The op was validated and delivered, and then honoured only by whichever

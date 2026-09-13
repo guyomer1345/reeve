@@ -7296,3 +7296,47 @@ now a comparison rather than an instinct.
 **Builds on:** **D191** (which raised the question), **12b**'s scratch contract (which is what makes the
 exemption matter).
 → `07` (sharpened, still open), `schemas.md`, `agents/setup-guide.md`.
+
+## D209 — the autonomy floor becomes an ENFORCEMENT, and the escape is a digest rather than a label **[BUILT 2026-09-13, closing `12a`'s named residual. `spec_approval.py` + the `checks.sh` arm; 12 tests; 1131 total]**
+
+**The residual, stated by `D189` when `12a` shipped:** the floor is *"a CONSULTATION, not an enforcement."*
+`loop.md` asks the orchestrator to run `check_autonomy_floor.py` before acting on a goal-affecting decision —
+and **the whole premise of the floor is that a loop grading its own decisions drifts toward "not
+fundamental"**, so *a loop that simply does not run it is precisely the case the floor exists for.* Nothing
+downstream noticed.
+
+**The reason it stayed unbuilt was correct, and is the actual design problem.** `D189` named the obvious
+backstop — run the floor at commit time — and rejected it: *it would block every legitimate commit of a
+locked-spec change that HAD been routed and approved, and giving it an escape means a second receipt, which is
+real design, not a wiring line.* That is right. **A gate with no escape is a gate that gets switched off.** So
+this slice is the escape, and the gate comes with it.
+
+**Bound to CONTENT, not to a label — the whole mechanism is in that choice.** A receipt that merely said
+*approved* would licence every later spec change forever, and worse, would licence **editing the spec after
+approval** — the exact move the floor exists to catch, and the one a human would never see. So the receipt stamps
+a **digest of the approved spec**, and the gate accepts it only when the digest matches the spec **as staged**.
+Approve v1, commit v2, and it blocks again with no way to talk it round; the fix is to **re-route**, never to
+re-record. *(`forecast.py freeze`'s trick applied to a second artifact: a digest is what makes an approval real
+rather than a label. The tests that matter most here are the ones where a receipt EXISTS and is still refused.)*
+
+**STAGED, not worktree.** A gate reading the working tree could be satisfied by a file the commit does not
+contain — so the digest is taken over `git show :docs/spec.md`, with the worktree as a fallback only when nothing
+is staged for that path.
+
+**Digest over the WHOLE FILE, deliberately.** A digest of "just the locked parts" would need the same parser the
+floor uses, and **two parsers that must agree forever is how a gate acquires a silent disagreement.** The cost is
+that an unrelated spec edit invalidates a live approval — which is over-routing, the floor's own stated correct
+failure direction.
+
+**Fail direction inherited rather than re-decided:** an unreadable receipt, an unreadable spec, or a floor that
+will not run all land on BLOCKED. **An escape hatch that opens when the mechanism malfunctions is not an escape
+hatch.**
+
+**What it still does not claim.** It proves a human approved *this text*; not that they understood it, and
+nothing at all about a code change that abandons a locked behaviour **without touching the spec** — the floor's
+own stated blind spot, which remains the alignment scan's.
+
+**Builds on:** **D189** (the floor, and the residual this closes), the `commit-receipt` law (a receipt must ride
+the commit it describes), **forecast freeze** (approval-by-digest).
+→ `07` (the `12a` residual, closed), `schemas.md § the autonomy floor`, `schemas-runtime.md`,
+`skills/checkpoint`, `templates/checks.sh`.

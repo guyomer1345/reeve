@@ -252,6 +252,12 @@ file that accepts anything is unbounded growth in the most expensive place in th
   standing instruction that does not survive a crash is not standing.
 
 ### the autonomy floor  · read by the orchestrator before taking a decision, computed by `check_autonomy_floor.py`
+> **Consulted at decision time, ENFORCED at commit time (2026-09-13).** `loop.md` asks the orchestrator to run
+> this before acting on a goal-affecting decision — which is a consultation, and *a loop that simply does not run
+> it is precisely the case the floor exists for*. `checks.sh --check` now runs it as a gate, with
+> `spec_approval.py`'s receipt as the escape: a change that crosses the floor commits only when a human approved
+> **this exact spec content**. The receipt is bound to a **digest**, not a label, so approving one version and
+> committing another blocks again — see `schemas-runtime.md § spec-approval.json`.
 **The loop takes every decision that does not change the goal, and routes anything that may.** That criterion is
 sharper than reversibility × blast-radius, which grades *how carefully to decide* rather than *whose decision it
 is*, and it already has an owner: the spec's commitment model. *Goal-affecting* ≈ *would change a `locked`

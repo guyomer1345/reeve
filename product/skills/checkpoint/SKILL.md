@@ -123,6 +123,17 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
   against the store and itemizes what is missing. It is **early warning, not a gate**: point-of-use fail-closed
   (the thing that needs the key failing loudly when it is absent) stays the floor.
 - **reconcile** — approve → `prioritize` · else → `ingest` (re-run) / `discuss`.
+
+**On ANY approve whose change edits `docs/spec.md` across the autonomy floor** — a `locked` element, a weakened
+commitment marker, or an acceptance criterion — **record the approval before you resume**:
+```bash
+python3 .claude/scripts/spec_approval.py record --ticket <ticket_id> --token <token>
+```
+This is not bookkeeping. `checks.sh --check` now runs the floor as a **gate**, and without the receipt the
+approved change cannot be committed at all. Run it **after** the spec edit is staged and **never before**: the
+receipt stamps a digest of the spec as it is at that moment, so one written ahead of the edit would licence
+whatever the edit turns out to be — which is the failure the floor exists to catch. Editing the spec after
+recording blocks again, correctly, and the fix is to re-route rather than to re-record.
 - **steer** — approve → the goal stands as finished: mark `goal.json` `status: stopped` and **stop** (do not
   re-pick; a finished goal with a non-empty backlog is still finished, and continuing is how a drive outruns what
   a human agreed to) · changes → the human's notes are the new direction: route them through `discuss` or

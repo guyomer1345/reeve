@@ -220,6 +220,17 @@ case "$MODE" in
       python3 "$SCRIPTS/check_decision_coverage.py"   "$m" || fail=1
     done
 
+    # The autonomy floor, with its escape. The floor alone is a CONSULTATION -- `loop.md` asks
+    # the orchestrator to run it, and a loop that simply does not is exactly the case the floor
+    # exists for. Running it here makes it an enforcement; the approval receipt is what keeps
+    # that from blocking the legitimate case, where a human WAS asked and DID approve. The
+    # receipt is bound to a digest of the approved spec, so approving v1 and committing v2
+    # blocks again rather than waving through.
+    if [ -f "$SCRIPTS/spec_approval.py" ]; then
+      echo "+ autonomy floor" >&2
+      python3 "$SCRIPTS/spec_approval.py" check --scripts-dir "$SCRIPTS" || fail=1
+    fi
+
     # Chain-forecast gates over every committed forecast. Two lints because they settle
     # two different facts (one owner each): the GRAPH half asks whether every event names
     # a real loop.md node — the property that keeps the forecast a reading of the routing

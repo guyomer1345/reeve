@@ -66,6 +66,10 @@
       "dest": ".claude/scripts/check_autonomy_floor.py"
     },
     {
+      "src": "scripts/spec_approval.py",
+      "dest": ".claude/scripts/spec_approval.py"
+    },
+    {
       "src": "scripts/check_wave_independence.py",
       "dest": ".claude/scripts/check_wave_independence.py"
     },
