@@ -6971,3 +6971,88 @@ slice is *mechanically ungameable by effort, not ungameable by a bad binding.*
 
 **Builds on:** **D192**/**D198** (an exit test is a re-runnable harness, not a paragraph about a run), **D199**.
 → `11` (Step 5), `07`.
+
+## D201 — `pause` had no state: the control a human most expects to be absolute was the one depending on a model remembering it **[FOUND + FIXED 2026-09-13, opening `12e`. `control.json` + `drain.py record` latches it; 9 tests]**
+
+**The finding.** `bus.py` validated a `control` op, the drain delivered it, and the orchestrator was trusted to
+honour it in context. The comment beside `CONTROL_OPS` said *"pause and resume each **re-set a flag**"* — and
+there was no flag: `grep -rn 'paused'` over the whole package returned **nothing**. `loop-detail.md` admitted it
+without noticing: *"Anchor: none possible."* So a pause survived exactly as long as the session that read it, and
+**expired at that session's exit — the precise moment an unattended driver decides whether to start another
+one.** A human who pauses a run and finds it running an hour later has been told the control works.
+
+**The fix follows a line this repo already drew from MEASUREMENT, not taste.** `drain.py`'s own docstring splits
+the boundary: *apply is judgment and stays the orchestrator's; bookkeeping is arithmetic and belongs to a script*
+— and that split was measured (driving real sessions, the apply half was right every time while the bookkeeping
+half silently produced an unbounded consumed-set in **two runs of three**). By that rule `reprioritize` is
+judgment — which item matters more is not a function of the inputs — and **`pause`/`resume` are a flag.** They
+were on the judgment side by accident. `drain.py record` now latches them into the runtime `control.json`, so
+honouring a pause is a side effect of bookkeeping the consumer must do anyway rather than something it can
+forget.
+
+**Written BEFORE the watermark**, deliberately: a crash between the two leaves the control honoured and the
+message merely redelivered, which is a no-op by construction. The reverse order loses the pause outright — the
+message reads as consumed and the latch never moved. **Ordering within one batch is by `message_id`** (which is
+time-ordered), so a pause and a resume drained together land as sent, not as listed by the caller.
+
+**RUNTIME, not committed** — operational intent about a live machine, and a rebuilt machine has nothing to stay
+paused about. **Rejected:** a `paused` value on `state.json`'s `status` enum, which would have conflated the
+loop's *mode* with an operator's *override* and made "paused while building" inexpressible.
+
+**Builds on:** **D117** (the drain's measured judgment/arithmetic split, which this applies rather than invents).
+→ `05` (the tree), `schemas-runtime.md`, `loop-detail.md` (whose "no anchor" claim this makes false and corrects),
+`07` (the `12e` question it answers).
+
+## D202 — `12e`: the driver decides, the session does not report — and a fresh process is the only `/clear` there is **[BUILT 2026-09-13 — D186 Step 6. `loop.sh --drive` + `drive.py`; 20 unit tests; exit test 20 checks, 0 failed, stable over three runs. **PARTIAL — the notify arm is not built; see below**]**
+
+**The call.** `loop.sh` gains `--drive`: hold the lock, run a session, start the next against the same goal until
+a stop predicate fires. Without the flag it is byte-for-byte the launcher it always was — one `exec claude`, the
+human drives — and the exit test asserts that separately, because a driver that changed the human path would be
+a regression disguised as a feature.
+
+**The design question `07` posed was "how does a session stop ITSELF at a clean boundary", and the answer is that
+it mostly should not have to.** The obvious build has each session write why it stopped and the driver obey; it
+was rejected because **a session that crashed, was killed, or ran out of context writes nothing**, and a driver
+that needs a report cannot tell that apart from a clean stop. So every predicate is computed from **durable state
+the session did not author for the purpose** — the pause latch, the goal ledger, git, the item anchors. A dead
+session cannot lie about why it died, and nothing needs it to. The exit test drives a session that exits `3` and
+writes nothing, and the drive continues correctly.
+
+**Progress is the ANCHOR SET, not `HEAD`.** `HEAD`-moved is the tempting signal and is wrong in the direction
+that matters: an item larger than one session advances through nodes without committing, and a `HEAD`-only driver
+calls that a stall. So progress reuses the rule the **forecast anchor table** already runs on — each node is
+resolved through the durable effect it leaves behind — and fingerprints `HEAD` **plus** the per-item anchors.
+**Presence only, never content:** hashing bodies would let an edited draft read as a node having run.
+
+**The drop-in window is a handshake, not a protocol.** Between sessions the driver releases the lock for a few
+seconds. Anyone who takes it — a human's own `loop.sh`, or the daemon's relaunch-runner — keeps it, and the
+driver **finds out by losing the re-acquire** and exits. No flag, no signal, no new state: the same `flock` that
+already prevents two orchestrators, used as the handover. It also resolves the collision nobody had named — the
+drop-in window and the relaunch-runner both want that gap, and losing the race to either is the correct outcome.
+
+**The session-side discipline rides the PROMPT, not the always-loaded brief.** It is the driver's instruction to
+its own sessions; a human session must never auto-stop; and a per-session instruction costs the always-loaded
+budget nothing — which mattered, with 11 tokens of advisory headroom left.
+
+**FAIL DIRECTION IS THE OPPOSITE OF `converge.py`'s, deliberately.** That module only reports, so it may be
+permissive. This one **spawns processes on a machine nobody is watching**, so every predicate it cannot compute
+**stops** it. The cost of stopping wrongly is a human retyping a command; the cost of continuing wrongly is an
+unattended night of work nobody can account for.
+
+**The exit test found a real bug that no unit test would have.** The stop reasons are written for humans and
+contain backticks (*"resume with a `control` message"*), and the shell contract quoted them with `json.dumps`.
+Inside double quotes a backtick is **command substitution**, so `eval` ran `control` as a command. Fixed with
+`shlex.quote` and pinned by a regression test using the nastiest reason a human could provoke — the safety now
+comes from the quoting rather than from nobody writing an awkward sentence.
+
+**PARTIAL, and named rather than glossed:** `11` specifies *"goal met ⇒ capture, **notify**, stop"*, and the
+notify arm is **not built**. The driver prints its reason and exits. Half-building it was refused for a specific
+reason: `Notifier.deliver` is daemon-coupled and shapes a checkpoint payload, so a driver-side send would either
+be surgery on the away channel or **a second copy of the delivery-and-backoff logic** — the one thing this repo
+forbids. And the right fix is already an open question rather than new design: **a goal stop that parked a
+`checkpoint` would ride the existing away channel for free**, which is the sixth `checkpoint.kind` `D199`
+deferred. Two threads, one decision, and it is `07`'s.
+
+**Builds on:** **D123** (the lock this drives on), **D201** (the latch, without which a driver is unsafe),
+**D199** (the stop predicate), **D117** (the anchor-table rule progress reuses).
+→ `11` (Step 6), `07`, `05`, `schemas-runtime.md`.

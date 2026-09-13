@@ -307,6 +307,15 @@ class Paths:
         # the daemon alone writes. A lost or corrupt copy re-alerts rather than going
         # silent — a missed alert is the failure this exists to prevent.
         self.alerts = os.path.join(self.runtime, "alerts.json")
+        # The loop's own PAUSE latch. A `control` message is the only thing that writes it
+        # (mechanically, from `drain.py record`), and the session driver reads it before
+        # spawning. It exists because `pause` had no durable representation at all: the op
+        # was validated, delivered, and then honoured only by whichever session happened to
+        # read it — so it died at that session's exit, which is the precise moment an
+        # unattended driver decides whether to start another one. RUNTIME, like state.json:
+        # it is operational intent about a live machine, not project history, and a rebuilt
+        # machine has nothing to stay paused about.
+        self.control = os.path.join(self.runtime, "control.json")
         # Pinned for the same measured reason as the token: these are live credentials
         # on a tree whose mount may ignore 0600 and say nothing. The bus never touches
         # this path — it is here because path resolution has one owner.

@@ -19,8 +19,16 @@ The order itself is in `loop.md`. What each kind *does*, and the **anchor** that
   no-op) — and "closed" means the record is gone, which is why `unpark` is the step that makes the anchor real.
 - **intake** — promoted into `backlog.md` through triage, stamped with the source message id. *Anchor:* that
   stamp (an item already carrying the id is already promoted → skip).
-- **control** — reprioritize / pause, honored here only (non-preemptive; never mid-item). *Anchor:* none
-  possible, so control ops are required to be idempotent.
+- **control** — reprioritize / pause / resume, honored here only (non-preemptive; never mid-item). The ops split
+  by **who can be trusted to apply them**, the same line this drain is built on (§ `drain.py`: apply is judgment,
+  bookkeeping is arithmetic). `reprioritize` is **judgment** — which item matters more is not a function of the
+  inputs — and stays yours. `pause`/`resume` are a **flag**, so `drain.py record` latches them mechanically into
+  the runtime `control.json`; you do not have to remember a pause, and **must not** treat having read one as
+  having honoured it. *Anchor:* for `pause`/`resume`, the latch itself (`drain.py paused`, exit 0 ⇒ paused); for
+  `reprioritize`, none possible — which is why every op here must still be idempotent under redelivery.
+  **Why the latch exists at all:** a pause used to live only in the reading session's head, so it expired at that
+  session's exit — precisely when an unattended driver decides whether to start another one, and precisely when a
+  human who paused expects it to hold.
 - **release** — fires the named `outbox/` entries through `guard.sh`. *Anchor:* the entry's status (already
   fired → skip).
 - **question** — run `answer`: reply from this project's own record and append the turn to

@@ -964,11 +964,14 @@ sub-questions deferred to the build, in the order the slices need them.
   has to re-solve the context half for an unattended session, where no human is watching a statusline at all.
   **Not scheduled** — it waits on the measurement above, and the maintainer flagged it explicitly as *not* the next
   roadmap item.
-- **How does a session stop ITSELF at a clean boundary? `[12e]`** The whole hand-off rests on this and it is the
-  one piece with no precedent: the runner's sessions end by running out of ready work, not by choosing to stop with
-  work remaining. Needs a boundary definition that cannot strand a half-done item, and it must interact correctly
-  with the `orchestrator.lock` release — the lock is held by the *launcher's* fd, so what the session controls is
-  its own exit, not the lock.
+- **~~How does a session stop ITSELF at a clean boundary?~~ ANSWERED 2026-09-13 by building it — `D202`, and the
+  answer is that it mostly does not have to.** The design that needs it — each session reports why it stopped, the
+  driver obeys — was rejected: a session that crashed, was killed, or ran out of context **writes nothing**, and a
+  driver needing a report cannot tell that apart from a clean stop. So the driver computes every predicate from
+  durable state the session did not author (latch, ledger, git, item anchors). **The residual is real and smaller
+  than the question:** the session-side *"stop between items, never mid-item, with the handoff written"* rides the
+  driver's prompt, which is an **instruction, not an enforcement** — a session may still stop mid-item, and what
+  makes that survivable is that the item dir is committed while open, so a mid-item stop loses position, not work.
 - **~~What does "the goal is met" read off?~~ ANSWERED 2026-09-13 by building it — `D199`.** Every acceptance
   enumerated in `.workflow/goal.json` discharged by a **promoted** item, read by `converge.py met`. The probe the
   question asked for was run and **the candidate was wrong**: `check_criterion_discharge.py` is a plan-time
@@ -976,10 +979,12 @@ sub-questions deferred to the build, in the order the slices need them.
   the measure on it would have produced a number that rises when plans are written. Not a gap in that gate; the
   wrong gate. What the measure actually reads is `verify`'s existing `pass: true`, which already entails every
   artifact criterion of the plan.
-- **Does a `pause` arriving mid-session reach the `loop.sh` gap? `[12e]`** `control` is honored at the next
-  *loop* boundary, and the wrapper's gap is a *session* boundary. Two different boundaries, and a human who pauses
-  expects the stronger one. Decide whether the wrapper drains `control` itself before spawning session N+1 — which
-  makes the interrupt guaranteed — or whether it trusts the session to have honored it.
+- **~~Does a `pause` arriving mid-session reach the `loop.sh` gap?~~ ANSWERED 2026-09-13 — `D201`/`D202`, and the
+  true answer was worse than the question assumed.** A pause did not reach the *next session*, let alone the gap:
+  it had **no durable representation at all** (`grep -rn 'paused'` over the package returned nothing, while the
+  code comment claimed a flag). Now `drain.py record` latches it mechanically and the driver reads the latch before
+  spawning, so the interrupt is guaranteed by *state* rather than by the wrapper re-draining or the session
+  remembering. The exit test drives a pause issued **during** session 2 and asserts session 3 never starts.
 
 ## Newly open from building and driving `12c` (2026-09-13 — D195–D198)
 Three of these were opened by the build finding something nobody had asked about; the fourth is a limit of a gate
@@ -1039,3 +1044,25 @@ slice inherits whether or not anyone looks at it.
   its advisory**. The axis still has to be chosen on *belonging* rather than to clear a number (the D193 lesson),
   and `goal`/`goal-ledger` sit with `roadmap`/`plan` as the planning chain — which is a hint at where the seam
   is. The next slice that adds a schema section should expect to split first.
+
+## Newly open from building `12e` (2026-09-13 — D201/D202)
+- **The sixth `checkpoint.kind` now has TWO callers, which is the promotion trigger it was waiting for.
+  `[12e-residual, decide next]`** `D199` deferred it with one caller (a goal stop routed to `idle`) on the
+  grounds that a gated enum should not grow for a single case. `D202` supplies the second and sharper one: `11`
+  specifies *"goal met ⇒ capture, **notify**, stop"*, and the notify arm is **unbuilt** because
+  `Notifier.deliver` is daemon-coupled and a driver-side send would be a **second copy of the delivery-and-backoff
+  logic**. A goal stop that **parked a checkpoint** would ride the existing away channel for free — so the sixth
+  kind and the missing notification are **one decision, not two**. Blast radius is known and small:
+  `checkpoint.kind`'s enum owner, `bus.py` `PARK_KINDS`, the checkpoint skill, the console's renderer,
+  `10-roster.md`. This is the strongest candidate for the next thing built.
+- **The driver's stop discipline is an INSTRUCTION, not an enforcement. `[12e-residual]`** *"Stop at a scheduler
+  boundary, never mid-item"* lives in the driver's prompt, which is the right home (a human session must never
+  auto-stop, and it costs no always-loaded budget) but is not a gate. A session that stops mid-item loses
+  **position**, not work — the item dir is committed while open — so the failure is a re-orientation cost rather
+  than lost building. Worth knowing before anyone reads the driver as bounded.
+- **Nothing has driven the driver with a REAL model. `[carried, now the dominant validation gap]`** `D200`'s and
+  `D202`'s harnesses both script their writers, deliberately and for the same reason (removing model variance
+  makes a red run mean the *mechanism* is wrong). Two slices now rest on that choice, and the outstanding
+  validation is the same one `D198` named: real `planner`/`execute` agents through a live `/start`. It has been
+  carried across three slices and is no longer a footnote — **it is the largest single unknown in Phase 12**, and
+  every mechanism built since `12c` has been proven against a scripted stand-in.

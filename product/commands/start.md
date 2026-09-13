@@ -79,6 +79,7 @@ loop's normal `state.json` takes over when the motion ends.
      codemap.sh        # code-map runner — a thin stack-independent wrapper (one auto-dispatching call into the shipped engine; writes docs/knowledge/graph.json) (committed)
      state.json        # live position — RUNTIME, add to .gitignore
      orchestrator.lock # single-orchestrator liveness marker (runner's precondition) — RUNTIME, add to .gitignore
+     control.json      # the loop's PAUSE latch — written by `drain.py record`, read by the session driver — RUNTIME, add to .gitignore
      install-set.json  # what this install wrote + the hashes — /update's ledger (committed)
      handoff.md        # durable resume anchor          (committed)
      backlog.md        # live OPEN queue (issues + roadmap; closed leave) (committed)
@@ -107,7 +108,7 @@ loop's normal `state.json` takes over when the motion ends.
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
    `bundles/` (org mode's review bundles — regenerable from git at any time, so they are a hand-off artifact
    rather than a record; the history they summarise is already committed), 
-   `orchestrator.lock`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
+   `orchestrator.lock`, `control.json`, `alerts.json`, `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
    material — the one runtime path that sits *inside* a committed directory, so it needs its own line or the
    allowlist's commit-by-default rule takes it; `shared/schemas.md § scratch`), and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,

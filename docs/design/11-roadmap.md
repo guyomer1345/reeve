@@ -1081,7 +1081,7 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
-### The ordered build sequence (set 2026-09-13, D186; Steps 0–5 CLOSED 2026-09-13, D187/D188/D189/D191/D198/D199/D200) — the fix pass, then Phase 12
+### The ordered build sequence (set 2026-09-13, D186; Steps 0–6 ALL CLOSED 2026-09-13 — D187/D188/D189/D191/D198/D199/D200/D201/D202; `12e` PARTIAL on its notify arm) — the fix pass, then Phase 12
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied. A step that is merely *nice*
 before another is called that; a step that is a **prerequisite** says why. Phase 12's per-slice content lives
@@ -1212,7 +1212,22 @@ always-loaded ceiling in hand:** the set stands at **6350 against a 6400 advisor
 rule forbids raising a cap to fit what the package weighs — the next slice needing per-turn space must
 **relocate**, not grow. `12c` paid its own rent that way (`D196`) rather than discovering it at integration.
 
-**Step 6 — `12e`, the `loop.sh` session driver. ← NEXT.** Last, and the ordering is a safety call rather than a
+**Step 6 — `12e`. ✅ CLOSED 2026-09-13 — `D201`/`D202` (PARTIAL: the notify arm).** Built: `loop.sh --drive` +
+`drive.py`, with the human path byte-for-byte unchanged and asserted so. **Opening the step found a defect that
+made the whole slice unsafe: `pause` had no state anywhere** — the op was validated, delivered, then honoured only
+by whichever session read it, so it died at that session's exit, which is exactly when a driver decides whether to
+start another one (`D201`). `07`'s question *"how does a session stop itself at a clean boundary"* is answered by
+**not needing it to**: a crashed or killed session writes nothing, so every predicate is read from durable state
+the session did not author — the latch, the ledger, git, the item anchors. Progress is the **anchor set, not
+`HEAD`**, because an item larger than a session advances without committing. The **drop-in window** is the lock
+itself: release, and whoever takes it keeps it — which also settles the unnamed collision between the drop-in
+window and the relaunch-runner. Exit test as specified in this line: a real goal across several sessions with no
+`/clear`, interrupted on purpose — **20 checks, 0 failed, stable over three runs**, and it caught a real
+shell-quoting bug no unit test would have. **The residual is named, not glossed:** `notify` on goal-met is not
+built, because the right fix is the sixth `checkpoint.kind` that `D199` deferred — one decision, not two, carried
+in `07`.
+
+**Step 6 (as originally written) — `12e`, the `loop.sh` session driver.** Last, and the ordering is a safety call rather than a
 convenience: it multiplies any defect in Steps 2–5 across unattended sessions, and **an autonomous driver without a
 convergence test is a churn engine holding a lock.** Its exit test is a real goal driven across several sessions
 with no human `/clear`, interrupted once on purpose to prove the drop-in window and the `pause` path.

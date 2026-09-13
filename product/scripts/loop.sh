@@ -18,6 +18,13 @@
 # on the same footing as the single-orchestrator run-constraint.
 #
 # Pass-through: every argument goes to `claude` unchanged (`loop.sh --resume …`, etc.).
+#
+# `--drive` (must be the FIRST argument) turns this launcher into a session DRIVER: hold the
+# lock, run a session, and when it exits start the next one against the same goal until the
+# goal is met, the operator pauses, or nothing is moving. Everything it decides between
+# sessions lives in `drive.py`, not here — a bash script making those calls is untestable
+# exactly where being wrong costs a whole unattended night. Without `--drive` this file
+# behaves exactly as it always has: one `exec claude`, and the human drives.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,4 +64,62 @@ fi
 # so the file names claude's real pid. The flock — not this value — is the authority.
 echo "$$" >&9
 
-exec claude "$@"
+if [ "${1:-}" != "--drive" ]; then
+  exec claude "$@"
+fi
+shift
+
+# ---------------------------------------------------------------- the session driver
+#
+# WHY A FRESH PROCESS RATHER THAN `/clear`. `/clear` cannot be self-invoked at all, so this is
+# not a second-best: a new session IS the reset, and it starts from the same durable anchor a
+# cold start already rebuilds from (`handoff.md` + git). The session-side discipline — stop at
+# a scheduler boundary, never mid-item, with the handoff written — is carried in the PROMPT
+# below rather than in the always-loaded brief, deliberately: it is the driver's instruction to
+# its own sessions, not a standing rule, and a human session must never auto-stop. It also
+# costs the always-loaded budget nothing.
+DRIVE_PROMPT="${REEVE_DRIVE_PROMPT:-Continue the loop. Work items to completion, committing \
+each as normal. STOP AT A SCHEDULER BOUNDARY — between items, never mid-item — and before you \
+stop, rewrite .workflow/handoff.md whole so a session that knows nothing can continue. Do not \
+run /clear and do not ask the human anything you can decide; park a checkpoint if you truly \
+need them.}"
+WF="${WORKFLOW_DIR:-.workflow}"
+# The drop-in window: seconds between sessions with the lock RELEASED, so a human can take the
+# machine simply by starting their own `loop.sh` — no flag to set, no signal to send. Whoever
+# takes the lock wins, and the driver finds out by losing the race rather than by being told.
+DROPIN="${REEVE_DROPIN_SECONDS:-5}"
+
+drive() { python3 "$HERE/drive.py" --workflow-dir "$WF" "$@"; }
+
+DRIVE_FINGERPRINT=""; DRIVE_STREAK=0; SESSIONS=0
+while true; do
+  # `eval` of KEY=VALUE, not JSON — a driver that needs `jq` has a new way to fail at 3am.
+  set +e; verdict="$(drive tick --prev-fingerprint "$DRIVE_FINGERPRINT" \
+                          --streak "$DRIVE_STREAK" --shell)"; rc=$?; set -e
+  eval "$verdict"
+  if [ "${DRIVE_CONTINUE}" != "1" ]; then
+    echo "loop.sh --drive: stopping after ${SESSIONS} session(s) — ${DRIVE_REASON}" >&2
+    exit 0
+  fi
+  SESSIONS=$((SESSIONS + 1))
+  echo "loop.sh --drive: session ${SESSIONS} (${DRIVE_REASON})" >&2
+  # A non-zero session is NOT a driver failure: a crashed or killed session is exactly the case
+  # the fingerprint exists to judge, and it gets judged on what it left behind, not on its exit
+  # code. `set -e` must not turn that into an abort.
+  set +e; claude -p "$DRIVE_PROMPT" "$@"; set -e
+
+  # The drop-in window. Releasing and re-taking is the whole handover protocol: if anyone else
+  # (a human launcher, or the daemon's relaunch-runner) takes the lock in the gap, the
+  # re-acquire fails and this driver steps aside rather than racing a second orchestrator
+  # against the same .workflow/ — the one hazard the lock exists to prevent.
+  if [ "$DROPIN" -gt 0 ]; then
+    flock -u 9
+    sleep "$DROPIN"
+    if ! flock -n 9; then
+      echo "loop.sh --drive: another orchestrator took the lock during the drop-in window —" >&2
+      echo "                 handing over and exiting. This is the intended way to take over." >&2
+      exit 0
+    fi
+    echo "$$" >&9
+  fi
+done

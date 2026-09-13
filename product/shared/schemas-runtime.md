@@ -203,6 +203,46 @@ resolve to identically) and **deduplicated** (never re-run for a tree state this
   ignores mode returns `0777` silently). **Deleting the file re-pairs everyone** — the only rotation path, and a
   deliberately visible, owner-level act.
 
+## control.json  · written by `drain.py record` when a `control` pause/resume is applied, read by `drain.py paused` and the session driver · *`.workflow/control.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
+- `{ paused: bool, at, by }` — `by` is the `message_id` of the control message that last set it.
+**The state `pause` did not have.** The op was validated and delivered, and then honoured only by whichever
+session read it — so a pause expired at that session's exit, which is exactly when an unattended driver decides
+whether to start another one, and exactly when a human who paused expects it to hold.
+**Why the drain writes it rather than the orchestrator.** The drain's own split is *apply is judgment,
+bookkeeping is arithmetic*, and that line was drawn from measurement, not taste. `reprioritize` is judgment —
+which item matters more is not a function of the inputs. `pause`/`resume` are a **flag**, so they belong to the
+arithmetic half; leaving them on the judgment side meant the one control a human most expects to be absolute was
+the one depending on a model remembering it.
+**Written BEFORE the watermark** in `record`, deliberately: a crash between the two leaves the control honoured
+and the message merely redelivered (a no-op by construction). The reverse order loses the pause outright — the
+message reads as consumed and the latch never moved.
+**RUNTIME, like `state.json`.** It is operational intent about a live machine, not project history, and a
+rebuilt machine has nothing to stay paused about.
+
+## session driver  · `scripts/loop.sh --drive` + `scripts/drive.py`, holding `orchestrator.lock` across sessions · *no artifact of its own — every decision is read from durable state written by something else*
+`loop.sh` without `--drive` is unchanged: one `exec claude`, and the human drives. With `--drive` it holds the
+lock, runs a session, and starts the next against the same goal until a stop predicate fires.
+- **A fresh process is the reset.** `/clear` cannot be self-invoked, so a new session is not a second-best — and
+  it starts from the anchor a cold start already rebuilds from (`handoff.md` + git).
+- **The driver decides; the session does not report.** Every predicate is computed from state the session did not
+  author for the purpose — the pause latch, the goal ledger, git, the item anchors. A session that crashed, was
+  killed, or ran out of context writes nothing, and a driver that needed a report could not tell that apart from
+  a clean stop.
+- **Stop predicates, in precedence order:** `paused` · goal `met` · goal `STALLED` · `MAX_NOPROGRESS` consecutive
+  sessions that moved no anchor. Anything that cannot be computed **also stops** — this half spawns processes, so
+  it fails closed where `converge.py` (which only reports) may not.
+- **Progress is the ANCHOR SET, not `HEAD` alone.** An item bigger than one session advances through nodes
+  without committing, and a HEAD-only driver would call that a stall. So it fingerprints `HEAD` **plus** the
+  per-item anchors, reusing the forecast anchor table's rule. Presence only — hashing bodies would let an edited
+  draft read as a node having run.
+- **The drop-in window** between sessions releases the lock for `REEVE_DROPIN_SECONDS` (default 5). Anyone who
+  takes it in the gap — a human's own `loop.sh`, or the daemon's relaunch-runner — keeps it, and the driver
+  finds out by **losing the re-acquire** and exiting. The handover needs no flag and no signal; it is the same
+  `flock` that already prevents two orchestrators, used as a handshake.
+- **The session-side stop discipline rides the PROMPT** (`REEVE_DRIVE_PROMPT`), not the always-loaded brief:
+  it is the driver's instruction to its own sessions, a human session must never auto-stop, and a per-session
+  instruction costs the always-loaded budget nothing.
+
 ## alerts.json  · written and read by the bus daemon alone, to record which checkpoints it has already alerted on · *`.workflow/alerts.json`; RUNTIME, gitignored, atomic write; kept on a native filesystem*
 - `{ checkpoints: { "<ticket_id>|<deadline>": { first_alert, last_alert, escalated } }, dead_letters: { "<message_id>": { at } } }`
   — the daemon's own away-alert bookkeeping. It **cannot** live in `parked/` (the orchestrator's single-writer

@@ -227,6 +227,47 @@ def publish(paths, block):
     atomic_write(paths.handoff, upsert_handoff_block(text, block), mode=0o644)
 
 
+def read_control(paths):
+    """The pause latch, as a dict. Unreadable or absent ⇒ not paused."""
+    val = read_json(getattr(paths, "control", "") or "")
+    return val if isinstance(val, dict) else {}
+
+
+def _apply_control(paths, applied):
+    """Set or clear the pause latch from the control messages just recorded.
+
+    WHY THIS IS ARITHMETIC AND NOT JUDGMENT, which is the whole split this file exists to
+    draw. `reprioritize` is judgment -- which item matters more is not a function of the
+    inputs. `pause` is a FLAG. It was on the judgment side by accident, and the cost was
+    exact: the op was validated and delivered, and then honoured only by whichever session
+    happened to read it, so it evaporated at that session's exit -- the precise moment an
+    unattended driver decides whether to start another one. A human who pauses a run and
+    finds it running again an hour later has been told the control works.
+
+    ORDER WITHIN ONE BATCH is by message id, which is time-ordered, so a pause and a resume
+    arriving in the same drain land in the order they were sent and the last one wins.
+    Re-applying either is a no-op by construction, which is what keeps a redelivered control
+    message safe -- the property the closed CONTROL_OPS set exists to protect.
+
+    Failure to write the latch is NOT swallowed: a pause that silently does not latch is the
+    failure this exists to prevent, and it must be loud at the moment it happens rather than
+    discovered when the driver keeps going.
+    """
+    ops = []
+    for mid in sorted(applied):
+        body = read_json(os.path.join(paths.inbox, mid + ".json"))
+        if isinstance(body, dict) and body.get("kind") == "control":
+            op = body.get("op")
+            if op in ("pause", "resume"):
+                ops.append((mid, op))
+    if not ops:
+        return None
+    mid, op = ops[-1]
+    state = {"paused": op == "pause", "at": now_iso(), "by": mid}
+    atomic_write(paths.control, json.dumps(state, indent=2, sort_keys=True) + "\n")
+    return state
+
+
 def cmd_record(paths, args):
     block, visible = load(paths)
     consumed = set(block.get("consumed") or [])
@@ -254,14 +295,23 @@ def cmd_record(paths, args):
     # — this is the step the brief never stated and two of three real runs skipped.
     kept = sorted(m for m in consumed if not through or m > through)
 
+    # The latch BEFORE the watermark: if this process dies between the two, the control
+    # has been honoured and the message merely redelivers, which is a no-op. The reverse
+    # order loses the pause entirely -- the message reads as consumed and the latch never
+    # moved.
+    control = _apply_control(paths, applied)
+
     out = empty_block()
     out["consumed"] = kept
     out["consumed_through"] = through
     out["dead_letters"] = dead[-MAX_DEAD_LETTERS:]
     publish(paths, out)
-    return {"recorded": sorted(set(applied)), "consumed_through": through,
-            "consumed_kept": len(kept), "dead_letters": len(out["dead_letters"]),
-            "pruned": len(consumed) - len(kept)}
+    res = {"recorded": sorted(set(applied)), "consumed_through": through,
+           "consumed_kept": len(kept), "dead_letters": len(out["dead_letters"]),
+           "pruned": len(consumed) - len(kept)}
+    if control is not None:
+        res["paused"] = control["paused"]
+    return res
 
 
 def cmd_secret(paths, args):
@@ -314,11 +364,19 @@ def main(argv=None):
     rec.add_argument("--dead-letter", nargs="*", default=[], metavar="ID=reason",
                      help="applied, but it resolved to nothing — surfaced to the human")
 
+    sub.add_parser("paused", help="exit 0 if the loop is PAUSED, 1 if it is not — the "
+                                  "session driver's gate, readable from a shell")
     sec = sub.add_parser("secret", help="move a returned credential to the store")
     sec.add_argument("--id", required=True)
 
     args = ap.parse_args(argv)
     paths = Paths(args.workflow_dir)
+    if args.cmd == "paused":
+        state = read_control(paths)
+        paused = bool(state.get("paused"))
+        print(json.dumps({"paused": paused, "since": state.get("at"),
+                          "by": state.get("by")}, indent=1))
+        return 0 if paused else 1
     fn = {"list": cmd_list, "record": cmd_record, "secret": cmd_secret}[args.cmd]
     print(json.dumps(fn(paths, args), indent=1))
     return 0
