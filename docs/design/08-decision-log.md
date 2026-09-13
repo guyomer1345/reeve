@@ -6880,3 +6880,94 @@ outstanding and this does not stand in for it — it is carried in `07` as the r
 **Builds on:** **D192** (coherence, not throughput), **D194** (the PARTIAL this closes), **D195** (freshness,
 wave 2's subject), **D196** (which the drive needed to be real).
 → `11` (Step 4 CLOSED), `07` (the residuals cleared, and the one that remains).
+
+## D199 — `12d`: convergence is acceptance-derived, moves only at item close, and the goal record exists because the spec is PROSE **[BUILT 2026-09-13 — D186 Step 5. `product/scripts/converge.py` + 21 tests; exit test 33 checks, 0 failed, stable over four runs]**
+
+**The call.** An autonomous drive stops on "the goal is met", so that predicate cannot be a judgement made by the
+thing that wants to keep running. It is mechanical end to end: a goal is **met** when every acceptance it
+enumerates has been discharged by a *promoted* item, and **stalled** when `STALL_LIMIT` (5) consecutive
+promotions discharge nothing new. No effort term appears anywhere in the module.
+
+**The roadmap's stated anchor for this slice was false, and finding that out was the first half of the work.**
+`11` justified the measure with *"`check_criterion_discharge.py` already computes which acceptance criteria a
+change discharges."* It does not. It is an 80-line **plan-time structural linter** that blocks when an `artifact`
+criterion has an empty `discharge` string; its own docstring says it "CANNOT prove the named discharge is
+ADEQUATE", and it never observes whether the named check *ran*. It answers *"did the planner name a check?"* —
+not *"is this criterion satisfied?"* `07` had suspected a gap ("inherits whatever gaps … never probed for this
+use"). Probed: not a gap, the wrong script. **Rejected:** building the measure on it anyway, which would have
+produced a convergence number that rises when plans are written.
+
+**Why a goal record exists at all, when `docs/spec.md` already states acceptance.** Because it states it as
+**prose**. `features[].acceptance_criteria` is a sentence, and a sentence has nothing a plan's criterion can bind
+to. `.workflow/goal.json` enumerates the acceptance the drive is judged on and gives each entry an `id` — that
+id is the *entire* reason the record exists. **Rejected: putting ids in the spec.** It would make a
+human-written, `STABLE`, rewrite-in-place document machine-shaped to serve one consumer, and its blast radius is
+`discuss` + `ingest` + `align`. The copy's staleness needs no new discipline: **the autonomy floor already treats
+a changed hunk inside an `acceptance_criteria` region as goal-affecting** and routes it to a human, which is
+exactly the moment to re-derive.
+
+**The measure moves ONLY at item close, which looks coarse and is the point.** An open item has delivered
+nothing; a plan binding `ga-3` is a *promise* to discharge it. So `discharged` (in the ledger) · `planned` (an
+open item binds it, worth nothing yet) · `unbound` (nothing anywhere binds it). Reading progress off open work is
+precisely how a stalled loop reports motion.
+
+**`unbound` is the cheapest finding here and is not what it was built for.** A goal carrying an acceptance no
+plan ever attempts cannot be met, and that is knowable on day one instead of after five sessions. `prioritize`
+reports it once per acceptance and files it as ordinary work.
+
+**Why a ledger exists in a repo whose law is that reality is DERIVED, never recorded** (`schemas-loopstate.md` §
+the forecast ANCHOR TABLE). Because the artifacts it would derive from are *deliberately destroyed*:
+`retention.py` prunes the whole item dir — `promises.json` and `verify-verdict.md` with it — once
+`promoted.json` lands. So `goal-ledger.jsonl` is **not a parallel record of live state**; it is the **promoted
+form of an item's acceptance evidence**, written at the one moment promote-then-prune already runs, by the node
+that already runs it. **While an item is open nothing is recorded and everything is derived.** The exit test
+drives real `retention.py` over real promoted items and reads the measure before and after, because a claim this
+load-bearing should not rest on an argument.
+
+**Deliberately NOT built: a per-criterion outcome field.** `verify` hard-fails an item when any `artifact`
+criterion's discharge produced no signal, so `pass: true` on line 1 of `verify-verdict.md` **already entails**
+that every artifact criterion of that plan discharged. A per-criterion record would be a second encoding of what
+the verdict token carries, and two encodings of one fact eventually disagree. This is also why the slice is much
+smaller than it first looked: `verify` already makes the judgement, it simply had nowhere durable to put it.
+
+**Three defects caught before shipping, recorded because each was a live mistake in this session's own work:**
+1. **`goal.status` was specified as `{active, met, stopped}`** — a stored copy of the one fact the driver stops
+   on, which `converge.py` derives. Cut to `{active, stopped}`, an operator switch; doneness is asked, never read.
+2. **The routing row sent a goal stop to `checkpoint`**, but `checkpoint.kind` is a *gated enum* with an owner
+   and consumers (`bus.py` `PARK_KINDS`, the console), and none of its five members means "re-steer". A sixth
+   member is its own decision with real blast radius. Routed to **`idle` (await steering)** instead — an existing
+   terminal state that already means *stop and wait for a human*. Whether a goal stop deserves its own kind (and
+   therefore an away-alert) is carried to `12e`, which is what makes an unattended stop matter.
+3. **`goal.json` was documented with a producer that did not produce it.** `planner:decompose` now writes it.
+
+**It paid its own rent, per the standing rule.** The always-loaded set went **6350 → 6389 / 6400 advisory** — two
+routing rows and no prose, with the *why* in `converge.py` and `schemas.md`, neither of which is always-loaded.
+
+**Builds on:** **D82** (the verifiability contract that makes `pass: true` mean something), **D80** (one owner per
+fact — the law defect 1 broke), **D186** Step 5, **D196** (`planner` as a leaf agent, where the binding is written).
+→ `11` (Step 5), `07` (what a green run does not earn; the `12e` questions this opened).
+
+## D200 — the `12d` exit test: show the measure REFUSING to move while work is manifestly happening **[DRIVEN 2026-09-13. 33 checks, 0 failed, stable over four runs. `scripts/exit_test_goal_convergence.py`]**
+
+The objection a convergence measure must answer is not speed and not coherence — it is that **a loop measuring
+its own progress will find a way to report progress.** So a run where the numbers go up proves nothing. Every
+assertion is aimed at the numbers *refusing* to go up: two items planned and open move it zero; five closed
+items that discharge nothing produce a **stall** and `check` exits 2; a genuine **re-fix of already-discharged
+work** keeps the streak counting; a crash replayed between `record` and `promoted.json` appends nothing and does
+not lengthen a streak that never happened; an unparseable goal and a goal with **no acceptance** both fail to
+read as met, the second being the one shape that is vacuously true and would stop a driver having built nothing.
+
+**The step that justifies the ledger's existence is driven, not argued.** Real `retention.py` runs over real
+promoted items, both dirs are confirmed gone, `promises.json` is confirmed unreadable — and the measure is
+identical across the prune.
+
+**WHAT A GREEN RUN DOES NOT EARN.** Nothing here dispatches a model. `planner` deciding which acceptance a
+criterion honestly settles is a **judgement**, and a *false binding* — a criterion bound to an acceptance it does
+not really settle — is invisible to every assertion here and to `converge.py` itself. The measure is only as
+sound as those bindings; this proves the mechanism around them. **That limit is structural, not a gap to close
+later:** no script can know whether a test really settles a sentence. It is why `planner`'s instruction says an
+unbound criterion costs nothing while a false binding stops a driver, and why the honest description of this
+slice is *mechanically ungameable by effort, not ungameable by a bad binding.*
+
+**Builds on:** **D192**/**D198** (an exit test is a re-runnable harness, not a paragraph about a run), **D199**.
+→ `11` (Step 5), `07`.

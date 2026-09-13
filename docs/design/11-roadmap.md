@@ -1081,7 +1081,7 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
-### The ordered build sequence (set 2026-09-13, D186; Steps 0–4 CLOSED 2026-09-13, D187/D188/D189/D191/D198) — the fix pass, then Phase 12
+### The ordered build sequence (set 2026-09-13, D186; Steps 0–5 CLOSED 2026-09-13, D187/D188/D189/D191/D198/D199/D200) — the fix pass, then Phase 12
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied. A step that is merely *nice*
 before another is called that; a step that is a **prerequisite** says why. Phase 12's per-slice content lives
@@ -1190,13 +1190,29 @@ out N workers multiplies *simultaneous returns into the router*, which is the co
 drive's fed-in tokens, D180). Parallelism before the returns are bounded makes the scarce resource scarcer — it
 would buy wall-clock by spending the exact budget the phase is trying to protect.
 
-**Step 5 — `12d`, goal-drive with convergence measurement. ← NEXT.** Needs `12a`'s autonomy boundary to know what
+**Step 5 — `12d`. ✅ CLOSED 2026-09-13 — `D199`/`D200`.** Built: `converge.py` (the measure, `met`, `check`,
+`record`), `.workflow/goal.json` + `goal-ledger.jsonl`, a `goal_ref` binding on plan criteria, and the
+`planner`/`document`/`prioritize`/`loop.md` wiring. **The slice's stated anchor turned out to be false and that
+was the first half of the work:** `check_criterion_discharge.py` does *not* compute which criteria a change
+discharges — it is a plan-time linter that checks a `discharge` string is present, so building on it would have
+produced a number that rises when plans are written. What the tree actually needed was much smaller than that
+implies: `verify` **already** judges each criterion and hard-fails on an unsignalled discharge, so `pass: true`
+entails them all, and no per-criterion record was built. The goal record exists for one reason — `docs/spec.md`
+states acceptance as **prose**, and a sentence has nothing to bind an id to. The measure **moves only at item
+close**, because reading progress off open plans is exactly how a stalled loop reports motion.
+**It paid its own rent:** 6350 → **6389/6400** advisory, two routing rows and no prose.
+**`D200`** drove the exit test: **33 checks, 0 failed, stable over four runs**, including real `retention.py`
+deleting the evidence the measure is derived from. **What it does not earn is carried in `07`, not here:** a
+*false binding* — a criterion bound to an acceptance it does not settle — is invisible to the measure, and that
+limit is structural rather than a gap to close.
+
+**Step 5 (as originally written) — `12d`, goal-drive with convergence measurement.** Needs `12a`'s autonomy boundary to know what
 to route and what to take, and needs a measure before `12e` can know when to stop. **Plan it with the
 always-loaded ceiling in hand:** the set stands at **6350 against a 6400 advisory**, 50 tokens, and the standing
 rule forbids raising a cap to fit what the package weighs — the next slice needing per-turn space must
 **relocate**, not grow. `12c` paid its own rent that way (`D196`) rather than discovering it at integration.
 
-**Step 6 — `12e`, the `loop.sh` session driver.** Last, and the ordering is a safety call rather than a
+**Step 6 — `12e`, the `loop.sh` session driver. ← NEXT.** Last, and the ordering is a safety call rather than a
 convenience: it multiplies any defect in Steps 2–5 across unattended sessions, and **an autonomous driver without a
 convergence test is a churn engine holding a lock.** Its exit test is a real goal driven across several sessions
 with no human `/clear`, interrupted once on purpose to prove the drop-in window and the `pause` path.

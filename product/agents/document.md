@@ -38,10 +38,18 @@ judge intent-vs-actual divergence against the recorded intent).
    symptom / cause / fix / avoid). Each entry's header is **`## [date] kind | title`** — the strict,
    lint-parseable form `retention.py` splits entries on; keep `# Sessions` the node's terminal section.
 4. Flag intent-vs-actual divergence as a signal.
-5. **Mark the item promoted** — once this item's essence is folded (the `# Sessions` entry written, its
-   `decision-record`s already in `docs/decisions/`), write `.workflow/items/<id>/promoted.json`
-   (`{ "promoted": true }`). This is the sole gate the audit prune reads: no marker → the dir is never pruned, so
-   the mechanical pass can't delete un-promoted memory.
+5. **Promote the item's acceptance evidence, THEN mark it promoted.** Order matters and is not a style
+   preference — the marker is what makes the dir prunable, so anything read out of the dir must be read first.
+   - **First**, if `.workflow/goal.json` exists, run
+     `python3 .claude/scripts/converge.py record --item <id> --workflow-dir .workflow`. It appends this item's
+     `goal_ref` bindings to `.workflow/goal-ledger.jsonl` — the durable form of what the item discharged, since
+     `promises.json` is about to be deleted with the dir. It is **idempotent by item id**, so a re-run after a
+     crash appends nothing; and it appends an entry even when the item discharged no acceptance, because an item
+     that moved nothing is exactly what the convergence stall streak counts.
+   - **Then** write `.workflow/items/<id>/promoted.json` (`{ "promoted": true }`), once this item's essence is
+     folded (the `# Sessions` entry written, its `decision-record`s already in `docs/decisions/`). This is the
+     sole gate the audit prune reads: no marker → the dir is never pruned, so the mechanical pass can't delete
+     un-promoted memory.
 
 ## Audit mode (retention + prune)
 The second mode, run as a maintenance item the caller injects on a count/size threshold (not after each phase).

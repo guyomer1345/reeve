@@ -70,6 +70,10 @@
       "dest": ".claude/scripts/plan_freshness.py"
     },
     {
+      "src": "scripts/converge.py",
+      "dest": ".claude/scripts/converge.py"
+    },
+    {
       "src": "scripts/check_directives.py",
       "dest": ".claude/scripts/check_directives.py"
     },

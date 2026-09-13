@@ -49,7 +49,8 @@ from each section below. Read it when that situation arises, not every turn.
 | `checkpoint:setup` | fail (couldn't complete) | re-attempt `checkpoint` (re-guides via setup-guide) / escalate to human |
 | `document` | knowledge + Sessions updated | `commit` |
 | `commit` | snapshot made | `close-issue?` |
-| `close-issue` | issue closed (or no linked issue → skip) | `prioritize` (next item) |
+| `close-issue` | issue closed (or no linked issue → skip) | `converge?` (if a goal) → `prioritize` |
+| `converge` | `met`, or `STALLED` (see `converge.py`) | `idle` (await steering) — **never** retry the item |
 | `document:audit` | retention pass done (changes + receipt staged) | `commit` |
 | `align` | scan done (tickets filed via `create-issue`, fixes + receipt staged, anchor written) | `commit` |
 | `doc-budget` | over-budget doc trimmed or split-and-pointered (changes + receipt staged) | `commit` |

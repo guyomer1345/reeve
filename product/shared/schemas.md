@@ -65,6 +65,41 @@ The prose layer over `graph.json`: the structural fields are **copied from `grap
 ## roadmap  · produced by `planner` (decompose mode) · *emitted as items into the live `backlog.md` queue*
 - `phases[]` — `{ name, goal, depends_on[], acceptance, commitment }`
 
+## goal  · derived from the `spec` by `planner` (decompose mode), read by `converge.py` · *`.workflow/goal.json`; **COMMITTED** (it outlives every item it is measured over, and a lost goal is a driver with no stop condition); rewrite-in-place — a new goal REPLACES it*
+The record **above the item level** that an autonomous drive converges on. At most one is active: the
+single-orchestrator run-constraint means a second would be a second thing to stop on.
+- `id` · `statement` — what the drive is for, in one line
+- `created_sha` — the commit the acceptance set was derived against
+- `status` ∈ `{ active, stopped }` — an **operator switch** (should a driver run against this goal), never a
+  progress field. **`met` is deliberately NOT a value here:** it is derived by `converge.py` from the ledger, and
+  a stored copy would be a second encoding of the one fact the driver stops on, and one fact never gets a second
+  owner.
+  Ask `converge.py met` (exit 0/1); never read doneness off this file.
+- `acceptance[]` — `{ id, text, source }`, the enumerated definition-of-done. **This is the only place a goal's
+  acceptance carries an `id`, and that is the whole reason the record exists.** `docs/spec.md` states acceptance
+  as *prose* (`features[].acceptance_criteria` is a sentence), and a sentence has nothing a plan's criterion can
+  be bound to. `source` points back at the spec element each entry was derived from.
+- **The enumeration is a DERIVED copy, and its staleness already has an owner.** Re-derive when the spec's
+  acceptance changes — which is not a new discipline to remember: *the autonomy floor already treats a changed
+  hunk inside an `acceptance_criteria` region as goal-affecting* (§ the autonomy floor) and routes it to a human.
+  That routing is the moment to re-derive, so the copy cannot drift silently past a gate that already exists.
+- **A goal with an empty `acceptance[]` is never `met`**, rather than vacuously met — `converge.py` special-cases
+  it, because "all zero of them are discharged" is the one shape that would stop a driver having built nothing.
+
+## goal-ledger  · appended by `document` at promote time (via `converge.py record`), read by `converge.py` · *`.workflow/goal-ledger.jsonl`; **COMMITTED**, APPEND-ONLY, one line per promoted item*
+- `{ goal, item, refs[] }` — the goal acceptance ids that item discharged; `refs: []` when it discharged none.
+**Why a ledger exists in a repo that derives reality rather than recording it** (§ the forecast ANCHOR TABLE in
+`schemas-loopstate.md`): because the artifacts it would derive from are *deleted*. `retention.py` prunes the item
+dir — `promises.json` and `verify-verdict.md` with it — once `promoted.json` lands. This is not a parallel record
+of live state; it is the **promoted form of an item's acceptance evidence**, written at the one moment
+promote-then-prune already runs, by the node that already runs it. **While an item is open nothing is recorded
+and everything is derived.** An entry is appended for **every** promoted item, including one that discharged
+nothing — that is precisely what the stall streak counts.
+**Deliberately NOT recorded: per-criterion pass/fail.** `verify` hard-fails an item when any `artifact`
+criterion's discharge produced no signal, so a `pass: true` verdict *already entails* that every `artifact`
+criterion of that plan discharged. A per-criterion outcome field would be a second encoding of what the verdict
+token carries, and the two would eventually disagree.
+
 ## plan  · produced by `planner` (plan-one mode) · *created per item under `.workflow/items/<id>/` (planner `mkdir`s it on demand); the item **dir** is committed while the item is open (crash-survival), pruned once closed by the audit pass*
 > **`committed while open` ≠ a second code commit.** What rides these interim commits is the item's `.workflow/`
 > *artifacts* (plan / changelog / verdict) — not the product code. The product code is still **one commit at
@@ -102,6 +137,12 @@ The prose layer over `graph.json`: the structural fields are **copied from `grap
   `check_criterion_discharge.py` blocks a plan whose `artifact` criterion lacks a discharge. A plan with zero
   `human-qa` criteria never triggers a QA checkpoint. `boundary: true` marks a criterion whose case is drawn
   from **outside the implementation's own enumerated set** (the discharge a universal promise requires).
+  **`goal_ref`** — optional; the `goal.acceptance[].id` this criterion discharges. It is the **binding that makes
+  convergence acceptance-derived rather than effort-derived**: without it the only measurable thing is how many
+  items closed, which is the measure a churning loop passes. `planner` binds it when a goal is active and the
+  criterion genuinely settles that acceptance; **unbound is legitimate** (incidental criteria exist) and is never
+  a gate — but a goal *acceptance* that no criterion anywhere binds is reported `unbound` by `converge.py`, which
+  says the goal cannot be met as planned, and says it before the work is spent rather than after.
 - `promises[]` — mirrors the impact-flagged `decision-record.promises[]` this plan implements; each promise's
   `test_ref` resolves to an `acceptance_criteria.id` here, and a `universal` promise's linked criterion must be
   **`boundary`-tagged** (one in-scope example can't discharge a "for-any" claim). `planner` writes these + the
@@ -109,7 +150,9 @@ The prose layer over `graph.json`: the structural fields are **copied from `grap
   (`check_promise_coverage.py`, run by `checks.sh --check`) **blocks** an unlinked or non-boundary promise — the
   mechanical sibling of the decision-coverage gate. It proves *linkage*, not adequacy: a universal's adequacy
   rests on a property/structural test drawn from outside the enumeration (e.g. the code-map floor invariant).
-  The same `promises.json` also carries the plan's `criteria[]` (`{ id, gate, discharge, boundary }`) — so
+  The same `promises.json` also carries the plan's `criteria[]` (`{ id, gate, discharge, boundary, goal_ref }`)
+  — it is what `converge.py` reads for an OPEN item's bindings, and the only reason `goal_ref` is mirrored
+  here rather than left in `plan.md`: the plan is prose and this is the machine-readable half. So
   `check_promise_coverage.py` resolves a universal's `boundary` off its **linked criterion** (where the tag
   lives), not off the promise; its sibling gate
   `check_criterion_discharge.py` (also in `checks.sh --check`) **blocks** an `artifact` criterion with an empty

@@ -969,10 +969,13 @@ sub-questions deferred to the build, in the order the slices need them.
   work remaining. Needs a boundary definition that cannot strand a half-done item, and it must interact correctly
   with the `orchestrator.lock` release — the lock is held by the *launcher's* fd, so what the session controls is
   its own exit, not the lock.
-- **What does "the goal is met" read off? `[12d/12e]`** The driver stops on it, so it cannot be a judgment call
-  made by the thing that wants to keep running. Candidate: every acceptance criterion of the goal's phases
-  discharged, which is mechanical — but it inherits whatever gaps `check_criterion_discharge.py` has, and those
-  have never been probed for this use.
+- **~~What does "the goal is met" read off?~~ ANSWERED 2026-09-13 by building it — `D199`.** Every acceptance
+  enumerated in `.workflow/goal.json` discharged by a **promoted** item, read by `converge.py met`. The probe the
+  question asked for was run and **the candidate was wrong**: `check_criterion_discharge.py` is a plan-time
+  linter that checks a `discharge` *string is present*, so it answers "did the planner name a check?" — building
+  the measure on it would have produced a number that rises when plans are written. Not a gap in that gate; the
+  wrong gate. What the measure actually reads is `verify`'s existing `pass: true`, which already entails every
+  artifact criterion of the plan.
 - **Does a `pause` arriving mid-session reach the `loop.sh` gap? `[12e]`** `control` is honored at the next
   *loop* boundary, and the wrapper's gap is a *session* boundary. Two different boundaries, and a human who pauses
   expects the stronger one. Decide whether the wrapper drains `control` itself before spawning session N+1 — which
@@ -1007,3 +1010,32 @@ written in the same session, recorded next to the gate rather than left for whoe
   for real — they dispatch adjudication views — so the same trick does not apply, and they stay inline as the
   router's remaining expensive nodes. Whether that is acceptable or whether adjudication itself should be
   restructured is the open half, and it is a Phase-13 candidate rather than a `12d`/`12e` prerequisite.
+
+## Newly open from building `12d` (2026-09-13 — D199/D200)
+Two were opened by the build, one is a limit of the thing built, and the last is budget arithmetic that the next
+slice inherits whether or not anyone looks at it.
+
+- **A FALSE BINDING is invisible to the measure, and that limit is structural. `[opened by D200]`** `converge.py`
+  trusts `goal_ref`. A criterion bound to an acceptance it does not really settle discharges that acceptance and
+  the goal reads closer to met than it is — and **no script can know whether a test really settles a sentence**,
+  so this cannot be gated mechanically the way the bindings' *presence* can. `planner`'s instruction leans the
+  safe way (an unbound criterion costs nothing; a false binding stops a driver), and the honest description of
+  the slice is *ungameable by effort, not ungameable by a bad binding.* Open: whether the adversarial-adequacy
+  lens already deferred for the promise `boundary` rule is the same mechanism, and should be built once for both.
+- **Does a goal stop deserve its own `checkpoint.kind`? `[12e]`** `12d` routes `met` and `STALLED` to `idle`
+  (await steering) — deliberately, because `checkpoint.kind` is a *gated enum* with an owner and consumers
+  (`bus.py` `PARK_KINDS`, the console) and a sixth member is a real decision, while `idle` already means *stop and
+  wait for a human*. **That is right exactly while a human is at the terminal.** `12e` is what makes it wrong: a
+  goal met at 3am lands in `idle` and simply waits, where a checkpoint kind would ride the away channel and
+  alert. Decide it **in `12e`**, where the cost is real, not now — this is the same shape as the dispatch-band
+  question above, and the two may want the same answer.
+- **Who sets a goal that is NOT the whole roadmap? `[12e]`** `planner:decompose` writes `goal.json` from the
+  phases it just emitted, which covers *"build what the spec says"*. An operator saying *"drive at the checkout
+  flow this week"* mid-project has **no owner** — `discuss` produces spec, `prioritize` orders a queue, and
+  neither mints a goal. Not invented in `12d` on purpose: a goal with no driver is a record nobody reads, and
+  `12e` is the driver.
+- **`schemas.md` is at 14350/15000 and `12d` put it there. `[carried, sharpened]`** The split question above is
+  no longer hypothetical: this slice added the `goal` + `goal-ledger` sections and the file is now at **96% of
+  its advisory**. The axis still has to be chosen on *belonging* rather than to clear a number (the D193 lesson),
+  and `goal`/`goal-ledger` sit with `roadmap`/`plan` as the planning chain — which is a hint at where the seam
+  is. The next slice that adds a schema section should expect to split first.

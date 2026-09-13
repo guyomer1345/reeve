@@ -44,10 +44,18 @@ The backlog (items with `depends_on`, `kind`, `severity`).
    straight to `commit`, never through `planner`/`execute`/`verify`. Because of that each **stages a maintenance
    receipt** (`.workflow/maintenance/<item-id>.json`) in its own commit: with no verdict to show, that receipt is
    the only thing standing between a verify-free item and a commit gate that reads it as an unverified one.
-3. Make eligible only items whose `depends_on` are already done.
-4. Order eligible items by **urgency × dependency-readiness**.
-5. **Emit the PLAN BATCH: the head of the queue, up to `config.run.wave.plan_max`**, skipping anything already
-   planned, in flight or parked. Straight down the order from step 4 — no separability judgement here, for two
+3. **Check the goal is still reachable, when one is active.** If `.workflow/goal.json` exists, run
+   `python3 .claude/scripts/converge.py status --workflow-dir .workflow`. Anything it reports **`unbound`** is a
+   goal acceptance that *no plan anywhere attempts* — the goal cannot be met as currently queued, and this is the
+   one finding available **before** the work is spent rather than after five sessions of it. File it with
+   `create-issue` (kind `feature`) so it enters the queue as ordinary work; do not invent the item's content
+   here — naming the gap is queue work, filling it is `discuss`/`planner`'s. Report `unbound` at most once per
+   acceptance: it stays unbound until something plans it, and re-filing every pass would be sediment, not a
+   signal — the same rule the `doc-budget` trigger above runs on.
+4. Make eligible only items whose `depends_on` are already done.
+5. Order eligible items by **urgency × dependency-readiness**.
+6. **Emit the PLAN BATCH: the head of the queue, up to `config.run.wave.plan_max`**, skipping anything already
+   planned, in flight or parked. Straight down the order from step 5 — no separability judgement here, for two
    reasons worth stating because the obvious design is to make one:
    - **You have nothing to judge with.** A backlog row carries `{title, kind, severity, depends_on}` and *no
      file scope*. Scope first exists when a plan exists, which is the whole reason planning has to run ahead of
@@ -59,7 +67,7 @@ The backlog (items with `depends_on`, `kind`, `severity`).
    Surplus is expected and is the mechanism, not an overrun: unbuilt items keep their plans and walk into the
    next wave already eligible, so the pool of provably-independent work grows monotonically. Only the first
    wave pays full price.
-6. **Do not claim these items are independent — you cannot know that yet, and something else now does.**
+7. **Do not claim these items are independent — you cannot know that yet, and something else now does.**
    `check_wave_independence.py` computes it from the real plans once they exist, and it is the only owner of
    that answer. What this step emits is a batch that is *worth planning*; what may then be dispatched together
    is the gate's call and is routinely a subset. (This step used to gather "the independent items that can run
