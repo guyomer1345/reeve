@@ -880,7 +880,12 @@ sub-questions deferred to the build, in the order the slices need them.
   unlike `schemas.md` it has no obvious second belonging already latent in it. Decide the axis *before* it is
   urgent; the D193 lesson is that a split chosen to clear a number needs re-splitting next slice, while one chosen
   on belonging holds.
-- **Should `checkpoint` move to `schemas-bus.md`? `[live proposal, carried from D193]`** The console renders its
+- **~~Should `checkpoint` move to `schemas-bus.md`?~~ YES — BUILT 2026-09-13, `D205`.** Decided on belonging
+  exactly as this entry demanded: `12d` made it urgent (96% of advisory) but supplied no answer, and the answer
+  came from the sibling's own rule. **`forecast` deliberately did not move** — a console panel is a view, not a
+  boundary, and an axis that cannot decline a plausible candidate is not an axis. `schemas.md` 14350 → 12005,
+  `schemas-bus.md` → 11962. *(Original proposal below.)*
+- **~~[resolved by D205]~~ Should `checkpoint` move to `schemas-bus.md`? `[live proposal, carried from D193]`** The console renders its
   `request`/`verdict` and the already-moved `parked-ticket` embeds `checkpoint: {kind, request, …}`, so it would
   reunite the console-facing enums and dissolve the one cross-half reference the split created. Held back
   deliberately: it is a *semantic* re-home and D193 was a *size* fix. **Size is no longer an argument for it**,
@@ -1044,7 +1049,11 @@ slice inherits whether or not anyone looks at it.
   flow this week"* mid-project has **no owner** — `discuss` produces spec, `prioritize` orders a queue, and
   neither mints a goal. Not invented in `12d` on purpose: a goal with no driver is a record nobody reads, and
   `12e` is the driver.
-- **`schemas.md` is at 14350/15000 and `12d` put it there. `[carried, sharpened]`** The split question above is
+- **~~`schemas.md` is at 14350/15000~~ RESOLVED 2026-09-13 by `D205`** — 12005 now, and the seam was the
+  console boundary rather than the planning chain this entry guessed at. The guess was wrong in an instructive
+  way: `goal`/`goal-ledger` do sit with `roadmap`/`plan`, but that is a *grouping*, not a boundary, and moving
+  them would have split the loop's own artifacts from each other. *(Original entry below.)*
+- **~~[resolved by D205]~~ `schemas.md` is at 14350/15000 and `12d` put it there. `[carried, sharpened]`** The split question above is
   no longer hypothetical: this slice added the `goal` + `goal-ledger` sections and the file is now at **96% of
   its advisory**. The axis still has to be chosen on *belonging* rather than to clear a number (the D193 lesson),
   and `goal`/`goal-ledger` sit with `roadmap`/`plan` as the planning chain — which is a hint at where the seam

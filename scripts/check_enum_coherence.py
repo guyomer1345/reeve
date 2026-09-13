@@ -36,7 +36,12 @@ from check_doc_budget import split_pointers  # noqa: E402
 ENUMS = [
     {
         "name": "checkpoint.kind",
-        "owner": "product/shared/schemas.md",
+        # Re-homed to the bus half (D205): a checkpoint's other end is a human at the console,
+        # and `parked-ticket` -- which EMBEDS it -- already lived there. Naming the file the
+        # text is actually in, rather than leaning on read_with_splits to find it in a sibling:
+        # the split-set read is what keeps the gate honest across a split, not a licence to let
+        # an owner declaration go stale.
+        "owner": "product/shared/schemas-bus.md",
         # anchor to the `request` line so we don't grab integrations/issue `kind:`.
         "owner_re": r"request[^\n]*kind:\s*([a-z]+(?:\|[a-z]+)+)",
         # bus.py is the enum's DECIDER, not just another restatement: `write_park`
@@ -58,7 +63,7 @@ ENUMS = [
     },
     {
         "name": "checkpoint.verdict.outcome",
-        "owner": "product/shared/schemas.md",
+        "owner": "product/shared/schemas-bus.md",   # moved with the checkpoint section (D205)
         # the checkpoint verdict verb-enum (D97); anchors on `outcome:` so it can't
         # collide with either `kind:` enum above.
         "owner_re": r"outcome:\s*(approve(?:\|[a-z]+)+)",

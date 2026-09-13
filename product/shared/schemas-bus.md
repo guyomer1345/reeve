@@ -18,6 +18,95 @@ carry ids and counts rather than bytes for exactly that reason.
 split-and-pointer convention in `shared/memory-model.md`. A reference of the form `schemas.md § <name>`
 for any section below resolves here — the name is the anchor, and the three files are one schema.*
 
+## checkpoint  · the `checkpoint` gate · *a **durable park boundary**: the orchestrator writes handoff + the request, yields, and resumes via `claude --resume` with the verdict as an authoritative prompt*
+A checkpoint sits at **a boundary only a human can cross** — either a **judgment** boundary (does this match intent:
+`demo`, `qa`, `reconcile`, `forecast` — the verdict is an opinion) or an **action** boundary (do something in the world
+the loop can't reach: `setup` — the verdict is "I did it" + a returned artifact, then machine-verified).
+**`steer` is a judgment boundary of a third shape:** it is raised by the machine reaching a **terminal state**
+(the goal's acceptance all discharged, or nothing moving for long enough to call it stalled) rather than by a step
+that needs a human inside it, so it carries what was achieved and what did not move rather than a thing to look
+at. **Raised by the session DRIVER, not by an attended loop** — an attended `converge` stop routes to `idle`,
+because the human is already there. Its reason for existing is reachability: an unattended drive that simply goes
+quiet is indistinguishable from one that died, and a parked checkpoint is what the away channel already alerts on,
+so this kind buys the notification through the machinery that owns it instead of a second sender beside it. Its
+ticket id and token are **derived from (goal, reason)**, so a driver relaunched against the same terminal state
+rewrites one record rather than filing a ticket per launch — an away channel that repeats itself is one a human
+learns to ignore.
+- `request` — `{ kind: demo|qa|setup|reconcile|forecast|steer, what, expected, how?(←setup-guide), tasks?[], blocking: true, token }`.
+  **`token`** (`{ticket}:{step}:{uuid}`) correlates the async verdict back to this parked ticket. **`tasks[]`** is the
+  *set* of setup items a `kind=setup` checkpoint carries (a lone setup is a one-element set); the orchestrator
+  coalesces a plan's foreseeable setups (spec `integrations[]`) into one checkpoint **at first-setup-contact** (not
+  front-loaded at intake) — an unforeseen setup is raised by `execute` on hitting the wall.
+  - **`tasks[]` entry — `{ id, what, secrets?[], provides?[] }`.** `id` is the **task** id (`polar-webhook`), stable
+    across the reply so a per-task outcome routes back; `what` is the one-line ask the console shows. **`secrets[]`
+    names the credential **KEY NAMES** this task will hand back** (`POLAR_WEBHOOK_SECRET`) — never values. It is what
+    lets the console render a *labelled* input per credential instead of asking a human to hand-compose a payload, and
+    it is the **source** `config.json`'s `secrets_required[]` accumulates from (that key is the running projection of
+    every task's `secrets[]`, not a second declaration of the same fact).
+    **`provides[]` is the non-credential mirror** — the NAMES of values the task hands back that are *not* secrets
+    (`POLAR_WEBHOOK_URL`, a project id). It renders the same labelled input and lands in the reply's **`artifacts`**,
+    never `returns`, so the value stays readable to the orchestrator instead of being shredded into the secret store.
+    Two declared lists, not one list with a flag: **which list a name was declared in is what decides the value's
+    protection**, and that is a property a composer cannot forget to set (the `sensitive` marker is deleted, not
+    renamed). It also carries the one thing a **remote** console can return — those inputs are not gated on the
+    credential-socket check, because a webhook URL is not a credential and withholding it left a paired phone able to
+    answer a setup task with an outcome and nothing else.
+    **Request and reply share NO key name, deliberately** — the request declares NAMES to ask for (`secrets[]` /
+    `provides[]`), the reply carries VALUES (`returns` / `artifacts`). That non-overlap is the only reason `park` can
+    refuse a reply-side field on a request at all; naming the request half `artifacts[]` would forfeit it.
+    **`bus.py park` refuses a request task carrying `outcome`** — that is the *reply's* field (see `verdict` below),
+    and a request wearing it reads to a later human as though the question had already been answered. The refusal is
+    deliberately narrow: other undeclared request fields are still accepted, because `park` is how the machine ASKS
+    for help and a park that hard-fails is a checkpoint that never opens — a worse failure than an extra field.
+  - **`how` — `[{ step, url?, breadcrumb?, query? }]`**, the `setup-guide` return: one action per `step`, each with
+    the verified deep-link and the still-findable fallback. Structured because the console **renders** it beside the
+    form; a plain string is accepted and shown as text, so a guide written before this shape still displays.
+- `verdict` — `{ outcome: approve|changes|reject, notes, returns?, artifacts? }` (`pass` ≡ `outcome=approve`); a
+  `kind=setup` verdict replaces the single `outcome` with **`tasks[]` — `{ id, outcome, returns?, artifacts? }` per
+  task**, so a mixed reply routes each item on its own (`id` matches the `request.tasks[]` id).
+- **`returns` is a NAME-KEYED MAP — `{ "<KEY_NAME>": { value } }` — and `returns` MEANS CREDENTIAL.** Every entry is
+  protected; there is nothing to mark. The key **is** the credential's name, which is what makes a returned secret
+  matchable against the declared set without a second identifier to get wrong; task identity already lives at
+  `tasks[].id`, so `returns` never carries one. Multiple credentials from one task are simply more keys.
+  **The bus rejects any other shape at `POST /api/verdict` with a `400`** — a payload that cannot be matched must
+  fail loudly at the boundary rather than reach the store and read later as total credential loss.
+- **`artifacts` is the non-credential half — the same `{ "<NAME>": { value } }` shape, never redacted, never stored.**
+  A webhook URL or a project id the task hands back goes here, and stays readable to the orchestrator that has to act
+  on it. It is validated exactly as strictly as `returns`: the only thing separating the two is which field a value
+  arrived in. **Its producer is the setup form's `provides[]` inputs** (above) — the same row as the credential
+  inputs, a different input class, a different field. It shipped declared-but-unproducible for a while and said so
+  in place; that is now closed, because a field specified as if it works while nothing can emit it is the same defect
+  that made the old `returns` shape a coin toss.
+  - **Why the split, and why there is no `sensitive` marker.** There was one, and it was the *sole* trigger for three
+    protections at once — redaction out of the orchestrator's context, eligibility for the shred/store path, and
+    therefore whether the value was ever removed from the inbox. A **fully conforming** entry that simply omitted it
+    was printed verbatim, key and value, and never stored. Protection now comes from the FIELD, which no producer can
+    forget to set, rather than from a boolean somebody had to remember. A composer still sending `sensitive` gets a
+    `400` naming the field and pointing here.
+  **Routing keys off `outcome`, per kind:**
+  - **demo** — approve → lock the spec state · changes → `create-demo` (refine) · reject → `discuss`.
+  - **qa** — approve → `document`/`commit` · reject → `debug` (`changes` ≡ reject here).
+  - **setup** — approve|changes → the orchestrator **verifies the external precondition actually works** (probe the
+    key/webhook) *before* proceeding; reject → replan or hard-stop. Every `returns` value is written to
+    the gitignored **secret store** (`.workflow/secrets/`; § secret store), **never logged**, and its inbox record **unlinked
+    immediately after that write** — the field is what triggers this, not a marker on the entry.
+    **The console's setup form is the producer** — the per-task rows (outcome + one labelled input per
+    `request.tasks[].secrets[]` name) are what emit a conforming `returns`, and they are the *only* shipped way to
+    deliver one. The credential is typed into the page, POSTed once, and never stored browser-side: no
+    `localStorage`, inputs cleared on send, and the "my requests" memory records the **outcome only**. It renders
+    **only where the socket may accept a credential** (loopback, or a remote socket over an end-to-end-encrypted
+    transport) — but that is UX, not the boundary: the `403` at the socket stays the enforcement, because a page is
+    never allowed to be the thing that decides. The **`provides[]`** inputs beside it are the producer of
+    `artifacts`, and they render on **every** socket: the credential gate exists to keep secrets off a socket that
+    cannot carry them, and a non-credential is not one. **The input is deliberately `type="text"`, not a password field** —
+    driving the form in a real browser showed masking cost a human the ability to confirm a paste landed whole, and
+    made Chrome offer to save the key into its password manager, which `autocomplete="off"` cannot suppress on a
+    password field. Masking defended a loopback (or WireGuard) socket against a shoulder while costing correctness
+    and copying the credential somewhere nobody asked for.
+  - **reconcile** — approve → `prioritize` · else → `ingest`/`discuss`.
+  A **timeout never auto-proceeds** — it re-surfaces + reminds (a missing credential can't be skipped). A rejection is
+  not always a defect — hence routing by kind, not a universal `debug` sink.
+
 ## parked-ticket  · composed by the orchestrator, **written by `bus.py park`** · *`.workflow/parked/<id>.json`; RUNTIME, gitignored, kept on a native filesystem; projected onto `handoff.md`'s **`parked` machine block** for cold-start rebuild*
 - `{ ticket_id, token, worktree?, branch?, loop_position, checkpoint: {kind, request, demo_id?, forecast_id?}, predicted_outcome, deadline, opened_at, summary, answered_at? }` — `worktree`/`branch` are **absent for a pre-build (intake-stage) park** (a `demo`/`reconcile`/`forecast` checkpoint parks before any build worktree exists); a build-stage park always carries them. **`checkpoint.demo_id`** is present only for `kind: demo` — the id of the served bundle under `demos/`, so the console builds the `/demo/<id>/` iframe (validated to the served-id shape before it is rendered). **`checkpoint.forecast_id`** is the same passthrough for `kind: forecast` — a **pointer** to the committed `forecasts/<id>.json`, never the chain itself, because `unpark` deletes *this* record at the instant of approval and approval is exactly when the forecast must be frozen (see § forecast). Both are shape-validated before the console is allowed to resolve them. The **absolute `deadline` is also the alert-dedup key** (`ticket_id` + `deadline`): a ticket that parks, resolves, and re-parks stamps a fresh `deadline`, so the daemon alerts on the new checkpoint rather than treating it as already-seen.
 - **`bus.py park` is the writer, and the split is the usual one.** The orchestrator composes the **judgment**
@@ -101,7 +190,7 @@ consumed; the **bus** GCs inbox files ≤ that watermark (staying the sole write
 consumed-set is pruned to ids above it — bounding both the inbox and the set. Volume is human-interaction-paced
 (the autonomous loop never writes the inbox), so this is hygiene, not a hot path.
 - **`kind: verdict`** — `{ token, verdict: {outcome, notes, returns?} }` (a `setup` reply carries `tasks[]` instead
-  of the single `outcome`; `returns` is the **name-keyed map** declared in `schemas.md § checkpoint` and is validated on the way in) — resumes a parked ticket; `token` matches a
+  of the single `outcome`; `returns` is the **name-keyed map** declared in § `checkpoint` below and is validated on the way in) — resumes a parked ticket; `token` matches a
   `parked-ticket`; unknown/closed token → **dead-letter + surface** (never a silent resume). **Anchor:** the parked
   `token` — a re-applied verdict finds the ticket already resumed (token closed) → dead-letter/no-op. A non-empty
   `returns` (a setup credential — the field *is* the marker) is written to the gitignored secret store and this inbox record is

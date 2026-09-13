@@ -7135,3 +7135,42 @@ Flag-only, never `[CONFIRM]`: a confirmation prompt would imply the command is a
 **Builds on:** **D201** (whose new path exposed this), **D183** (`/update`'s ownership boundary), and the enum
 gate that makes the parsed clause trustworthy.
 → `07` (the open question, answered), `commands/update.md`.
+
+## D205 — `checkpoint` moves to the bus half, on BELONGING — and the split it dissolves is the one the last split created **[BUILT 2026-09-13. `schemas.md` 14350 → 12005; `schemas-bus.md` 8982 → 11962; gates green, 1094 tests]**
+
+**The call.** The `## checkpoint` section moves from `schemas.md` to `schemas-bus.md`, and **`forecast`
+deliberately does not go with it.**
+
+**Decided on the axis `07` insisted on, and the timing is the evidence.** D193's lesson was that *a split chosen
+to clear a number needs re-splitting next slice, while one chosen on belonging holds* — so `07` carried this as a
+live proposal with the note **"size is no longer an argument for it, which is the right way for it to be
+decided."** It is decided that way here: `12d` pushed `schemas.md` to **96% of its advisory**, which made the
+question *urgent* but supplied no answer, and the answer comes from the sibling's own stated rule — *the other
+end of each of these records is a human at the console, not the loop.* A checkpoint is the loop stopping to ask
+a person. That is the rule verbatim.
+
+**It dissolves a cross-half reference the previous split created.** `parked-ticket` lives in `schemas-bus.md` and
+**embeds** `checkpoint: {kind, request, …}`; the verdict shape was defined one file away. Two halves of a single
+exchange sat in two documents, and D193 recorded that as the one seam it left behind. The `schemas.md § checkpoint`
+pointer inside `schemas-bus.md` is now an in-file `§` reference — the only inbound pointer in the tree, which is
+itself a signal the seam was in the right place.
+
+**`forecast` stays, and refusing to move it is the test that the axis is real.** It is rendered in a console
+panel, so a size-driven or a "console-ish" reading would take it too. But its other end is **the loop walking the
+chain** — the panel is a *view*, not a boundary — and it is a committed artifact written by a loop skill. An axis
+that cannot decline a plausible candidate is not an axis.
+
+**The split machinery proved itself rather than being trusted.** `read_with_splits` (built at D193, so an invariant
+whose owner outgrows one file is still parsed whole) followed the move with no change. But the enum registry's
+**owner declaration was repointed to the file the text is actually in** rather than left leaning on the sibling
+read: the split-set read exists to keep a gate honest across a split, not to license a stale owner. **Verified by
+negative control** — dropping `steer` from `PARK_KINDS` fails the gate with the moved section named as owner, so
+it is genuinely reading it and not passing vacuously.
+
+**Where this leaves the file:** `schemas.md` 12005 and `schemas-bus.md` 11962 against a 15000 advisory — even,
+and both with room. A **pointer stub stays** where the section was, because a reader arriving at `schemas.md` for
+a checkpoint must not conclude it was deleted.
+
+**Builds on:** **D193** (the belonging axis and `read_with_splits`), **D199** (whose additions made it urgent),
+**D203** (the sixth kind, which the negative control exercises).
+→ `07` (the live proposal, resolved), `check_enum_coherence.py` (two owner declarations).
