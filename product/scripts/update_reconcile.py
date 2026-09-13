@@ -359,6 +359,66 @@ def write_ledger(project_root, ledger):
 
 # ---------------------------------------------------------------- planning
 
+# The gitignore clause in `commands/start.md` is the SHIPPED enumeration of runtime paths, and
+# `check_enum_coherence.py` already proves it matches the design record's tree. So it is a list
+# that is kept true by a gate rather than by a reader's diligence, and that is the only reason
+# it can be parsed here instead of restated.
+_IGNORE_CLAUSE_RE = re.compile(
+    r"Add the \*\*runtime\*\* paths to the target's `\.gitignore`(.*?);\s*the durable artifacts",
+    re.S)
+
+
+def runtime_paths(plugin_root):
+    """The runtime paths this package expects a target to ignore, read from the shipped clause.
+
+    Returns [] if the clause cannot be found -- a `/update` that cannot read it must report
+    NOTHING rather than a wrong list, because the whole value here is that the names are true.
+    """
+    try:
+        with open(os.path.join(plugin_root, "commands", "start.md"), encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        return []
+    m = _IGNORE_CLAUSE_RE.search(text)
+    if not m:
+        return []
+    return sorted({p for p in re.findall(r"`([^`]+)`", m.group(1))
+                   if not p.startswith("shared/") and "§" not in p})
+
+
+def missing_ignores(plugin_root, project_root):
+    """Runtime paths the package expects ignored that the target's `.gitignore` does not cover.
+
+    A DETECTION, never a write. `.gitignore` is target-owned and frequently hand-curated: a
+    runtime path left out is a tidiness bug, while a rewritten ignore file can start tracking or
+    untracking product code. So this names the lines and `/update` offers them; the human says
+    yes. It exists because the alternative was a model reading three schema documents and
+    hoping -- and it mis-fires in exactly the direction that is safe, since a false "missing"
+    costs one glance at a file the human owns anyway.
+
+    Matching is by LINE, deliberately loosely: an ignore file may cover `state.json` as
+    `.workflow/state.json`, `.workflow/*.json`, or a bare name, and a matcher strict enough to
+    be precise would report half a correct file as missing.
+    """
+    wanted = runtime_paths(plugin_root)
+    if not wanted:
+        return []
+    path = os.path.join(project_root, ".gitignore")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+    except OSError:
+        return wanted                       # no ignore file at all => every one is missing
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip() and not ln.startswith("#")]
+    missing = []
+    for want in wanted:
+        stem = want.rstrip("/").split("/")[-1]
+        if any(want in ln or stem in ln for ln in lines):
+            continue
+        missing.append(want)
+    return missing
+
+
 def compute_plan(plugin_root, project_root):
     expected = expected_files(plugin_root, project_root)
     ledger = load_ledger(project_root)
@@ -392,6 +452,11 @@ def compute_plan(plugin_root, project_root):
     for _src_rel, dest in SEEDS:
         kind = "SEEDED" if os.path.exists(os.path.join(project_root, dest)) else "SEED"
         actions.append({"kind": kind, "path": dest, "confirm": False})
+
+    # Runtime paths the target's `.gitignore` does not cover. FLAG-ONLY, like ORPHAN-EDITED:
+    # `.gitignore` is target-owned, so this names what is missing and never writes it.
+    for want in missing_ignores(plugin_root, project_root):
+        actions.append({"kind": "GITIGNORE", "path": want, "confirm": False})
 
     # The orchestrator brief's managed block.
     new_body = render_brief(plugin_root, project_root)
@@ -457,6 +522,8 @@ def render_plan(plan):
             "ORPHAN-EDITED": "retired but locally modified — FLAG ONLY, never removed",
             "BRIEF-UNMARKED": "no managed block in CLAUDE.md — flag only, not modified",
             "SEED": "absent — seeded once with the package's starting content, then yours",
+            "GITIGNORE": "RUNTIME path not covered by the target's .gitignore — it would be "
+                         "COMMITTED. Offer the line; never write it (target-owned)",
         }.get(a["kind"], "")
         flag = "  [CONFIRM]" if a["confirm"] else ""
         lines.append("%-14s %-46s (%s)%s" % (a["kind"], a["path"], note, flag))

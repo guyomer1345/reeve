@@ -899,10 +899,13 @@ sub-questions deferred to the build, in the order the slices need them.
   page and must carry everything in context, which is precisely what the ~41× re-read makes expensive. Read-narrowly
   is its only lever today. Not an oversight to fix silently: giving a research-shaped agent write access is a trust
   decision.
-- **`/update` never reconciles `.gitignore`. `[carried from D191]`** So every already-started project would commit
-  `items/*/scratch/`. `.gitignore` is target-owned, so `/update` names the missing line and asks rather than
-  writing it — the same rule that says a target-owned knob is never the fix for a package-owned defect. Open:
-  whether the ownership boundary should bend for a path the package itself introduced.
+- **~~`/update` never reconciles `.gitignore`.~~ ANSWERED 2026-09-13 — `D204`, and the ownership question was
+  the smaller half.** The boundary does **not** bend: `/update` still names the line and asks, never writes.
+  What changed is that the detection is mechanical — `update_reconcile.py` reports a `GITIGNORE` action per
+  uncovered runtime path, reading the *shipped* gitignore clause in `commands/start.md`, which a meta-gate already
+  proves matches `05`'s tree. **The prompt was `D201` adding `control.json` and exposing that the old prose
+  pointer had already gone stale** (it named two schema documents; the new path landed in a third), which is the
+  failure shape that mattered: silent, and in the direction of committing a runtime file.
 - **What makes the autonomy floor fire when the loop does NOT consult it? `[12a-residual, opened by building 12a]`**
   The floor is built, mechanical and decision-time: `loop.md` tells the orchestrator to run
   `check_autonomy_floor.py` before acting on a goal-affecting decision, exit 1 ⇒ `checkpoint`. **That is a

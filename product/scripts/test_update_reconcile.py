@@ -585,3 +585,85 @@ def test_the_shipped_package_pins_no_version_anywhere():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# --- gitignore detection: /update names what would be committed, never writes it ----------
+#
+# `/update` refreshes package files, but `.gitignore` is TARGET-owned — so a package that
+# introduces a new runtime path silently gets it committed on every already-started project.
+# The old instruction was prose telling the model to read the schema docs and work it out, and
+# it named the wrong documents once `control.json` landed in a third one. These pin the
+# mechanical replacement: the shipped gitignore clause in `commands/start.md` IS the list, and
+# `check_enum_coherence.py` already proves it matches the design record's tree.
+
+PLUGIN = os.path.join(os.path.dirname(os.path.abspath(ur.__file__)), "..")
+
+
+def _gi_project(tmp_path, ignore_body=None):
+    root = tmp_path / "proj"
+    root.mkdir(exist_ok=True)
+    if ignore_body is not None:
+        (root / ".gitignore").write_text(ignore_body, encoding="utf-8")
+    return str(root)
+
+
+def test_the_clause_is_parsed_from_the_shipped_file():
+    paths = ur.runtime_paths(PLUGIN)
+    assert "state.json" in paths
+    assert "control.json" in paths      # the path that exposed the stale prose pointer
+
+
+def test_prose_pointers_are_not_mistaken_for_paths():
+    """The clause cites `shared/schemas.md § scratch` mid-sentence; a naive backtick scrape
+    would report a documentation reference as a path a human should ignore."""
+    assert not [p for p in ur.runtime_paths(PLUGIN) if "§" in p or p.startswith("shared/")]
+
+
+def test_a_missing_path_is_reported(tmp_path):
+    root = _gi_project(tmp_path, "node_modules/\n.workflow/state.json\n")
+    assert "control.json" in ur.missing_ignores(PLUGIN, root)
+
+
+def test_a_covered_path_is_not_reported(tmp_path):
+    root = _gi_project(tmp_path, "\n".join(ur.runtime_paths(PLUGIN)) + "\n")
+    assert ur.missing_ignores(PLUGIN, root) == []
+
+
+def test_a_path_covered_with_a_directory_prefix_counts_as_covered(tmp_path):
+    """An ignore file may say `.workflow/control.json` where the package says `control.json`.
+    A matcher strict enough to be precise would report half a correct file as missing, which
+    is how a useful signal becomes one people skip."""
+    root = _gi_project(tmp_path, ".workflow/control.json\n")
+    assert "control.json" not in ur.missing_ignores(PLUGIN, root)
+
+
+def test_comments_do_not_count_as_coverage(tmp_path):
+    root = _gi_project(tmp_path, "# control.json goes here one day\n")
+    assert "control.json" in ur.missing_ignores(PLUGIN, root)
+
+
+def test_no_gitignore_at_all_reports_every_path(tmp_path):
+    root = _gi_project(tmp_path, None)
+    assert ur.missing_ignores(PLUGIN, root) == ur.runtime_paths(PLUGIN)
+
+
+def test_an_unreadable_clause_reports_NOTHING_rather_than_a_wrong_list(tmp_path):
+    """The whole value is that the names are true. A `/update` that cannot read the clause must
+    stay silent rather than send a human to edit a file against a guess."""
+    empty = tmp_path / "noplugin"
+    (empty / "commands").mkdir(parents=True)
+    (empty / "commands" / "start.md").write_text("nothing resembling the clause\n",
+                                                 encoding="utf-8")
+    assert ur.runtime_paths(str(empty)) == []
+    assert ur.missing_ignores(str(empty), _gi_project(tmp_path, "")) == []
+
+
+def test_the_action_is_flag_only_and_never_confirms(tmp_path):
+    """`.gitignore` is target-owned: `/update` names the line and the human says yes. A
+    [CONFIRM] would imply this command is about to write the file."""
+    root = _gi_project(tmp_path, "")
+    plan = ur.compute_plan(PLUGIN, root)
+    gi = [a for a in plan["actions"] if a["kind"] == "GITIGNORE"]
+    assert gi
+    assert not any(a["confirm"] for a in gi)
+    assert "never write it" in ur.render_plan(plan)

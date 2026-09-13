@@ -133,11 +133,16 @@ schema or new node frontmatter, and the only correct way to get it is to re-run 
   a regenerable code-map is a finding, not something to paper over.
 - `.workflow/checks.env` is **target-owned** and not refreshed. If the new package added a gate
   that needs a new key, say so and offer to add it — never rewrite the human's stack commands.
-- **`.gitignore` is target-owned too, and `/update` does not write it.** If the new package introduced a runtime
-  path (`shared/schemas.md` and its `schemas-bus.md` half name each one as RUNTIME + gitignored), the existing project's ignore file predates
-  it and will happily commit it. Name the missing line, offer to add it, and let the human say yes — the same
-  posture as `checks.env`. Do not silently edit the file: it is frequently hand-curated, and a runtime path left
-  out is a tidiness bug, while a rewritten `.gitignore` can start tracking or untracking product code.
+- **`.gitignore` is target-owned too, and `/update` does not write it — but the reconcile now NAMES what is
+  missing mechanically.** A new package version can introduce a runtime path the project's ignore file predates,
+  and it will happily commit it. `update_reconcile.py` reports each one as a **`GITIGNORE`** action in the plan;
+  offer the lines, let the human say yes, and do not silently edit the file — it is frequently hand-curated, and
+  a runtime path left out is a tidiness bug while a rewritten `.gitignore` can start tracking or untracking
+  product code. **Why mechanical rather than "read the schema docs":** the earlier instruction pointed at
+  `shared/schemas.md` and `schemas-bus.md`, and went stale the moment a runtime path landed in a *third* file —
+  a pointer that must be re-audited every time the package grows is one that will be wrong exactly when it
+  matters. The list now comes from the shipped gitignore clause in `commands/start.md`, which a meta-gate already
+  proves matches the design record, so it is kept true by a check rather than by a reader's diligence.
 
 ## 4. The orchestrator brief
 The brief lives in the target's root `CLAUDE.md` inside a **managed block** (the

@@ -7102,3 +7102,36 @@ renderer already handles a kind it does not special-case, which is the property 
 **Builds on:** **D199** (which deferred it and wrote the promotion trigger this satisfies), **D202** (which
 supplied the second caller), **D120** (the away channel's no-repeat-alerts discipline this copies).
 → `11`, `07` (both residuals closed), `10-roster`.
+
+## D204 — `/update` names the `.gitignore` lines a new package version needs, mechanically — ownership does not bend, but detection stops being prose **[BUILT 2026-09-13, prompted by `D201` introducing a runtime path and exposing the gap. 1085+ tests; 8 new]**
+
+**The trigger was self-inflicted and is the useful part.** `D201` added `control.json`, a new RUNTIME path. Every
+already-started project would **commit its pause latch** on the next `/update`, because `.gitignore` is
+target-owned and `/update` does not write it. That was a known open question (*"`/update` never reconciles
+`.gitignore`"*), and adding a path is what turned it from hypothetical into a live regression.
+
+**The ownership question resolves NO — and that was the smaller half.** `.gitignore` is frequently hand-curated;
+a runtime path left out is a tidiness bug, while a rewritten ignore file can start tracking or untracking product
+code. So `/update` still names the line and asks, the same posture as `checks.env`. **What changes is who works
+out the list.**
+
+**The old instruction was prose pointing at two documents, and it had already gone stale.** It told the model to
+read `shared/schemas.md` and `schemas-bus.md` for RUNTIME paths — and `control.json` landed in a **third**
+(`schemas-runtime.md`). A pointer that must be re-audited every time the package grows is one that will be wrong
+exactly when it matters, silently, in the direction of committing a runtime file. **Rejected:** fixing the
+pointer to name three documents, which buys one correct release and the same failure at the fourth.
+
+**The list now comes from a source a gate already keeps true.** `commands/start.md`'s gitignore clause is the
+*shipped* enumeration of runtime paths, and `check_enum_coherence.py` **already proves it matches
+`05-shared-state.md`'s tree**. So `update_reconcile.py` parses that clause rather than restating it — the value
+here is entirely that the names are true, and they are true because something else checks them.
+
+**Fail direction: an unreadable clause reports NOTHING, never a partial list.** A `/update` that cannot read it
+must stay silent rather than send a human to edit a file against a guess. Matching is deliberately **loose** (an
+ignore file may cover `state.json` as `.workflow/state.json` or a glob), because a matcher strict enough to be
+precise would report half a correct file as missing — which is how a useful signal becomes one people skip.
+Flag-only, never `[CONFIRM]`: a confirmation prompt would imply the command is about to write the file.
+
+**Builds on:** **D201** (whose new path exposed this), **D183** (`/update`'s ownership boundary), and the enum
+gate that makes the parsed clause trustworthy.
+→ `07` (the open question, answered), `commands/update.md`.
