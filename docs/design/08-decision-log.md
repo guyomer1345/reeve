@@ -6620,3 +6620,63 @@ green, 71 shipped files (both siblings ship via the `shared` glob with no MANIFE
 caps), **D80** (one owner; the `§`-anchor semantics), the split-and-pointer convention in `shared/memory-model.md`.
 → `07` (**`schemas-runtime.md` at 97% of advisory is the next to trip**; the `checkpoint` re-home is a live
 proposal).
+
+## D194 — `12c` PARTIAL: the two mechanical halves are built and honest about their limits; the coordinator's own behaviour is wired but UNPROVEN **[BUILT 2026-09-13, `727d172` — D186 Step 4, to D192's charter. 1091 tests (1043→1091), 6 meta-gates green. NOT CLOSED: the exit test D192 demands — coherence, not throughput — has not been run, and two residuals block a real fan-out]**
+
+D192 reversed D91 and chartered real same-turn fan-out with two first-class capabilities and one hard
+precondition. What is built is everything that must be **mechanical before any fan-out is safe**; what is not is
+the demonstration that it works.
+
+**The independence gate** (`check_wave_independence.py`) computes D91's retained predicate instead of
+`prioritize`'s admitted "conservative heuristic". Two exit codes only — 0 fan-out, 1 serial — with **serial
+absorbing every failure to compute**, so a caller that ignores the report and branches on status alone is still
+correct: the only non-zero answer it can receive is the conservative one. Rejections name a clause **and a
+counterparty**, because "not eligible" is unactionable. It is **narrower than D91's original grading**, which
+admitted a near-miss as a *flagged* start with raised integration rigor — a concession that made sense when the
+candidate would run **later** and does not when it runs **concurrently**; a test asserts no flagged-start path
+survives.
+
+**One build per wave** (`wave_build.py`) makes true what `orchestrator-CLAUDE.md` has called *"not yet enforced"*
+since it was written. An `flock` plus a pass-memo on the **git common dir** — chosen because the lock must be
+*one* file across workers living in **different worktrees**, and `.workflow/`'s runtime half is gitignored, so a
+per-ticket worktree has no lock to contend on. Being inside `.git/` it is uncommittable by construction.
+
+**The line it draws is the load-bearing part.** Only `--check`'s repo-wide stack half sits in the slot. Not in
+it: `--fix`, the `.workflow/`-only coverage gates, and above all **`execute` running the project's tests inside
+its own worktree**. One act is a worker checking itself; the other is the wave deciding. Conflating them would
+have broken `execute`, which is the failure a naive "build once" rule walks straight into.
+
+- **It fails towards BUILDING**, and that direction was reasoned rather than defaulted: a missing memo costs a
+  wasted build, while the other direction wagers the verdict a commit stands on. **Only passes are memoized** — a
+  remembered *failure* would outlive its cause, since the commonest red stack gate is a machine missing the
+  toolchain `checks.env` names, cured without touching the tree. Crash safety is kernel `flock`, the same
+  discipline as `orchestrator.lock`: no lease, no heartbeat, no stale-pid sweep, because no stale state can exist.
+- **Negative controls were run, not assumed.** Neutering the `flock` reddens the concurrency test; neutering the
+  claim reddens the dedup test. A green test that cannot go red is not evidence.
+- **Rejected — putting the wave lock under `.workflow/`.** It is the obvious home and it does not work: the
+  workers are in separate worktrees and the runtime half is gitignored, so there would be no single file to
+  contend on.
+
+*TWO RESIDUALS, and together they mean NO REAL FAN-OUT HAS YET RUN:*
+1. **Nothing in the package writes a non-null `wave` id.** `rebind.py` writes `null`; `bus.py` and
+   `project_state.py` only read it. So the **exclusion** half is fully mechanical today and the **dedup** half is
+   **dormant** until the coordinator publishes one. That is the correct coupling — no second notion of "which
+   wave is this" was invented — but it is a real gap.
+2. **Homogeneous fan-out needs PLAN-AHEAD, which is a change to the loop's shape rather than a coordinator
+   detail.** A backlog row has **no plan until it is picked**, and the predicate reads `files_touched` from the
+   plan. Measured on the real project: **106 candidates, zero eligible, 95 of them for *no plan*.** The machinery
+   is not at fault — exercised directly against the real code map (376 nodes / 164 edges), 64 scoped items yield
+   **1732 independent pairs**, 276 overlapping, 8 one-hop adjacent. So a wave becomes **plan-N-then-execute-N**,
+   and planning is the thing that fans out first.
+
+*AND THE EXIT TEST D192 DEMANDS HAS NOT BEEN RUN.* D192 is explicit that `12c`'s exit test must demonstrate
+**coherence, not throughput** — that is the objection D91 actually raised, and nothing built here touches it.
+Until a fanned-out wave has been driven and its merged result shown correct, the reversal is **decided and
+implemented but not validated**. This entry is deliberately titled PARTIAL for that reason.
+
+*Evidence:* real-project run reports `SERIAL`, exit 1, 106 candidates / 0 eligible with the breakdown above;
+predicate exercised directly on the live `graph.json`; budget after the slice — always-loaded set 6291/8000, with
+`orchestrator-CLAUDE.md` at **3137/3200** and `schemas-runtime.md` at **14962/15000**, both now uncomfortably tight.
+**Builds on:** **D192** (the charter and the reversal), **D91** (predicate + worktree isolation, retained),
+**D186** (Step 4), **D184** (the budget discipline that shaped where the prose landed).
+→ `11` (Step 4 — partial, not closed), `07` (the wave-id residual, plan-ahead, and the two tight files).

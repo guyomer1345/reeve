@@ -839,6 +839,16 @@ sub-questions deferred to the build, in the order the slices need them.
   computes which criteria a change *discharges*, which is not the same as which criteria a change *redefines*. If
   the second half cannot be made mechanical, say so plainly and let the floor be the first half alone rather than
   shipping a floor that is really a judgment wearing a gate's clothes.
+- **Nothing writes a non-null `wave` id, so half the wave-build slot is dormant. `[12c residual, D194]`**
+  `rebind.py` writes `null`; `bus.py` and `project_state.py` only read it. The **exclusion** half (one build at a
+  time) is fully mechanical today; the **dedup** half (don't re-gate an unchanged tree in the same wave) cannot
+  fire until the coordinator publishes a wave id. Correct coupling — no second notion of "which wave is this" was
+  invented — but whoever builds the coordinator owns closing it.
+- **The coherence exit test D192 demands has NOT been run. `[12c, blocks closing Step 4]`** D192 is explicit that
+  `12c`'s exit test is **coherence, not throughput** — that is the objection D91 actually raised, and nothing in
+  `D194` touches it. Until a fanned-out wave has been driven on a real project and its **merged result shown
+  correct**, the D91 reversal is decided and implemented but **not validated**. Combined with the two residuals
+  above, **no real fan-out has yet run.** This is the single thing standing between Step 4 and closed.
 - **Homogeneous fan-out needs PLAN-AHEAD, and that is a change to the loop's shape, not a coordinator detail.
   `[12c, found by building the independence gate]`** A backlog row has **no plan until it is picked**, and the
   independence predicate reads `files_touched` from the plan — so "the open backlog" is almost never a set of
@@ -850,8 +860,10 @@ sub-questions deferred to the build, in the order the slices need them.
   wave becomes plan-N-then-execute-N rather than pick-then-plan-then-execute. Open: whether that planning batch
   is itself dispatched in parallel (it is heterogeneous-batch work and looks eligible), and what it costs to plan
   an item that then proves ineligible and is never dispatched.
-- **`schemas-runtime.md` is now the tightest file in the package, at 14 503/15 000 advisory (97%). `[carried from
-  D193]`** The three-way split of `schemas.md` deliberately left it untouched, so it is the next one to trip — and
+- **`schemas-runtime.md` is the tightest file in the package, at 14 962/15 000 advisory — 38 tokens. `[carried
+  from D193, worsened by `12c`]`** The `12c` build had to trim its schema section three times to stay under, and
+  parked the rationale in `wave_build.py`'s docstring instead. That is the split-and-pointer remedy being applied
+  by hand under pressure, which is the signal that the file needs the real remedy.** The three-way split of `schemas.md` deliberately left it untouched, so it is the next one to trip — and
   unlike `schemas.md` it has no obvious second belonging already latent in it. Decide the axis *before* it is
   urgent; the D193 lesson is that a split chosen to clear a number needs re-splitting next slice, while one chosen
   on belonging holds.
@@ -860,11 +872,11 @@ sub-questions deferred to the build, in the order the slices need them.
   reunite the console-facing enums and dissolve the one cross-half reference the split created. Held back
   deliberately: it is a *semantic* re-home and D193 was a *size* fix. **Size is no longer an argument for it**,
   which is the right way for it to be decided.
-- **The always-loaded set has 144 tokens of advisory headroom left, and two slices still want rent. `[12d/12e]`**
+- **The always-loaded set has 109 tokens of advisory headroom left, and two slices still want rent. `[12d/12e]`**
   Step 1 created that headroom (8134 → 5394); Phase 12 has been spending it (`12a`'s directive channel, `12c`'s
   dispatch rule) and it now stands at **6256/6400 advisory**. The standing rule forbids raising a cap to
   accommodate what the package weighs, so the next slice needing per-turn space must **relocate**, not grow. The
-  brief is the obvious candidate at 3102/3200 — but it has already crept 2993 → 3066 → 3102 and its remaining
+  brief is the obvious candidate at 3137/3200 — but it has already crept 2993 → 3066 → 3102 → 3137 and its remaining
   content is genuinely every-turn, so the next cut there is a real judgement call rather than the dedup the earlier
   ones were. Plan `12d`/`12e` with this in hand rather than discovering it at integration.
 - **Should `setup-guide` get a write tool? `[carried from D191]`** Its `tools:` line is `WebSearch, WebFetch,

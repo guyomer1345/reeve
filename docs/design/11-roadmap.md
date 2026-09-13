@@ -1154,7 +1154,17 @@ what a worker does between turns. **It also re-justifies Step 4's ordering more 
 fanning out N workers multiplies *stalls*, not only simultaneous returns, since more workers wait on a
 coordinator that serialises. Parallelism before stall exposure is bounded makes the scarce resource scarcer.
 
-**Step 4 — `12c`, the wave coordinator. CHARTER REPLACED 2026-09-13 by `D192`, which REVERSES D91's
+**Step 4 — `12c`. ⚠️ PARTIAL 2026-09-13 — `D194`. BUILT but NOT CLOSED.** The two halves that must be mechanical
+before any fan-out is safe are done: the **independence gate** (D91's predicate computed, failing towards serial,
+with no flagged-start path) and **one build per wave** (an `flock` + pass-memo on the git common dir, drawing the
+line so that `execute` testing its own worktree is untouched). The coordinator's behaviour is wired in
+`loop.md` / `loop-detail.md`. **What is missing is the proof.** Three things block closing, all carried in `07`:
+nothing yet writes a non-null `wave` id, so the slot's dedup half is dormant; **homogeneous fan-out needs
+plan-ahead** — a backlog row has no plan until picked, so the real project shows 106 candidates / 0 eligible and a
+wave must become *plan-N-then-execute-N*; and **the coherence exit test `D192` demands has not been run**, which
+means the D91 reversal is implemented but **not validated**. No real fan-out has yet run.
+
+**Step 4 (charter) — `12c`, the wave coordinator. REPLACED 2026-09-13 by `D192`, which REVERSES D91's
 "interleaving, not parallelism".** Opening this step surfaced a contradiction: D91 decided against real
 concurrency and was never reversed, while the shipped `prioritize/SKILL.md` has promised parallel fan-out to every
 reader since it was written. The maintainer's call is **real same-turn fan-out**, with two first-class capabilities
