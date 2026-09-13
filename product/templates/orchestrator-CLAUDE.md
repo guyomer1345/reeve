@@ -73,6 +73,9 @@ not a lost *update*. If a session is already driving this repo, do not start a s
 
 **Enforced by hooks (you cannot cross these):**
 - No commit until `verify` passes for the item.
+- **Never obtain a commit by editing `state.json`.** `building` with no current item is **legal**
+  at a boundary, so it is never the thing to "fix". A motion with no item takes a *receipt*
+  (`shared/schemas.md` § commit-receipt).
 - No commit if the staged diff trips the secret scan.
 - **Never push a protected branch** — by default `main`/`master`, plus anything `config.json`'s
   `guard.protected_branches` adds. Push a feature branch; a **human** moves `main`. A hard block, not a

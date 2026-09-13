@@ -22,18 +22,31 @@ So this does NOT trust a single fragile key or path:
     (`current_item` OR `position.item`). A `status: building` with no identifiable item is a
     fail-closed block, not a skip.
 
-NOT EVERY COMMIT CARRIES A BUILT ITEM, and the fail-closed rule above had no way to say so, so
-two legitimate motions had no legal commit at all:
+NOT EVERY COMMIT CARRIES A BUILT ITEM, and the fail-closed rule above had no way to say so. The
+legal motions that carry no item are:
   - the `/start` BOOTSTRAP publishes `building` before any item exists  -> `_bootstrapping()`;
-  - a MAINTENANCE item (`loop.md` § Maintenance items) runs its own pass and flows straight to
-    commit with no planner/execute/verify  -> a staged maintenance RECEIPT (below).
+  - every other NON-ITEM motion -> a staged COMMIT RECEIPT (below) naming which motion it is.
 Both escapes take an explicit marker the motion itself publishes, never an inference from an
-absent item. The maintenance marker is deliberately NOT a `state.json` field: bootstrap's phase
-marker is safe because it fires once and then disappears forever, whereas maintenance recurs for
-the life of the project — a volatile marker for a recurring motion re-arms on every threshold hit
-and, left stale by a crashed pass, would disarm this gate for the next PRODUCT-CODE commit. That
-is the same fail-open shape as the two drift vectors above. A marker carried in the commit under
-review cannot go stale, and is visible in the diff a human reads.
+absent item. The receipt is deliberately NOT a `state.json` field: bootstrap's phase marker is
+safe because it fires once and then disappears forever, whereas these motions recur for the life
+of the project — a volatile marker for a recurring motion re-arms on every trigger and, left
+stale by a crashed pass, would disarm this gate for the next PRODUCT-CODE commit. That is the
+same fail-open shape as the two drift vectors above. A marker carried in the commit under review
+cannot go stale, and is visible in the diff a human reads.
+
+`status: building` WITH NO CURRENT ITEM IS A LEGAL STATE, not evidence of drift. The three
+statuses describe the loop's MODE, not item occupancy: `building` means the autonomous loop is
+driving, and `idle` means the backlog is empty and a human must steer. At a scheduler boundary —
+`prioritize` with a full backlog, say — the loop is driving and has not yet picked, so `building`
+with a null item is the only honest pair. This gate therefore does NOT treat that pair as a
+problem to report; it asks only whether the commit in front of it is sanctioned. What it blocks
+is an UNSANCTIONED non-item commit, which is a different sentence and a different remedy.
+
+AND NO COMMIT MAY BE OBTAINED BY EDITING `state.json`. Flipping `status` to `idle`, committing,
+and flipping back is not a workaround for this gate — it is the gate being OFF for the duration,
+with a window in which a crash leaves the file lying about the loop's position. It is also a
+misreport to the console, which renders `idle` as "awaiting steering" while the loop is mid-wave.
+A motion that needs a commit takes a receipt; it never edits the field the gate reads.
 """
 import json
 import os
@@ -44,11 +57,21 @@ import sys
 WORKFLOW = ".workflow"
 # The verdict lives in the COMMITTED half (never relocated), so it is read under .workflow/.
 ITEM_DIR_RE = re.compile(r"^\.workflow/items/([^/]+)/")
-MAINT_RE = re.compile(r"^\.workflow/maintenance/([^/]+)\.json$")
+RECEIPT_RE = re.compile(r"^\.workflow/maintenance/([^/]+)\.json$")
 PASS_TRUE_RE = re.compile(r"(?i)^\s*pass:\s*true(\W|$)")
 PASS_FALSE_RE = re.compile(r"(?i)^\s*pass:\s*false(\W|$)")
-# The `loop.md` maintenance nodes — the only kinds a receipt may claim.
-MAINT_KINDS = ("align", "document:audit", "doc-budget")
+# The sanctioned NON-ITEM commit motions — the only kinds a receipt may claim. The first three
+# are the `loop.md` maintenance nodes this artifact was built for; `update` is the `/update`
+# package refresh, which is bootstrap-shaped rather than a loop node and had no legal commit at
+# all until it joined the set. An explicit allowlist is a FEATURE here: the set is small and
+# closed-ish, each addition is a reviewed act rather than an emergent one, and this tuple is the
+# DECIDER that `check_enum_coherence.py` holds the schema against.
+#
+# The directory is still `.workflow/maintenance/` and that name is now narrower than the set it
+# holds. Kept deliberately: this is the maintenance receipt generalized rather than a new mechanism, and
+# relocating it would put a migration inside the very command (`/update`) that joining the set
+# exists to unblock.
+RECEIPT_KINDS = ("align", "document:audit", "doc-budget", "update")
 
 
 def resolve_runtime_root():
@@ -100,18 +123,18 @@ def staged_item_ids(paths):
     return ids
 
 
-def maintenance_receipts(paths):
-    """(ids, complaints) for the staged `.workflow/maintenance/<id>.json` receipts.
+def commit_receipts(paths):
+    """(ids, complaints) for the staged `.workflow/maintenance/<id>.json` commit receipts.
 
     VALIDATED, because an unvalidated marker is a hole — any file that landed in that directory
     would otherwise satisfy the identifiable-item tripwire. A receipt must parse, must name the
-    node it ran, and must agree with its own filename; anything else is not a receipt and is
+    motion it ran, and must agree with its own filename; anything else is not a receipt and is
     reported as the reason the commit is blocked rather than silently ignored (a format slip
     fails the same direction the verdict's does). Read from the worktree, like the verdict.
     """
     ids, bad = [], []
     for name in paths:
-        m = MAINT_RE.match(name)
+        m = RECEIPT_RE.match(name)
         if not m:
             continue
         ident = m.group(1)
@@ -126,9 +149,9 @@ def maintenance_receipts(paths):
         elif rec.get("item") != ident:
             bad.append("%s declares item %r, which does not match its filename"
                        % (name, rec.get("item")))
-        elif rec.get("kind") not in MAINT_KINDS:
+        elif rec.get("kind") not in RECEIPT_KINDS:
             bad.append("%s declares kind %r (expected one of: %s)"
-                       % (name, rec.get("kind"), ", ".join(MAINT_KINDS)))
+                       % (name, rec.get("kind"), ", ".join(RECEIPT_KINDS)))
         elif ident not in ids:
             ids.append(ident)
     return ids, bad
@@ -178,25 +201,37 @@ def main():
     runtime = resolve_runtime_root()
     staged = staged_paths()
     candidates = staged_item_ids(staged)
-    maintenance, bad_receipts = maintenance_receipts(staged)
+    receipts, bad_receipts = commit_receipts(staged)
 
     state = read_state(runtime)
     if state is not None and state.get("status") == "building":
         # Resolve the active item robustly: top-level current_item OR the nested position.item.
         active = state.get("current_item") or (state.get("position") or {}).get("item")
-        # A maintenance item IS the current item while it runs and has no verdict BY DESIGN, so
+        # A non-item motion IS the current item while it runs and has no verdict BY DESIGN, so
         # its own id must not be promoted into the verdict-checked set. The receipt it staged is
         # what says so — never the absence of a verdict, which is indistinguishable from a skipped
         # verify. An id that ALSO staged an item dir stays a candidate: `planner` mkdirs that dir,
         # so something built under it, and a built item is verified rather than exempted.
-        if active and active not in candidates and active not in maintenance:
+        if active and active not in candidates and active not in receipts:
             candidates.append(active)
-        if not candidates and not maintenance and not _bootstrapping(state):
-            msg = ("state.json status=building but no item is identifiable (no current_item, no "
-                   "position.item, no staged .workflow/items/<id>/, no valid staged maintenance "
-                   "receipt) — verify-before-commit fails closed.")
+        if not candidates and not receipts and not _bootstrapping(state):
+            # THE MESSAGE NAMES THE CAUSE, NOT THE NEAREST ESCAPE. An earlier version opened on
+            # "status=building but no item is identifiable" and then listed the escapes it knew,
+            # which reads as "pick one of these" — so a reader driving a motion that belonged to
+            # none of them went hunting for a receipt mechanism to imitate instead of asking
+            # whether their motion was sanctioned at all, and one of them faked a kind. The pair
+            # (`building`, no item) is LEGAL; what is not legal is committing on it unannounced.
+            msg = ("this commit carries no item and no receipt, so nothing here has been "
+                   "verified and nothing says it was exempt. `status: building` with no current "
+                   "item is a legal state and is NOT the problem — do not 'fix' it by editing "
+                   "state.json, which turns this gate off and misreports the loop to the "
+                   "console. If an item is being built, stage its `.workflow/items/<id>/` and "
+                   "run verify. If this is a non-item motion (%s), stage its receipt at "
+                   "`.workflow/maintenance/<id>.json`. If it is neither, it is not a motion this "
+                   "gate sanctions: stop and ask." % ", ".join(RECEIPT_KINDS))
             if bad_receipts:
-                msg += " Rejected receipt(s): %s." % "; ".join(bad_receipts)
+                msg += (" A receipt WAS staged and rejected, which is probably the real cause: "
+                        "%s." % "; ".join(bad_receipts))
             print(msg)
             return 1
 

@@ -151,7 +151,7 @@ The updated findings register + the routed tickets + the new scan anchor (`.work
 
 **Stage the maintenance receipt with them** — `.workflow/maintenance/<item-id>.json`
 `{ item, kind: "align", summary }`, deleting any earlier receipt as you write yours (`shared/schemas.md`
-§ maintenance-receipt). A scan has no `verify`, so the receipt is the only thing that tells the commit gate this
+§ commit-receipt). A scan has no `verify`, so the receipt is the only thing that tells the commit gate this
 item is verify-free by design rather than a verify that was skipped — without it the commit **blocks**.
 
 ## Route

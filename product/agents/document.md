@@ -62,7 +62,7 @@ Keeps disk + context high-signal:
   it ignore its own instructions.
 - **Dead-node prune:** a deleted source file → delete its `docs/knowledge/` node.
 - **Stage the maintenance receipt** — `.workflow/maintenance/<item-id>.json` `{ item, kind: "document:audit",
-  summary }`, deleting any earlier receipt as you write yours (`shared/schemas.md` § maintenance-receipt). This is
+  summary }`, deleting any earlier receipt as you write yours (`shared/schemas.md` § commit-receipt). This is
   not bookkeeping: an audit item has no `verify`, so without the receipt the commit gate cannot distinguish it from
   an item whose verify was skipped and **blocks the commit**. Never write a courtesy `verify-verdict.md` instead.
 - **Doc budget is a SEPARATE item, not part of this one.** `doc-budget` has its own trigger and its own remedy

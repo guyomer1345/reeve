@@ -97,7 +97,12 @@ def test_building_but_unidentifiable_item_blocks(tmp_path):
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     r = _run(root)
     assert r.returncode == 1
-    assert "no item is identifiable" in r.stdout
+    assert "no item and no receipt" in r.stdout
+    # The message must NOT frame the legal (`building`, no item) pair as the fault, and must
+    # not offer editing state.json as a way out — that is how the first reader of this block
+    # concluded the state was wrong and disarmed the gate to get past it.
+    assert "is a legal state" in r.stdout
+    assert "do not 'fix' it by editing" in r.stdout
 
 
 # --- legitimate proceeds ---
@@ -183,7 +188,7 @@ def test_building_no_phase_still_blocks(tmp_path):
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     r = _run(root)
     assert r.returncode == 1
-    assert "no item is identifiable" in r.stdout
+    assert "no item and no receipt" in r.stdout
 
 
 # --- maintenance items: a verify-free motion needs a LEGAL commit, not a faked verdict ---
@@ -248,7 +253,7 @@ def test_unknown_kind_receipt_is_rejected_and_named(tmp_path):
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     r = _run(root)
     assert r.returncode == 1, "only the loop's maintenance nodes may claim the exemption"
-    assert "Rejected receipt" in r.stdout and "execute" in r.stdout
+    assert "rejected" in r.stdout and "execute" in r.stdout
 
 
 def test_receipt_not_matching_its_filename_is_rejected(tmp_path):
@@ -313,3 +318,65 @@ def test_prune_ridden_maintenance_commit_proceeds(tmp_path):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# --- the /update package refresh: the motion that had no legal commit at all ---
+
+def test_an_update_receipt_is_a_legal_non_item_commit(tmp_path):
+    """The reproduction. `/update` refreshes package files: zero item files, `status: building`.
+    Before `update` joined the receipt kinds this was fail-closed with NO legal escape, and the
+    drive that hit it got past by flipping `state.json` — turning the gate off to commit."""
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "node": "prioritize", "current_item": None})
+    (root / ".claude").mkdir(exist_ok=True)
+    (root / ".claude" / "skills.md").write_text("refreshed package file\n")
+    _receipt(root, "UPDATE-1", kind="update")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout
+
+
+def test_building_with_a_null_current_item_is_not_itself_the_fault(tmp_path):
+    """`status: building` + `current_item: null` at a scheduler boundary is a LEGAL pair — the
+    loop is driving and has not yet picked. A commit on it still needs a receipt, but the block
+    must not tell the reader their state is wrong, because the previous message did and the
+    reader duly 'corrected' it by editing the field the gate reads."""
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "node": "prioritize", "current_item": None})
+    (root / "note.txt").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1
+    assert "is a legal state" in r.stdout
+    assert "no item is identifiable" not in r.stdout
+
+
+def test_flipping_status_to_idle_is_not_a_sanctioned_escape(tmp_path):
+    """Pins the shape of the banned workaround rather than the wording. Flipping to `idle`
+    does get a commit through — the gate only engages while the loop says it is building — and
+    that is precisely why the ban has to live in the ORCHESTRATOR's rules and in this block's
+    message. This test exists so that a future 'just make idle block too' change has to
+    confront the reason it would not help: the flip is a misreport, and the fix is a receipt."""
+    root = _repo(tmp_path)
+    _state(root, {"status": "idle"})
+    (root / "note.txt").write_text("x\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    assert _run(root).returncode == 0
+    _state(root, {"status": "building", "current_item": None})
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1
+    assert "editing" in r.stdout and "state.json" in r.stdout
+
+
+def test_every_receipt_kind_is_accepted(tmp_path):
+    """The tuple is the decider; nothing in it may be a kind the gate then refuses."""
+    import sys as _s
+    _s.path.insert(0, str(HELPER.parent))
+    import verify_check as vc
+    for kind in vc.RECEIPT_KINDS:
+        root = _repo(tmp_path / kind.replace(":", "-"))
+        _state(root, {"status": "building", "current_item": None})
+        _receipt(root, "R-1", kind=kind)
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+        assert _run(root).returncode == 0, "kind %r was refused" % kind

@@ -16,7 +16,7 @@ SCHEMAS = """\
 - `verdict` — `{ outcome: approve|changes|reject, notes }`
 - inbox message is typed — `kind: verdict|intake|control` — one transport
 - **`kind: control`** — `{ op: reprioritize|pause|resume }` — honored at a boundary
-- `item` — the maintenance item's id · `kind: align|document:audit|doc-budget` — the node that ran
+- `item` — the motion's item id · `kind: align|document:audit|doc-budget|update` — the motion that ran
 """
 
 # A CODE consumer declares the set as a literal. The prose word-search is worthless
@@ -53,15 +53,17 @@ ROSTER_STALE = "| checkpoint | skill | verdict (demo / qa / setup) |"  # missing
 SHARED05_OK = "one typed inbox — verdict, intake, control — single consumer"
 SHARED05_STALE = "one typed inbox — verdict, intake — single consumer"  # missing control
 
-# The maintenance-receipt kinds (D182). verify_check.py is the DECIDER — a kind outside this
-# tuple is a receipt it rejects, so a node the schema declares and the tuple omits is a
-# maintenance item that can never commit, which `loop.md` promises is a straight-to-commit path.
+# The commit-receipt kinds (D182, generalized by D183). verify_check.py is the DECIDER — a kind
+# outside this tuple is a receipt it rejects, so a motion the schema declares and the tuple omits
+# is a commit that can never land, which `loop.md` promises is a straight-to-commit path.
 VERIFY_OK = '''\
-"""Shared verify-before-commit check. A maintenance pass may align, audit or trim."""
-MAINT_KINDS = ("align", "document:audit", "doc-budget")
+"""Shared verify-before-commit check. A non-item motion may align, audit, trim or update."""
+RECEIPT_KINDS = ("align", "document:audit", "doc-budget", "update")
 '''
-VERIFY_STALE = VERIFY_OK.replace(', "doc-budget")', ")")
-VERIFY_EXTRA = VERIFY_OK.replace(', "doc-budget")', ', "doc-budget", "vibes")')
+VERIFY_STALE = VERIFY_OK.replace(', "doc-budget"', "")
+VERIFY_EXTRA = VERIFY_OK.replace(', "update")', ', "update", "vibes")')
+# `loop.md` routes loop NODES. It names the three maintenance kinds and is DECLARED EXEMPT from
+# `update`, which is a command motion with no node in the graph.
 LOOP_OK = "| `document:audit` / `align` / `doc-budget` | maintenance due | `commit` |"
 LOOP_STALE = "| `document:audit` / `align` | maintenance due | `commit` |"  # missing doc-budget
 
@@ -158,24 +160,47 @@ class Enums(unittest.TestCase):
         errs = e.check_enums(reader(self._files(ROSTER_OK, bus=BUS_EXTRA_OPS)))
         self.assertTrue(any("inbox.control.op" in x and "abort" in x for x in errs), errs)
 
-    def test_maintenance_kind_dropped_by_the_gate_is_caught(self):
-        """A node the schema declares and MAINT_KINDS omits is a maintenance item whose
+    def test_commit_receipt_kind_dropped_by_the_gate_is_caught(self):
+        """A motion the schema declares and RECEIPT_KINDS omits is a commit whose
         receipt the gate rejects — so it can never commit, while `loop.md` still routes it
         straight to `commit`. The drift is invisible from the schema side."""
         errs = e.check_enums(reader(self._files(ROSTER_OK, verify=VERIFY_STALE)))
-        self.assertTrue(any("maintenance.kind" in x and "verify_check.py" in x for x in errs), errs)
+        self.assertTrue(any("commit_receipt.kind" in x and "verify_check.py" in x for x in errs), errs)
 
-    def test_maintenance_kind_added_by_the_gate_is_caught(self):
+    def test_commit_receipt_kind_added_by_the_gate_is_caught(self):
         """Both directions: a kind the gate would honour that no schema admits is an
         exemption from verify-before-commit that nothing declared."""
         errs = e.check_enums(reader(self._files(ROSTER_OK, verify=VERIFY_EXTRA)))
-        self.assertTrue(any("maintenance.kind" in x and "vibes" in x for x in errs), errs)
+        self.assertTrue(any("commit_receipt.kind" in x and "vibes" in x for x in errs), errs)
 
-    def test_maintenance_kind_missing_from_the_loop_is_caught(self):
+    def test_commit_receipt_kind_missing_from_the_loop_is_caught(self):
         """The prose consumer matters too: a maintenance node `loop.md` never routes is a
         node the orchestrator cannot reach."""
         errs = e.check_enums(reader(self._files(ROSTER_OK, loop=LOOP_STALE)))
-        self.assertTrue(any("maintenance.kind" in x and "loop.md" in x for x in errs), errs)
+        self.assertTrue(any("commit_receipt.kind" in x and "loop.md" in x for x in errs), errs)
+
+    def test_a_declared_exemption_lets_a_prose_consumer_cover_a_subset(self):
+        """`loop.md` routes loop NODES, so it names the three maintenance kinds and never
+        `update` — a command motion with no node. Without the declared exemption the only ways
+        past the gate are to drop the consumer (losing the check that a maintenance node is
+        routable) or to add a non-node to an always-loaded file to satisfy a gate."""
+        files = self._files(ROSTER_OK)
+        self.assertNotIn("update", files["product/templates/loop.md"])
+        self.assertFalse([x for x in e.check_enums(reader(files))
+                          if "commit_receipt.kind" in x and "loop.md" in x])
+
+    def test_a_stale_exemption_is_itself_reported(self):
+        """An exemption is a hole, so it may not outlive the value it exempts. If the owner
+        stops declaring `update`, the exemption naming it must fail rather than sit there
+        silently widening to whatever the set becomes next."""
+        inv = next(i for i in e.ENUMS if i["name"] == "commit_receipt.kind")
+        original = inv.get("consumer_exempt")
+        inv["consumer_exempt"] = {"product/templates/loop.md": ("no-such-kind",)}
+        try:
+            errs = e.check_enums(reader(self._files(ROSTER_OK)))
+        finally:
+            inv["consumer_exempt"] = original
+        self.assertTrue(any("no-such-kind" in x and "stale exemption" in x for x in errs), errs)
 
     def test_a_mention_in_prose_does_not_satisfy_a_code_consumer(self):
         """The toothless case, pinned: BUS_STALE_OPS drops "resume" from the tuple while

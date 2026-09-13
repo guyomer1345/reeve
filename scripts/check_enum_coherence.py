@@ -78,17 +78,21 @@ ENUMS = [
         "consumer_re": {"product/scripts/bus.py": r"CONTROL_OPS\s*=\s*\(([^)]*)\)"},
     },
     {
-        "name": "maintenance.kind",
+        "name": "commit_receipt.kind",
         "owner": "product/shared/schemas.md",
-        # the maintenance-receipt kinds (D182); anchors on `align` so it can't collide with
-        # the `kind:` enums above.
+        # the commit-receipt kinds (D182, generalized by D183 to every non-item motion);
+        # anchors on `align` so it can't collide with the `kind:` enums above.
         "owner_re": r"kind:\s*(align(?:\|[a-z:-]+)+)",
         # verify_check.py is the DECIDER, not a restatement: a receipt whose kind is outside
-        # MAINT_KINDS is rejected, so a maintenance node the schema declares and the tuple
-        # omits is an item that can never commit — and `loop.md`'s straight-to-commit path
+        # RECEIPT_KINDS is rejected, so a non-item motion the schema declares and the tuple
+        # omits is a commit that can never land — and `loop.md`'s straight-to-commit path
         # says nothing is wrong. Exactly the checkpoint.kind/PARK_KINDS shape.
         "consumers": ["product/templates/loop.md", "product/hooks/verify_check.py"],
-        "consumer_re": {"product/hooks/verify_check.py": r"MAINT_KINDS\s*=\s*\(([^)]*)\)"},
+        "consumer_re": {"product/hooks/verify_check.py": r"RECEIPT_KINDS\s*=\s*\(([^)]*)\)"},
+        # `loop.md` is the routing graph: it owns the three MAINTENANCE nodes and routes them
+        # straight to `commit`. `update` is a `/update` command motion, not a node — it appears
+        # nowhere in the graph and must not be added to an always-loaded file to satisfy a gate.
+        "consumer_exempt": {"product/templates/loop.md": ("update",)},
     },
 ]
 
@@ -321,7 +325,21 @@ def check_enums(read=_default_read):
                         f"{inv['name']}: {cons} declares {'|'.join(got) or '(none)'} "
                         f"— owner {inv['owner']} declares {'|'.join(values)}")
             else:
-                missing = [v for v in values if not re.search(rf"\b{re.escape(v)}\b", text)]
+                # A PROSE consumer may legitimately cover only part of the set — `loop.md`
+                # routes loop NODES, so it must name every maintenance kind and must NOT be
+                # made to name `update`, which is a command motion with no node. The exemption
+                # is DECLARED per consumer and per value, never inferred: an undeclared gap is
+                # still drift, and writing the exemption down is what makes the asymmetry a
+                # reviewed act instead of a silently dropped check.
+                skip = set((inv.get("consumer_exempt") or {}).get(cons, ()))
+                unknown = skip - set(values)
+                if unknown:
+                    errs.append(f"{inv['name']}: {cons} is exempted from value(s) "
+                                f"{', '.join(sorted(unknown))}, which the owner "
+                                f"{inv['owner']} does not declare — a stale exemption is a "
+                                f"hole; update check_enum_coherence.py")
+                missing = [v for v in values
+                           if v not in skip and not re.search(rf"\b{re.escape(v)}\b", text)]
                 if missing:
                     errs.append(f"{inv['name']}: {cons} is missing value(s) "
                                 f"{', '.join(missing)} — owner {inv['owner']} "

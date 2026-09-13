@@ -148,8 +148,21 @@ Once marked, every later update refreshes it automatically.
 3. **Write the change summary** for the human: old version → new version, what was refreshed, what
    was removed, what was flagged (local edits kept or overwritten, `ORPHAN-EDITED`, an unmarked
    brief, a `[D]` body that could not be carried forward), and anything they must do themselves.
-4. **Commit** the update as one commit (the refreshed package files, the regenerated code-map,
-   `config.json`, `install-set.json`) with a message naming both versions. Runtime paths are
-   gitignored and stay out of it.
-5. **Tell them to `/clear` and start a fresh session.** This one is holding the old brief and the
+4. **Stage the commit receipt** — `.workflow/maintenance/<item-id>.json`
+   `{ item, kind: "update", summary }`, deleting any earlier receipt as you write yours
+   (`shared/schemas.md` § commit-receipt). Use an id naming the motion, e.g.
+   `update-<old>-to-<new>`. An update commit carries **package files and zero item files**, so it
+   has no `verify-verdict` and the commit gate cannot otherwise tell a legitimately verify-free
+   commit from one whose verify was skipped. The receipt is what tells it. It must be **staged in
+   this commit** — an unstaged receipt sitting in the tree exempts nothing.
+
+   **Never obtain this commit by editing `state.json`.** `status: building` with no current item
+   is a legal state at a boundary and is not the thing blocking you; flipping it to `idle` turns
+   the gate off for the duration, leaves a window where a crash makes the file lie about the
+   loop's position, and misreports the loop to the console as "awaiting steering" while a wave is
+   in flight. Never fake another motion's `kind` either — the kinds are validated.
+5. **Commit** the update as one commit (the refreshed package files, the regenerated code-map,
+   `config.json`, `install-set.json`, the receipt) with a message naming both versions. Runtime
+   paths are gitignored and stay out of it.
+6. **Tell them to `/clear` and start a fresh session.** This one is holding the old brief and the
    whole update transcript in context; the loop should resume from `handoff.md` on the new package.

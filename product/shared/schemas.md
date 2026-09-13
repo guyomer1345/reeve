@@ -110,13 +110,25 @@ line 1.
 - `mismatches[]` — `{ expected, actual }`
 - `confidence`
 
-## maintenance-receipt  · produced by the maintenance pass itself (`align` / `document:audit` / `doc-budget`) · *on disk at `.workflow/maintenance/<item-id>.json`; COMMITTED (it must ride the commit it describes), and self-collecting — each pass deletes any earlier receipt as it writes its own, so the directory holds one file and the history lives in its git log*
-**The verify-free counterpart of `verify-verdict`, and the same kind of load-bearing on-disk contract.** A
-maintenance item runs its own pass and flows straight to `commit` with no `planner`/`execute`/`verify`
-(`loop.md` § Maintenance items) — so it has no verdict, and the commit gate cannot otherwise tell a legitimately
-verify-free item from an item whose verify was skipped. The receipt is how the pass *says which one it is*.
-- `item` — the maintenance item's id; **must equal the filename stem** · `kind: align|document:audit|doc-budget`
-  — the maintenance node that ran · `summary` — one line, human-readable.
+## commit-receipt  · produced by the non-item motion itself (`align` / `document:audit` / `doc-budget` / `update`) · *on disk at `.workflow/maintenance/<item-id>.json`; COMMITTED (it must ride the commit it describes), and self-collecting — each pass deletes any earlier receipt as it writes its own, so the directory holds one file and the history lives in its git log*
+**The verify-free counterpart of `verify-verdict`, and the same kind of load-bearing on-disk contract.** Some
+motions reach `commit` with no `planner`/`execute`/`verify` behind them — the three maintenance nodes, which run
+their own pass and flow straight to `commit` (`loop.md` § Maintenance items), and the `/update` package refresh,
+which is a bounded command motion rather than a loop node. None of them has a verdict, and the commit gate
+cannot otherwise tell a legitimately verify-free commit from one whose verify was skipped. The receipt is how
+the motion *says which one it is*.
+- `item` — the motion's item id; **must equal the filename stem** · `kind: align|document:audit|doc-budget|update`
+  — the motion that ran · `summary` — one line, human-readable.
+- **`status: building` with no current item is a LEGAL state and never needs correcting.** The three statuses
+  describe the loop's MODE, not item occupancy: at a scheduler boundary the loop is driving and has not yet
+  picked, so `building` with a null item is the only honest pair — `idle` means *backlog empty, awaiting
+  steering* and is not a synonym for it. **No commit may be obtained by editing `state.json`.** Flipping
+  `status` to `idle`, committing and flipping back is the gate being OFF for the duration, with a window where a
+  crash leaves the file lying about the loop's position, and it misreports the loop to the console while a wave
+  is in flight. A motion that needs a commit takes a receipt.
+- **The directory name is narrower than the set it holds**, and that is deliberate rather than overlooked: this
+  is the maintenance receipt generalized, not a second mechanism, and relocating it would put a migration inside
+  `/update` — the very motion that joining this set exists to unblock.
 - **Consumer fails closed, exactly like the verdict's:** `verify_check.py` accepts the receipt only when it is
   **staged in the commit under review**, parses, and agrees with its own filename; anything else is not a receipt
   and the commit blocks with the reason named. An unstaged receipt exempts nothing — a marker sitting in the tree
@@ -551,9 +563,17 @@ the one place the loop keeps a secret.
   no `0600` → explicit ACLs, the same target-OS/FS family as the other runtime pins.
 
 ## state.json  · the live loop pointer (volatile, gitignored) · *`.workflow/state.json`; published atomically each iteration (write-temp → `fsync` → `rename`) — logically in-place, physically a rename so a bus reader never catches a torn file; RUNTIME, kept on a native filesystem*
-- `status` ∈ `{ intake, building, idle }`
+- `status` ∈ `{ intake, building, idle }` — the loop's **MODE, never item occupancy**. `intake` is gathering
+  requirements, `building` is the autonomous loop driving, `idle` is **backlog empty, awaiting steering** (owned
+  by `loop.md`'s `prioritize | backlog empty | idle (await steering)` row). So **`building` with
+  `current_item: null` is a legal and expected pair** at a scheduler boundary — at `prioritize` with a full
+  backlog the loop is driving and has not yet picked, and `idle` is not available as a synonym for it. Publishing
+  `idle` there would tell the console a human must act while a wave is in flight. Nothing may flip this field to
+  obtain a commit: see § commit-receipt.
 - `phase` — **present only during the `/start` bootstrap motion**, value `bootstrap`; absent once the loop
-  drives. With it, `node` carries the bootstrap stage (`start:<step>` / `ingest:<stage>`) and `note` the
+  drives. It is not a second mode field: `status` already carries the mode, so there is no `phase: normal-ops`
+  or any other steady-state value, and the orchestrator does not write one. A second, redundant mode field that
+  no consumer reads is how the next invented value gets depended on. With it, `node` carries the bootstrap stage (`start:<step>` / `ingest:<stage>`) and `note` the
   human-readable step marker (`"seeding knowledge nodes 40/95"`) — the console's "Now" panel renders these, so
   the motion is visible from the first minute. Written at every stage boundary, same atomic publish.
 - `node` — current loop node; value ∈ the `loop.md` node labels (e.g. `planner:plan-one`, `verify`)

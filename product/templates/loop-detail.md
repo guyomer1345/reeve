@@ -108,4 +108,4 @@ the pass **stages a receipt in its own commit**: `.workflow/maintenance/<item-id
 accepts in place of a verdict; without it a maintenance item has **no legal commit at all**. It writes its own
 and **deletes any earlier one**, so the directory holds only the current commit's receipt and the history of
 past maintenance is that directory's git log. Never fake a trivial `pass: true` verdict instead — the console
-reads that first line as "verify passed" (`shared/schemas.md § maintenance-receipt`).
+reads that first line as "verify passed" (`shared/schemas.md § commit-receipt`).
