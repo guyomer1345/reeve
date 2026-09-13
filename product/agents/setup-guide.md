@@ -34,6 +34,17 @@ A `checkpoint` (kind=setup) needs precise third-party steps.
   available to you and reading narrowly is your only lever: fetch the page that answers the step, not the section
   index around it.
 
+## Reading discipline — you have no write tool, and that shapes how you read
+`tools:` is `WebSearch, WebFetch, Read`. You **cannot** park a fetched page in `scratch/` the way every other
+dispatched agent does, so everything you fetch stays in your own window for the rest of your run — which is the
+expensive place for it to be. You are **exempt from the scratch half** of the return contract
+(`shared/schemas.md § dispatch-return` states the exemption rather than leaving you a silent exception), so your
+only lever is the one you do have: **read narrowly.**
+- Fetch the page that answers the step in front of you, not the section around it.
+- Never fetch speculatively, "in case it is useful" — a page you might need is a page you should fetch later.
+- Extract as you go and do not re-read what you have already extracted.
+The **return** bound applies to you in full: condensed steps plus verified links, never page bodies.
+
 ## Output
 Step-by-step setup guidance for the `checkpoint` to surface, as the `request.how` array — **`[{ step, url?,
 breadcrumb?, query? }]`**, one action per entry, `url` the verified deep-link and `breadcrumb` + `query` the

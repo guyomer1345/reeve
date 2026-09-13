@@ -7260,3 +7260,39 @@ so the negative controls cannot pass vacuously.
 
 **Builds on:** **D197** (the gate and its written-down limit), **D202** (which made the limit live).
 → `07` (the open question, answered).
+
+## D208 — a contract that names an agent which cannot obey it: `setup-guide`'s scratch exemption is stated, and the trust question is sharpened rather than answered **[BUILT 2026-09-13. Contradiction fixed; the grant decision deliberately left open]**
+
+**The contradiction, which was shipping.** `schemas.md § dispatch-return` names six dispatched agents — including
+`setup-guide` — and requires heavy material be written to `scratch/`. `setup-guide`'s `tools:` line is
+`WebSearch, WebFetch, Read`: **no write tool of any kind.** It cannot park a fetched page and must carry every
+byte it reads in its own window, which under the ~41× re-read is the most expensive place for it. A rule that
+names a party who cannot satisfy it is a rule with a **silent** exception, which is strictly worse than one with
+a stated exception — a reader checks compliance and finds a mystery rather than a decision.
+
+**Fixed by stating the exemption in both places** (the contract, and the agent), together with the only lever
+`setup-guide` actually has: **read narrowly** — fetch the page that answers the step in front of you, never
+speculatively, re-read nothing already extracted. The **return** half of the contract still binds it in full;
+that half needs no write access.
+
+**The grant itself is NOT decided here, deliberately** — `07` flagged it as a trust decision not to be made
+silently, and it still is. What is added is the comparison nobody had made.
+
+**`research` — the OTHER web-facing agent, on the same untrusted input — already has `Bash`.** That is strictly
+broader than `Write`: arbitrary shell, on content a fetched page can attempt to inject into. So *"should a
+research-shaped agent get write access"* has already been answered **yes, in practice, once, inconsistently**,
+without the conversation this question is holding for.
+
+**The tighter option was checked rather than assumed, and it is ruled out.** Removing `Bash` from `research` is
+the disciplined-looking answer, but `research`'s body directs it to write heavy material to
+`.workflow/items/<id>/scratch/`, and `Bash` is its **only** write path (it has no `Write` tool). Taking it away
+would make `research` unable to comply with the scratch rule — turning one exempt agent into two.
+
+**Which leaves the real finding: the status quo is the worst of the three options.** The capability actually
+granted is *broader* than the one withheld, so granting `setup-guide` a narrow `Write` would **reduce** the
+package's aggregate injection surface relative to what ships today. The decision stays the maintainer's; it is
+now a comparison rather than an instinct.
+
+**Builds on:** **D191** (which raised the question), **12b**'s scratch contract (which is what makes the
+exemption matter).
+→ `07` (sharpened, still open), `schemas.md`, `agents/setup-guide.md`.

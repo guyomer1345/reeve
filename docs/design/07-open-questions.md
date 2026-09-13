@@ -899,11 +899,29 @@ sub-questions deferred to the build, in the order the slices need them.
   brief is the obvious candidate at 3137/3200 — but it has already crept 2993 → 3066 → 3102 → 3137 and its remaining
   content is genuinely every-turn, so the next cut there is a real judgement call rather than the dedup the earlier
   ones were. Plan `12d`/`12e` with this in hand rather than discovering it at integration.
-- **Should `setup-guide` get a write tool? `[carried from D191]`** Its `tools:` line is `WebSearch, WebFetch,
-  Read`, so it is the one dispatched agent that **cannot use scratch at all** — it has no way to park a fetched
-  page and must carry everything in context, which is precisely what the ~41× re-read makes expensive. Read-narrowly
-  is its only lever today. Not an oversight to fix silently: giving a research-shaped agent write access is a trust
-  decision.
+- **Should `setup-guide` get a write tool? `[carried from D191]` — SHARPENED 2026-09-13, and the question as
+  posed may be the wrong one.** *(The shipped CONTRADICTION it caused is fixed — `D208` — but the trust call is
+  deliberately untouched: it was flagged as not-to-be-decided-silently and it still is.)* Its `tools:` line is
+  `WebSearch, WebFetch, Read`, so it is the one dispatched agent that **cannot use scratch at all** — it carries
+  every fetched page in its own window, which is precisely what the ~41× re-read makes expensive. Read-narrowly is
+  its only lever, and is now written into the agent.
+  **What changes the question: `research`, the OTHER web-facing agent, already has `Bash`** — strictly more than
+  Write, and on the same untrusted input (a fetched page that can attempt injection). So "should a research-shaped
+  agent get write access" has already been answered *yes, in practice*, once, inconsistently, and without the trust
+  conversation this entry is holding for. The real question is therefore **not** whether to grant `setup-guide`
+  Write, but **why its sibling has more, and which of the two is the mistake**: grant `setup-guide` a write tool
+  for consistency, or take `Bash` off `research` and let both live inside the read-narrowly discipline. The second
+  is the tighter answer. **Checked, rather than assumed — and it rules that option out:** `research`'s `Bash` is
+  **load-bearing**, and load-bearing for *this very contract*. Its body (`agents/research.md`) says heavy raw
+  material is *"written to `.workflow/items/<id>/scratch/`"* and, with no item to scope to, *"gather into a temp
+  file"* — and `Bash` is its **only** write path, since it has no `Write` tool. Taking `Bash` away would make
+  `research` unable to comply with the scratch rule, turning one exempt agent into two.
+  **So the status quo is the worst of the three options, which is the finding:** the capability actually granted
+  (`Bash` — arbitrary shell, on untrusted fetched input) is **broader** than the one being withheld from
+  `setup-guide` (`Write`). Granting `setup-guide` a narrow `Write` would *reduce* the package's aggregate
+  injection surface relative to what already ships, not increase it. That reframes the trust decision from
+  "should we loosen this?" to "we already loosened the other one further, by accident" — and it is still the
+  maintainer's call, now with the real comparison on the table.
 - **~~`/update` never reconciles `.gitignore`.~~ ANSWERED 2026-09-13 — `D204`, and the ownership question was
   the smaller half.** The boundary does **not** bend: `/update` still names the line and asks, never writes.
   What changed is that the detection is mechanical — `update_reconcile.py` reports a `GITIGNORE` action per

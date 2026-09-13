@@ -387,6 +387,12 @@ stays here" is half the rule. Nothing a worker has read can be un-read:
 - **Write heavy output; never print it.** A long draft, a generated file, a big report goes out through `Write`
   into `scratch/` and the tool result is a filename. The same bytes echoed into the transcript buy nothing and
   are then paid for on every remaining turn.
+- **`setup-guide` is EXEMPT from the scratch half, and the exemption is stated because the contract above names
+  it.** Its `tools:` line is `WebSearch, WebFetch, Read` — no write tool of any kind — so it **cannot** park a
+  fetched page and must carry everything it reads in its own window. A contract that named an agent which could
+  not satisfy it would be a rule with a silent exception, which is worse than a rule with a stated one. **Its only
+  lever is to read narrowly:** fetch the page that answers the step, not the section around it, and never fetch
+  speculatively. The return bound still applies in full — that half needs no write access.
 - **Redirect, then grep.** A command with large output is redirected into `scratch/` and searched, not run bare —
   raw stdout lands in the window permanently.
 - **Read narrowly, and point at disk rather than re-carrying.** Grep for the anchor and read the range around it;
