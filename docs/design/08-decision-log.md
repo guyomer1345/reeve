@@ -6360,3 +6360,64 @@ Always-loaded set 5394 → **6086**/8000 (advisory 6400), the brief at 3102/3200
 **Builds on:** **D185** (the calls), **D184** (the total ceiling this lands inside — the sequencing was real, not
 ceremonial), **D106** (the commitment model the floor reads), **D129** (mechanical floor, judgment above it).
 → `11` (Step 2 closed, Step 3 next), `07` (both `[12a]` questions answered; one residual opened).
+
+## D190 — the 1h cache TTL is a break-even no-op, and the real cost is that a worker's context is re-read ~41 times: `12b`'s centre of gravity moves from the RETURN to the worker's own window **[MEASURED 2026-09-13 over the same 364 dispatches as D187. Kills an obvious, confident, WRONG change. Re-justifies Step 3 on a number an order of magnitude larger than the one it was argued from]**
+
+D187 found that 36% of all worker tokens are 300-second prompt-cache re-writes and handed the cost to `12b`. Two
+follow-up measurements were needed before building anything on that, and both changed the answer.
+
+**1. The obvious fix is available, and it buys nothing.** The TTL *is* package-controllable — `subagentPromptCacheTtl`
+(settings.json) / `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL`, with a per-agent `experimental.cacheTtl` frontmatter
+override. The subagent bucket defaults to **5m regardless of plan**, which is why all **10 914** subagent
+cache-creation turns measured `ephemeral_5m` and **exactly zero** measured `ephemeral_1h`. But 1h writes cost
+**2.0×** base input against 5m's **1.25×**, and at this workload the arithmetic lands on the knife edge:
+
+| | base-input units |
+|---|---|
+| today, 5m | **276.1M** |
+| all subagents at 1h | **275.0M** |
+| delta | **−1.1M (−0.4%)** |
+
+Break-even is a stall re-write of 39% of writes; the measured share is **40%**. The workload sits within one
+percentage point of neutral, and the −0.4% is *optimistic* — it assumes every stall gap is under an hour, while
+**24 of the 70** stalled dispatches ran longer than an hour in total, so some gaps would still expire at 1h and
+be paid for at 2×. **So the knob is NOT shipped on.** It is documented with its break-even test, because the
+answer is workload-dependent and flips the wrong way after the rest of this slice lands: shrinking context
+shrinks the stall re-write that 1h exists to recover, while the 2× write premium stays.
+This is the closest this repo has come to shipping a confident, cheap, measured-wrong change.
+
+**2. The dominant cost is not the re-write at all — it is the ordinary re-read, and it is amplified by turn count.**
+Cache **reads** total **1815.6M** against **75.6M** of writes; at 0.1× vs 1.25× that is **66% of all worker cost
+in reads**. A worker's whole context is re-read on every turn, and workers take many turns:
+
+| node | n | turns p50 | peak ctx p50 | reads p50 | re-reads |
+|---|---|---|---|---|---|
+| execute | 138 | 66 | 152k | 6.58M | **41×** |
+| document | 112 | 25 | 81k | 1.46M | 18× |
+| research | 75 | 27 | 91k | 1.66M | 18× |
+
+**A token left in an `execute` worker's context is re-read ~41 times, so it costs ~4.1× base input over the
+dispatch, not 1×.** That is the number `12b` should have been argued from all along.
+
+**What this changes about the slice.** `12b` was justified by router headroom (the router is 32% of a drive,
+D187) and then by stall exposure (D187 again). Both are real and both are second-order. The first-order effect is
+that **every token a worker accumulates in its own window is paid ~41× at read rate** — so the scratch discipline
+(heavy content goes to disk and stays out of the worker's context) is worth several times the return bound (what
+comes back to the router). The slice keeps both halves; their priority inverts, and the scratch half is now the
+one that must not be compromised for convenience.
+
+- **Rejected — shipping `subagentPromptCacheTtl: "1h"` as a default.** Measured −0.4%, inside the error bar,
+  optimistically computed, and it gets *worse* as the rest of the slice succeeds. A default that has to be
+  re-evaluated the moment the next slice lands is not a default.
+- **Rejected — keeping D187's framing that the 36% stall re-write is `12b`'s headline cost.** It is 34% of cost
+  at most (all writes, not just stalls), against 66% in reads. The stall number was correct and led to the right
+  slice for the wrong reason; the reason is now on the record.
+- **Rejected — a keep-warm heartbeat during long tool calls.** No mechanism exists: the harness documents no
+  cache refresh during an idle gap, and a config package cannot issue a request on the worker's behalf.
+
+*Evidence:* `usage.cache_creation.ephemeral_1h_input_tokens` = 0 across 10 914 subagent cache-creation turns,
+`ephemeral_5m` = 55 365 084 in the same sample. Pricing 1.25× / 2.0× write, 0.1× read. Per-dispatch
+`read_tokens ÷ peak_context` medians as tabled. Stall re-write 30.4M of 75.6M writes.
+**Builds on:** **D187** (the stall finding this corrects the weighting of), **D180** (the router-window framing
+this puts in proportion), **D185** call 5 (the slice itself).
+→ `11` (Step 3 — re-justified and re-prioritized), `07` (the `warn_pct`-for-the-router question is untouched).

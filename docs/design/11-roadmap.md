@@ -1125,7 +1125,17 @@ the judgment half of the autonomy boundary — has nowhere to live and decays at
 precede `12d`/`12e` on safety grounds: **an autonomous driver with no decided autonomy boundary is the one
 combination in this phase that can do damage unattended.** Depends on Step 1's ceiling.
 
-**Step 3 — `12b`, return contracts + scratch retention — NOW ALSO OWNS STALL EXPOSURE.** Cheapest slice, pure
+**Step 3 — `12b`, return contracts + scratch retention. RE-JUSTIFIED by `D190`, and its two halves have
+swapped priority.** The headline number is not the router (32%) and not the stall re-write (36% of worker
+tokens): it is that **a token left in an `execute` worker's context is re-read ~41 times and therefore costs
+~4.1× base input over the dispatch**, with cache reads being **66%** of all worker cost. So the **scratch
+discipline** — heavy content goes to disk and stays out of the worker's window — is the half that matters most,
+and the return bound (what comes back to the router) is the second-order half. Both ship; the scratch half is the
+one that must not be traded away for convenience. **`D190` also killed the obvious fix:** the 5m→1h subagent
+cache TTL *is* package-controllable and measures **−0.4%**, inside the error bar and optimistically computed — it
+is documented as a knob with its break-even test, never shipped on, because it gets worse as this slice succeeds.
+
+**Step 3 (as originally written) — `12b`, return contracts + scratch retention — NOW ALSO OWNS STALL EXPOSURE.** Cheapest slice, pure
 contract work, and it buys router headroom that Step 4 immediately spends. Uses Step 0's measured numbers rather
 than guessed ones — and **Step 0 changed this slice's scope.** The dominant cost in a real drive is not return
 size at all: **36% of all worker tokens, and 50% of `execute`'s, are 300-second prompt-cache TTL re-writes**
