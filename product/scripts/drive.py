@@ -42,6 +42,7 @@ import hashlib
 import json
 import os
 import shlex
+import re
 import subprocess
 import sys
 
@@ -51,6 +52,8 @@ sys.path.insert(0, HERE)
 # The per-item artifacts that PROVE a node ran -- the forecast anchor table's set. Kept in
 # step with it by hand and deliberately: a drifting copy here makes the driver blind to a node,
 # never noisy about one, so the failure is silent and this comment is the tripwire.
+TICKET_SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
 ITEM_ANCHORS = ("plan.md", "changelog.md", "verify-verdict.md", "debug-report.md",
                 "plan-delta.md", "promoted.json")
 
@@ -87,6 +90,18 @@ def fingerprint(workflow_dir):
             if os.path.exists(os.path.join(items, name, anchor)):
                 marks.append("%s/%s" % (name, anchor))
     return hashlib.sha256("\n".join(marks).encode("utf-8")).hexdigest()[:16]
+
+
+def _goal_id(workflow_dir):
+    """The active goal's id, for keying a steer ticket. Unreadable ⇒ a stable placeholder,
+    because a park that cannot be named is worse than one named generically."""
+    try:
+        with open(os.path.join(workflow_dir, "goal.json"), encoding="utf-8") as fh:
+            val = json.load(fh)
+        gid = (val or {}).get("id")
+        return gid if isinstance(gid, str) and TICKET_SAFE.match(gid) else "goal"
+    except (OSError, ValueError, AttributeError):
+        return "goal"
 
 
 def _converge(workflow_dir, cmd):
@@ -134,12 +149,13 @@ def decide(workflow_dir, prev_fp, streak, max_noprogress=MAX_NOPROGRESS):
         if rc == 0:
             return {"cont": False, "reason": "GOAL MET — capture, notify, and stop for "
                                              "re-steering", "fingerprint": fp, "streak": streak,
-                    "met": True}
+                    "met": True, "goal": _goal_id(workflow_dir)}
         rc, ok = _converge(workflow_dir, "check")
         if ok and rc == 2:
             return {"cont": False, "reason": "GOAL STALLED — read back what was attempted and "
                                              "why it did not move; never retry the same item",
-                    "fingerprint": fp, "streak": streak, "stalled": True}
+                    "fingerprint": fp, "streak": streak, "stalled": True,
+                    "goal": _goal_id(workflow_dir)}
 
     # Progress is measured against the PREVIOUS fingerprint, so the first tick (no previous)
     # never scores no-progress -- there has been no session to have made any.
@@ -154,6 +170,51 @@ def decide(workflow_dir, prev_fp, streak, max_noprogress=MAX_NOPROGRESS):
         return {"cont": True, "streak": streak, "fingerprint": fp,
                 "reason": "no progress (%d/%d)" % (streak, max_noprogress)}
     return {"cont": True, "streak": 0, "fingerprint": fp, "reason": "progress"}
+
+
+def park_steer(workflow_dir, verdict):
+    """Park a `steer` checkpoint for a terminal stop, so the stop is REACHABLE.
+
+    An unattended drive that just goes quiet is indistinguishable from one that died. A
+    parked checkpoint is what the daemon's away channel already alerts on, so raising one
+    buys the notification through the machinery that owns it -- rather than a second sender
+    beside it, which would mean a second copy of the delivery-and-backoff logic and a second
+    way for the channel to be wrong.
+
+    IDEMPOTENT BY CONSTRUCTION. The ticket id and token are DERIVED from (goal, reason), so a
+    driver restarted against the same terminal state rewrites the same record rather than
+    filing a second ask. A stalled goal that a human has not yet answered must not accumulate
+    one ticket per driver launch -- that is how an away channel trains someone to ignore it.
+
+    Best-effort, and deliberately so: the driver's job is to STOP, and it has already decided
+    to. A park that fails must not turn a clean stop into a crash, so the failure is reported
+    and the stop proceeds. The console still shows the goal's state either way.
+    """
+    kind = "met" if verdict.get("met") else "stalled"
+    goal_id = verdict.get("goal") or "goal"
+    ticket = "steer-%s-%s" % (goal_id, kind)
+    digest = hashlib.sha256(ticket.encode("utf-8")).hexdigest()[:8]
+    rec = {
+        "ticket_id": ticket,
+        "token": "%s:steer:%s" % (ticket, digest),
+        "checkpoint": {
+            "kind": "steer",
+            "request": {
+                "kind": "steer",
+                "what": ("the goal is met — confirm it is finished, or say what is still missing"
+                         if kind == "met" else
+                         "the drive stopped moving — it needs direction, not a retry"),
+                "expected": verdict.get("reason", ""),
+                "blocking": True,
+            },
+        },
+        "loop_position": "converge",
+    }
+    try:
+        from bus import Paths, write_park
+        return write_park(Paths(workflow_dir), rec, summary=verdict.get("reason", "")[:120])
+    except Exception as exc:                       # noqa: BLE001 -- never crash a clean stop
+        return {"error": "could not park the steer checkpoint: %r" % exc}
 
 
 def _shell(verdict):
@@ -192,6 +253,13 @@ def main(argv=None):
         return 0 if fp else 1
 
     v = decide(args.workflow_dir, args.prev_fingerprint or None, args.streak)
+    # A TERMINAL stop (the goal is met, or it stalled) gets a `steer` checkpoint so the stop
+    # is reachable from a phone. A pause does NOT: the human who paused already knows, and
+    # asking them to answer a checkpoint about their own instruction is noise. Nor does a
+    # no-progress give-up, which is the driver's own guard rather than a verdict about the
+    # goal -- it may fire on a goal that is perfectly healthy and simply blocked.
+    if not v["cont"] and (v.get("met") or v.get("stalled")):
+        v["parked"] = park_steer(args.workflow_dir, v)
     print(_shell(v) if args.shell else json.dumps(v, indent=2, sort_keys=True))
     if not args.shell:
         print("drive: " + v["reason"], file=sys.stderr)

@@ -807,7 +807,7 @@ def upsert_handoff_block(text, block):
 # handoff.md is COMMITTED. The record does not MOVE to the committed half, it PROJECTS
 # onto it — which is what keeps the projection small, bounded, and safe to read back.
 DEFAULT_DEADLINE_HOURS = 24
-PARK_KINDS = ("demo", "qa", "setup", "reconcile", "forecast")
+PARK_KINDS = ("demo", "qa", "setup", "reconcile", "forecast", "steer")
 # A ticket id becomes a FILENAME, so this is a path-safety check before it is a format
 # check: one component, no separator, and it cannot be `.`/`..` because it must open on
 # an alphanumeric.
@@ -882,7 +882,7 @@ def validate_park(rec):
       no id     → nothing to name the file or key the mirror on;
       no token  → the drain matches a verdict to its ticket ON the token, so a tokenless
                   park is a checkpoint that can be answered but never resumed;
-      bad kind  → the router has four arms and no default;
+      bad kind  → the router has one arm per PARK_KINDS member and no default;
       no request→ the human is being asked nothing.
     """
     if not isinstance(rec, dict):
@@ -3956,6 +3956,12 @@ def remote_carries_payload(clean):
 # through it, and that is the dangerous one: an approved forecast is a whole execution
 # plan the agent then follows, so it is MORE authoritative than an opinion, not less.
 # Hence a second, orthogonal gate keyed on the KIND.
+# `steer` is deliberately NOT here, and the omission is a decision rather than an oversight.
+# It is raised when an unattended drive hits a terminal state, and its entire reason for
+# existing is that the stop be answerable from a phone — refusing it remotely would defeat the
+# kind. Its verdict is also an opinion in the ordinary sense (is this finished, or what is
+# still missing), not an execution plan the agent then follows, so the reasoning above does
+# not reach it.
 REMOTE_REFUSED_KINDS = ("forecast",)
 
 

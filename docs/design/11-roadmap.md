@@ -1081,7 +1081,7 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
-### The ordered build sequence (set 2026-09-13, D186; Steps 0–6 ALL CLOSED 2026-09-13 — D187/D188/D189/D191/D198/D199/D200/D201/D202; `12e` PARTIAL on its notify arm) — the fix pass, then Phase 12
+### The ordered build sequence (set 2026-09-13, D186; Steps 0–6 ALL CLOSED 2026-09-13 — D187/D188/D189/D191/D198/D199/D200/D201/D202/D203; nothing partial) — the fix pass, then Phase 12
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied. A step that is merely *nice*
 before another is called that; a step that is a **prerequisite** says why. Phase 12's per-slice content lives
@@ -1223,9 +1223,10 @@ the session did not author — the latch, the ledger, git, the item anchors. Pro
 itself: release, and whoever takes it keeps it — which also settles the unnamed collision between the drop-in
 window and the relaunch-runner. Exit test as specified in this line: a real goal across several sessions with no
 `/clear`, interrupted on purpose — **20 checks, 0 failed, stable over three runs**, and it caught a real
-shell-quoting bug no unit test would have. **The residual is named, not glossed:** `notify` on goal-met is not
-built, because the right fix is the sixth `checkpoint.kind` that `D199` deferred — one decision, not two, carried
-in `07`.
+shell-quoting bug no unit test would have. **The residual it named is now CLOSED by `D203`** (2026-09-13, same day): the
+sixth `checkpoint.kind`, `steer`, which `D199` had deferred for want of a second caller. `12e` supplied it, and
+the notify arm is satisfied by parking a checkpoint the away channel already alerts on rather than by a second
+sender beside `Notifier`. **`12e` is therefore no longer partial.**
 
 **Step 6 (as originally written) — `12e`, the `loop.sh` session driver.** Last, and the ordering is a safety call rather than a
 convenience: it multiplies any defect in Steps 2–5 across unattended sessions, and **an autonomous driver without a

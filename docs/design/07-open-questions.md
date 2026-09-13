@@ -1027,7 +1027,9 @@ slice inherits whether or not anyone looks at it.
   safe way (an unbound criterion costs nothing; a false binding stops a driver), and the honest description of
   the slice is *ungameable by effort, not ungameable by a bad binding.* Open: whether the adversarial-adequacy
   lens already deferred for the promise `boundary` rule is the same mechanism, and should be built once for both.
-- **Does a goal stop deserve its own `checkpoint.kind`? `[12e]`** `12d` routes `met` and `STALLED` to `idle`
+- **~~Does a goal stop deserve its own `checkpoint.kind`?~~ ANSWERED 2026-09-13 — `D203`: yes, once it had a
+  second caller. `steer`.** *(Original reasoning below; it predicted the shape of the answer correctly — "the two
+  may want the same answer" — and they did.)* `12d` routes `met` and `STALLED` to `idle`
   (await steering) — deliberately, because `checkpoint.kind` is a *gated enum* with an owner and consumers
   (`bus.py` `PARK_KINDS`, the console) and a sixth member is a real decision, while `idle` already means *stop and
   wait for a human*. **That is right exactly while a human is at the terminal.** `12e` is what makes it wrong: a
@@ -1046,7 +1048,13 @@ slice inherits whether or not anyone looks at it.
   is. The next slice that adds a schema section should expect to split first.
 
 ## Newly open from building `12e` (2026-09-13 — D201/D202)
-- **The sixth `checkpoint.kind` now has TWO callers, which is the promotion trigger it was waiting for.
+- **~~The sixth `checkpoint.kind` now has TWO callers~~ BUILT 2026-09-13 — `D203`. `steer`.** Both residuals it
+  named are closed together: the kind exists, and `12e`'s missing notify arm is satisfied by it rather than by a
+  second sender beside `Notifier`. The split that made it cheap: **attended `converge` stop → `idle`** (the human
+  is there), **driver terminal stop → a parked `steer`** (the human is not, and an idle drive that goes quiet is
+  indistinguishable from a dead one). Ticket id and token derive from (goal, reason), so a relaunched driver
+  rewrites one record rather than filing a ticket per launch. *(Original entry below, for the reasoning.)*
+- **~~[superseded by D203]~~ The sixth `checkpoint.kind` now has TWO callers, which is the promotion trigger it was waiting for.
   `[12e-residual, decide next]`** `D199` deferred it with one caller (a goal stop routed to `idle`) on the
   grounds that a gated enum should not grow for a single case. `D202` supplies the second and sharper one: `11`
   specifies *"goal met ⇒ capture, **notify**, stop"*, and the notify arm is **unbuilt** because

@@ -7056,3 +7056,49 @@ deferred. Two threads, one decision, and it is `07`'s.
 **Builds on:** **D123** (the lock this drives on), **D201** (the latch, without which a driver is unsafe),
 **D199** (the stop predicate), **D117** (the anchor-table rule progress reuses).
 → `11` (Step 6), `07`, `05`, `schemas-runtime.md`.
+
+## D203 — the sixth `checkpoint.kind`: `steer`, so a terminal stop is REACHABLE rather than merely correct **[BUILT 2026-09-13, closing `12e`'s named residual and `D199`'s deferral in one decision. 1085 tests; driver exit test 23 checks, 0 failed]**
+
+**The call.** `checkpoint.kind` gains `steer`, raised by the **session driver** when a drive hits a terminal
+state — the goal's acceptance all discharged, or nothing moving long enough to call it stalled.
+
+**It was deferred twice, correctly, and the trigger it was waiting for arrived.** `D199` declined it with one
+caller (a goal stop routed to `idle`) because a gated enum should not grow for a single case, and wrote the
+promotion rule down: *promote when a second caller wants it.* `D202` supplied the second and sharper one — `11`
+specifies *"goal met ⇒ capture, **notify**, stop"*, and the notify arm could not be built, because
+`Notifier.deliver` is daemon-coupled and a driver-side send would be **a second copy of the delivery-and-backoff
+logic**. Those two are one problem: **a parked checkpoint is already what the away channel alerts on.** The kind
+buys the notification through the machinery that owns it rather than beside it.
+
+**The reason it exists is reachability, not correctness.** `idle` was already the *right* state; `D202` argued
+that and it still holds for an attended session, where the human is at the terminal. Unattended, an idle drive
+that simply goes quiet is **indistinguishable from one that died**, and no amount of correct state fixes that.
+So the split is by who is present: **an attended `converge` stop routes to `idle`; the driver parks a `steer`.**
+Neither duplicates the other, which is why no reconciliation between them was needed.
+
+**A third boundary shape, and worth naming.** The existing five are raised by a *step* that needs a human inside
+it — approve this sandbox, test this feature, do this thing I cannot reach. `steer` is raised by the machine
+reaching a **terminal state**, so it carries what was achieved and what did not move rather than a thing to look
+at. Its verdict maps onto the existing outcome enum without extending it: `approve` = finished · `changes` = the
+notes are the new direction · `reject` = stop this goal. **Never a retry** — a stall means repeating it produced
+nothing, and the verdict's job is to supply information the loop did not have.
+
+**IDEMPOTENT BY DERIVATION, which is the part that makes the channel worth reading.** The ticket id and token are
+derived from (goal, reason), so a driver relaunched against the same unanswered terminal state **rewrites one
+record** instead of filing a ticket per launch. An away channel that repeats itself is one a human learns to
+ignore — the same reasoning `Notifier` already uses to avoid re-alerting everything open after a restart.
+
+**Two deliberate omissions, each stated so neither reads as an oversight.**
+1. **A pause does NOT park a steer.** The human who paused already knows; asking them to answer a checkpoint
+   about their own instruction is noise. Nor does the no-progress give-up — that is the *driver's* guard, not a
+   verdict about the goal, and it can fire on a healthy goal that is merely blocked.
+2. **`steer` is NOT in `REMOTE_REFUSED_KINDS`.** `forecast` is refused remotely because an approved forecast is an
+   execution plan the agent then follows. A steer verdict is an opinion in the ordinary sense, and its entire
+   purpose is to be answerable **from a phone** — refusing it remotely would defeat the kind.
+
+**Cost:** the enum owner, `PARK_KINDS`, the checkpoint skill, the roster row. **No console change** — the
+renderer already handles a kind it does not special-case, which is the property that made this cheap.
+
+**Builds on:** **D199** (which deferred it and wrote the promotion trigger this satisfies), **D202** (which
+supplied the second caller), **D120** (the away channel's no-repeat-alerts discipline this copies).
+→ `11`, `07` (both residuals closed), `10-roster`.

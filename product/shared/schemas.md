@@ -304,7 +304,17 @@ escalate on. The floor is a minimum, not a cap.
 A checkpoint sits at **a boundary only a human can cross** — either a **judgment** boundary (does this match intent:
 `demo`, `qa`, `reconcile`, `forecast` — the verdict is an opinion) or an **action** boundary (do something in the world
 the loop can't reach: `setup` — the verdict is "I did it" + a returned artifact, then machine-verified).
-- `request` — `{ kind: demo|qa|setup|reconcile|forecast, what, expected, how?(←setup-guide), tasks?[], blocking: true, token }`.
+**`steer` is a judgment boundary of a third shape:** it is raised by the machine reaching a **terminal state**
+(the goal's acceptance all discharged, or nothing moving for long enough to call it stalled) rather than by a step
+that needs a human inside it, so it carries what was achieved and what did not move rather than a thing to look
+at. **Raised by the session DRIVER, not by an attended loop** — an attended `converge` stop routes to `idle`,
+because the human is already there. Its reason for existing is reachability: an unattended drive that simply goes
+quiet is indistinguishable from one that died, and a parked checkpoint is what the away channel already alerts on,
+so this kind buys the notification through the machinery that owns it instead of a second sender beside it. Its
+ticket id and token are **derived from (goal, reason)**, so a driver relaunched against the same terminal state
+rewrites one record rather than filing a ticket per launch — an away channel that repeats itself is one a human
+learns to ignore.
+- `request` — `{ kind: demo|qa|setup|reconcile|forecast|steer, what, expected, how?(←setup-guide), tasks?[], blocking: true, token }`.
   **`token`** (`{ticket}:{step}:{uuid}`) correlates the async verdict back to this parked ticket. **`tasks[]`** is the
   *set* of setup items a `kind=setup` checkpoint carries (a lone setup is a one-element set); the orchestrator
   coalesces a plan's foreseeable setups (spec `integrations[]`) into one checkpoint **at first-setup-contact** (not

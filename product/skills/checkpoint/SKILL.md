@@ -1,6 +1,6 @@
 ---
 name: checkpoint
-description: Pause autonomous work to get a human verdict on the live app, then resume on the answer. Five kinds — demo (approve a sandbox), qa (test a built feature), setup (perform a manual external action), reconcile (confirm a brownfield-reconstructed spec), forecast (approve the chain of events the loop proposes to walk). Parks the ticket durably and yields — never a live wait; routes by kind on both pass and fail (see Route).
+description: Pause autonomous work to get a human verdict on the live app, then resume on the answer. Six kinds — demo (approve a sandbox), qa (test a built feature), setup (perform a manual external action), reconcile (confirm a brownfield-reconstructed spec), forecast (approve the chain of events the loop proposes to walk), steer (the drive reached its goal or stopped moving and needs direction). Parks the ticket durably and yields — never a live wait; routes by kind on both pass and fail (see Route).
 ---
 
 # Checkpoint — the human-in-the-loop gate
@@ -16,6 +16,13 @@ Two boundary types. **Judgment** — the human gives an opinion:
 - **forecast** — approve the chain of events the loop proposes to walk for a change, before it walks it (from
   `create-forecast`). Where `demo` de-risks the **product** question ("did we agree *what* to build?"), this
   de-risks the **process** question ("did we agree *how* the machine will proceed?").
+- **steer** — the drive has **stopped**, and needs direction to go further: the goal's acceptance is all
+  discharged (`converge.py met`), or nothing has moved for long enough to call it stalled. The one kind raised by
+  the machine reaching a **terminal state** rather than by a step that needs a human inside it, which is why it
+  carries what was achieved and what did not move rather than a thing to look at. **It exists so the stop is
+  REACHABLE:** an unattended drive that simply goes quiet is indistinguishable from one that died, and a parked
+  checkpoint is what the away channel already alerts on — so this kind buys the notification instead of building
+  a second notifier beside the one the daemon owns.
 
 **Action** — the human does something the loop can't reach, then the loop *verifies* it worked:
 - **setup** — perform a manual external action (create an account, add a key, configure a webhook); calls
@@ -23,7 +30,7 @@ Two boundary types. **Judgment** — the human gives an opinion:
   plan's foreseeable setups into one checkpoint at first-setup-contact.
 
 ## Inputs
-A `checkpoint.request` `{ kind: demo|qa|setup|reconcile|forecast, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
+A `checkpoint.request` `{ kind: demo|qa|setup|reconcile|forecast|steer, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
 **A `setup` `tasks[]` entry is `{ id, what, secrets?[], provides?[] }`** — `secrets[]` naming the credential **key
 names** that task will hand back (`POLAR_WEBHOOK_SECRET`), never values. Fill it whenever the task returns a
 credential: it is what makes the console render a labelled input per key instead of asking a human to hand-compose a
@@ -116,6 +123,12 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
   against the store and itemizes what is missing. It is **early warning, not a gate**: point-of-use fail-closed
   (the thing that needs the key failing loudly when it is absent) stays the floor.
 - **reconcile** — approve → `prioritize` · else → `ingest` (re-run) / `discuss`.
+- **steer** — approve → the goal stands as finished: mark `goal.json` `status: stopped` and **stop** (do not
+  re-pick; a finished goal with a non-empty backlog is still finished, and continuing is how a drive outruns what
+  a human agreed to) · changes → the human's notes are the new direction: route them through `discuss` or
+  `create-issue` as ordinary intake, then `prioritize` · reject → `status: stopped`, no further work on this goal.
+  **Never re-run the item that stalled.** A stall means repeating it produced nothing; the verdict's job is to
+  supply information the loop did not have, and acting on it is `refine`'s or `discuss`'s, never a retry.
 - **forecast** — approve → **freeze** the forecast, then continue to the next intake step (the sandbox gate) ·
   changes → `create-forecast` (re-forecast with the human's edits; the record stays a draft) · reject → `discuss`.
   - **Freeze BEFORE you unpark, and the order is the whole point.** `unpark` removes `parked/<id>.json`, and the

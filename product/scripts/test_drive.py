@@ -207,6 +207,77 @@ def test_shell_output_is_evalable_and_quotes_the_reason(repo):
     assert got.returncode == 0 and "PAUSED" in got.stdout
 
 
+# --- the steer checkpoint: making a terminal stop REACHABLE ---------------------
+
+def _tick(repo):
+    return subprocess.run([sys.executable, os.path.join(os.path.dirname(drive.__file__),
+                                                        "drive.py"),
+                           "--workflow-dir", wf(repo), "tick"],
+                          capture_output=True, text=True)
+
+
+def _parked(repo):
+    d = repo / ".workflow" / "parked"
+    return sorted(p.name for p in d.iterdir()) if d.is_dir() else []
+
+
+def test_a_met_goal_parks_a_steer_checkpoint(repo):
+    """An unattended drive that just goes quiet is indistinguishable from one that died.
+    The park is what the daemon's away channel already alerts on."""
+    _goal(repo, ("ga-1",))
+    _ledger(repo, {"item": "i-1", "refs": ["ga-1"]})
+    assert _tick(repo).returncode == 1
+    names = _parked(repo)
+    assert names == ["steer-g-1-met.json"], names
+    rec = json.loads((repo / ".workflow" / "parked" / names[0]).read_text())
+    assert rec["checkpoint"]["kind"] == "steer"
+    assert rec["token"], "a tokenless park can be answered but never resumed"
+
+
+def test_a_stalled_goal_parks_a_DIFFERENT_steer_ticket(repo):
+    """Met and stalled are different asks and must not overwrite each other."""
+    _goal(repo, ("ga-1",))
+    _ledger(repo, *[{"item": "m-%d" % i, "refs": []} for i in range(6)])
+    _tick(repo)
+    assert _parked(repo) == ["steer-g-1-stalled.json"]
+
+
+def test_re_running_the_driver_does_not_file_a_SECOND_ticket(repo):
+    """The idempotence that keeps an away channel worth reading. A stalled goal nobody has
+    answered yet must not accumulate one ticket per driver launch — that is exactly how a
+    human is trained to ignore the notifications."""
+    _goal(repo, ("ga-1",))
+    _ledger(repo, {"item": "i-1", "refs": ["ga-1"]})
+    for _ in range(3):
+        _tick(repo)
+    assert len(_parked(repo)) == 1
+
+
+def test_a_pause_does_NOT_park_a_steer(repo):
+    """The human who paused already knows. Asking them to answer a checkpoint about their
+    own instruction is noise on the channel."""
+    _goal(repo, ("ga-1",))
+    _pause(repo)
+    assert _tick(repo).returncode == 1
+    assert _parked(repo) == []
+
+
+def test_a_no_progress_giveup_does_NOT_park_a_steer(repo):
+    """It is the driver's own guard, not a verdict about the goal — it can fire on a
+    perfectly healthy goal that is merely blocked."""
+    _goal(repo, ("ga-1",))
+    v = drive.decide(wf(repo), drive.fingerprint(wf(repo)), drive.MAX_NOPROGRESS - 1)
+    assert v["cont"] is False
+    assert not v.get("met") and not v.get("stalled")
+
+
+def test_a_park_failure_never_turns_a_clean_stop_into_a_crash(repo, monkeypatch):
+    """The driver has already decided to stop. A failed park must be reported, not fatal."""
+    monkeypatch.setattr(drive, "_goal_id", lambda w: "g-1")
+    out = drive.park_steer("/nonexistent/nowhere", {"met": True, "reason": "r", "goal": "g-1"})
+    assert "error" in out
+
+
 def test_a_reason_full_of_shell_metacharacters_survives_eval(repo, monkeypatch):
     """The bug the exit test caught, pinned so it cannot come back. Reasons are written for
     humans and contain backticks — "resume with a `control` message" — which inside double

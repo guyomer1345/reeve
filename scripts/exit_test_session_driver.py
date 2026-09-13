@@ -216,6 +216,18 @@ def drive_goal_met(tmp):
           (r.stderr.strip().splitlines() or [""])[-1])
     check("15. it did not keep committing past the goal",
           len(git(repo, "log", "--oneline").strip().splitlines()) == 1)
+    # The stop must be REACHABLE. A drive that goes quiet at 3am is indistinguishable from
+    # one that died, and a parked checkpoint is what the away channel already alerts on.
+    parked = os.path.join(wf, "parked")
+    names = sorted(os.listdir(parked)) if os.path.isdir(parked) else []
+    check("16. it parked a `steer` checkpoint so the stop can reach a phone",
+          names == ["steer-g-1-met.json"], str(names))
+    if names:
+        rec = json.load(open(os.path.join(parked, names[0])))
+        check("17. the park carries a token, so the verdict can resume it",
+              bool(rec.get("token")) and rec["checkpoint"]["kind"] == "steer")
+        check("18. and the handoff mirror names it, so a cold start sees it too",
+              "steer-g-1-met" in open(os.path.join(wf, "handoff.md")).read())
 
 
 def drive_dropin(tmp):
@@ -238,13 +250,13 @@ def drive_dropin(tmp):
         time.sleep(0.1)
     took = subprocess.run(["flock", "-w", "20", lock, "-c", "sleep 3"],
                           capture_output=True, text=True)
-    check("16. a human could take the lock in the drop-in window", took.returncode == 0,
+    check("19. a human could take the lock in the drop-in window", took.returncode == 0,
           "rc=%d %s" % (took.returncode, took.stderr[-120:]))
     out, err = p.communicate(timeout=60)
-    check("17. the driver stepped aside rather than racing a second orchestrator",
+    check("20. the driver stepped aside rather than racing a second orchestrator",
           p.returncode == 0 and "handing over" in err,
           "rc=%s tail=%r" % (p.returncode, err.strip()[-160:]))
-    check("18. it had done real work before handing over", sessions_run(wf) >= 1,
+    check("21. it had done real work before handing over", sessions_run(wf) >= 1,
           "ran %d" % sessions_run(wf))
 
 
@@ -257,9 +269,9 @@ def drive_human_path_unchanged(tmp):
     env["PATH"] = binz + os.pathsep + env["PATH"]
     r = subprocess.run(["bash", os.path.join(repo, ".claude", "scripts", "loop.sh")],
                        cwd=repo, capture_output=True, text=True, env=env, timeout=60)
-    check("19. it ran exactly one session and exited", sessions_run(wf) == 1,
+    check("22. it ran exactly one session and exited", sessions_run(wf) == 1,
           "ran %d" % sessions_run(wf))
-    check("20. and never printed a driver line", "--drive" not in r.stderr, r.stderr[-120:])
+    check("23. and never printed a driver line", "--drive" not in r.stderr, r.stderr[-120:])
 
 
 def main():
