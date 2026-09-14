@@ -1089,7 +1089,48 @@ built, with the dependency that fixes each position stated rather than implied.
 `D199`/`D200`/`D201`/`D202`/`D203`. Its per-step record is preserved below because the reasoning is still worth
 reading; it is **history, not the queue**.
 
-#### NEXT — the smoke drive. `[core]`
+#### NEXT — the self-clearing supervisor (the maintainer's design, 2026-09-14). `[core]`
+**The thing `12e` was asked for and did not build.** The ask was: *let the loop keep going past a full context —
+clear and resume itself — without me typing `/clear`.* `12e` answered it with `loop.sh --drive`, a shell loop
+around **`claude -p`**, which self-clears but is **headless**: no UI, no live tool calls, no status line. The
+maintainer's correction: *"we are not using -p driver for anything."* Autonomy was never meant to cost the
+interactive session.
+
+**The design, in his words and now the call:** a **bash supervisor per orchestrator**, running beside an ordinary
+interactive Claude Code session and **polling**. When the context is full **and nothing is waiting on a human**,
+it resets the session — `/clear`, then a bare `continue`.
+
+**Three things fix the shape of it, each from lived use rather than reasoning:**
+1. **A cleared session does NOT start on its own.** The package claimed it did, in **five shipped places**
+   (*"auto-rehydrates"*), and that was **false** — `SessionStart` injects `handoff.md` as `additionalContext`,
+   which is context, not a turn. The session sits idle until prompted. **Corrected in all five.** This is
+   load-bearing: a supervisor built on the old claim would send `/clear` and wait forever. So the supervisor
+   sends **`/clear` then `continue`** — two keystroke injections, not one.
+2. **The supervisor does NOT send `/dispatch`.** Writing the handoff is the **orchestrator's** job when it is
+   working toward a goal and sees the limit approaching — it has the context to know what a complete anchor says;
+   a poller does not. The supervisor's whole job is the **reset**, never the preparation. It waits for a freshly
+   rewritten `handoff.md`, then clears.
+3. **The trigger works here and only here.** `context_band.py`'s sensor is the status line, which **runs in an
+   interactive session and not under `-p`**. So this design reads a live band; the `-p` driver never could
+   (`c7269d4`). The gate is: band says `handoff-now` · handoff freshly written · **no parked checkpoint awaiting
+   a verdict** (nothing for a human to do).
+
+**Transport is the one real unknown.** The supervisor must put keystrokes into a running session's stdin, which a
+normal terminal does not expose. **`tmux send-keys` is the robust answer** and makes tmux a requirement; the
+fallback is launching under a pty wrapper, which is fiddlier. **Probe before building** — this is exactly the
+kind of assumption that put the band on a blind sensor.
+**Also unprobed:** whether keys injected mid-turn queue cleanly (they should — Claude Code buffers typed input),
+which decides whether the supervisor must detect an idle session or may simply send.
+
+**`--drive` / `claude -p` is DEMOTED, and its premise is now in question.** It was justified as the away path —
+*"nobody at the terminal"*. The maintainer's actual away path is **Claude Code in the Claude app on his phone**,
+which is a full interactive session. That leaves `-p` covering only *"running while nobody is looking at all"* —
+the mode with the least supervision, the most unmapped capability gaps (two found by accident already), and now
+the weakest justification. **Do not delete it yet** — the relaunch-runner (`D123`) is a different, older
+mechanism with its own job (resume a *dead* loop when a verdict lands). But `--drive` is no longer the answer to
+"run more autonomously", and whether it should survive at all is a live question, not an assumption.
+
+#### Then — the smoke drive. `[core]`
 **Make the live drive a mechanism instead of something done once by hand.** Two live drives (`D210`, `D211`)
 found **four** package defects that **1,137 unit tests and three green exit-test harnesses found none of** — two
 of them shipped hours earlier, and one would have blocked the first commit of every project bootstrapped from

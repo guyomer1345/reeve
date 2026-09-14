@@ -7489,3 +7489,55 @@ rather than behaviour. Its first run closes the `loop.sh --drive` gap at the sam
 **Builds on:** **D210** + **D211** (the two passes), **D151** (the same lesson, first costume), **D198**/**D200**/
 **D202** (which each stated this limit and were believed).
 → `11` (§ the ordered build sequence — the next work order), `07`.
+
+## D213 — "a cleared session auto-rehydrates" was FALSE in five shipped places, and `12e` answered the wrong question **[CORRECTED + RE-SCOPED 2026-09-14, from the maintainer's lived use. Sets the next slice — `11` § the ordered build sequence]**
+
+**The false claim, first, because everything else rests on it.** Five shipped files said a cleared session
+**auto-rehydrates** / **auto-resumes** from `handoff.md`. It does not. `SessionStart` injects the anchor as
+`additionalContext`, and **`additionalContext` is context, not a turn** — a cleared session sits idle until
+somebody prompts it. The maintainer types `continue`; that is the whole mechanism, and nothing in the package
+said so. The hook removes the need to **re-explain** where the build was; it never removed the need to **ask**.
+**Found from use, not from review** — it is invisible to every test, because a human prompting the next session
+is indistinguishable from a session that started itself.
+
+**It is load-bearing rather than a wording nit:** anything automating the reset depends on it. A supervisor built
+on the old claim would send `/clear` and then **wait forever** for a session that was never going to move.
+Corrected in all five (`dispatch.md` ×2, `start.md`, `session_start.py`, `orchestrator-CLAUDE.md`), and
+`session_start.py` now states the distinction in the place a future author will be standing.
+
+**`12e` ANSWERED THE WRONG QUESTION.** The ask was: *let the loop keep going past a full context — clear and
+resume itself — without me typing `/clear`.* `12e` delivered `loop.sh --drive`, a shell loop around **`claude
+-p`**. It does self-clear and self-continue, so it satisfies the words — and it is **headless**, so it costs the
+interactive session entirely: no UI, no live tool calls, no status line. *"We are not using -p driver for
+anything."* **Autonomy was never meant to be paid for with the thing being made autonomous.** The error was mine
+in a specific way worth naming: `/clear` cannot be self-invoked, so I concluded a **fresh process** was the only
+route to a fresh context — and stopped at the only *scriptable* way to start one. **A supervisor driving an
+ordinary interactive session was never considered**, and it is both simpler and strictly more capable.
+
+**The design now decided — his, not a compromise on mine.** A **bash supervisor per orchestrator**, polling
+beside a normal interactive session; when the context is full and nothing waits on a human, it sends **`/clear`
+then `continue`**. Three properties the `-p` design could not have:
+- **The band works.** `context_band.py`'s sensor is the status line, which runs interactively and **not** under
+  `-p`. This reads a live band; `--drive` never could (`c7269d4`). The trigger and the sensor are finally in the
+  same room.
+- **The supervisor never sends `/dispatch`.** Writing the anchor is the **orchestrator's** job — it has the
+  context to know what a complete handoff says, and a poller does not. The supervisor owns the **reset**, never
+  the preparation.
+- **Nothing is killed**, so `loop.sh`'s `flock` is never dropped and there is no race with the daemon's runner.
+
+**`--drive` is DEMOTED and its premise is in question.** It was justified as the away path — *nobody at the
+terminal*. The maintainer's real away path is **Claude Code in the Claude app on his phone**, a full interactive
+session. That leaves `-p` covering only *"running while nobody is looking at all"*: the least-supervised mode,
+with the most unmapped capability gaps (**two found by accident already**), and now the thinnest justification.
+Not deleted — the relaunch-runner (`D123`) is an older mechanism with its own job — but it is no longer the
+answer to "run more autonomously", and whether it survives is now a live question rather than a premise.
+
+**Two things deliberately left unprobed, and named so they are not assumed away:** the supervisor needs to put
+keystrokes into a running session's stdin, which a normal terminal does not expose — **`tmux send-keys` is the
+robust answer** and makes tmux a requirement; and whether keys injected mid-turn queue cleanly. **Probe both
+before building.** Assuming a mechanism instead of checking it is what put the band on a blind sensor, and that
+mistake is two weeks old, not two years.
+
+**Builds on:** **D202** (the slice this re-scopes), **D206** (the band, whose sensor this design finally reaches),
+**D212** (the live-drive discipline that says probe rather than assume).
+→ `11` (§ the ordered build sequence — now the first entry), `commands/dispatch.md`, `hooks/session_start.py`.

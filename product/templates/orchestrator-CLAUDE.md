@@ -123,7 +123,7 @@ parked. Write the anchor as if the next session is a stranger: it is.
 **Interactive reset (the statusline governor).** The shipped statusline shows a persistent budget
 banner once context passes `config.json` → `context.warn_pct`. When you or the human see it, run
 **`/dispatch`**, then the human runs **`/clear`** — you cannot `/clear` yourself. A cleared session
-auto-rehydrates from `handoff.md`, so a long interactive run resets its context without losing the
+re-injects `handoff.md`, so the next prompt (a bare `continue`) resumes a long interactive run without losing the
 build. *(What `/dispatch` writes and the `PreCompact` backstop behind it: the `/dispatch` command.)*
 
 If the runner is enabled (`config.json` → `runner`) it relaunches a fresh session for the next

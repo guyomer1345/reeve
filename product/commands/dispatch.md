@@ -1,5 +1,5 @@
 ---
-description: Write a complete, current handoff.md right now so a /clear is safe — the interactive context-reset step. Run it when the statusline shows the context-budget warning, then /clear (the session auto-rehydrates from the handoff).
+description: Write a complete, current handoff.md right now so a /clear is safe — the interactive context-reset step. Run it when the statusline shows the context-budget warning, then /clear, then a bare `continue` — the SessionStart hook re-injects the handoff, so that one word is all the next session needs.
 ---
 
 # /dispatch — checkpoint context to disk, then it is safe to /clear
@@ -13,8 +13,10 @@ because a 200k and a 1M window at the same percentage full leave very different 
 a window that still had work in it. Ask any time with
 `python3 .claude/scripts/context_band.py --workflow-dir .workflow`.
 `/dispatch` is the manual reset step: it writes a **complete, current** `.workflow/handoff.md` so that a `/clear` loses
-no build state — a cleared session auto-rehydrates from that anchor (the SessionStart hook
-re-injects it). Run `/dispatch`, confirm it reports the handoff is written, then run `/clear`.
+no build state. The SessionStart hook re-injects that anchor on `/clear`, so the next prompt
+resumes from it — **but a cleared session does not start on its own.** It sits idle until you
+prompt it, and a bare `continue` is enough. The hook removes the need to *re-explain* where the
+build was; it does not remove the need to *ask*. Run `/dispatch`, confirm it reports the handoff is written, then run `/clear`.
 
 You (the orchestrator) do this now, in this turn:
 

@@ -3,8 +3,14 @@
 
   1. REHYDRATE (source=clear only). `/clear` wipes the conversation but preserves the
      filesystem, so the durable resume anchor `.workflow/handoff.md` is still on disk;
-     this injects it as `additionalContext` so the cleared session auto-resumes instead
-     of the human re-explaining where the build was. The automatic half of `/dispatch`.
+     this injects it as `additionalContext` so the cleared session's NEXT PROMPT resumes
+     from it instead of the human re-explaining where the build was.
+
+     IT DOES NOT START THE SESSION. `additionalContext` is context, not a turn: a cleared
+     session sits idle until it is prompted, and a bare `continue` is enough. Saying this
+     precisely matters because anything automating the reset depends on it -- a supervisor
+     built on "auto-resumes" would send `/clear` and then wait forever for a session that
+     was never going to move. This removes the need to RE-EXPLAIN, not the need to ASK.
 
   2. RE-ASSERT the git pre-commit backstop (EVERY source). `/start` installs
      `.claude/hooks/pre-commit.sh` as `.git/hooks/pre-commit`, but `.git/hooks/` is not

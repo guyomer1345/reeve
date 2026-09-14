@@ -227,7 +227,7 @@ loop's normal `state.json` takes over when the motion ends.
      network — stays `ask`). The template also wires the **interactive context governor**: a `statusLine`
      (`.claude/scripts/statusline.py`) that shows a persistent banner once context passes `config.context.warn_pct`
      telling the human to run `/dispatch` then `/clear`; a `SessionStart` hook that re-injects
-     `.workflow/handoff.md` on matcher `clear` so a cleared session **auto-rehydrates**; and a `PreCompact` backstop
+     `.workflow/handoff.md` on matcher `clear` so a cleared session's **next prompt resumes from it** (it does not start on its own — a bare `continue` is enough); and a `PreCompact` backstop
      that preserves the handoff through an auto-compaction. That same `SessionStart` hook is wired on `startup` and
      `resume` as well, where it does a *different* job: it re-asserts `.git/hooks/pre-commit`, because
      `.git/hooks/` is not part of the repository and so a **clone** of an already-bootstrapped project arrives with
