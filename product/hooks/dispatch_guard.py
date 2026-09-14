@@ -34,6 +34,35 @@ FAILURE MODES, ON PURPOSE
 KNOWN COST, STATED RATHER THAN DISCOVERED: signal B blocks a general-purpose dispatch that
 legitimately mentions `.workflow/` in passing. That is the deliberate trade — the block prints
 what to do instead, and a re-dispatch by capability name is one turn.
+
+--------------------------------------------------------------------------------------------
+THE SECOND GATE: NEVER WAIT ALONE, AND NOW IT IS ENFORCED.
+
+"The orchestrator may never wait alone" was made a first-class rule and the wave machinery was
+built under it — and the rule itself lived only as a sentence in `loop.md`. A router that blocks
+on one `execute` while two others were eligible violates nothing, and **nothing notices**. The
+hard half (`check_wave_independence.py`, which computes what may safely run beside what) shipped,
+and the half that makes the omission impossible did not.
+
+This is the asked-for half. A `reeve:execute` dispatch is REFUSED unless the gate's own verdict
+covers it — `.workflow/wave-decision.json`, written by `check_wave_independence.py --record` and
+by nothing else. Four ways to fail it, each naming its fix:
+  1. no record at all      → the question was never asked.
+  2. recorded at another HEAD → asked, but before the commit that changed the answer. A commit
+     per item is the boundary's cadence, so HEAD is the honest staleness test, not a TTL.
+  3. this item not among `considered` → the gate looked, but not at this.
+  4. the record puts this item in a batch of N>1 and `state.json.wave` is null → the gate said
+     these may run together and this is being sent alone. Mint the wave, send them in one turn.
+
+WHAT THIS CANNOT ENFORCE, SAID PLAINLY RATHER THAN LEFT TO BE DISCOVERED. A `PreToolUse` hook
+fires once per tool call and cannot see the call's siblings, so it can never prove that the
+other members of a minted batch went out in the SAME turn — only that the batch was minted
+before the first one left. Minting a batch of three and then dispatching one is the residual.
+It is a far smaller hole than "nothing notices", and it is a hole, not a corner that was
+rounded off quietly. Scope is likewise narrow on purpose: `execute` is the blocking dispatch the
+rule is about and the only one the independence gate grades. `document`, `create-demo`,
+`research` and `setup-guide` block too and are NOT covered here — there is no gate that computes
+what may run beside them, and inventing one would be new judgement rather than a check.
 """
 import json
 import os
@@ -43,6 +72,11 @@ import sys
 PLUGIN = "reeve"
 WORKFLOW = ".workflow"
 DISPATCH_TOOLS = {"Agent", "Task"}
+# The one leaf the wave gate grades, and the one whose solo dispatch is the ask's subject.
+WAVE_GATED = "execute"
+# An item id as it appears in a dispatch — the item directory is the only spelling a prompt
+# reliably carries, and it is the one `check_wave_independence.py` keys its verdict on.
+ITEM_RE = re.compile(r"\.workflow/items/([A-Za-z0-9][\w.-]*)")
 TITLE_CHARS = 200          # a dispatch title is short; the node name leads it or it isn't a title
 # The loop's own runtime artifacts. Deliberately narrow: `.workflow/` alone would catch a
 # passing mention, these are the paths only a node's work touches.
@@ -102,6 +136,89 @@ def targeted_node(nodes, description, prompt):
     return None
 
 
+def _head(root):
+    import subprocess
+    try:
+        p = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return (p.stdout.strip() or None) if p.returncode == 0 else None
+
+
+def _minted_wave(project_dir):
+    """`state.json`'s wave, through `wave_build.py` — the single owner of that resolution
+    (runtime pointer, worktree fallback). Its reader is CWD-relative, so the cwd is moved to
+    the project for the call rather than the resolution being re-derived here; this process
+    exists for one tool call and has nothing else to be relative to."""
+    try:
+        sys.path.insert(0, os.path.join(project_dir, ".claude", "scripts"))
+        import wave_build
+        here = os.getcwd()
+        try:
+            os.chdir(project_dir)
+            return wave_build.wave_id()
+        finally:
+            os.chdir(here)
+    except Exception:
+        return None
+
+
+def viability_gate(project_dir, workflow, prompt, description):
+    """Refuse an `execute` that no recorded wave verdict covers. See the second half of the
+    module docstring for the four failures and for what this deliberately cannot prove."""
+    path = os.path.join(workflow, "wave-decision.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            rec = json.load(fh)
+    except (OSError, ValueError):
+        rec = None
+    if not isinstance(rec, dict):
+        block(
+            "there is no recorded answer to \"what else could run right now?\" — "
+            f"{path} is missing or unreadable, so this `execute` is about to block the loop "
+            "with nothing establishing that it had to go alone.\n"
+            "  Run `python3 .claude/scripts/check_wave_independence.py --record` at the "
+            "boundary, then dispatch the batch it returns in ONE turn.\n"
+            "  The rule it enforces: never dispatch a blocking call by itself while other "
+            "viable work exists (`loop.md § Dispatch boundary`)."
+        )
+
+    head = _head(project_dir)
+    if not head or rec.get("head") != head:
+        block(
+            f"the recorded wave verdict was made at {rec.get('head') or '(no commit)'} and HEAD "
+            f"is now {head or '(git cannot say)'}. A commit is what changes the answer — one "
+            "lands per item — so this verdict is stale.\n"
+            "  Re-run `python3 .claude/scripts/check_wave_independence.py --record`."
+        )
+
+    ids = set(ITEM_RE.findall(prompt or "")) | set(ITEM_RE.findall(description or ""))
+    considered = set(rec.get("considered") or [])
+    unknown = sorted(ids - considered)
+    if unknown:
+        block(
+            f"the wave verdict at this commit never looked at {', '.join(unknown)} — it "
+            f"considered {', '.join(sorted(considered)) or '(nothing)'}. A dispatch the gate "
+            "has not graded is one whose independence nobody has established.\n"
+            "  Re-run `python3 .claude/scripts/check_wave_independence.py --record` "
+            f"{' '.join(unknown)}."
+        )
+
+    batch = [b for b in (rec.get("batch") or []) if isinstance(b, str)]
+    if len(batch) > 1 and ids & set(batch) and not _minted_wave(project_dir):
+        block(
+            f"the gate says {len(batch)} items may run concurrently right now "
+            f"({', '.join(batch)}) and this is being sent on its own, with no wave minted. "
+            "Concurrency in this harness exists ONLY for work dispatched in the same turn — "
+            "while this Task is in flight nothing else can start.\n"
+            f"  Mint the wave (`python3 .claude/scripts/wave_build.py mint {' '.join(batch)}` "
+            "→ `state.json`'s `wave`), then send all of them in ONE turn.\n"
+            "  If one of them genuinely must not run now, re-run the gate with the ids that "
+            "may (`check_wave_independence.py --record <ids…>`) so the record says so."
+        )
+
+
 def main():
     payload = read_payload()
     if payload.get("tool_name") not in DISPATCH_TOOLS:
@@ -109,12 +226,19 @@ def main():
     tool_input = payload.get("tool_input") or {}
     subagent = (tool_input.get("subagent_type") or "").strip()
 
-    # This package's own capabilities are the point of the rule — always allowed.
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or "."
+    workflow = os.path.join(project_dir, WORKFLOW)
+
+    # This package's own capabilities are the point of the FIRST rule — always allowed there.
+    # `execute` still answers to the second gate: it is the blocking dispatch that "never wait
+    # alone" is about, and being the right agent says nothing about whether it should be alone.
     if subagent.startswith(PLUGIN + ":"):
+        if (subagent.split(":", 1)[1].strip() == WAVE_GATED
+                and os.path.isdir(workflow)):
+            viability_gate(project_dir, workflow,
+                           tool_input.get("prompt") or "", tool_input.get("description") or "")
         return 0
 
-    workflow = os.environ.get("CLAUDE_PROJECT_DIR", "")
-    workflow = os.path.join(workflow, WORKFLOW) if workflow else WORKFLOW
     nodes = loop_nodes(workflow)
     if nodes is None:
         return 0                       # no loop here; nothing to protect

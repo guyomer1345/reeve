@@ -767,6 +767,78 @@ def render(res):
     return "\n".join(lines)
 
 
+# ------------------------------------------------------- the recorded boundary decision
+#
+# WHY THIS FILE WRITES ANYTHING AT ALL. "The orchestrator may never wait alone" was made a
+# first-class rule and the wave machinery was built under it -- and then the rule itself lived
+# only as a sentence in `loop.md`. A router that blocks on a single dispatch while other work
+# was viable violates nothing and nothing notices. The hard half (knowing what may run beside
+# what -- this whole file) shipped; the half that makes the omission impossible did not. This
+# is that half, and it is the pattern worth naming: a sensor is easier to build, easier to
+# test, and passes every gate the actuator would have had to.
+#
+# The missing piece is not new judgement. It is that the ANSWER has to exist somewhere a gate can
+# read. So the scan records its own verdict, and `hooks/dispatch_guard.py` refuses an `execute`
+# dispatch that no verdict covers. The record is written by the GATE and never by hand -- a
+# hand-written "I considered it" is exactly the claim being replaced.
+#
+# Bound to the HEAD it was decided at, which is the boundary's natural cadence: one commit per
+# item, so the next item's dispatch needs a fresh answer. Not a TTL -- a commit is the event that
+# actually invalidates the scan.
+DECISION_FILE = "wave-decision.json"
+
+
+def _head(root):
+    """The commit the decision was made at, or None when git cannot answer (which reads as
+    `always stale`, so the gate is re-run rather than trusted)."""
+    import subprocess
+    try:
+        p = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return p.stdout.strip() or None if p.returncode == 0 else None
+
+
+def decision_path(root):
+    return os.path.join(root, ".workflow", DECISION_FILE)
+
+
+def record_decision(root, res):
+    """Publish this scan's verdict where the dispatch boundary can read it. Atomic; returns the
+    record. Never raises -- a lost record reads as "not asked", which blocks rather than passes."""
+    import datetime
+    rec = {
+        "decided_at": datetime.datetime.now(datetime.timezone.utc)
+                      .replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "head": _head(root),
+        "batch": list(res.get("batch") or []),
+        "fan_out": bool(res.get("fan_out")),
+        "considered": sorted({c["id"] for c in (res.get("candidates") or []) if c.get("id")}),
+        "max_batch": res.get("max_batch"),
+        "held": res.get("held") or {},
+    }
+    path = decision_path(root)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(rec, fh, indent=2, sort_keys=True)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+    return rec
+
+
+def read_decision(root):
+    try:
+        with open(decision_path(root), encoding="utf-8") as fh:
+            val = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return val if isinstance(val, dict) else None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="what may legally be dispatched in the same turn")
@@ -777,10 +849,16 @@ def main(argv=None):
                     help="ceiling on concurrent workers, in-flight included; default is "
                          "`config.run.wave.execute_max` (shipped default 5)")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--record", action="store_true",
+                    help="publish this verdict to .workflow/wave-decision.json — the recorded "
+                         "answer to \"what else is viable?\" that the dispatch boundary requires "
+                         "before it will let an `execute` through. Run it AT the boundary.")
     args = ap.parse_args(argv)
     root = os.path.abspath(args.project_root)
     res = scan(root, args.candidates,
                args.max_batch if args.max_batch is not None else execute_max(root))
+    if args.record:
+        res["recorded"] = record_decision(root, res)
     print(json.dumps(res, indent=2, sort_keys=True) if args.json else render(res))
     return 0 if res["fan_out"] else 1
 

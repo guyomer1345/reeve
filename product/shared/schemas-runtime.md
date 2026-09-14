@@ -235,6 +235,20 @@ the session it was protecting.
 **On the repo mount on purpose.** A project whose runtime root has gone missing still needs its anchor written —
 that is precisely when it needs it most — so nothing in this path may require resolving `runtime.json`.
 
+## wave-decision.json  · written ONLY by `check_wave_independence.py --record`, read by `hooks/dispatch_guard.py` · *`.workflow/wave-decision.json`; RUNTIME, gitignored, atomic write (temp + `os.replace`); lives on the repo mount beside the backlog it grades*
+- `{ decided_at, head, batch[], fan_out, considered[], max_batch, held }` — the boundary's recorded answer to
+  **"what else could run right now?"**, exactly as the gate computed it.
+**It exists because the rule had no reader.** *The orchestrator may never wait alone* lived as a
+sentence in `loop.md`, so a router that blocked on one `execute` while two others were eligible violated nothing
+and nothing noticed. The verdict was already computed; it was simply thrown away after a human read it.
+**Written by the gate and never by hand.** A hand-written "I considered it" is the claim being replaced, so the
+record is a by-product of the scan rather than an assertion about it — and a test asserts the two agree.
+**Bound to `HEAD`, not to a clock.** One commit lands per item, so a commit is the event that actually
+invalidates the answer. A TTL would go stale while nothing had moved and stay fresh while everything had. A
+record with a null `head` (no git) reads as **stale**, so the boundary re-derives rather than trusts.
+**Absent or unreadable ⇒ the dispatch is refused**, which is the whole point: an empty record must never pass
+vacuously. See `hooks/dispatch_guard.py` for the four failures and for what a `PreToolUse` hook cannot prove.
+
 ## spec-approval.json  · written by `checkpoint` on an approve that crosses the autonomy floor, read by `checks.sh --check` · *`.workflow/spec-approval.json`; **COMMITTED** — it must ride the commit it authorises, the same law as `commit-receipt`; atomic write; rewrite-in-place (one live approval, history in git)*
 - `{ spec_sha256, ticket_id, spec_path }` — the digest of `docs/spec.md` **as approved**.
 **There is deliberately NO `token` field, and the absence is load-bearing.** This file is committed, and

@@ -80,10 +80,12 @@ long-running dispatch: form the **largest legal batch** and send it in **one tur
 call by itself while other viable work exists.** Both `execute` items that do not overlap and other viable work
 (research a queued item needs, an unblocked plan) go in the same batch — neither is subordinate.
 
-**Eligibility is not a judgement call.** Run `python3 .claude/scripts/check_wave_independence.py`: only its batch
-may fan out, a rejected candidate **runs serially**, and missing evidence never reads as "probably fine". It
-judges plan **freshness** too — a plan whose tree moved under it is read pessimistically and must go through
-`planner:refresh` before dispatch; re-run the gate on the batch afterwards.
+**Eligibility is not a judgement call.** Run `python3 .claude/scripts/check_wave_independence.py --record`:
+only its batch may fan out, a rejected candidate **runs serially**, and missing evidence never reads as
+"probably fine". It judges plan **freshness** too — a plan whose tree moved under it is read pessimistically and
+must go through `planner:refresh` before dispatch; re-run the gate on the batch afterwards.
+**`--record` is not optional.** It publishes the verdict, and `PreToolUse` **refuses an `execute`** that no
+verdict at this commit covers — including one sent alone while the gate said N could run together.
 
 → **Batch formation, what counts as viable, build-once-per-wave, and interleaving while one item is parked:
 `loop-detail.md § the dispatch boundary`.**

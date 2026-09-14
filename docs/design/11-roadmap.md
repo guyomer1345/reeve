@@ -1103,7 +1103,7 @@ below is a *reading* of it, and a reading can drift from its source. Argue from 
 | 3 | **cap an agent's tokens; it self-dispatches and a fresh one starts** | `D187` measured only | ⚠️ **OPEN** |
 | 4 | org mode on hold | parked | ✅ |
 | 5 | always judge what can run in parallel | `12c` · `D192`/`D195`–`D198` | ✅ |
-| 6 | **use the hangs — dispatch during a wait** | `D192` decided; prose only | ⚠️ **OPEN** |
+| 6 | use the hangs — dispatch during a wait | `12g` · `D216` — `PreToolUse` refuses an `execute` no wave verdict covers | ✅ |
 | 7 | **returns limited to a reasonable size** + temp store with a deletion rule | `12b` · `D191` — store ✅, **limit advisory** | ⚠️ **OPEN (half)** |
 | 8 | goal-driven drive; stop when not progressing, re-research, continue | `12d` · `D199`/`D200` | ✅ |
 | 9 | at 30–35%, RUN dispatch and tell me to clear | `12f` · `D215` — a `Stop` hook blocks the turn until the anchor is written | ✅ |
@@ -1114,9 +1114,12 @@ actuator was not.** A band that reports and nothing acts on · a detector that w
 · a measurement that concluded instead of enforcing · a parallelism rule written as prose. In each case the hard
 half — *knowing when* — shipped, and the asked-for half — *doing something* — did not. **Any new slice here is
 checked against that:** name the actuator, or say plainly that none is possible and why.
-**Three remain.** #9 was the first discharged under that rule (`D215`), and it is worth reading as the template:
-the routing rule was written *and* a `Stop` hook was built to make skipping it impossible — because the rule on
-its own would have been the same prose the ask already had.
+**Two remain** (#3+#7, one problem; and #10). #9 and #6 were the first discharged under that rule (`D215`,
+`D216`) and are worth reading as the template: in both, the rule was written *and* a hook was built to make
+skipping it impossible — because the rule on its own would have been the same prose the ask already had. Both
+entries also **name what their actuator cannot prove**, in the shipped file rather than only in the log, which
+is the other half of the rule: the failure was never that the actuator was hard, it was that its absence was
+invisible.
 
 ### The ordered build sequence  ·  ▶ START HERE (D186's Steps 0–6 are ALL CLOSED — what comes next is the first subsection below)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
@@ -1144,10 +1147,29 @@ claim (in `dispatch.md` step 5, the step that tells the human what to expect), a
 `warn_pct` while the status line honoured it, and `bus.Paths` raising `SystemExit` — not `Exception` — on the
 `/rebind` case.
 
+#### `12g` — never wait alone, ENFORCED. ✅ **CLOSED 2026-09-14 — `D216`.** `[ask #6]`
+Built: `check_wave_independence.py --record` (the verdict publishes itself to
+`.workflow/wave-decision.json`) and a second gate in `hooks/dispatch_guard.py` that refuses a `reeve:execute`
+with no verdict at this `HEAD`, or one going alone while the record says N could run together. **`D216` owns the
+calls.** The rule needed no new judgement — the verdict was already computed and then thrown away. The residual
+is named in the shipped file: a `PreToolUse` hook cannot see its call's siblings, so *mint three, dispatch one*
+is not catchable, and only `execute` is covered because it is the only leaf the gate grades.
+
 #### NEXT — the self-clearing supervisor (the maintainer's design, 2026-09-14). `[ask #10]` `[core]`
-**Its prerequisite is now in place:** `12f` makes the orchestrator write an anchor on its own, and
-`context_band.py --gate` publishes `clear_safe` — a **file**, not a transcript, so the poller needs no access to
-the session it supervises. Poll it; reset when it is true.
+**Its prerequisite is in place and its transport is PROBED** — `D217`, on a real session, not reasoned.
+`tmux send-keys` drove a live interactive `claude`: a prompt ran, `/clear` cleared, a bare `continue` started a
+turn in the cleared session. Mid-turn keys queue (raw-mode pty buffering, verified against a stand-in; Enter is
+`\r`). `12f` makes the orchestrator write the anchor on its own and `context_band.py --gate` publishes
+`clear_safe` — a **file**, not a transcript, so the poller needs no access to the session it supervises.
+
+**What the probe changed, and it is not a detail: `clear_safe` is not enough.** The cleared session's `continue`
+ran straight into a **permission prompt** and sat there. `clear_safe` asks whether a parked *checkpoint* awaits a
+human; a permission dialog is a different kind of waiting-on-a-human and is invisible to it. The supervisor
+therefore needs a **third gate — the pane is not sitting in a dialog** — readable from `tmux capture-pane` and
+from nothing else the package has. Also: `loop.sh` ends in `exec claude "$@"` and must launch *into* tmux, and
+**the tmux permission rules have to ship in `templates/settings.json`** (the maintainer's point, 2026-09-14) —
+otherwise the supervisor works only where someone added them by hand. A directory Claude Code has not seen
+before shows a trust prompt, so a first supervised launch in a new tree is attended once.
 **The thing `12e` was asked for and did not build.** The ask was: *let the loop keep going past a full context —
 clear and resume itself — without me typing `/clear`.* `12e` answered it with `loop.sh --drive`, a shell loop
 around **`claude -p`**, which self-clears but is **headless**: no UI, no live tool calls, no status line. The

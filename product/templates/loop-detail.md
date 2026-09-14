@@ -154,6 +154,17 @@ walk into the next wave already eligible. Only the first wave pays full price.
 deliberately over-cautious, and an item in a churning area can be pushed out wave after wave. Force a refresh on
 it (or dispatch it serially) rather than letting it starve invisibly.
 
+**The rule is enforced, and here is exactly how far.** `--record` publishes the verdict to
+`.workflow/wave-decision.json`, and `hooks/dispatch_guard.py` (`PreToolUse`) **refuses a `reeve:execute`** when:
+there is no record · it was made at another `HEAD` (a commit per item is the boundary's cadence, so that is the
+staleness test rather than a TTL) · this item is not among `considered` · or the record puts it in a batch of
+N>1 and `state.json.wave` is null, i.e. it is going alone while the gate said N could run together.
+**What that cannot prove, stated rather than left to be found:** a `PreToolUse` hook fires once per tool call and
+cannot see the call's siblings, so minting a batch of three and then dispatching one is the residual. Scope is
+narrow on purpose too — `execute` is the blocking dispatch the rule is about and the only one the gate grades;
+`document`, `create-demo`, `research` and `setup-guide` block too and are **not** covered, because no gate
+computes what may run beside them and inventing one would be new judgement rather than a check.
+
 **Build once per wave.** The authoritative gate (`checks.sh --check`, the one a commit depends on) runs **once per
 wave**, not once per member — N workers each triggering it collide on shared build state, caches, ports and
 fixtures. That is distinct from a worker validating its own work inside its own worktree, which is legitimate and

@@ -7680,3 +7680,82 @@ access to the session it is supervising.
 design and the `/clear`-does-not-self-start correction), **D214** (name the actuator).
 → `11` (§ acceptance ledger #9 → discharged; § the ordered build sequence — the supervisor is now next),
 `product/shared/schemas-runtime.md` (§ `handoff-gate.json` — new owner).
+
+## D216 — "never wait alone" stops being a sentence: the gate's verdict becomes a record, and `PreToolUse` refuses an `execute` no verdict covers **[DECIDED + BUILT 2026-09-14 — discharges ask #6]**
+**The gap.** `D192` made *the orchestrator may never wait alone* a first-class capability and `12c` built the
+wave machinery under it. Nothing made it happen. The rule lived in `loop.md`/`loop-detail.md` as an instruction,
+so a router that blocked on one `execute` while two others were eligible **violated nothing and nothing
+noticed** — `D214`'s pattern, third instance: the hard half (`check_wave_independence.py`, which computes what
+may safely run beside what) shipped, the asked-for half did not.
+
+**The call, and it needs no new judgement.** The verdict was already computed and then *thrown away* — read by a
+human, gone. So the scan records itself (`check_wave_independence.py --record` → `.workflow/wave-decision.json`)
+and `hooks/dispatch_guard.py`, already the `PreToolUse(Agent|Task)` gate, **refuses a `reeve:execute`** on four
+conditions: no record · recorded at another `HEAD` · this item not among `considered` · the record puts it in a
+batch of N>1 while `state.json.wave` is null, i.e. it is going alone while the gate said N could run together.
+**The record is written by the gate and never by hand** — a hand-written *"I considered it"* is exactly the
+claim being replaced, and a test asserts the record agrees with the scan that produced it.
+
+**`HEAD`, not a clock.** Rejected a TTL and a "recently" for the same reason as `D215`'s latch: one commit lands
+per item, so a commit is the event that actually invalidates the answer. A TTL goes stale while nothing has
+moved and stays fresh while everything has. A record with a null `head` (no git) reads as **stale**.
+
+**WHAT THIS CANNOT ENFORCE, AND IT IS SAID IN THE SHIPPED FILE RATHER THAN HERE ALONE.** A `PreToolUse` hook
+fires once per tool call and **cannot see that call's siblings**, so it can never prove the other members of a
+minted batch went out in the same turn — only that the batch was minted before the first one left. *Mint three,
+dispatch one* is the residual. It is a far smaller hole than "nothing notices", and naming it is the point:
+`D214` asks for the actuator **or** a plain statement of what is not possible, and the failure being corrected is
+not that the actuator was hard, it is that its absence was invisible.
+
+**Scope is narrow on purpose.** `execute` is the blocking dispatch the rule is about and the only leaf the
+independence gate grades. `document`, `create-demo`, `research` and `setup-guide` block too and are **not**
+covered — no gate computes what may run beside them, and inventing one would be new judgement rather than a
+check. An existing test that asserted *"a namespaced dispatch is always allowed"* now uses `document` rather
+than `execute`, because that premise genuinely changed: being the right agent says nothing about whether it
+should be going alone.
+
+**Evidence.** 14 new tests, every block paired with the thing that must still pass — a gate that refused every
+`execute` would stall the loop far more effectively than the omission it replaces: a graded item goes through, a
+minted wave lets the batch through, a batch of one needs no wave, a project with no `.workflow/` is untouched,
+and the other four leaves are explicitly unaffected. The hook is run as the harness runs it, against a tmp
+project laid out as an install lays one out (`wave_build.py` under `.claude/scripts/`), so the shipped
+resolution path is under test. 1280 tests, 6 meta-gates green.
+
+**Builds on:** **D91** (the predicate), **D192** (the capability), **D214** (name the actuator or say none is
+possible), **D215** (the same shape, one slice earlier).
+→ `11` (§ acceptance ledger #6 → discharged), `product/shared/schemas-runtime.md` (§ `wave-decision.json`).
+
+## D217 — the supervisor's transport is PROBED, not assumed — and the probe found a stall the design did not account for **[PROBED 2026-09-14, before building; sets the shape of ask #10]**
+`D213` named two unknowns and said **probe before building**, because assuming a mechanism instead of checking
+it is what put the band on a blind sensor. Both are now answered, on this machine, against a real session.
+
+**`tmux send-keys` IS the transport, proven end to end.** A real interactive `claude` was launched in a tmux
+pane and driven entirely by injected keystrokes: a prompt ran, **`/clear` cleared the transcript**, and a bare
+**`continue` started a turn in the cleared session**. That is the supervisor's whole operation, performed.
+
+**Mid-turn keys queue cleanly** — the second unknown. Answered twice, because the first answer did not transfer:
+a line-buffered reader took `beta`/`gamma` sent while `alpha` was still working, in order; but Claude Code is a
+**raw-mode TUI**, so that proved nothing about the case that matters. A raw-mode stand-in, busy and not reading
+for six seconds, read back `b'continue\rsecond\r'` intact and ordered. (Enter arrives as `\r`.) *The first
+attempt at that probe produced a false negative and is recorded rather than quietly re-run:* Python's
+`tty.setraw` defaults to `TCSAFLUSH`, which **discards pending input**, so the probe ate its own keys. A probe
+can be wrong in the same way the thing it is probing can.
+
+**THE FINDING NOBODY ASKED FOR, and it changes the design: a PERMISSION PROMPT stalls the session, and
+`clear_safe` does not see it.** The cleared session's `continue` ran straight into *"This command requires
+approval — do you want to proceed?"* and sat there. `D215`'s gate asks whether a **parked checkpoint** awaits a
+human; a permission dialog is a completely different kind of waiting-on-a-human and is invisible to it. A
+supervisor built on `clear_safe` alone would `/clear` a session mid-dialog, or send `continue` into one. So the
+supervisor needs a **third** condition — *the pane is not sitting in a dialog* — which is readable from
+`tmux capture-pane` and from nothing else the package currently has.
+**Two smaller findings, both operational:** a directory Claude Code has not seen before shows a **trust prompt**
+on first launch, so the first supervised launch in a new tree is attended; and there was **no tmux server
+running at all** on this machine, which means `loop.sh` — currently `exec claude "$@"` — has to launch *into*
+tmux for any of this to apply.
+
+**Consequence for the package, raised by the maintainer while this ran:** the tmux permission rules are not a
+local convenience, they are a **shipped requirement** — `templates/settings.json` must carry them, or the
+supervisor works only on the machine where someone added them by hand.
+
+**Builds on:** **D213** (the design and the instruction to probe), **D215** (the gate the supervisor polls).
+→ `11` (§ the ordered build sequence — the supervisor entry's unknowns are closed and one constraint is added).

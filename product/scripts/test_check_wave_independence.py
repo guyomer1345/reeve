@@ -771,3 +771,69 @@ def test_execute_max_comes_from_config(tmp_path):
     with open(os.path.join(root, ".workflow", "config.json"), "w") as fh:
         json.dump({"project_root": "."}, fh)
     assert wi.execute_max(root) == wi.DEFAULT_EXECUTE_MAX == 5
+
+
+# --- the recorded boundary decision (ask #6) ------------------------------------------
+#
+# The verdict this file computes was, until now, read by a human and then gone. These assert
+# that it lands somewhere a gate can read, and that the record says what the scan said — a
+# record that drifted from its own scan would be a worse claim than no record.
+
+def test_record_publishes_the_scan_that_produced_it(tmp_path):
+    root = _project(tmp_path, rows=[("a", "—"), ("b", "—")], graph=_graph(["src/a.py", "src/b.py"]))
+    _code(root, "src/a.py", "src/b.py")
+    _plan(root, "a", files=["src/a.py"])
+    _plan(root, "b", files=["src/b.py"])
+    res = wi.scan(root, [], 5)
+    rec = wi.record_decision(root, res)
+
+    on_disk = wi.read_decision(root)
+    assert on_disk == rec
+    assert on_disk["batch"] == res["batch"]
+    assert on_disk["fan_out"] == res["fan_out"]
+    assert set(on_disk["considered"]) == {c["id"] for c in res["candidates"]}
+    assert on_disk["decided_at"].endswith("Z")
+
+
+def test_the_record_is_bound_to_a_commit_not_a_clock(tmp_path):
+    """HEAD is the staleness test because a commit is what changes the answer — one lands per
+    item. A TTL would go stale while nothing had moved, and stay fresh while everything had."""
+    root = _project(tmp_path, rows=[("a", "—")], graph=_graph(["src/a.py"]))
+    _code(root, "src/a.py")
+    _plan(root, "a", files=["src/a.py"])
+    subprocess.run(["git", "init", "-q", root], check=True, capture_output=True)
+    for k, v in (("user.email", "t@t"), ("user.name", "t")):
+        subprocess.run(["git", "-C", root, "config", k, v], check=True, capture_output=True)
+    subprocess.run(["git", "-C", root, "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", root, "commit", "-qm", "seed"], check=True, capture_output=True)
+    head = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+    rec = wi.record_decision(root, wi.scan(root, [], 5))
+    assert rec["head"] == head
+
+
+def test_no_git_records_a_null_head_which_reads_as_stale(tmp_path):
+    """Fail direction: a record nobody can date is one the boundary re-derives, never one it
+    trusts. The dispatch guard treats a null head as stale."""
+    root = _project(tmp_path, rows=[("a", "—")], graph=_graph(["src/a.py"]))
+    _code(root, "src/a.py")
+    _plan(root, "a", files=["src/a.py"])
+    assert wi.record_decision(root, wi.scan(root, [], 5))["head"] is None
+
+
+def test_record_is_opt_in_so_a_read_only_ask_writes_nothing(tmp_path):
+    root = _project(tmp_path, rows=[("a", "—")], graph=_graph(["src/a.py"]))
+    _code(root, "src/a.py")
+    _plan(root, "a", files=["src/a.py"])
+    wi.main(["--project-root", root, "--json"])
+    assert wi.read_decision(root) is None
+    wi.main(["--project-root", root, "--json", "--record"])
+    assert wi.read_decision(root) is not None
+
+
+def test_an_unreadable_record_reads_as_absent(tmp_path):
+    root = _project(tmp_path, rows=[("a", "—")], graph=_graph(["src/a.py"]))
+    with open(wi.decision_path(root), "w") as fh:
+        fh.write("{ not json")
+    assert wi.read_decision(root) is None

@@ -11,6 +11,7 @@ project are all asserted to pass, including when the graph itself is broken.
 """
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -113,8 +114,10 @@ def test_the_word_document_in_ordinary_prose_is_not_a_dispatch_title(tmp_path):
 
 # --- the gate must never stall the loop's own work ------------------------------------
 def test_a_namespaced_agent_dispatch_is_allowed(tmp_path):
-    r = _run(_project(tmp_path), subagent_type="reeve:execute",
-             description="Execute S2a-evidence-store", prompt=".workflow/items/s2a/plan.md")
+    """Uses `document` rather than `execute` deliberately: `execute` answers to the SECOND gate
+    below, and being the right agent says nothing about whether it should be going alone."""
+    r = _run(_project(tmp_path), subagent_type="reeve:document",
+             description="Document S2a-evidence-store", prompt=".workflow/items/s2a/changelog.md")
     assert r.returncode == ALLOWED
 
 
@@ -153,3 +156,119 @@ def test_a_garbled_payload_never_tracebacks(tmp_path):
 def test_the_task_tool_name_is_matched_too(tmp_path):
     r = _run(_project(tmp_path), tool="Task", description="Execute S2a-evidence-store")
     assert r.returncode == BLOCKED
+
+
+# --- the second gate: never wait alone, enforced ---------------------------------------
+#
+# The rule has existed since D192 and lived as a sentence, so a router that blocked on one
+# `execute` while two were eligible violated nothing and nothing noticed. Every test here is
+# paired: the block, and the thing that must still pass — a gate that refuses every `execute`
+# would stall the loop far more effectively than the omission it replaces.
+
+def _git_project(tmp_path, loop=LOOP):
+    p = _project(tmp_path, loop)
+    # Laid out as an install lays it out: the hook reaches `state.json`'s wave through
+    # `wave_build.py` in `.claude/scripts/`, which is the single owner of that resolution. A test
+    # that imported it some other way would not be testing the shipped arrangement.
+    scripts = p / ".claude" / "scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+    shutil.copy(HERE / "wave_build.py", scripts / "wave_build.py")
+    subprocess.run(["git", "init", "-q", str(p)], check=True, capture_output=True)
+    for k, v in (("user.email", "t@t"), ("user.name", "t")):
+        subprocess.run(["git", "-C", str(p), "config", k, v], check=True, capture_output=True)
+    (p / "seed.txt").write_text("x")
+    subprocess.run(["git", "-C", str(p), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(p), "commit", "-qm", "seed"], check=True, capture_output=True)
+    return p
+
+
+def _head_of(p):
+    out = subprocess.run(["git", "-C", str(p), "rev-parse", "HEAD"],
+                         capture_output=True, text=True, check=True)
+    return out.stdout.strip()
+
+
+def _decision(p, considered, batch=(), head="HEAD"):
+    rec = {"considered": list(considered), "batch": list(batch),
+           "fan_out": len(batch) > 1, "decided_at": "2026-09-14T00:00:00Z",
+           "head": _head_of(p) if head == "HEAD" else head}
+    (p / ".workflow" / "wave-decision.json").write_text(json.dumps(rec), encoding="utf-8")
+    return rec
+
+
+def _exec(p, item="s2a"):
+    return _run(p, subagent_type="reeve:execute", description="Execute %s" % item,
+                prompt="Run the plan at .workflow/items/%s/plan.md" % item)
+
+
+def test_an_execute_with_no_recorded_verdict_is_REFUSED(tmp_path):
+    p = _git_project(tmp_path)
+    r = _exec(p)
+    assert r.returncode == BLOCKED
+    assert "what else could run right now" in r.stderr
+    assert "check_wave_independence.py --record" in r.stderr
+
+
+def test_an_execute_the_gate_graded_goes_through(tmp_path):
+    """The negative control for every block below."""
+    p = _git_project(tmp_path)
+    _decision(p, considered=["s2a"], batch=["s2a"])
+    assert _exec(p).returncode == ALLOWED
+
+
+def test_a_verdict_from_before_the_last_commit_is_stale(tmp_path):
+    p = _git_project(tmp_path)
+    _decision(p, considered=["s2a"], batch=["s2a"], head="0" * 40)
+    r = _exec(p)
+    assert r.returncode == BLOCKED
+    assert "stale" in r.stderr
+
+
+def test_an_item_the_gate_never_looked_at_is_refused(tmp_path):
+    p = _git_project(tmp_path)
+    _decision(p, considered=["other"], batch=["other"])
+    r = _exec(p, item="s2a")
+    assert r.returncode == BLOCKED
+    assert "never looked at s2a" in r.stderr
+
+
+def test_sending_ONE_of_an_eligible_batch_alone_is_refused(tmp_path):
+    """The ask itself: the gate said three may run together and one is going by itself."""
+    p = _git_project(tmp_path)
+    _decision(p, considered=["s2a", "s2b", "s2c"], batch=["s2a", "s2b", "s2c"])
+    r = _exec(p, item="s2a")
+    assert r.returncode == BLOCKED
+    assert "3 items may run concurrently" in r.stderr
+    assert "ONE turn" in r.stderr
+
+
+def test_a_minted_wave_lets_the_batch_through(tmp_path):
+    """The negative control for the clause above — without it the gate would make a legal
+    fan-out impossible, which is worse than the omission it replaces."""
+    p = _git_project(tmp_path)
+    _decision(p, considered=["s2a", "s2b", "s2c"], batch=["s2a", "s2b", "s2c"])
+    (p / ".workflow" / "state.json").write_text(json.dumps({"wave": "w-abc123"}), encoding="utf-8")
+    assert _exec(p, item="s2a").returncode == ALLOWED
+
+
+def test_a_batch_of_one_needs_no_wave(tmp_path):
+    """"Alone" is only a violation when something else was eligible. The gate saying so IS the
+    recorded answer, and a serial dispatch must stay free."""
+    p = _git_project(tmp_path)
+    _decision(p, considered=["s2a", "s2b"], batch=["s2a"])
+    assert _exec(p, item="s2a").returncode == ALLOWED
+
+
+def test_a_project_with_no_workflow_is_untouched(tmp_path):
+    p = _project(tmp_path, loop=None)
+    assert _exec(p).returncode == ALLOWED
+
+
+def test_the_second_gate_does_not_touch_the_other_leaves(tmp_path):
+    """Stated as an assertion because it is a deliberate scope limit, not an oversight: no gate
+    computes what may run beside a `document` or a `research`, so none is claimed."""
+    p = _git_project(tmp_path)
+    for cap in ("document", "research", "planner", "create-demo", "verify"):
+        r = _run(p, subagent_type="reeve:" + cap, description="%s s2a" % cap,
+                 prompt=".workflow/items/s2a/plan.md")
+        assert r.returncode == ALLOWED, cap
