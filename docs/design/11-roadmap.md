@@ -1081,11 +1081,58 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
-### The ordered build sequence (set 2026-09-13, D186; Steps 0–6 ALL CLOSED 2026-09-13 — D187/D188/D189/D191/D198/D199/D200/D201/D202/D203; nothing partial) — the fix pass, then Phase 12
+### The ordered build sequence  ·  ▶ START HERE (D186's Steps 0–6 are ALL CLOSED — what comes next is the first subsection below)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
-built, with the dependency that fixes each position stated rather than implied. A step that is merely *nice*
-before another is called that; a step that is a **prerequisite** says why. Phase 12's per-slice content lives
-in `### Phase 12` below — this section owns only the ORDER.
+built, with the dependency that fixes each position stated rather than implied.
+
+**The D186 sequence (Steps 0–6) is CLOSED, all of it, nothing partial** — `D187`/`D188`/`D189`/`D191`/`D198`/
+`D199`/`D200`/`D201`/`D202`/`D203`. Its per-step record is preserved below because the reasoning is still worth
+reading; it is **history, not the queue**.
+
+#### NEXT — the smoke drive. `[core]`
+**Make the live drive a mechanism instead of something done once by hand.** Two live drives (`D210`, `D211`)
+found **four** package defects that **1,137 unit tests and three green exit-test harnesses found none of** — two
+of them shipped hours earlier, and one would have blocked the first commit of every project bootstrapped from
+that version. **`D212` is the synthesis and the reason this is next:** not one of the four was a bug *in* a
+component; every one was a bug *between* components, and the blind spot is structural — **nothing tested the
+package as an installed, running whole.** Leave a live drive as a manual act and the next four ship the same way.
+*(This repo has now learned the same lesson three times — `D151` was the first costume, and its fix was a
+documented manual step. A documented step nobody runs is not a control.)*
+
+**What it is:** one command. Throwaway repo → real install derived from `MANIFEST.json` → real `/start` → one
+real item through `planner` → `execute` → `verify` → `document` → `commit` → assertions. Both bootstrap modes,
+because finding 3 (`brownfield never mints a goal`) is only visible when the two paths are compared.
+
+**Three constraints that keep it honest, each learned from this pass:**
+- **It can NEVER join the routine suite.** It spends real model calls and takes ~40 minutes. It is a deliberate
+  **pre-release gate**, run beside `build-release.py --check`.
+- **Assert SEAMS, not behaviour.** Did the install close · did a real `git commit` land with the real `guard.sh`
+  in the way · did the floor's receipt get written *and accepted* · does the code map see only product files ·
+  is a `goal.json` present on **both** paths. Asserting what the model *wrote* would be flaky and prove nothing.
+- **It must be able to go red.** Every assertion needs the negative control the exit tests already use, or this
+  becomes a 40-minute green light.
+
+**Its first run closes the last unproven layer for free:** `loop.sh --drive` has only ever run against its own
+scripted stand-in (`D202`) — the same kind of stand-in that missed four defects elsewhere. Bootstrap and the item
+loop are now proven live; the session driver is not.
+
+**Known method residue, so the next session does not rediscover it:** `claude -p` nested inside a session works;
+`.claude/` is write-guarded **above** the settings allowlist, so `/start` cannot complete non-interactively
+(`start.md` already says so, and the live run confirmed it) — the harness must therefore do the manifest install
+itself; and the target repo needs its own `.claude/settings.local.json` allowlist, since `--permission-mode
+bypassPermissions` is refused.
+
+#### Then — the standing queue, unchanged in content and now actually next
+The **cold-context reviewer** (promotable, and the strongest Phase-13 candidate) and the **inline-node topology
+question**; then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage ·
+project-map tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the
+code-map observed layer. **Org mode stays parked at the maintainer's word.** Open questions and their current
+state live in `07`, which owns them.
+
+---
+
+#### The D186 sequence — CLOSED, kept for its reasoning
+Phase 12's per-slice content lives in `### Phase 12` below — this section owns only the ORDER.
 
 **Step 0 — Measure. ✅ CLOSED 2026-09-13 — `D187`.** Ran over 114 `agentic cyber` transcripts (364 subagent
 runs, 381 dispatches), read-only. All three questions answered; **full numbers and what they change live in
@@ -1233,13 +1280,11 @@ convenience: it multiplies any defect in Steps 2–5 across unattended sessions,
 convergence test is a churn engine holding a lock.** Its exit test is a real goal driven across several sessions
 with no human `/clear`, interrupted once on purpose to prove the drop-in window and the `pause` path.
 
-**Deliberately NOT in this sequence,** so the phase stays a sequence rather than a backlog with a new name: the
-**cold-context reviewer** and the **inline-node topology question** (both named as Phase-11 successors in `07`,
-both still unscheduled — the reviewer is *promotable* now that 11e is green, and is the strongest candidate for
-whatever follows Phase 12); and the standing deferred menu, each already carrying its trigger — proportional-rigor
-triage · project-map tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA ·
-the code-map observed layer. **Org mode is parked at the maintainer's word** (2026-09-13) until the company
-context is real; nothing in this sequence touches it. *(The **two-sided dispatch band**, raised 2026-09-13 and
+**Deliberately NOT in the D186 sequence,** so the phase stayed a sequence rather than a backlog with a new name:
+the cold-context reviewer, the inline-node topology question, the standing deferred menu, and org mode. **Those
+items are now live queue rather than exclusions — they are listed once, in `### The ordered build sequence`
+above, which owns the order. Deliberately not restated here:** an exclusion list that outlives the sequence it excluded from is exactly
+how two copies of a work order start disagreeing. *(The **two-sided dispatch band**, raised 2026-09-13 and
 listed here as unscheduled, was **BUILT the same day — `D206`**. It turned out not to be downstream of the
 `warn_pct` measurement at all: the blocker was that the statusline could see a token count and not act on it
 while the loop could act and not see, and crossing that wall needed no number.)*

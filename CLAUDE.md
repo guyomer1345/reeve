@@ -23,7 +23,9 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
 ## Ground yourself first (read before proposing anything)
 - **`docs/design/11-roadmap.md`** — the complete by-space map of what's left + the phased build sequence
   (canonical status). Its **`### The ordered build sequence`** is the live work order — read that first; it is
-  the single owner of *what to build next, and why in that order*.
+  the single owner of *what to build next, and why in that order*. It is marked **▶ START HERE**, and the
+  **first subsection under it is the next thing to build** — everything below that is closed work kept for its
+  reasoning.
 - **`docs/design/08-decision-log.md`** — every decision: the call, why, what was rejected, the evidence.
 - Then the numbered spec docs `docs/design/00`–`11` + `product/shared/` as the topic needs.
 

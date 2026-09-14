@@ -7444,3 +7444,48 @@ not to fix it by weakening the scan. Its reasoning was verified against `guard.s
 **Builds on:** **D210** (the first live pass), **D209** (whose receipt this repairs), **D199** (the goal record
 this completes).
 → `07`, `schemas.md § goal`, `schemas-runtime.md`, `skills/checkpoint`, `agents/planner.md`.
+
+## D212 — what the two live drives actually proved: the suite tests COMPONENTS, and every defect found was between them **[SYNTHESIS 2026-09-14, over `D210`+`D211`. Sets the next work order — see `11` § the ordered build sequence]**
+
+**The measurement, first, because it is the whole argument.** **1,137 unit tests** and **three scripted exit-test
+harnesses** (33 + 20 + 31 assertions, each green and stable over repeated runs) found **zero** of the four
+defects. **Two live drives found four**, and two of those had shipped *hours* earlier with everything green. One
+of them — `checks.sh` calling `spec_approval.py` in an argument order argparse rejects — would have **blocked the
+first commit of every project bootstrapped from that version**.
+
+**The pattern: not one of the four was a bug IN a component.** Each part was individually correct and
+individually tested. What failed was the join:
+1. a shipped **caller** invoking a component in a way no test used (`checks.sh` → `spec_approval.py`);
+2. two package **rules** that each pass their own tests and contradict each other (the receipt must be committed
+   / `guard.sh` blocks it as a credential);
+3. a mechanism correct in **one path** and absent in the other (goal-minting: greenfield yes, brownfield never);
+4. the package mistaking **its own substrate** for the product (`ruff .` and the code map on a brownfield root).
+
+**This is not an indictment of the suite — the suite is WHY the components work.** It is that the blind spot now
+has a known shape, and it is structural rather than a matter of coverage: **nothing tested the package as an
+installed, running whole.** Every scripted harness deliberately removes model variance and calls the *Python
+API*; that makes each a sharp test of its mechanism and, **by construction**, no test of a seam. `D198`, `D200`
+and `D202` each said so in their own docstring. Three slices then came to rest on that limit, and it was read as
+a caveat rather than as a gap.
+
+**The uncomfortable second-order point, recorded because it is the one most likely to recur.** This repo *is* a
+disciplined-builder workflow, and **its own discipline had no "install it and run it" gate.** `D151` already
+learned a version of this — a stale install discovered mid-drive — and the fix then was a **documented manual
+step**. A documented step nobody runs is not a control; `dev-reinstall.sh` exists because that lesson had to be
+learned twice. It has now recurred a third time in a different costume, which is the signal that the answer is a
+**mechanism**, not another instruction.
+
+**What this changes about confidence in Phase 12.** Its *mechanisms* are proven — the exit tests are good at
+exactly what they claim. Its *seams* were **assumed**, and two of them were wrong. Bootstrap and the item loop
+are now proven against a live model; **`loop.sh --drive` is not** — it has only ever run against its scripted
+stand-in, which is the same stand-in that missed four defects elsewhere.
+
+**The call this sets up, owned by `11` rather than restated here:** the response to a structural blind spot is a
+**structural fix**. A live drive that stays a thing done once by hand lets the next four defects ship the same
+way — so the next slice is the **smoke drive**: the live pass made re-runnable, as a deliberate pre-release gate
+(it spends real model calls and takes ~40 minutes, so it can never join the routine suite), asserting **seams**
+rather than behaviour. Its first run closes the `loop.sh --drive` gap at the same time.
+
+**Builds on:** **D210** + **D211** (the two passes), **D151** (the same lesson, first costume), **D198**/**D200**/
+**D202** (which each stated this limit and were believed).
+→ `11` (§ the ordered build sequence — the next work order), `07`.
