@@ -164,13 +164,45 @@ def seam_code_map_sees_only_product_files(repo):
             graph = json.load(fh)
     except (OSError, ValueError) as exc:
         return False, "code map is unreadable: %s" % exc
-    leaked = [n.get("path") for n in (graph.get("nodes") or [])
+    nodes = graph.get("nodes") or []
+    leaked = [n.get("path") for n in nodes
               if isinstance(n.get("path"), str)
               and (n["path"].startswith(".claude/") or n["path"].startswith(".workflow/")
                    or "/.claude/" in n["path"] or "/.workflow/" in n["path"])]
     if leaked:
         return False, "the map ingested the workflow's own files: %s" % ", ".join(leaked[:4])
-    return True, "%d node(s), none of them package machinery" % len(graph.get("nodes") or [])
+    # EMPTY IS NOT CLEAN, and the harness's own first run is why this is here: greenfield passed
+    # this seam with ZERO nodes, because nothing had been built yet. An assertion that cannot
+    # tell "mapped nothing forbidden" from "mapped nothing" is half a seam — it would stay green
+    # through a code map that had stopped working entirely.
+    if not nodes:
+        source = _product_source(repo)
+        if source:
+            return False, ("the map is EMPTY while %d source file(s) exist under the project "
+                           "root (e.g. %s) — that is a map that did not run, not a clean one"
+                           % (len(source), ", ".join(source[:3])))
+        return False, ("the map is empty and so is the project — this run built nothing, so "
+                       "the seam has nothing to attest")
+    return True, "%d node(s), none of them package machinery" % len(nodes)
+
+
+def _product_source(repo):
+    """Source files under the configured project root — what a code map is supposed to see."""
+    try:
+        with open(os.path.join(repo, ".workflow", "config.json"), encoding="utf-8") as fh:
+            root = (json.load(fh) or {}).get("project_root") or "."
+    except (OSError, ValueError):
+        root = "."
+    base = os.path.normpath(os.path.join(repo, root))
+    exts = (".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".rb", ".cs")
+    found = []
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = [d for d in dirnames
+                       if d not in (".git", ".claude", ".workflow", "node_modules", "__pycache__")]
+        for name in filenames:
+            if name.endswith(exts):
+                found.append(os.path.relpath(os.path.join(dirpath, name), repo))
+    return sorted(found)
 
 
 def seam_goal_minted(repo):
@@ -270,6 +302,7 @@ def _good_tree(repo):
           {"spec_sha256": digest, "ticket_id": "TCK-1", "spec_path": "docs/spec.md"})
     _json(repo, "docs/knowledge/graph.json",
           {"root": ".", "nodes": [{"path": "src/app.py"}], "edges": []})
+    _json(repo, ".workflow/config.json", {"project_root": "."})
     _json(repo, ".workflow/goal.json", {"id": "G-1", "statement": "ship it"})
     _json(repo, ".workflow/wave-decision.json",
           {"considered": ["i1"], "batch": ["i1"], "head": "deadbeef"})
@@ -330,7 +363,14 @@ def _break_anchor(repo):
         fh.write("# handoff\nno commit named here\n")
 
 
+def _break_code_map_by_emptying_it(repo):
+    """The case the harness's own first run passed vacuously: a map with nothing in it, over a
+    project that has source to map."""
+    _json(repo, "docs/knowledge/graph.json", {"root": ".", "nodes": [], "edges": []})
+
+
 BREAKS = [
+    ("code map sees only product files", _break_code_map_by_emptying_it),
     ("install closed", _break_install),
     ("commit landed through the guard", _break_guard),
     ("spec-approval receipt accepted", _break_approval),
@@ -466,23 +506,49 @@ ITEM_PROMPT = (
 )
 
 
-def run_mode(mode, timeout, keep):
+def bootstrapped(repo):
+    """Has `/start` already run here? The resume predicate, read from the tree rather than
+    remembered — a resumed run must not trust a note it wrote about itself."""
+    return os.path.exists(os.path.join(repo, ".workflow", "config.json"))
+
+
+def run_mode(mode, timeout, keep, resume=None):
+    """One bootstrap path, end to end — or the part of it that is not already done.
+
+    `resume` re-enters a KEPT tree and skips the phases it can see are finished. The drive costs
+    about an hour per mode, and the run that exposed the first four defects failed in the SECOND
+    phase of one mode: repeating the first phase to retry the second buys nothing and costs most
+    of the time. The predicate is read off the tree, never from a note the harness left itself.
+    """
     print("\n=== %s ===" % mode)
-    repo = tempfile.mkdtemp(prefix="reeve-smoke-%s-" % mode)
+    fresh = resume is None
+    repo = resume or tempfile.mkdtemp(prefix="reeve-smoke-%s-" % mode)
     try:
-        seed(repo, mode)
-        install_package(repo)
-        ok, detail = drive(repo, START_PROMPT, timeout)
-        check("%s: /start completed" % mode, ok, detail)
+        if fresh:
+            seed(repo, mode)
+            install_package(repo)
+        else:
+            print("  resuming %s" % repo)
+            # The package under test may have moved since the tree was made; re-installing is
+            # the whole point of resuming, and it is the cheap half.
+            install_package(repo)
+
+        if bootstrapped(repo):
+            check("%s: /start completed" % mode, True, "already bootstrapped — skipped")
+        else:
+            ok, detail = drive(repo, START_PROMPT, timeout)
+            if not check("%s: /start completed" % mode, ok, detail):
+                print("  tree kept at %s" % repo)
+                return False
+
         ok2, detail2 = drive(repo, ITEM_PROMPT, timeout)
         check("%s: one item went round" % mode, ok2, detail2)
         good = assert_seams(repo, mode)
         if keep or not good:
             print("  tree kept at %s" % repo)
-            return good
         return good
     finally:
-        if not keep and not FAILURES:
+        if fresh and not keep and not FAILURES:
             shutil.rmtree(repo, ignore_errors=True)
 
 
@@ -491,17 +557,47 @@ def head():
     return (p.stdout.strip() or None) if p.returncode == 0 else None
 
 
-def write_receipt(modes):
-    """Only on a fully green real drive. A receipt for a run that failed, or for a run that
-    skipped a mode, would be worse than none — it would say the gate had passed."""
+def package_digest():
+    """The identity the receipt attests to. `build-release.py` owns it — it owns `shipped_files`,
+    and a second answer to "what is the package" is the drift this repo's own law forbids."""
+    import importlib.util
+    path = os.path.join(ROOT, "scripts", "build-release.py")
+    spec = importlib.util.spec_from_file_location("build_release", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.package_digest()
+
+
+def record_mode(mode):
+    """Attest ONE mode, against the package it was run on.
+
+    PER MODE AND KEYED ON THE PACKAGE, both for the same reason: a two-hour gate that has to be
+    re-run whole after every fix is a gate that gets skipped. Fixing greenfield should cost a
+    greenfield run, not a greenfield run plus an hour re-proving a brownfield path nothing
+    touched — and a decision-log commit should cost nothing at all, because it cannot change
+    what the package does. The digest invalidates exactly the runs a package change invalidates.
+    """
     import datetime
-    rec = {"head": head(), "modes": sorted(modes),
-           "at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
-                 .isoformat().replace("+00:00", "Z"),
-           "seams": [name for name, _ in SEAMS]}
+    rec = read_receipt() or {}
+    modes = rec.get("modes") if isinstance(rec.get("modes"), dict) else {}
+    modes[mode] = {
+        "package": package_digest(),
+        "head": head(),
+        "at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+              .isoformat().replace("+00:00", "Z"),
+        "seams": [name for name, _ in SEAMS],
+    }
+    rec["modes"] = modes
     with open(RECEIPT, "w", encoding="utf-8") as fh:
         json.dump(rec, fh, indent=2, sort_keys=True)
-    print("  receipt written: %s (HEAD %s)" % (RECEIPT, (rec["head"] or "unknown")[:12]))
+    print("  %s attested for package %s" % (mode, modes[mode]["package"][:12]))
+
+
+def attested(mode):
+    """Is this mode already green on THIS package? The basis for skipping it."""
+    rec = read_receipt() or {}
+    entry = (rec.get("modes") or {}).get(mode)
+    return isinstance(entry, dict) and entry.get("package") == package_digest()
 
 
 def read_receipt():
@@ -517,25 +613,45 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--self-test", action="store_true",
                     help="run only the negative controls — no model calls, no tokens")
+    ap.add_argument("--assert-only", metavar="DIR",
+                    help="re-run the seam assertions against a KEPT tree and exit. No model "
+                         "calls, seconds not hours — for iterating on a seam, or re-checking a "
+                         "tree after a fix, without paying for the drive again.")
+    ap.add_argument("--resume", metavar="DIR",
+                    help="re-enter a kept tree, reinstall the package into it, and run only the "
+                         "phases it cannot see are already done")
     ap.add_argument("--mode", choices=["greenfield", "brownfield", "both"], default="both")
     ap.add_argument("--timeout", type=int, default=1800, help="seconds per session")
     ap.add_argument("--keep", action="store_true", help="keep the throwaway trees")
+    ap.add_argument("--force", action="store_true",
+                    help="re-run a mode already attested for this exact package")
     args = ap.parse_args(argv)
 
     if args.self_test:
         self_test()
+    elif args.assert_only:
+        assert_seams(args.assert_only, os.path.basename(args.assert_only.rstrip("/")))
     else:
         if not shutil.which("claude"):
             print("smoke_drive: `claude` is not on PATH — this gate drives a real session.")
             return 69
-        print("smoke_drive: REAL model calls, roughly 40 minutes. Never run this in CI.")
         modes = ["greenfield", "brownfield"] if args.mode == "both" else [args.mode]
-        for mode in modes:
-            run_mode(mode, args.timeout, args.keep)
-        # BOTH modes, green, or no receipt. The defect that made this harness necessary was
-        # only visible by comparing the two paths, so a one-mode pass is not the gate.
-        if not FAILURES and set(modes) == {"greenfield", "brownfield"}:
-            write_receipt(modes)
+        # SKIP WHAT IS ALREADY PROVEN ON THIS PACKAGE. The receipt is per mode and keyed on the
+        # shipped tree, so re-running a green mode against an unchanged package proves nothing
+        # and costs an hour. `--force` says otherwise out loud.
+        todo = [m for m in modes if args.force or args.resume or not attested(m)]
+        for skipped in [m for m in modes if m not in todo]:
+            print("  %s: already attested for this package — skipping (--force to re-run)"
+                  % skipped)
+        if not todo:
+            print("smoke_drive: nothing to run; every requested mode is attested.")
+        else:
+            print("smoke_drive: REAL model calls, about an hour per mode. Never run this in CI.")
+        for mode in todo:
+            before = len(FAILURES)
+            if run_mode(mode, args.timeout, args.keep, resume=args.resume) \
+                    and len(FAILURES) == before:
+                record_mode(mode)
 
     print("\n%d step(s), %d failure(s)" % (len(STEPS), len(FAILURES)))
     for f in FAILURES:

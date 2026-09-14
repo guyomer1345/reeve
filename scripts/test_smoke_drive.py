@@ -40,7 +40,8 @@ class Seams(unittest.TestCase):
 
     def test_every_seam_has_a_break(self):
         """A seam with no negative control is a seam nobody has proved measures anything."""
-        self.assertEqual(sorted(n for n, _ in sd.SEAMS), sorted(n for n, _ in sd.BREAKS))
+        self.assertEqual({n for n, _ in sd.SEAMS}, {n for n, _ in sd.BREAKS},
+                         "a seam with no negative control, or a break for no seam")
 
 
 class ReleaseGate(unittest.TestCase):

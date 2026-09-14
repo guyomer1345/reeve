@@ -1185,6 +1185,14 @@ fixed and gated (below); three are the queue that follows.
 
 #### NEXT — what the first smoke drive found. `[from `D219`]` `[core]`
 In the order the run exposed them. Each is a between-components defect; none is a bug *in* a component.
+**Re-running is now cheap where it can be** (`D220`): the receipt is keyed on the **package** rather than on
+`HEAD` and kept **per mode**, so a docs commit costs nothing and fixing one path does not re-prove the other;
+`--assert-only <tree>` re-checks the seams in seconds with no model calls, and `--resume <tree>` skips phases
+already done. Verify a fix against the kept trees first, and pay for a drive only when a phase must actually
+re-run. **The first run's trees were kept** at `/tmp/reeve-smoke-greenfield-gv6x_ayv` and
+`/tmp/reeve-smoke-brownfield-10f4hha0` — machine-local and **perishable** (they do not survive a reboot, and
+nothing should be made to depend on them). While they exist they are worth about an hour each: `--assert-only`
+re-checks a fix against them in seconds. Once they are gone, `--mode <one>` re-earns one of them.
 
 1. **Greenfield never mints a goal, and brownfield does.** The INVERSE of the finding that made comparing both
    paths a requirement — so the asymmetry is real and was mis-attributed. The greenfield session named the
@@ -1196,9 +1204,9 @@ In the order the run exposed them. Each is a between-components defect; none is 
    A resume reads `git log <base_sha>..HEAD`; without it a cleared or dead session cannot see what changed —
    and this is now load-bearing twice over, because the supervisor (`12h`) clears sessions on purpose.
    The `/dispatch` command names the field; nothing checks it. **Name the actuator.**
-3. **The code-map seam passes vacuously on 0 nodes.** A harness defect, found by the harness's own first run:
-   an assertion that cannot tell "clean" from "empty" is half a seam. Cheap, and it makes run 2 mean more
-   than run 1 did.
+3. ~~**The code-map seam passes vacuously on 0 nodes.**~~ ✅ **FIXED — `D220`.** *Empty is not clean*: the
+   seam now fails when the map has no nodes and the project root has source. It immediately turned greenfield
+   red for a real reason — that run had written **10 source files** and the map was still empty.
 4. **The autonomy floor raises a spurious `locked-block`** on prose containing the word `` `locked` `` —
    reported by the brownfield session in passing. A commitment marker that fires on the word rather than the
    structure will keep stopping drives that have nothing locked in them.

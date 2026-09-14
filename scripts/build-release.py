@@ -21,6 +21,7 @@ check_demo_bundle.py.
 """
 import argparse
 import fnmatch
+import hashlib
 import json
 import os
 import shutil
@@ -153,6 +154,31 @@ def check_install_covered(m, files):
     return errs
 
 
+def package_digest(m=None, files=None):
+    """A sha256 over the SHIPPED file set — the identity a smoke receipt attests to.
+
+    THE KEY IS THE PACKAGE, NOT `HEAD`, and that choice is what makes a two-hour gate usable.
+    Keying on the commit meant a docs-only commit — a decision-log entry, a roadmap edit —
+    invalidated an attestation about behaviour it could not possibly have changed, forcing a full
+    re-run or an `--no-smoke` override. A gate that expensive, invalidated that often, is a gate
+    that gets skipped, which is the failure this whole layer exists to prevent.
+
+    The smoke drive tests the package. So the receipt is invalidated by changes to the package
+    and by nothing else, and the manifest already says exactly which files those are.
+    """
+    if m is None:
+        m = load_manifest()
+    if files is None:
+        files = shipped_files(m)
+    h = hashlib.sha256()
+    for rel in sorted(files):
+        h.update(rel.encode("utf-8"))
+        h.update(b"\0")
+        with open(os.path.join(PRODUCT, rel), "rb") as fh:
+            h.update(hashlib.sha256(fh.read()).digest())
+    return h.hexdigest()
+
+
 def smoke_state():
     """The reason an emit must not proceed, or None when the receipt is current.
 
@@ -168,19 +194,24 @@ def smoke_state():
             rec = json.load(fh)
     except (OSError, ValueError):
         return "no smoke-drive receipt — the package has never been run as an installed whole"
-    p = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
-                       cwd=os.path.dirname(receipt))
-    head = (p.stdout.strip() or None) if p.returncode == 0 else None
-    if not head:
-        return "git cannot name HEAD, so the smoke receipt cannot be dated"
-    if rec.get("head") != head:
-        return ("the smoke-drive receipt is for %s and HEAD is %s"
-                % ((rec.get("head") or "nothing")[:12], head[:12]))
-    if sorted(rec.get("modes") or []) != ["brownfield", "greenfield"]:
-        return ("the smoke receipt covers only %s — the defect this gate exists for is visible "
-                "only by comparing both bootstrap paths" % (", ".join(rec.get("modes") or [])
-                                                            or "nothing"))
-    return None
+
+    digest = package_digest()
+    modes = rec.get("modes") if isinstance(rec.get("modes"), dict) else {}
+    # PER MODE, because the two paths are independently attestable and re-running the one that
+    # is already green buys nothing but an hour. A mode whose entry names a different package is
+    # simply not attested; the run that fixes one mode does not throw the other away unless the
+    # package itself changed.
+    fresh = sorted(name for name, e in modes.items()
+                   if isinstance(e, dict) and e.get("package") == digest)
+    if fresh == ["brownfield", "greenfield"]:
+        return None
+    stale = sorted(set(modes) - set(fresh))
+    missing = sorted({"brownfield", "greenfield"} - set(fresh))
+    return ("the smoke receipt does not cover this package (%s) — %s%s. The defect this gate "
+            "exists for is visible only by comparing BOTH bootstrap paths."
+            % (digest[:12],
+               "not attested: " + ", ".join(missing),
+               ("; stale: " + ", ".join(stale)) if stale else ""))
 
 
 def main(argv=None):

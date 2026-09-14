@@ -7873,3 +7873,40 @@ half a seam. Carried as a queue item rather than patched in the same breath.
 **Builds on:** **D151** (the same lesson, first costume), **D210**/**D211**/**D212** (the two live drives and
 their synthesis), **D216** (whose `wave-decision.json` this run exercised live, on a real orchestrator).
 → `11` (§ the ordered build sequence — the smoke drive is BUILT; its four findings are now the queue).
+
+## D220 — the smoke receipt is keyed on the PACKAGE and kept per mode, because a two-hour gate that re-runs whole is a gate that gets skipped **[DECIDED + BUILT 2026-09-14, from the maintainer's observation on the first run's cost]**
+**The observation.** `D219`'s first run took **two hours, not the estimated forty minutes**, and the receipt was
+keyed on `HEAD` and written only for a both-modes-green run. Both facts together make the gate unusable in
+practice: a decision-log commit — which cannot possibly change what the package does — invalidated the
+attestation, and fixing one bootstrap path cost a re-run of the other. The maintainer's framing: *"maybe we can
+just test the items that are left to be green instead of the whole test."*
+
+**Two changes, one principle: invalidate exactly what changed, and nothing else.**
+- **Keyed on the package, not the commit.** The receipt now names a sha256 over the **shipped file set**
+  (`build-release.py`'s `package_digest`, built from `shipped_files` so there is no second answer to *what is
+  the package*). The smoke drive tests the package, so a construction-record commit leaves the attestation
+  standing and a change to any shipped byte drops it. `HEAD` is still recorded, as provenance, and is no longer
+  the key.
+- **Per mode.** `modes: {greenfield: {package, head, at, seams}, brownfield: {…}}`. The release gate still
+  requires **both** paths — that requirement is the whole reason the two modes are compared — but a run that
+  fixes one no longer discards the other. A mode already attested for this exact package is **skipped**, and
+  `--force` says otherwise out loud.
+
+**Two cheap re-entry points, both from the same observation.** `--assert-only <dir>` re-runs the seven seam
+assertions against a kept tree: **seconds, zero model calls**, for iterating on a seam or re-checking a tree
+after a fix. `--resume <dir>` re-enters a kept tree, reinstalls the package into it, and skips phases it can see
+are finished — the resume predicate is **read off the tree** (`.workflow/config.json` exists), never from a note
+the harness left itself. The first run failed in the *second* phase of one mode; repeating the first phase to
+retry the second buys nothing and costs most of the hour.
+
+**And the finding this immediately paid for.** `D219` carried a harness weakness as a queue item: greenfield's
+code-map seam passed with **0 nodes**, vacuously. `--assert-only` made fixing it a seconds-long loop instead of
+a two-hour one, and the strengthened seam — *empty is not clean* — turned that tree red for a real reason: the
+greenfield run had written **10 source files** under `project/csvsplit/` and the map was still empty. An
+assertion that cannot tell *"mapped nothing forbidden"* from *"mapped nothing"* would stay green through a code
+map that had stopped working entirely. Brownfield still passes on 2 nodes, so the tighter rule costs no false
+positive.
+
+**Builds on:** **D219** (the drive and its first run), **D125** (`MANIFEST.json` as the single answer to what
+ships, which is what makes a package digest well-defined).
+→ `11` (§ the ordered build sequence — finding 3 is discharged; 1, 2 and 4 remain).
