@@ -15,8 +15,12 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
   `reviews/`. Dense and internal by design; a consumer never needs it.
 - **`scripts/`** — meta-only tooling that never ships (`check-no-spec-refs.sh`, `check-status-coherence.sh`,
   `check_enum_coherence.py`, `check-template-budgets.py`, `check_install_closure.py`, `build-release.py`, `dev-reinstall.sh`,
-  `exit_test_wave_coherence.py`), plus their
-  tests. `check-template-budgets.py` is the one that binds *this* repo to the package's own context budget:
+  `exit_test_wave_coherence.py`, `smoke_drive.py`), plus their
+  tests. **`smoke_drive.py` is the one that runs the package as an INSTALLED WHOLE** — throwaway repo,
+  manifest install, real `/start`, one real item, then seam assertions; both bootstrap modes. It spends real
+  model calls and **must never join the routine suite**; its `--self-test` (the negative controls) does, and
+  `build-release.py --out` refuses to emit without a current receipt, so it is a control rather than a
+  documented step. `check-template-budgets.py` is the one that binds *this* repo to the package's own context budget:
   the shipped gate walks an installed project, so `product/templates/*` is invisible to it — that one measures
   them **at source**, through the shipped gate's own estimator and role rule (D184).
 

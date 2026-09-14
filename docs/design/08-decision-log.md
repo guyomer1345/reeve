@@ -7819,3 +7819,57 @@ survive is a live question rather than an assumption.
 **Builds on:** **D123** (the away analogue), **D136** (the governor), **D213** (the design and the correction),
 **D215** (the gate this polls), **D217** (the probe that added the third condition).
 → `11` (§ acceptance ledger #10 → discharged), `product/shared/schemas-runtime.md` (§ `awaiting-input.json`).
+
+## D219 — the smoke drive: built, run, and RED on its first use — four defects the 1,298-test suite cannot see **[BUILT + FIRST RUN 2026-09-14. The gate is a control, not a documented step: `build-release.py --out` refuses without a current receipt. No receipt was written — the run failed, which is the point]**
+**What it is.** `scripts/smoke_drive.py`: throwaway repo → a real install derived from
+`MANIFEST.json` → a real `/start` → one real item → seam assertions, on **both** bootstrap paths.
+Meta-only; it never ships. Three constraints, all held:
+- **Never in the routine suite.** Real model calls, ~2 hours in practice rather than the estimated 40 minutes.
+- **Seams, not behaviour.** Seven pure functions over the finished tree: install closed · a commit landed with an
+  executable `guard.sh` in the way · a spec-approval receipt still matching its spec · a code map with no package
+  machinery in it · a goal minted · the dispatch boundary's viability verdict recorded · a resume anchor naming a
+  base commit. Asserting what the model *wrote* would be flaky and prove nothing.
+- **It can go red**, and the proof is cheap: `--self-test` builds a tree every seam accepts, then breaks each seam
+  and requires that **exactly that one** fails. That half runs in the routine suite; the drive never can.
+
+**THE RECEIPT IS WHAT MAKES IT A CONTROL.** `D151` already fixed this class once with a documented manual step,
+and a documented step nobody runs is not a control. So a green run over **both** modes writes
+`.smoke-receipt.json` (machine-local, gitignored — it names the `HEAD` it tested, so committing it would change
+that `HEAD` and invalidate itself on the way in), and **`build-release.py --out` refuses to emit without a
+current one.** `--no-smoke` exists so that cutting a release without ever running the package as an installed
+whole is a thing somebody typed.
+
+**THE FIRST RUN FAILED, AND EVERY FAILURE IS REAL.**
+1. **Greenfield never minted a `goal.json`** — and brownfield did (`G-001`). This is the **inverse** of the
+   finding that made comparing both paths a requirement, which means the asymmetry is real and was
+   mis-attributed. The greenfield session said why, in its own words: *"this project could be bootstrapped
+   unattended, but it cannot be built unattended"* — `planner:decompose` is blocked because `goal.acceptance[]`
+   derives from the spec's definition-of-done, and `converge.py` treats an empty acceptance set as never-`met`,
+   so a goal minted there would have no reachable stop.
+2. **Greenfield's item never went round** — 1800s timeout, downstream of (1).
+3. **Brownfield's `handoff.md` carries no `base_sha`** — on a path that otherwise went all the way round
+   (planned, executed, verified, documented, committed, goal MET 4/4). A resume reads
+   `git log <base_sha>..HEAD`; without it, a cleared or dead session cannot see what changed.
+4. **`prioritize/SKILL.md` documented a command that ERRORS**: `converge.py status --workflow-dir .workflow` —
+   `--workflow-dir` is top-level, the subcommand comes last. A shipped instruction to run something that dies on
+   contact. `agents/document.md` had the same shape.
+
+**(4) IS FIXED AND GATED, because it is a whole class rather than a typo.** Both invocations corrected, and
+`scripts/check_documented_invocations.py` now extracts **every** documented `.claude/scripts/…` invocation in the
+package and asks that script's **own parser** whether it would accept it. Nothing is executed — `parse_args` is
+intercepted, so the parser is captured fully built and the body is never entered (running the check would *run*
+`drain.py record`). 19 invocations checked; it joins the commit chain.
+**Its own first version was a FALSE GREEN and that is recorded rather than quietly rewritten:** it used a probe
+flag and its own logic swallowed the very error it was looking for. It passed on the known-bad input. A gate is
+not a gate until it has been seen to fail, which is exactly what this slice is about, one level up.
+
+**A weakness in the harness, found by its own first run:** greenfield's code-map seam passed with **0 nodes** —
+vacuously, because nothing had been built yet. An assertion that cannot distinguish "clean" from "empty" is
+half a seam. Carried as a queue item rather than patched in the same breath.
+
+**Also reported by the brownfield session and not yet acted on:** the autonomy floor raises a spurious
+`locked-block` because prose containing the word `` `locked` `` parses as a commitment marker.
+
+**Builds on:** **D151** (the same lesson, first costume), **D210**/**D211**/**D212** (the two live drives and
+their synthesis), **D216** (whose `wave-decision.json` this run exercised live, on a real orchestrator).
+→ `11` (§ the ordered build sequence — the smoke drive is BUILT; its four findings are now the queue).

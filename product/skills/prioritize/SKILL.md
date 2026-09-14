@@ -45,7 +45,7 @@ The backlog (items with `depends_on`, `kind`, `severity`).
    receipt** (`.workflow/maintenance/<item-id>.json`) in its own commit: with no verdict to show, that receipt is
    the only thing standing between a verify-free item and a commit gate that reads it as an unverified one.
 3. **Check the goal is still reachable, when one is active.** If `.workflow/goal.json` exists, run
-   `python3 .claude/scripts/converge.py status --workflow-dir .workflow`. Anything it reports **`unbound`** is a
+   `python3 .claude/scripts/converge.py --workflow-dir .workflow status`. Anything it reports **`unbound`** is a
    goal acceptance that *no plan anywhere attempts* — the goal cannot be met as currently queued, and this is the
    one finding available **before** the work is spent rather than after five sessions of it. File it with
    `create-issue` (kind `feature`) so it enters the queue as ordinary work; do not invent the item's content

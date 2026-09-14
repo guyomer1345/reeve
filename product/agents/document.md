@@ -41,7 +41,7 @@ judge intent-vs-actual divergence against the recorded intent).
 5. **Promote the item's acceptance evidence, THEN mark it promoted.** Order matters and is not a style
    preference — the marker is what makes the dir prunable, so anything read out of the dir must be read first.
    - **First**, if `.workflow/goal.json` exists, run
-     `python3 .claude/scripts/converge.py record --item <id> --workflow-dir .workflow`. It appends this item's
+     `python3 .claude/scripts/converge.py --workflow-dir .workflow record --item <id>`. It appends this item's
      `goal_ref` bindings to `.workflow/goal-ledger.jsonl` — the durable form of what the item discharged, since
      `promises.json` is about to be deleted with the dir. It is **idempotent by item id**, so a re-run after a
      crash appends nothing; and it appends an entry even when the item discharged no acceptance, because an item

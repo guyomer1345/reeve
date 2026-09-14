@@ -1173,38 +1173,41 @@ carrying forward:
 recording stand-in, never against a real orchestrator going the whole way round. That is exactly the gap the
 smoke drive exists to close, and it is now the strongest reason to build it.
 
-#### NEXT — the smoke drive. `[validation for everything above]` `[core]`
-**Make the live drive a mechanism instead of something done once by hand.** Two live drives (`D210`, `D211`)
-found **four** package defects that **1,137 unit tests and three green exit-test harnesses found none of** — two
-of them shipped hours earlier, and one would have blocked the first commit of every project bootstrapped from
-that version. **`D212` is the synthesis and the reason this is next:** not one of the four was a bug *in* a
-component; every one was a bug *between* components, and the blind spot is structural — **nothing tested the
-package as an installed, running whole.** Leave a live drive as a manual act and the next four ship the same way.
-*(This repo has now learned the same lesson three times — `D151` was the first costume, and its fix was a
-documented manual step. A documented step nobody runs is not a control.)*
+#### `12i` — the smoke drive. ✅ **BUILT + RUN 2026-09-14 — `D219`.** `[validation for everything above]`
+`scripts/smoke_drive.py` (meta-only): throwaway repo → manifest install → real `/start` → one real item → seven
+seam assertions, both bootstrap modes. `--self-test` proves every seam can go red and runs in the routine suite;
+the drive itself never can. **The receipt is what makes it a control** — a green run over both modes writes
+`.smoke-receipt.json` and `build-release.py --out` refuses to emit without a current one, so this is not `D151`'s
+documented step wearing a new hat.
 
-**What it is:** one command. Throwaway repo → real install derived from `MANIFEST.json` → real `/start` → one
-real item through `planner` → `execute` → `verify` → `document` → `commit` → assertions. Both bootstrap modes,
-because finding 3 (`brownfield never mints a goal`) is only visible when the two paths are compared.
+**Its first run was RED, which is the whole point.** Four defects, none visible to 1,298 unit tests. One is
+fixed and gated (below); three are the queue that follows.
 
-**Three constraints that keep it honest, each learned from this pass:**
-- **It can NEVER join the routine suite.** It spends real model calls and takes ~40 minutes. It is a deliberate
-  **pre-release gate**, run beside `build-release.py --check`.
-- **Assert SEAMS, not behaviour.** Did the install close · did a real `git commit` land with the real `guard.sh`
-  in the way · did the floor's receipt get written *and accepted* · does the code map see only product files ·
-  is a `goal.json` present on **both** paths. Asserting what the model *wrote* would be flaky and prove nothing.
-- **It must be able to go red.** Every assertion needs the negative control the exit tests already use, or this
-  becomes a 40-minute green light.
+#### NEXT — what the first smoke drive found. `[from `D219`]` `[core]`
+In the order the run exposed them. Each is a between-components defect; none is a bug *in* a component.
 
-**Its first run closes the last unproven layer for free:** `loop.sh --drive` has only ever run against its own
-scripted stand-in (`D202`) — the same kind of stand-in that missed four defects elsewhere. Bootstrap and the item
-loop are now proven live; the session driver is not.
+1. **Greenfield never mints a goal, and brownfield does.** The INVERSE of the finding that made comparing both
+   paths a requirement — so the asymmetry is real and was mis-attributed. The greenfield session named the
+   cause itself: `planner:decompose` is blocked because `goal.acceptance[]` derives from the spec's
+   definition-of-done and `converge.py` treats an empty acceptance set as never-`met`, so a goal minted there
+   would have no reachable stop. *"This project could be bootstrapped unattended, but it cannot be built
+   unattended."* **That sentence is the slice.** Greenfield's whole point is an unattended build.
+2. **A `handoff.md` with no `base_sha`**, written by a brownfield path that otherwise went all the way round.
+   A resume reads `git log <base_sha>..HEAD`; without it a cleared or dead session cannot see what changed —
+   and this is now load-bearing twice over, because the supervisor (`12h`) clears sessions on purpose.
+   The `/dispatch` command names the field; nothing checks it. **Name the actuator.**
+3. **The code-map seam passes vacuously on 0 nodes.** A harness defect, found by the harness's own first run:
+   an assertion that cannot tell "clean" from "empty" is half a seam. Cheap, and it makes run 2 mean more
+   than run 1 did.
+4. **The autonomy floor raises a spurious `locked-block`** on prose containing the word `` `locked` `` —
+   reported by the brownfield session in passing. A commitment marker that fires on the word rather than the
+   structure will keep stopping drives that have nothing locked in them.
 
-**Known method residue, so the next session does not rediscover it:** `claude -p` nested inside a session works;
-`.claude/` is write-guarded **above** the settings allowlist, so `/start` cannot complete non-interactively
-(`start.md` already says so, and the live run confirmed it) — the harness must therefore do the manifest install
-itself; and the target repo needs its own `.claude/settings.local.json` allowlist, since `--permission-mode
-bypassPermissions` is refused.
+**Already fixed, and gated so the class cannot return:** `prioritize/SKILL.md` and `agents/document.md`
+documented `converge.py status --workflow-dir .workflow`, which **errors** — a shipped instruction to run a
+command that dies on contact. `scripts/check_documented_invocations.py` now asks every documented script's own
+parser whether it would accept its documented invocation (nothing is executed: `parse_args` is intercepted), and
+it is in the commit chain. *Its own first version was a false green and is recorded as such in `D219`.*
 
 #### Then — never wait alone, ENFORCED. `[ask #6]` `[core]`
 *"In all of this time... we should dispatch work to be done."* `D192` made this a first-class capability —

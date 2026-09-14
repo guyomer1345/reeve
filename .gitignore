@@ -25,3 +25,10 @@ __pycache__/
 # `git status` showing a bare `?? .claude/` after the phase-9-capture worktree existed;
 # nothing had committed it yet, and this is what stops the first one that would.
 .claude/worktrees/
+
+# The smoke-drive receipt: evidence that THIS working tree, at THIS commit, was driven
+# end-to-end as an installed package. Machine-local on purpose and not committed — it names
+# the HEAD it tested, so committing it would change the HEAD and invalidate itself on the way
+# in. A clone has no receipt and must run its own drive, which is the correct answer: the
+# receipt attests to a run that happened here, not to a claim that travels.
+.smoke-receipt.json

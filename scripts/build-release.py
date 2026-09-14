@@ -24,6 +24,7 @@ import fnmatch
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -152,11 +153,46 @@ def check_install_covered(m, files):
     return errs
 
 
+def smoke_state():
+    """The reason an emit must not proceed, or None when the receipt is current.
+
+    The smoke drive is a PRE-RELEASE gate that cannot run here — it spends real model calls and
+    takes about forty minutes. So the gate is its receipt, checked at the one moment it matters:
+    cutting a release. Anything else would be a documented step, and this repo has now learned
+    three times that a documented step nobody runs is not a control.
+    """
+    receipt = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".smoke-receipt.json")
+    receipt = os.path.normpath(receipt)
+    try:
+        with open(receipt, encoding="utf-8") as fh:
+            rec = json.load(fh)
+    except (OSError, ValueError):
+        return "no smoke-drive receipt — the package has never been run as an installed whole"
+    p = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+                       cwd=os.path.dirname(receipt))
+    head = (p.stdout.strip() or None) if p.returncode == 0 else None
+    if not head:
+        return "git cannot name HEAD, so the smoke receipt cannot be dated"
+    if rec.get("head") != head:
+        return ("the smoke-drive receipt is for %s and HEAD is %s"
+                % ((rec.get("head") or "nothing")[:12], head[:12]))
+    if sorted(rec.get("modes") or []) != ["brownfield", "greenfield"]:
+        return ("the smoke receipt covers only %s — the defect this gate exists for is visible "
+                "only by comparing both bootstrap paths" % (", ".join(rec.get("modes") or [])
+                                                            or "nothing"))
+    return None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Emit / verify the shippable product tree.")
     ap.add_argument("--out", metavar="DIR", help="emit the clean tree to DIR")
     ap.add_argument("--check", action="store_true",
                     help="dry-run + assert invariants, emit nothing (the default)")
+    ap.add_argument("--no-smoke", action="store_true",
+                    help="emit WITHOUT a current smoke-drive receipt. An explicit override, "
+                         "never a default: the receipt is the only evidence the package works "
+                         "as an installed whole, and every defect that motivated it was "
+                         "invisible to the unit suite and to this boundary check.")
     args = ap.parse_args(argv)
 
     m = load_manifest()
@@ -166,6 +202,13 @@ def main(argv=None):
     if args.out and not args.check:
         if os.path.exists(args.out) and os.listdir(args.out):
             raise SystemExit(f"BLOCKED: --out dir {args.out} exists and is not empty")
+        smoke = smoke_state()
+        if smoke and not args.no_smoke:
+            raise SystemExit(
+                "BLOCKED: %s\n"
+                "  Run `scripts/smoke_drive.py --mode both` (real model calls, ~40 minutes) and\n"
+                "  emit again, or pass --no-smoke to say plainly that this release was cut\n"
+                "  without ever running the package as an installed whole." % smoke)
         emit(m, args.out)
         clean_errs = assert_clean(args.out, files)
         errs = install_errs + clean_errs
