@@ -122,12 +122,23 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
   machine move could only report "the store is gone, work out what was in it". `/rebind` diffs the declared set
   against the store and itemizes what is missing. It is **early warning, not a gate**: point-of-use fail-closed
   (the thing that needs the key failing loudly when it is absent) stays the floor.
-- **reconcile** — approve → `prioritize` · else → `ingest` (re-run) / `discuss`.
+- **reconcile** — approve → **mint the goal**, then `prioritize` · else → `ingest` (re-run) / `discuss`.
+  - **Minting is not optional, and brownfield is the only place it can happen.** `planner:decompose` writes
+    `.workflow/goal.json` for a greenfield project, and the brownfield path never runs decompose — it goes
+    `/start` → `ingest` → here → `prioritize` → `plan-one`. Without this step a brownfield project has **no
+    goal at all**, so `converge.py` reports *"nothing to converge on"*, no criterion ever carries a `goal_ref`,
+    and an autonomous driver's `met` and `stalled` stops **can never fire** — it would run to its no-progress
+    guard instead. *(Measured on a real drive: exactly that.)*
+  - Write `goal.json` (§ `goal` in `schemas.md`) from the acceptance **the human just confirmed** — that
+    confirmation is the authority here, the same way the roadmap it just wrote is decompose's. One
+    `acceptance[]` entry per confirmed criterion, each with an `id` and a `source` naming the spec element.
+    **Enumerate only what they locked**: an entry drawn from an element still tagged `unspecified` is an
+    acceptance nothing will bind, which `converge.py` reports as `unbound` — correctly, and unhelpfully.
 
 **On ANY approve whose change edits `docs/spec.md` across the autonomy floor** — a `locked` element, a weakened
 commitment marker, or an acceptance criterion — **record the approval before you resume**:
 ```bash
-python3 .claude/scripts/spec_approval.py record --ticket <ticket_id> --token <token>
+python3 .claude/scripts/spec_approval.py record --ticket <ticket_id>
 ```
 This is not bookkeeping. `checks.sh --check` now runs the floor as a **gate**, and without the receipt the
 approved change cannot be committed at all. Run it **after** the spec edit is staged and **never before**: the

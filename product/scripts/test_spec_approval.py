@@ -85,7 +85,7 @@ def test_crossing_the_floor_with_no_receipt_is_BLOCKED(proj):
 def test_a_matching_receipt_lets_the_approved_change_through(proj):
     """The escape must actually work, or the gate gets switched off."""
     _stage(proj, LOCKED_SPEC)
-    sa.record(str(proj), "t-1", "t-1:steer:abc")
+    sa.record(str(proj), "t-1")
     ok, msg = _check(proj)
     assert ok is True and "covered by the approval receipt" in msg
 
@@ -96,7 +96,7 @@ def test_editing_the_spec_AFTER_approval_blocks_again(proj):
     """The move the digest exists to catch. A receipt that merely said "approved" would licence
     this, and it is exactly how a goal change gets past a human who approved something else."""
     _stage(proj, LOCKED_SPEC)
-    sa.record(str(proj), "t-1", "tok")
+    sa.record(str(proj), "t-1")
     assert _check(proj)[0] is True
     _stage(proj, LOCKED_SPEC.replace("users can sign in", "users can sign in with SSO only"))
     ok, msg = _check(proj)
@@ -108,7 +108,7 @@ def test_editing_the_spec_AFTER_approval_blocks_again(proj):
 def test_a_stale_receipt_does_not_licence_a_LATER_change(proj):
     """One approval must not be a standing permit."""
     _stage(proj, LOCKED_SPEC)
-    sa.record(str(proj), "t-1", "tok")
+    sa.record(str(proj), "t-1")
     _stage(proj, LOCKED_SPEC + "\n- **Payments** — commitment: `locked`\n")
     assert _check(proj)[0] is False
 
@@ -132,7 +132,7 @@ def test_an_unparseable_receipt_is_refused_not_ignored(proj):
 def test_the_gate_reads_the_STAGED_spec_not_the_worktree(proj):
     """A gate reading the worktree could be satisfied by a file the commit does not contain."""
     _stage(proj, LOCKED_SPEC)
-    sa.record(str(proj), "t-1", "tok")
+    sa.record(str(proj), "t-1")
     # Now dirty the worktree WITHOUT staging it. The commit still contains the approved text.
     (proj / "docs" / "spec.md").write_text(LOCKED_SPEC + "\nunstaged junk\n", encoding="utf-8")
     assert _check(proj)[0] is True
@@ -140,7 +140,7 @@ def test_the_gate_reads_the_STAGED_spec_not_the_worktree(proj):
 
 def test_record_stamps_the_STAGED_content(proj):
     _stage(proj, LOCKED_SPEC)
-    rec = sa.record(str(proj), "t-1", "tok")
+    rec = sa.record(str(proj), "t-1")
     assert rec["spec_sha256"] == sa.spec_digest(LOCKED_SPEC)
 
 
@@ -170,7 +170,7 @@ def test_cli_exit_codes(proj):
                               "--scripts-dir", HERE, "check"], capture_output=True, text=True)
     assert blocked.returncode == 2
     subprocess.run([sys.executable, gate, "--project-root", str(proj), "record",
-                    "--ticket", "t-1", "--token", "tok"], capture_output=True, text=True)
+                    "--ticket", "t-1"], capture_output=True, text=True)
     allowed = subprocess.run([sys.executable, gate, "--project-root", str(proj),
                               "--scripts-dir", HERE, "check"], capture_output=True, text=True)
     assert allowed.returncode == 0
@@ -214,7 +214,36 @@ def test_the_exact_invocation_checks_sh_writes(proj):
 def test_record_also_accepts_flags_after_the_subcommand(proj):
     gate = os.path.join(HERE, "spec_approval.py")
     _stage(proj, LOCKED_SPEC)
-    r = subprocess.run([sys.executable, gate, "record", "--ticket", "t-1", "--token", "tok",
+    r = subprocess.run([sys.executable, gate, "record", "--ticket", "t-1",
                         "--project-root", str(proj)], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert sa.read_receipt(str(proj))["ticket_id"] == "t-1"
+
+
+def test_the_receipt_does_not_trip_the_SECRET_SCAN(proj):
+    """The defect a live drive found, pinned so it cannot come back.
+
+    The receipt is COMMITTED — it must ride the commit it authorises — and `guard.sh` blocks any
+    staged `token:` followed by 12+ key-shaped characters. The original receipt carried the
+    checkpoint's correlation token, which is comfortably longer, so it could never be staged:
+    two package rules with no reachable compliant state. The fix is on THIS side deliberately —
+    a false positive on a token-shaped field is far cheaper than a missed credential, so the
+    scan does not move. This asserts the receipt stays clean against the real pattern.
+    """
+    import re
+    guard = os.path.join(HERE, "..", "hooks", "guard.sh")
+    line = [l for l in open(guard, encoding="utf-8") if l.startswith("SECRET_RE=")][0]
+    pattern = line.split("=", 1)[1].strip().strip("'")
+    _stage(proj, LOCKED_SPEC)
+    sa.record(str(proj), "bootstrap-reconcile")           # a realistic, long ticket id
+    body = open(os.path.join(str(proj), sa.RECEIPT_REL), encoding="utf-8").read()
+    hit = re.search(pattern, body, re.I)
+    assert hit is None, "receipt would be blocked as a secret: %r" % (hit.group(0) if hit else "")
+
+
+def test_the_receipt_carries_no_credential_shaped_field_names(proj):
+    """The structural half of the rule above: if a future field reintroduces one of these names,
+    this fails at the schema rather than waiting for a commit to be blocked."""
+    _stage(proj, LOCKED_SPEC)
+    rec = sa.record(str(proj), "t-1")
+    assert not {"token", "secret", "password", "api_key", "apikey"} & set(rec)

@@ -83,7 +83,7 @@ def read_receipt(project_root):
     return val if isinstance(val, dict) else None
 
 
-def record(project_root, ticket_id, token, spec_rel=None):
+def record(project_root, ticket_id, spec_rel=None):
     """Write the receipt for a spec the human has just approved.
 
     Stamps the digest of the spec AS IT IS NOW. Run it at the moment the approval is applied and
@@ -93,7 +93,15 @@ def record(project_root, ticket_id, token, spec_rel=None):
     body = staged_spec(project_root, spec_rel)
     if body is None:
         return None
-    rec = {"spec_sha256": spec_digest(body), "ticket_id": ticket_id, "token": token,
+    # NO `token` FIELD, and its absence is load-bearing rather than tidy. This file is
+    # COMMITTED -- it must ride the commit it authorises -- and `guard.sh`'s secret scan blocks
+    # any staged `token:` followed by 12+ key-shaped characters. A checkpoint ticket string is
+    # comfortably longer, so a receipt carrying one could never be staged: two package rules
+    # with no reachable compliant state, found on a live drive. The fix is here rather than in
+    # the scan, deliberately -- a false positive on a token-shaped field is far cheaper than a
+    # missed credential, so the scan does not move. `ticket_id` already carries the provenance;
+    # the correlation token is the DRAIN's key and is meaningless once the verdict is applied.
+    rec = {"spec_sha256": spec_digest(body), "ticket_id": ticket_id,
            "spec_path": (spec_rel or SPEC_REL).replace(os.sep, "/")}
     path = os.path.join(project_root, RECEIPT_REL)
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -144,7 +152,7 @@ def check(project_root, scripts_dir):
             "  This is not a formality: the floor exists because a loop grading its own "
             "decisions drifts toward 'not fundamental'.\n"
             "  Route it — raise a checkpoint, get a verdict, and record it with "
-            "`spec_approval.py record --ticket <id> --token <token>`.")
+            "`spec_approval.py record --ticket <id>`.")
     got = rec.get("spec_sha256")
     if got != want:
         return False, (
@@ -179,7 +187,6 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     rec = _common(sub.add_parser("record", help="stamp the approved spec's digest"))
     rec.add_argument("--ticket", required=True)
-    rec.add_argument("--token", required=True)
     _common(sub.add_parser("check", help="the commit gate (exit 2 = blocked)"))
     args = ap.parse_args(argv)
     # SUPPRESS keeps an unset flag out of the namespace entirely, so a value given on either
@@ -191,7 +198,7 @@ def main(argv=None):
 
     scripts = args.scripts_dir or os.path.dirname(os.path.abspath(__file__))
     if args.cmd == "record":
-        r = record(args.project_root, args.ticket, args.token)
+        r = record(args.project_root, args.ticket)
         if r is None:
             print("spec-approval: cannot read the spec — nothing recorded", file=sys.stderr)
             return 2

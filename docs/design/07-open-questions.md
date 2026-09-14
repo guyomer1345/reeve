@@ -1134,10 +1134,14 @@ slice inherits whether or not anyone looks at it.
   reality for the first time. **The transferable lesson: a shipped CALLER is not covered by a test that calls the
   same code differently** — both defects were a caller meeting a component in a context no test placed it in, and
   scripted harnesses cannot reach that by construction.
-  **STILL OPEN, narrowed:** the drive covered **bootstrap** (`/start` → `ingest` → the reconcile checkpoint). It
-  did **not** reach the item loop — `planner` → `execute` → `verify` → `document` → `commit` with real agents —
-  nor `loop.sh --drive` end to end. Those remain unproven against a live model, and the `12d`/`12e` mechanisms are
-  what sits behind them. *(Original entry below.)*
+  **SECOND PASS RUN 2026-09-14 — `D211`: the item loop is now proven too.** A real `planner` → `execute` →
+  `verify` → `document` → `commit` on a live item, every on-disk contract holding, and `D209`'s
+  floor→checkpoint→receipt→commit path confirmed end to end on live content. It found **two more contradictions**
+  no unit test could reach: the brownfield path **never mints a goal** (so `12d` was inert on half the bootstrap
+  modes), and the approval receipt **could never be committed** (its `token` field tripped `guard.sh`'s secret
+  scan, while its schema says it must ride the commit — two rules with no reachable compliant state). Both fixed.
+  **STILL OPEN, narrowed again:** `loop.sh --drive` has not been run end to end against a live model — only its
+  scripted harness (`D202`). The session-driver mechanisms are the last unproven layer. *(Original entry below.)*
 - **~~[first pass run — D210]~~ Nothing has driven the driver with a REAL model. `[carried, now the dominant validation gap]`** `D200`'s and
   `D202`'s harnesses both script their writers, deliberately and for the same reason (removing model variance
   makes a red run mean the *mechanism* is wrong). Two slices now rest on that choice, and the outstanding

@@ -219,7 +219,14 @@ raises blanks itself. A lost reading degrades the band to `unknown`, which is th
 never `hold`, because a wrong `hold` tells a session to keep filling a window it should be leaving.
 
 ## spec-approval.json  · written by `checkpoint` on an approve that crosses the autonomy floor, read by `checks.sh --check` · *`.workflow/spec-approval.json`; **COMMITTED** — it must ride the commit it authorises, the same law as `commit-receipt`; atomic write; rewrite-in-place (one live approval, history in git)*
-- `{ spec_sha256, ticket_id, token, spec_path }` — the digest of `docs/spec.md` **as approved**.
+- `{ spec_sha256, ticket_id, spec_path }` — the digest of `docs/spec.md` **as approved**.
+**There is deliberately NO `token` field, and the absence is load-bearing.** This file is committed, and
+`guard.sh`'s secret scan blocks any staged `token:` followed by 12+ key-shaped characters — a checkpoint ticket
+string is comfortably longer. A receipt carrying one **could never be staged**, which would leave two package
+rules with no reachable compliant state (found on a live drive, not reasoned about). The fix sits here rather
+than in the scan: a false positive on a token-shaped field is far cheaper than a missed credential, so the scan
+does not move. `ticket_id` already carries the provenance, and the correlation token is the *drain's* key —
+meaningless once the verdict has been applied.
 **It is what turns the autonomy floor from a consultation into an enforcement.** The floor is run at decision
 time by the orchestrator, which means a loop that does not run it is unchecked — and that is exactly the case the
 floor exists for, since a loop grading its own decisions drifts toward "not fundamental". `checks.sh --check` now

@@ -68,6 +68,12 @@ The prose layer over `graph.json`: the structural fields are **copied from `grap
 ## goal  · derived from the `spec` by `planner` (decompose mode), read by `converge.py` · *`.workflow/goal.json`; **COMMITTED** (it outlives every item it is measured over, and a lost goal is a driver with no stop condition); rewrite-in-place — a new goal REPLACES it*
 The record **above the item level** that an autonomous drive converges on. At most one is active: the
 single-orchestrator run-constraint means a second would be a second thing to stop on.
+**Two producers, one per bootstrap path, and both are required.** `planner:decompose` writes it for a
+**greenfield** project from the roadmap it just emitted; the **reconcile checkpoint** writes it for a
+**brownfield** one from the acceptance the human just confirmed — because the brownfield path never runs
+decompose (`/start` → `ingest` → reconcile → `prioritize` → `plan-one`). Miss the second and a brownfield project
+has no goal at all: `converge.py` reports *"nothing to converge on"*, nothing binds a `goal_ref`, and a driver's
+`met`/`stalled` stops can never fire.
 - `id` · `statement` — what the drive is for, in one line
 - `created_sha` — the commit the acceptance set was derived against
 - `status` ∈ `{ active, stopped }` — an **operator switch** (should a driver run against this goal), never a

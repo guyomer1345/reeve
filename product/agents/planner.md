@@ -21,7 +21,7 @@ wave that plans differently depending on who finished first cannot be reproduced
 - **decompose** (new project / heavy change): `spec` → `roadmap` of phases, each with goal, deps,
   acceptance. Each phase becomes a backlog item with its own plan → execute → verify → document sub-loop, tagged
   `kind` (feature/debt) + `severity` so `prioritize` orders it by the same key as an `issue`.
-  **Decompose also writes `.workflow/goal.json`** (§ `goal` in `schemas.md`) — one `acceptance[]` entry per phase
+  **Decompose also writes `.workflow/goal.json`** *(the GREENFIELD half of goal-minting; the brownfield half is the reconcile checkpoint's, since decompose never runs there)* (§ `goal` in `schemas.md`) — one `acceptance[]` entry per phase
   acceptance you just wrote, each with an `id`, the acceptance text, and a `source` pointing at the spec element
   it came from. This is the *only* place a goal's acceptance gets an id, and without it nothing downstream can be
   bound to it. **Enumerate what the roadmap actually commits to and nothing more:** an entry with no phase behind

@@ -7393,3 +7393,54 @@ drive is not a nicer exit test; it is the only thing that tests the seams betwee
 **Builds on:** **D209** (whose defect this found), **D198**/**D200**/**D202** (whose scripted harnesses stated
 this exact limit each time).
 → `07` (the validation gap, closed for this pass), `templates/checks.sh`, `codemap.py`, `commands/start.md`.
+
+## D211 — the live drive reaches the ITEM LOOP, and finds two contradictions only a real commit could expose **[DRIVEN 2026-09-14, same throwaway repo. `ISSUE-001` planned → executed → verified → documented → COMMITTED by real agents. Two package defects found + fixed; 1137 tests]**
+
+**`D210` covered bootstrap and stopped there. This is the other half.** The reconcile verdict was answered
+through the bus the way a human would, and the loop drove an item end to end with **real subagents**: `planner`
+wrote a plan and a `promises.json` (with `base_sha` stamped — `D195`'s freshness field, on live content),
+`execute` made the actual source fix and authored five tests, `verify` emitted **`pass: true` as line 1
+verbatim**, `document` wrote `promoted.json`, and `commit` landed `fix(cli): make add/done/list reachable from a
+terminal`. The full artifact set is on disk and every on-disk contract held.
+
+**`D209` was confirmed end to end on live content, which is worth stating as plainly as the defects.** The
+autonomy floor **fired** on the reconstructed spec; the loop, following the checkpoint skill, **wrote the
+approval receipt itself**; and the gate then accepted it (*"crossed, and covered by the approval receipt"*) and
+the spec commit landed. Consultation → enforcement → escape, proven rather than argued.
+
+**FINDING 1 — the brownfield path never mints a goal, so `12d` is INERT on half the bootstrap modes.**
+`planner:decompose` writes `goal.json`; brownfield runs `/start` → `ingest` → reconcile → `prioritize` →
+`plan-one` and **decompose never executes.** Measured live: no `goal.json`, `converge.py` reporting *"nothing to
+converge on"*, and **0 of 6** criteria carrying a `goal_ref`. So on a brownfield project a driver's `met` and
+`stalled` stops **can never fire** — it would run to its no-progress guard instead. The design said a goal is
+optional and that fallback is sound; what it did not see is that for an existing repo the goal is not *optional*,
+it is *impossible*. **Fixed by giving the reconcile checkpoint the brownfield half of goal-minting**, from the
+acceptance the human just confirmed — that confirmation is the authority there, exactly as the roadmap it just
+wrote is decompose's. Only confirmed elements are enumerated: an entry drawn from something still `unspecified`
+is an acceptance nothing will bind.
+
+**FINDING 2 — the approval receipt could never be committed, because two package rules had no reachable
+compliant state.** `schemas-runtime.md` says `spec-approval.json` is **COMMITTED** and *"must ride the commit it
+authorises"*. `guard.sh`'s `SECRET_RE` blocks any staged `token:` followed by 12+ key-shaped characters — and
+`D209` gave the receipt a `token` field holding the checkpoint ticket, which is comfortably longer. **Staging the
+receipt blocked the commit as a suspected credential.** The consequence was live and silent: the receipt
+authorising the spec commit was *not in git*, so a fresh clone would show an approved `locked` spec with no
+evidence of approval — precisely what the receipt exists to prevent — while `checks.sh` read the working-tree
+copy and passed.
+
+**The fix is on the receipt's side and the scan does not move.** A false positive on a token-shaped field is far
+cheaper than a missed credential, so weakening `SECRET_RE` was refused outright. The `token` was **dead weight**:
+nothing read it, `ticket_id` already carries the provenance, and the correlation token is the *drain's* key —
+meaningless once the verdict is applied. Deleted. Pinned by two tests — one that runs the **real `SECRET_RE`,
+parsed out of `guard.sh`**, over a freshly written receipt, and one structural check that no
+credential-shaped field name returns.
+
+**How it was found is the point, again.** No unit test could produce either: the first needs *two bootstrap paths
+to be compared*, the second needs *an actual `git commit` with a real guard in the way*. Both are seams between
+shipped parts, and `D210`'s rule holds a second time — **a live drive is the only thing that tests them.**
+*(The loop filed the second one itself, as a backlog issue, with the correct diagnosis and an explicit warning
+not to fix it by weakening the scan. Its reasoning was verified against `guard.sh` rather than taken on trust.)*
+
+**Builds on:** **D210** (the first live pass), **D209** (whose receipt this repairs), **D199** (the goal record
+this completes).
+→ `07`, `schemas.md § goal`, `schemas-runtime.md`, `skills/checkpoint`, `agents/planner.md`.
