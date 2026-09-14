@@ -25,7 +25,10 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
   (canonical status). Its **`### The ordered build sequence`** is the live work order — read that first; it is
   the single owner of *what to build next, and why in that order*. It is marked **▶ START HERE**, and the
   **first subsection under it is the next thing to build** — everything below that is closed work kept for its
-  reasoning.
+  reasoning. **Read `### The Phase-12 ACCEPTANCE LEDGER` immediately above it first**: it is the owner of what
+  the maintainer actually ASKED FOR, and every queue entry cites an ask number. It exists because five of ten
+  asks were delivered as closed while unmet — a request with no durable owner goes missing silently (D214).
+  **An ask with no item against it is work that has been lost.**
 - **`docs/design/08-decision-log.md`** — every decision: the call, why, what was rejected, the evidence.
 - Then the numbered spec docs `docs/design/00`–`11` + `product/shared/` as the topic needs.
 

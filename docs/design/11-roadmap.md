@@ -1081,6 +1081,40 @@ their own instructions and is **promotable now that 11e is green**; and the **in
 11f's router numbers put a price on (`07`). Still out: **within-item parallel writers**, rejected in D178 with a
 stated re-open trigger — which 11f leaves untouched, while additionally rejecting *serial* splitting on cost.
 
+### The Phase-12 ACCEPTANCE LEDGER — what was actually asked for, and what discharges it **[the owner of the original request; added 2026-09-14 after five of ten items were found undelivered]**
+**Why this section exists.** Phase 12 came from one request (session `257d8bf7`, 2026-09-13) listing ten things
+the maintainer wanted after living with the tool. Decisions got an owner (`08`), slices got an owner (this doc's
+sequence), open questions got an owner (`07`) — **and the request itself had none.** It lived in a chat that was
+cleared. So a slice could close, be captured, pass every gate, and leave its originating ask unmet, with nothing
+anywhere able to notice. **Five of ten were undelivered and it took the maintainer re-reading his own prompt to
+find out.** This ledger is that missing owner: the asks are the **acceptance**, and a slice is only done when the
+ask it came from is discharged.
+*(The irony is the point, and is recorded rather than smoothed over: the capability this phase is building —
+`goal.json` + `converge.py`, set a goal and measure against it mechanically — is exactly what the phase itself
+was run without. `D214`.)*
+
+**The request is preserved verbatim at [`intake/phase-12-request.md`](intake/phase-12-request.md)** — the table
+below is a *reading* of it, and a reading can drift from its source. Argue from the file, not from the row.
+
+| # | The ask, in his words (condensed) | Discharged by | State |
+|---|---|---|---|
+| 1 | standing directives that do not decay (*"notify me every time X"*) | `12a` · `D189` | ✅ |
+| 2 | do `doc_budget`/`align` default if unset? | answered — they do | ✅ |
+| 3 | **cap an agent's tokens; it self-dispatches and a fresh one starts** | `D187` measured only | ⚠️ **OPEN** |
+| 4 | org mode on hold | parked | ✅ |
+| 5 | always judge what can run in parallel | `12c` · `D192`/`D195`–`D198` | ✅ |
+| 6 | **use the hangs — dispatch during a wait** | `D192` decided; prose only | ⚠️ **OPEN** |
+| 7 | **returns limited to a reasonable size** + temp store with a deletion rule | `12b` · `D191` — store ✅, **limit advisory** | ⚠️ **OPEN (half)** |
+| 8 | goal-driven drive; stop when not progressing, re-research, continue | `12d` · `D199`/`D200` | ✅ |
+| 9 | **at 30–35%, RUN dispatch and tell me to clear** | `D206` band — **nothing reads it** | ⚠️ **OPEN** |
+| 10 | **autonomous dispatch→clear→continue, interruptible** | `12e` built headless `-p`; re-scoped `D213` | ⚠️ **OPEN** |
+
+**The pattern across the five, which is one defect rather than five** (`D214`): **the sensor was built and the
+actuator was not.** A band that reports and nothing acts on · a detector that warns after the tokens have landed
+· a measurement that concluded instead of enforcing · a parallelism rule written as prose. In each case the hard
+half — *knowing when* — shipped, and the asked-for half — *doing something* — did not. **Any new slice here is
+checked against that:** name the actuator, or say plainly that none is possible and why.
+
 ### The ordered build sequence  ·  ▶ START HERE (D186's Steps 0–6 are ALL CLOSED — what comes next is the first subsection below)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
@@ -1089,7 +1123,22 @@ built, with the dependency that fixes each position stated rather than implied.
 `D199`/`D200`/`D201`/`D202`/`D203`. Its per-step record is preserved below because the reasoning is still worth
 reading; it is **history, not the queue**.
 
-#### NEXT — the self-clearing supervisor (the maintainer's design, 2026-09-14). `[core]`
+> **Every entry below traces to a numbered ask in the ACCEPTANCE LEDGER above. An item with no ask behind it
+> does not belong in this queue, and an ask with no item in it is work that has gone missing — which is exactly
+> how five of ten were lost.**
+
+#### NEXT — make the loop ACT on the band. `[ask #9]` `[core, small, prerequisite]`
+**The smallest gap and the most embarrassing.** He wrote: *"currently there is the banner which is nice, but
+again this is something I want to internally be a part of the repo."* `D206` built a genuinely better band —
+two-sided, in nodes of runway, measured constants — and **nothing in the loop ever reads it**: `grep context_band`
+over `loop.md`, `loop-detail.md` and `orchestrator-CLAUDE.md` returns **nothing**. The banner was replaced with a
+better banner. **What is missing is one routing rule**: at a scheduler boundary, if `context_band.py` says
+`handoff-now` and no checkpoint is open, the orchestrator **runs `/dispatch` itself** and says it is safe to
+clear. **It is a PREREQUISITE for the supervisor below**, which waits for a freshly-written `handoff.md` and has
+nothing to wait for until the orchestrator writes one on its own. Budget: the always-loaded set is at
+**6393/6400**, so this must **relocate**, not grow — `loop-detail.md` is the on-demand sibling.
+
+#### Then — the self-clearing supervisor (the maintainer's design, 2026-09-14). `[ask #10]` `[core]`
 **The thing `12e` was asked for and did not build.** The ask was: *let the loop keep going past a full context —
 clear and resume itself — without me typing `/clear`.* `12e` answered it with `loop.sh --drive`, a shell loop
 around **`claude -p`**, which self-clears but is **headless**: no UI, no live tool calls, no status line. The
@@ -1130,7 +1179,7 @@ the weakest justification. **Do not delete it yet** — the relaunch-runner (`D1
 mechanism with its own job (resume a *dead* loop when a verdict lands). But `--drive` is no longer the answer to
 "run more autonomously", and whether it should survive at all is a live question, not an assumption.
 
-#### Then — the smoke drive. `[core]`
+#### Then — the smoke drive. `[validation for everything above]` `[core]`
 **Make the live drive a mechanism instead of something done once by hand.** Two live drives (`D210`, `D211`)
 found **four** package defects that **1,137 unit tests and three green exit-test harnesses found none of** — two
 of them shipped hours earlier, and one would have blocked the first commit of every project bootstrapped from
@@ -1162,6 +1211,31 @@ loop are now proven live; the session driver is not.
 (`start.md` already says so, and the live run confirmed it) — the harness must therefore do the manifest install
 itself; and the target repo needs its own `.claude/settings.local.json` allowlist, since `--permission-mode
 bypassPermissions` is refused.
+
+#### Then — never wait alone, ENFORCED. `[ask #6]` `[core]`
+*"In all of this time... we should dispatch work to be done."* `D192` made this a first-class capability —
+**the orchestrator may never wait alone** — and `12c` built the wave machinery under it. What it did **not**
+build is anything that makes it happen: the rule lives in `loop.md`/`loop-detail.md` as an instruction, so a
+router that simply blocks on a dispatch violates nothing and nothing notices. **Name the actuator.** The
+independence gate (`check_wave_independence.py`) already computes what is safe to run beside what, so the
+missing piece is a *check at the blocking boundary*, not new judgement. Candidate: before any blocking dispatch,
+the boundary requires a recorded answer to *"what else is viable?"* — which makes the omission visible the way a
+missing `discharge` is.
+
+#### Then — bounding a WORKER, both halves. `[asks #3 + #7]` `[core — research-gated]`
+**These are one problem and were split across two slices, which is part of why neither closed.**
+- **#7, the return bound.** *"Give each skill/agent we dispatch a return format that is limited to a reasonable
+  amount of context."* The temp-store half shipped well (`12b`: scratch, promote-then-prune — his own concern
+  about deletion answered without inventing a TTL). The **limit** is a `PostToolUse` detector that fires *after*
+  the return has landed: it warns, it cannot truncate, and the tokens are already paid for.
+- **#3, the worker's own window.** *"Limit the tokens an agent can reach before it should itself /dispatch and
+  start a new one."* `D187` measured (194.1k median, 21% over 300k — a tail, not a median) and stopped there.
+**Both need a mechanism nobody has found yet**, and `07` carries the reasons: no live signal observes a running
+subagent's token count, a subagent cannot spawn its own successor, and `PostToolUse` can add context but not
+rewrite a tool result. **So this slice starts as RESEARCH, not a build** — and its honest possible outcome is
+*"no actuator exists; here is the strongest mitigation and here is what stays advisory."* Saying that plainly
+would already be better than the current state, where a contract reads as a control until someone asks what
+enforces it.
 
 #### Then — the standing queue, unchanged in content and now actually next
 The **cold-context reviewer** (promotable, and the strongest Phase-13 candidate) and the **inline-node topology

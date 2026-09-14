@@ -7541,3 +7541,49 @@ mistake is two weeks old, not two years.
 **Builds on:** **D202** (the slice this re-scopes), **D206** (the band, whose sensor this design finally reaches),
 **D212** (the live-drive discipline that says probe rather than assume).
 → `11` (§ the ordered build sequence — now the first entry), `commands/dispatch.md`, `hooks/session_start.py`.
+
+## D214 — five of ten asks were undelivered, and the reason is that the REQUEST had no owner **[FOUND 2026-09-14 by the maintainer re-reading his own prompt. Acceptance ledger added to `11`; five items queued]**
+
+**What happened.** Phase 12 came from one request (session `257d8bf7`, 2026-09-13) listing **ten** things the
+maintainer wanted after living with the tool. Ten slices' worth of work was done, captured across `D185`–`D213`,
+and every gate stayed green. **Five of the ten were not delivered**, and it took him **re-reading his own
+original prompt** to discover it.
+
+**The cause is structural and this repo should have seen it, because it is the repo's own law.** `D80` says one
+owner per fact. Decisions had an owner (`08`). Slices had an owner (`11`'s sequence). Open questions had an owner
+(`07`). **The request itself had none** — it lived in a chat that was cleared. So a slice could close, be
+captured, pass every meta-gate, and leave the ask it came from unmet, with nothing anywhere able to notice the
+difference. **An intake with no durable owner is work that goes missing silently**, and every mechanism this repo
+has for not losing things was pointed somewhere else.
+
+**THE IRONY IS THE FINDING, not a remark.** The capability Phase 12 exists to build is `12d` — *set a goal,
+enumerate its acceptance, and measure progress against it mechanically, because a loop grading its own progress
+drifts toward "done".* **Phase 12 was itself run without that capability**, grading its own progress from its
+slice list, and drifted exactly as `D199` predicts a loop will. The maintainer's own framing when he found it:
+*"this very much relates to the change I want in the repo — I want to be able to set a clear goal, like these 10,
+and have it autonomously work and measure itself against them."* The construction record needed `converge.py`
+and did not have it.
+
+**THE DEFECT PATTERN ACROSS THE FIVE IS ONE DEFECT, NOT FIVE: the sensor was built and the actuator was not.**
+- **#9** — *"at 30–35% run dispatch and tell me to clear"*: `D206` built a genuinely better band, and **nothing
+  in the loop reads it.** `grep context_band` over `loop.md`/`loop-detail.md`/`orchestrator-CLAUDE.md` returns
+  nothing. He had explicitly said *"the banner is nice, but I want it internal"* — and got a better banner.
+- **#7** — *"returns limited to a reasonable amount"*: a `PostToolUse` detector that warns **after** the tokens
+  have landed.
+- **#3** — *"cap an agent, it self-dispatches"*: measured (`D187`), never built.
+- **#6** — *"use the hangs"*: `D192` made it a first-class capability and it lives as **prose**; a router that
+  blocks alone violates nothing.
+- **#10** — *"dispatch→clear→continue without me"*: built as headless `-p` (`D213`).
+In each case the hard half — **knowing when** — shipped, and the asked-for half — **doing something** — did not.
+A sensor is easier to build, easier to test, and passes every gate the actuator would have had to.
+
+**The fix, and it is a MECHANISM rather than an intention.** `11` gains an **ACCEPTANCE LEDGER**: the ten asks in
+his words, each mapped to what discharges it and its live state. It is the missing owner. Two rules attach to it:
+**an item with no ask behind it does not belong in the queue**, and **an ask with no item in it is work that has
+gone missing.** Every new entry in the sequence now cites its ask number. And any slice here must **name its
+actuator, or state plainly that none is possible and why** — because the current failure is not that the
+actuator was hard, it is that its absence was never visible.
+
+**Builds on:** **D80** (one owner per fact — the law this violated by omission), **D199** (whose own argument
+about a loop grading itself applies to this repo), **D213** (the fifth mismatch, found the same day).
+→ `11` (§ the acceptance ledger — new owner; § the ordered build sequence — five items queued).
