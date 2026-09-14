@@ -1172,3 +1172,20 @@ Both found by inspecting the live `-p` runs rather than by reasoning, and both a
   documented `flock -w` incantation, or `loop.sh` itself waiting for the window when it finds the lock held by a
   **driver** (distinguishable, since the driver could publish that it is one). Decide with the smoke drive, which
   is when this gets exercised for real.
+
+- **What ELSE can a `claude -p` session not do? Nobody has enumerated it, and the driver is built on it.
+  `[raised by the maintainer 2026-09-14 — "the plan is to drive the loop through claude -p not the harness?"]`**
+  The answer to the question as asked is **no**: `loop.sh` without `--drive` is still `exec claude "$@"`, the
+  interactive harness stays the normal way to work, and `--drive` is opt-in and unattended-only. `-p` is not a
+  preference — **`/clear` cannot be self-invoked and an interactive session cannot be fed turns
+  programmatically**, so a fresh process is the only mechanism for multi-session driving (`D202`).
+  **What the question exposes is real, though.** `claude -p` is a materially weaker environment and **two
+  capability gaps have now been found BY ACCIDENT while looking for something else**: no status line (so `D206`'s
+  band is blind — `c7269d4`) and `.claude/` write-guarded (so `/start` cannot complete — `D210`). Two for two,
+  neither predicted. **Nobody has ever enumerated the difference**, and every unknown item on that list is a
+  silent capability gap in the mode with the *least* supervision. Evidence in the other direction, also measured:
+  the **item loop itself survives `-p`** — a live drive ran `planner` → `execute` → `verify` → `document` →
+  `commit` through it with every on-disk contract holding (`D211`). So the core loop is fine and the *surrounding*
+  capabilities are unmapped. **Enumerate it during the smoke drive** — it is the one run that exercises both
+  environments against the same package, so the diff is cheap there and nowhere else. Until then, no claim that
+  a driven session is equivalent to an interactive one should be made in either direction.
