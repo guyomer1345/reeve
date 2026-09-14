@@ -7587,3 +7587,96 @@ actuator was hard, it is that its absence was never visible.
 **Builds on:** **D80** (one owner per fact — the law this violated by omission), **D199** (whose own argument
 about a loop grading itself applies to this repo), **D213** (the fifth mismatch, found the same day).
 → `11` (§ the acceptance ledger — new owner; § the ordered build sequence — five items queued).
+
+## D215 — the band ACTS: a `Stop` hook that will not let a turn end with the anchor unwritten, and a gate that separates *owing* one from *being safe to reset* **[DECIDED + BUILT 2026-09-14 — discharges ask #9; the prerequisite the supervisor (ask #10) waits on]**
+**The gap, stated exactly.** `D206` built a two-sided band in measured units of work, and **nothing in the loop
+ever read it**: `grep context_band` over `loop.md`, `loop-detail.md` and `orchestrator-CLAUDE.md` returned
+nothing. The maintainer had asked for the opposite of what he got — *"currently there is the banner which is
+nice, but again this is something I want to internally be a part of the repo"* — and received a better banner.
+`D214` names the pattern: **the sensor shipped and the actuator did not**, four times over.
+
+**The call — a routing rule AND the thing that makes it fire.** `loop.md`'s scheduler boundary now reads the
+gate (`context_band.py --gate --json`) and routes on it, and `hooks/handoff_gate.py` (`Stop`, no matcher)
+**blocks the turn from ending** while an anchor is owed. The rule alone would have repeated the defect: a
+routing rule is prose, and a session that simply does not run it violates nothing and nothing notices. **The
+actuator is the hook**; the rule is the cheaper, truer path that meets it before it fires.
+
+**THE ONE-LINE RULE IN `11` WAS WRONG IN ONE PLACE, and the correction is the substance.** It said: *if the band
+says `handoff-now` and no checkpoint is open, run `/dispatch` and say it is safe to clear.* That conflates two
+permissions with different fail directions, so the gate returns **two** verdicts:
+- **`needs_handoff`** — the band says `handoff-now` and `handoff.md` has not moved since it began saying so.
+  **Nothing may veto this.** Writing an anchor is always safe, and gating it on a reachable runtime root or an
+  empty checkpoint queue would withhold the anchor exactly when it matters most — a project whose runtime half
+  has gone missing still needs its place saved. Answerable from the repo mount alone: no `bus.py`, no
+  `runtime.json`, no subprocess.
+- **`clear_safe`** — the anchor is written **and** `parked_open == 0`. Its consumer is the supervisor, which
+  *resets a live session*, so here an unreadable runtime root reads as **"a human may be waiting"**. `None` is
+  not zero, and `blocked_by` says which.
+
+**FRESHNESS NEEDED A MOMENT TO BE FRESH RELATIVE TO** — the supervisor's gate is *"handoff freshly written"*, and
+"freshly" was undefined. Rejected: a TTL (a guess), and "mtime within N minutes" (the same guess wearing a unit).
+The call: **latch the instant the band ENTERED `handoff-now`**, recording `handoff.md`'s mtime as it was then
+(`.workflow/handoff-gate.json`); the anchor counts as written once its mtime passes that. Leaving `handoff-now`
+— in practice the turn after a `/clear` — disarms it, which is what makes the demand **once per fill cycle**
+rather than a nag on every turn thereafter.
+
+**PROBED, NOT ASSUMED** (`D213`'s standing lesson — assuming a mechanism instead of checking it is what put the
+band on a blind sensor). Read against the live hook reference, not from memory: `Stop` takes **no matcher**; the
+block shape is `hookSpecificOutput.decision: "block"` with `reason`; `additionalContext` is **ignored** for
+`Stop`, so the instruction has to ride the block reason; and **there is no `stop_hook_active` field** — so the
+loop stop is ours to keep. It is kept in the latch: after **two** demands with the anchor still unmoved the hook
+gives up, says the place is not saved, and lets the turn end. A hook that blocks forever wedges the session it
+was protecting. The older top-level `decision`/`reason` pair is emitted **alongside** the documented one, since
+shipped harnesses differ on which they read and the cost of both is a duplicated string.
+
+**Rejected, with reasons.**
+- **Picking ONE block mechanism.** Both documented ones fire: `exit 2` (which blocks a `Stop` regardless of
+  JSON output, with the instruction on stderr) **and** the JSON decision on stdout, in the documented
+  `hookSpecificOutput` spelling plus the older top-level one. This hook *is* the actuator — a block the running
+  harness happens not to honour leaves the slice exactly where it started — and the cost of carrying both is a
+  duplicated string.
+- **Folding the verdict into `drain.py list`**, so it arrives in context at a boundary the loop already visits:
+  cheaper, but it only fires where the orchestrator already chose to look, and the failure being fixed is a
+  session that *stops* without looking.
+- **A `PostToolUse` nag**: the same shape as ask #7's return bound — it warns after the fact and cannot act.
+  Choosing it here would have been the fourth repetition of `D214`'s pattern in the slice written to end it.
+- **Having the hook send `/clear`**: it cannot — a hook does not drive the session — and it should not. Writing
+  the anchor is the orchestrator's job because only it knows what a complete one says; the reset is the
+  supervisor's. `D213`'s split, unchanged.
+- **Blocking on `handoff-at-boundary`**: that verdict means runway remains, and interrupting a turn to spend it
+  would defeat the floor half of the band. The hook fires on `handoff-now` alone.
+
+**Four defects found while building, none of them the slice's subject.**
+1. **A sixth copy of the false "auto-rehydrates" claim** survived `D213`'s five-place correction, in
+   `dispatch.md` **step 5** — the very step that tells the human what to expect. Corrected, and the hook's own
+   instruction ends by saying the cleared session needs a bare `continue`.
+2. **`context_band.py`'s CLI ignored `config.context.warn_pct`** while the status line honoured it — the same
+   band answering two different questions depending on who asked. `warn_pct_configured` moved into
+   `context_band.py` as its one owner; the status line delegates.
+3. **`bus.Paths` raises `SystemExit`**, not an `Exception`, when the runtime pointer names a root that is gone
+   (the `/rebind` case). A plain `except Exception` around it would have crashed the gate on precisely the
+   projects that most need their anchor written.
+4. **A meta-gate whose negative controls had not run since `D205`.** The first whole-repo `pytest` of this slice
+   came back **15 failed**, all in `scripts/test_check_enum_coherence.py`, all `KeyError` — and all of them
+   **pre-existing at `HEAD`** (confirmed by re-running stashed). `D205` re-homed two enum owners to
+   `schemas-bus.md`; the fixture kept serving every owner out of one `schemas.md` blob, so two invariants
+   resolved to a missing key and their stale/extra controls stopped meaning anything. **The gate itself stayed
+   green against the real tree the whole time**, which is why nothing said so — and recent commits' *"1137 tests
+   green"* was a count over `product/scripts/` alone, not the repo. Fixed by **partitioning** the fixture, not by
+   serving the same blob under both paths: the latter passes while still never checking that the gate reads the
+   file it declares. **This is the slice's own pattern in the tooling** — a control that reports rather than
+   acts, found only because something ran it end to end.
+
+**Evidence.** 21 new tests (13 gate, 8 hook), each blocking assertion paired with its negative control: it stops
+blocking when the anchor lands, when runway remains, and when it has asked twice and been ignored. The hook is
+run as the harness runs it — `python3 handoff_gate.py` with the payload on stdin, against a tmp project laid out
+as an install lays one out — so the shipped `.claude/scripts` import path is under test rather than assumed.
+
+**What it unblocks.** The supervisor (ask #10) waits for a freshly written `handoff.md` and had nothing to wait
+for; `--gate`'s `clear_safe` is now that signal, and it is a **file, not a transcript**, so the poller needs no
+access to the session it is supervising.
+
+**Builds on:** **D136** (the interactive governor this completes), **D206** (the band), **D213** (the supervisor
+design and the `/clear`-does-not-self-start correction), **D214** (name the actuator).
+→ `11` (§ acceptance ledger #9 → discharged; § the ordered build sequence — the supervisor is now next),
+`product/shared/schemas-runtime.md` (§ `handoff-gate.json` — new owner).

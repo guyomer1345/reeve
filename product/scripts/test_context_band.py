@@ -166,3 +166,172 @@ def test_exit_code_encodes_urgency(tmp_path, capsys):
 def test_no_reading_at_all_is_not_an_error(tmp_path):
     """A session with no statusline configured must not look like a failure."""
     assert cb.main(["--workflow-dir", str(tmp_path)]) == 0
+
+
+# --- the gate: the half that acts --------------------------------------------
+#
+# The band above was right and read by nobody. Everything below is about the two verdicts that
+# turn it into a control, and about the one that must NEVER be inferred: `clear_safe`, whose
+# consumer resets a live session.
+
+def _wf(tmp_path, runway_nodes, window=1_000_000):
+    wf = str(tmp_path / ".workflow")
+    cb.publish(wf, *_at(runway_nodes, window), mono=time.monotonic())
+    return wf
+
+
+def _handoff(wf, text="# handoff\n", bump=0.0):
+    os.makedirs(wf, exist_ok=True)
+    path = os.path.join(wf, "handoff.md")
+    with open(path, "w") as fh:
+        fh.write(text)
+    if bump:
+        os.utime(path, (os.path.getatime(path), os.path.getmtime(path) + bump))
+    return path
+
+
+def test_handoff_now_with_no_anchor_OWES_one(tmp_path):
+    wf = _wf(tmp_path, 0.5)
+    d = cb.demand(wf)
+    assert d["verdict"] == "handoff-now"
+    assert d["needs_handoff"] is True
+    assert d["handoff_written"] is False
+
+
+def test_writing_the_anchor_DISCHARGES_the_demand(tmp_path):
+    """The negative control for the test above — without it the hook would block forever."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf)                              # an anchor that predates the demand
+    assert cb.demand(wf)["needs_handoff"] is True
+    _handoff(wf, "# fresh\n", bump=10)        # one written since
+    d = cb.demand(wf)
+    assert d["handoff_written"] is True
+    assert d["needs_handoff"] is False
+
+
+def test_freshness_is_measured_from_when_the_band_ENTERED_handoff_now(tmp_path):
+    """Not a TTL and not "recently" — an anchor written before the demand does not discharge it."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf)
+    cb.demand(wf)                                            # arms, latching that mtime
+    latched = cb._read_latch(wf)["armed_handoff_mtime"]
+    assert latched == pytest.approx(os.path.getmtime(os.path.join(wf, "handoff.md")))
+    assert cb.demand(wf)["needs_handoff"] is True            # same file, still owed
+
+
+def test_leaving_handoff_now_DISARMS_so_the_demand_is_once_per_fill(tmp_path):
+    """In practice this is the turn after a /clear. Without it the hook nags forever."""
+    wf = _wf(tmp_path, 0.5)
+    cb.demand(wf)
+    cb.record_demand(wf)
+    assert cb._read_latch(wf) is not None
+    cb.publish(wf, *_at(20), mono=time.monotonic())          # cleared: the window emptied
+    d = cb.demand(wf)
+    assert d["needs_handoff"] is False
+    assert cb._read_latch(wf) is None
+    assert d["demands"] == 0
+
+
+def test_no_arm_asks_without_latching(tmp_path):
+    wf = _wf(tmp_path, 0.5)
+    assert cb.demand(wf, arm=False)["needs_handoff"] is True
+    assert cb._read_latch(wf) is None
+
+
+def test_demands_counts_only_when_recorded(tmp_path):
+    """Asking must never inflate the loop-stop counter — the hook would give up early."""
+    wf = _wf(tmp_path, 0.5)
+    for _ in range(5):
+        cb.demand(wf)
+    assert cb.demand(wf)["demands"] == 0
+    assert cb.record_demand(wf) == 1
+    assert cb.demand(wf)["demands"] == 1
+
+
+def test_an_unwritten_anchor_is_never_clear_safe(tmp_path):
+    wf = _wf(tmp_path, 0.5)
+    g = cb.gate(wf)
+    assert g["clear_safe"] is False
+    assert any("no handoff has been written" in b for b in g["blocked_by"])
+
+
+def test_clear_safe_once_the_anchor_is_fresh_and_nobody_is_waiting(tmp_path):
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf)
+    cb.demand(wf)
+    _handoff(wf, "# fresh\n", bump=10)
+    g = cb.gate(wf)
+    assert g["parked_open"] == 0
+    assert g["clear_safe"] is True, g["blocked_by"]
+
+
+def test_a_parked_checkpoint_blocks_the_reset(tmp_path):
+    """`clear_safe` is not `needs_handoff` with extra steps — a person mid-conversation."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf)
+    cb.demand(wf)
+    _handoff(wf, "# fresh\n", bump=10)
+    os.makedirs(os.path.join(wf, "parked"))
+    with open(os.path.join(wf, "parked", "TCK-1.json"), "w") as fh:
+        json.dump({"ticket_id": "TCK-1"}, fh)
+    g = cb.gate(wf)
+    assert g["parked_open"] == 1
+    assert g["clear_safe"] is False
+    assert any("await a human verdict" in b for b in g["blocked_by"])
+
+
+def test_an_unreachable_runtime_root_reads_as_somebody_IS_waiting(tmp_path):
+    """`bus.Paths` raises SystemExit here (the /rebind case), which is not an Exception."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf)
+    cb.demand(wf)
+    _handoff(wf, "# fresh\n", bump=10)
+    with open(os.path.join(wf, "runtime.json"), "w") as fh:
+        json.dump({"runtime_root": str(tmp_path / "gone")}, fh)
+    g = cb.gate(wf)
+    assert g["parked_open"] is None            # None is NOT zero
+    assert g["clear_safe"] is False
+
+
+def test_a_missing_anchor_is_still_owed_not_excused(tmp_path):
+    wf = _wf(tmp_path, 0.5)                    # no handoff.md at all
+    assert cb.demand(wf)["needs_handoff"] is True
+
+
+def test_the_gate_never_fires_on_handoff_at_boundary(tmp_path):
+    """The middle verdict means there IS runway; interrupting a turn to spend it would defeat
+    the floor half of the band."""
+    wf = _wf(tmp_path, (cb.RESERVE_NODES + cb.COMFORTABLE_NODES) / 2.0)
+    d = cb.demand(wf)
+    assert d["verdict"] == "handoff-at-boundary"
+    assert d["needs_handoff"] is False
+
+
+def test_no_reading_owes_nothing(tmp_path):
+    """A session with no statusline configured must not be told it owes an anchor forever."""
+    wf = str(tmp_path / ".workflow")
+    os.makedirs(wf)
+    d = cb.demand(wf)
+    assert d["verdict"] == "unknown"
+    assert d["needs_handoff"] is False
+
+
+def test_gate_cli_exit_code_is_may_i_reset(tmp_path, capsys):
+    wf = _wf(tmp_path, 0.5)
+    assert cb.main(["--workflow-dir", wf, "--gate"]) == 1        # anchor owed
+    out = json.loads(capsys.readouterr().out)
+    assert out["needs_handoff"] is True
+    _handoff(wf, "# fresh\n", bump=10)
+    assert cb.main(["--workflow-dir", wf, "--gate"]) == 0        # reset is safe
+    assert json.loads(capsys.readouterr().out)["clear_safe"] is True
+
+
+def test_the_operator_ceiling_reaches_the_gate_too(tmp_path):
+    """It outranked the arithmetic in the statusline and was ignored by the CLI — one owner now."""
+    wf = _wf(tmp_path, 30)                                      # plenty of runway
+    assert cb.demand(wf)["verdict"] == "hold"
+    with open(os.path.join(wf, "config.json"), "w") as fh:
+        json.dump({"context": {"warn_pct": 1}}, fh)
+    d = cb.demand(wf, project_dir=str(tmp_path))
+    assert d["verdict"] == "handoff-now"
+    assert d["operator_ceiling"] == 1

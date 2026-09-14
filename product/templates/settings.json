@@ -97,6 +97,16 @@
         ]
       }
     ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/handoff_gate.py"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "matcher": "startup",

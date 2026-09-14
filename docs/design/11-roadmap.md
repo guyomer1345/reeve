@@ -1106,7 +1106,7 @@ below is a *reading* of it, and a reading can drift from its source. Argue from 
 | 6 | **use the hangs — dispatch during a wait** | `D192` decided; prose only | ⚠️ **OPEN** |
 | 7 | **returns limited to a reasonable size** + temp store with a deletion rule | `12b` · `D191` — store ✅, **limit advisory** | ⚠️ **OPEN (half)** |
 | 8 | goal-driven drive; stop when not progressing, re-research, continue | `12d` · `D199`/`D200` | ✅ |
-| 9 | **at 30–35%, RUN dispatch and tell me to clear** | `D206` band — **nothing reads it** | ⚠️ **OPEN** |
+| 9 | at 30–35%, RUN dispatch and tell me to clear | `12f` · `D215` — a `Stop` hook blocks the turn until the anchor is written | ✅ |
 | 10 | **autonomous dispatch→clear→continue, interruptible** | `12e` built headless `-p`; re-scoped `D213` | ⚠️ **OPEN** |
 
 **The pattern across the five, which is one defect rather than five** (`D214`): **the sensor was built and the
@@ -1114,6 +1114,9 @@ actuator was not.** A band that reports and nothing acts on · a detector that w
 · a measurement that concluded instead of enforcing · a parallelism rule written as prose. In each case the hard
 half — *knowing when* — shipped, and the asked-for half — *doing something* — did not. **Any new slice here is
 checked against that:** name the actuator, or say plainly that none is possible and why.
+**Three remain.** #9 was the first discharged under that rule (`D215`), and it is worth reading as the template:
+the routing rule was written *and* a `Stop` hook was built to make skipping it impossible — because the rule on
+its own would have been the same prose the ask already had.
 
 ### The ordered build sequence  ·  ▶ START HERE (D186's Steps 0–6 are ALL CLOSED — what comes next is the first subsection below)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
@@ -1127,18 +1130,24 @@ reading; it is **history, not the queue**.
 > does not belong in this queue, and an ask with no item in it is work that has gone missing — which is exactly
 > how five of ten were lost.**
 
-#### NEXT — make the loop ACT on the band. `[ask #9]` `[core, small, prerequisite]`
-**The smallest gap and the most embarrassing.** He wrote: *"currently there is the banner which is nice, but
-again this is something I want to internally be a part of the repo."* `D206` built a genuinely better band —
-two-sided, in nodes of runway, measured constants — and **nothing in the loop ever reads it**: `grep context_band`
-over `loop.md`, `loop-detail.md` and `orchestrator-CLAUDE.md` returns **nothing**. The banner was replaced with a
-better banner. **What is missing is one routing rule**: at a scheduler boundary, if `context_band.py` says
-`handoff-now` and no checkpoint is open, the orchestrator **runs `/dispatch` itself** and says it is safe to
-clear. **It is a PREREQUISITE for the supervisor below**, which waits for a freshly-written `handoff.md` and has
-nothing to wait for until the orchestrator writes one on its own. Budget: the always-loaded set is at
-**6393/6400**, so this must **relocate**, not grow — `loop-detail.md` is the on-demand sibling.
+#### `12f` — make the loop ACT on the band. ✅ **CLOSED 2026-09-14 — `D215`.** `[ask #9]`
+Built: `context_band.py --gate` (two verdicts, not one), `hooks/handoff_gate.py` (a `Stop` hook that **blocks
+the turn** while an anchor is owed), the routing rule at `loop.md`'s scheduler boundary, and
+`.workflow/handoff-gate.json` as the freshness latch. **`D215` owns the calls and what building it found** — not
+restated here. The one thing that changed shape: this entry's own instruction *"if the band says `handoff-now`
+and no checkpoint is open, run `/dispatch`"* **conflated two permissions**. Writing an anchor may be vetoed by
+nothing (an unreachable runtime root is when it matters most); *resetting the session* must be vetoed by an open
+checkpoint or an unreadable one. So the gate answers `needs_handoff` and `clear_safe` separately, and only the
+second asks about checkpoints. Budget held — `loop.md` 2876 → 3017/3200, detail in `loop-detail.md`.
+**Three unrelated defects fell out of it** and are in `D215`: a **sixth** copy of the false "auto-rehydrates"
+claim (in `dispatch.md` step 5, the step that tells the human what to expect), a CLI that ignored the operator's
+`warn_pct` while the status line honoured it, and `bus.Paths` raising `SystemExit` — not `Exception` — on the
+`/rebind` case.
 
-#### Then — the self-clearing supervisor (the maintainer's design, 2026-09-14). `[ask #10]` `[core]`
+#### NEXT — the self-clearing supervisor (the maintainer's design, 2026-09-14). `[ask #10]` `[core]`
+**Its prerequisite is now in place:** `12f` makes the orchestrator write an anchor on its own, and
+`context_band.py --gate` publishes `clear_safe` — a **file**, not a transcript, so the poller needs no access to
+the session it supervises. Poll it; reset when it is true.
 **The thing `12e` was asked for and did not build.** The ask was: *let the loop keep going past a full context —
 clear and resume itself — without me typing `/clear`.* `12e` answered it with `loop.sh --drive`, a shell loop
 around **`claude -p`**, which self-clears but is **headless**: no UI, no live tool calls, no status line. The
@@ -1404,7 +1413,7 @@ listed here as unscheduled, was **BUILT the same day — `D206`**. It turned out
 `warn_pct` measurement at all: the blocker was that the statusline could see a token count and not act on it
 while the loop could act and not see, and crossing that wall needed no number.)*
 
-### Phase 12 — Standing intent: make the operator's recurring instructions part of the machine **[OPEN 2026-09-13 — designed D185, NOT BUILT. Opened from LIVED USE, not from a premise re-check (Phase 10) or an instrument reading (Phase 11): the maintainer noticed what he keeps re-typing. Org mode is explicitly parked and no slice here touches it]**
+### Phase 12 — Standing intent: make the operator's recurring instructions part of the machine **[OPEN 2026-09-13 — designed D185; per-slice state lives in `### The ordered build sequence` above, which owns it. Opened from LIVED USE, not from a premise re-check (Phase 10) or an instrument reading (Phase 11): the maintainer noticed what he keeps re-typing. Org mode is explicitly parked and no slice here touches it]**
 Five behaviours were being re-established conversationally, session after session, and every one of them decays at
 the next `/clear`. They have **one root cause** — there is no owner in the package for a standing operator
 directive about how the *loop* behaves (`docs/decisions/` is build decisions, `rules/` is product code enforced by
@@ -1455,6 +1464,12 @@ fraction full). And the decision log **is** mirrored into a target as `docs/deci
   `kind: control` `pause|resume|reprioritize` at the boundary), plus a **drop-in window** between sessions that
   releases the lock and hands over an interactive session. Goal met ⇒ capture, notify, stop for re-steering.
   **LAST — it multiplies any defect in 12a–12d across unattended sessions.** **[core]**
+- **12f — the band, acted on.** Added after the fact, from `D214`'s finding that this phase's asks were being
+  closed with sensors. The band (`D206`) was read by nobody, so it is read at the scheduler boundary *and* a
+  `Stop` hook blocks a turn from ending while the anchor is owed — the rule alone would have been the same prose
+  the ask already had. Splits the one permission into two (`needs_handoff` may be vetoed by nothing;
+  `clear_safe` is vetoed by an open or unreadable checkpoint queue), which is what the supervisor polls.
+  Full call: **D215**. **[core]**
 - **Measurement, not a slice — the per-agent token budget.** Runs beside 12b and feeds it. The observed 300–400k
   per `execute` may be the artifact D180 already corrected (the instrument read **2.8–3.5× high**; real `execute`
   was 119.1k fed-in over a 60.5k peak). `scripts/measure-dispatch.py` settles it before anything is built on it.

@@ -985,6 +985,11 @@ sub-questions deferred to the build, in the order the slices need them.
   operator ceiling that outranks the arithmetic. **Only the three constants still want measurement**, and they
   sit in one file. *(Original entry below, including the obstacle analysis that turned out to be the useful
   part.)*
+  **The ACTING half closed a day later — `D215`.** This entry asked for something that *fires in the background*
+  and **guides when to run `/dispatch`**; `D206` delivered the arithmetic and left the guiding to a human reading
+  a banner, which `D214` then caught as the phase's pattern. A `Stop` hook now blocks a turn from ending while
+  the anchor is owed, and the scheduler boundary routes on the verdict. The entry is fully discharged only as of
+  `D215`.
 - **~~[built as D206]~~ The dispatch trigger must be a two-sided BAND fired in the background, not a one-sided banner. `[raised by the
   maintainer 2026-09-13; downstream of the `warn_pct` measurement above, and a `12e` prerequisite candidate]`**
   Stated as a requirement, not yet a design: once the router's ideal threshold is measured (say it lands at 30%),

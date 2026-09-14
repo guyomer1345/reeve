@@ -42,6 +42,34 @@ hard one.
 FAIL DIRECTION. An unreadable or stale reading yields `unknown`, never `hold`. A wrong `hold`
 tells a session to keep filling a window it should be leaving, and the cost of that is a
 session that stops with no anchor written.
+
+THE GATE — the half that ACTS, added because the band above was read by nobody. For its first
+life this module was a better banner and nothing more: `grep context_band` over the loop's own
+routing docs returned nothing, so a two-sided, measured, well-argued verdict was printed at a
+human and then dropped. The sensor shipped and the actuator did not, which is a failure this
+package has now made four times over.
+
+The gate answers two questions that were previously conflated into one, and separating them is
+the substance:
+
+    needs_handoff   The band says `handoff-now` and no anchor has been written since it began
+                    saying so. Writing an anchor is ALWAYS safe, so this is deliberately not
+                    gated on anything else -- not on whether a checkpoint is open, not on
+                    whether the runtime half is reachable. Its consumer is `hooks/handoff_gate.py`,
+                    a `Stop` hook, which BLOCKS the turn from ending until the anchor exists.
+                    That is the actuator: a session cannot spend its reserve and then quietly
+                    stop with nothing to resume from.
+    clear_safe      The band says `handoff-now`, the anchor IS written, and nothing is waiting
+                    on a human. Its consumer is the supervisor, whose whole job is the reset
+                    (`/clear` then `continue`) and which must never reset a session that a
+                    person is mid-conversation with.
+
+FRESHNESS NEEDS A MOMENT TO BE FRESH RELATIVE TO, and that moment is when the band ENTERED
+`handoff-now` -- not "recently", not a TTL. So `gate()`/`demand()` latch it: the first call that
+sees `handoff-now` records the anchor's mtime as it was at that instant
+(`.workflow/handoff-gate.json`), and the anchor counts as written once its mtime moves past it.
+Leaving `handoff-now` -- which in practice means the session was cleared -- disarms the latch, so
+the demand is made once per fill cycle rather than nagging every turn afterwards.
 """
 import argparse
 import json
@@ -63,6 +91,12 @@ RESERVE_NODES = 2
 COMFORTABLE_NODES = 5
 
 STALE_SECONDS = 900          # a reading older than this describes a session that is likely gone
+
+# The latch that gives "freshly written" a moment to be fresh relative to. Beside `context.json`
+# on the repo mount deliberately: the `Stop` hook reads it every turn and must not have to
+# resolve the runtime root to do so (a project whose runtime half has gone missing still needs
+# its anchor written -- that is exactly when it needs it most).
+GATE_FILE = "handoff-gate.json"
 
 
 def band(used_tokens, window_tokens, warn_pct=None):
@@ -144,15 +178,189 @@ def publish(workflow_dir, used_tokens, window_tokens, mono):
         return False
 
 
+def warn_pct_configured(project_dir):
+    """`config.context.warn_pct` as the operator SET it, or None when they did not.
+
+    Lives here rather than in the status line because it is an input to the BAND, and the band
+    now has two readers -- the status line and the gate below. An explicitly set percentage is a
+    standing instruction that outranks the arithmetic; an ABSENT one must not be silently
+    materialised into a ceiling nobody asked for, which would make the band unreachable (a 30%
+    default fires long before runway ever runs low).
+    """
+    try:
+        with open(os.path.join(project_dir, ".workflow", "config.json"), encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        pct = (cfg.get("context") or {}).get("warn_pct")
+        if isinstance(pct, (int, float)) and 0 < pct <= 100:
+            return float(pct)
+    except Exception:
+        pass
+    return None
+
+
+def _mtime(path):
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
+def _read_latch(workflow_dir):
+    try:
+        with open(os.path.join(workflow_dir, GATE_FILE), encoding="utf-8") as fh:
+            val = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return val if isinstance(val, dict) else None
+
+
+def _write_latch(workflow_dir, latch):
+    """Best-effort and never raising -- every caller runs inside a hook or a status line."""
+    try:
+        os.makedirs(workflow_dir, exist_ok=True)
+        tmp = os.path.join(workflow_dir, "." + GATE_FILE + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(latch, fh, sort_keys=True)
+        os.replace(tmp, os.path.join(workflow_dir, GATE_FILE))
+        return True
+    except OSError:
+        return False
+
+
+def _clear_latch(workflow_dir):
+    try:
+        os.remove(os.path.join(workflow_dir, GATE_FILE))
+    except OSError:
+        pass
+
+
+def record_demand(workflow_dir):
+    """Count one demand made. The `Stop` hook's loop-stop: after MAX_DEMANDS it gives up and
+    lets the turn end, because a hook that blocks forever wedges the session it was protecting.
+    Separate from the latch's arming so that merely ASKING the gate never inflates the count."""
+    latch = _read_latch(workflow_dir) or {}
+    latch["demands"] = int(latch.get("demands") or 0) + 1
+    _write_latch(workflow_dir, latch)
+    return latch["demands"]
+
+
+def demand(workflow_dir, project_dir=None, now=None, arm=True):
+    """Does this session owe an anchor right now? -- the half with no dependencies.
+
+    Deliberately answerable from the repo mount alone: no runtime root, no `bus.py`, no
+    subprocess. Writing a handoff is always safe, so nothing here may veto it.
+    """
+    if project_dir is None:
+        project_dir = os.path.dirname(os.path.abspath(workflow_dir)) or "."
+    reading = read_reading(workflow_dir, now=now)
+    if reading:
+        out = dict(band(reading.get("used"), reading.get("window"),
+                        warn_pct_configured(project_dir)))
+    else:
+        out = {"verdict": "unknown",
+               "reason": "no recent context reading — the statusline publishes it, so this is "
+                         "either a session with no statusline configured or one that has not "
+                         "rendered yet"}
+
+    handoff = os.path.join(workflow_dir, "handoff.md")
+    latch = _read_latch(workflow_dir)
+
+    if out["verdict"] != "handoff-now":
+        # Disarm. In practice this is the post-`/clear` turn: the window emptied, so the demand
+        # is discharged and the next fill cycle gets a fresh one rather than a stale count.
+        if arm and latch is not None:
+            _clear_latch(workflow_dir)
+        out.update({"needs_handoff": False, "handoff_written": False, "demands": 0,
+                    "armed_at_mtime": None})
+        return out
+
+    if latch is None:
+        latch = {"armed_handoff_mtime": _mtime(handoff), "demands": 0}
+        if arm:
+            _write_latch(workflow_dir, latch)
+
+    armed = float(latch.get("armed_handoff_mtime") or 0.0)
+    written = _mtime(handoff) > armed
+    out.update({"needs_handoff": not written, "handoff_written": written,
+                "demands": int(latch.get("demands") or 0), "armed_at_mtime": armed})
+    return out
+
+
+def _parked_open(workflow_dir):
+    """How many checkpoints are waiting on a human — or None when that cannot be established.
+
+    Counted from `parked/` itself, not from the mirror in `handoff.md`: the mirror is a
+    projection, and a projection is the wrong thing to ask when the question is "is a person
+    genuinely blocked". `bus.py` owns the path resolution, so it is imported rather than
+    re-derived — lazily, because this is the only part of the gate that costs anything and the
+    `Stop` hook never asks it.
+
+    None is NOT zero. An unreachable runtime root means nobody can say whether a human is
+    waiting, and the consumer of that answer resets a live session — so it must read as "do not".
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import bus
+        paths = bus.Paths(workflow_dir)
+        if not os.path.isdir(paths.runtime):
+            return None
+        return len([n for n in os.listdir(paths.parked) if n.endswith(".json")])
+    except FileNotFoundError:
+        return 0            # a reachable runtime root that has simply never parked anything
+    except (Exception, SystemExit):
+        # `SystemExit` is deliberate and not defensive padding: `bus.Paths` RAISES it when the
+        # runtime pointer names a root that is gone — the /rebind case — and `SystemExit` is not
+        # an `Exception`. Caught here it becomes `None`, which reads as "a human may be waiting".
+        return None
+
+
+def gate(workflow_dir, project_dir=None, now=None, arm=True):
+    """The full verdict, including whether a supervisor may reset this session."""
+    out = demand(workflow_dir, project_dir=project_dir, now=now, arm=arm)
+    blocked = []
+    if out["verdict"] != "handoff-now":
+        blocked.append("the band says %s, not handoff-now" % out["verdict"])
+    if not out["handoff_written"]:
+        blocked.append("no handoff has been written since the band began asking for one")
+    n = _parked_open(workflow_dir)
+    out["parked_open"] = n
+    if n is None:
+        blocked.append("the open-checkpoint record is unreadable — nothing can say a human is "
+                       "not waiting, so this reads as though one is")
+    elif n > 0:
+        blocked.append("%d checkpoint(s) await a human verdict" % n)
+    out["clear_safe"] = not blocked
+    out["blocked_by"] = blocked
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Should this session hand off yet?")
     ap.add_argument("--workflow-dir", default=".workflow")
+    ap.add_argument("--project-root", default=None,
+                    help="where .workflow/config.json's operator ceiling is read from "
+                         "(default: the parent of --workflow-dir)")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--gate", action="store_true",
+                    help="the ACTING verdict: needs_handoff / clear_safe / blocked_by. Always "
+                         "JSON — this surface is read by the Stop hook and the supervisor, not "
+                         "by eyes. Exit 0 iff a reset is safe RIGHT NOW, 1 otherwise.")
+    ap.add_argument("--no-arm", action="store_true",
+                    help="ask without latching the moment the band entered handoff-now "
+                         "(a pure read; use it when inspecting, never when driving)")
     args = ap.parse_args(argv)
 
     import time
+    if args.gate:
+        g = gate(args.workflow_dir, project_dir=args.project_root, now=time.monotonic(),
+                 arm=not args.no_arm)
+        print(json.dumps(g, indent=2, sort_keys=True))
+        return 0 if g["clear_safe"] else 1
+
     r = read_reading(args.workflow_dir, now=time.monotonic())
-    v = band(r.get("used"), r.get("window")) if r else {
+    warn = warn_pct_configured(args.project_root
+                               or os.path.dirname(os.path.abspath(args.workflow_dir)) or ".")
+    v = band(r.get("used"), r.get("window"), warn) if r else {
         "verdict": "unknown",
         "reason": "no recent context reading — the statusline publishes it, so this is either a "
                   "session with no statusline configured or one that has not rendered yet"}

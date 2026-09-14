@@ -102,6 +102,12 @@ that directory and collects consumed messages itself).
 → **What each kind does and its idempotence anchor, and why the drain is split between `drain.py` and
 judgment: `loop-detail.md § the boundary drain, by kind`.**
 
+**Read the context gate here too** — `python3 .claude/scripts/context_band.py --gate --json`.
+`handoff-at-boundary` ⇒ finish the drain, write `handoff.md`, then stop picking. `handoff-now` ⇒ write it
+**now**, before anything else, and say a `/clear` is safe. A `Stop` hook enforces the `handoff-now` half, so
+skipping it is not silent — but it fires mid-turn, where a boundary handoff is cheaper and truer.
+→ **`loop-detail.md § the context gate`.**
+
 → **If the item being picked has a frozen `.workflow/forecasts/<id>.json`, run the divergence check before
 starting work — boundary only, never mid-item: `loop-detail.md § forecast divergence check`.**
 

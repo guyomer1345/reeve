@@ -148,6 +148,10 @@
     {
       "src": "hooks/precompact.py",
       "dest": ".claude/hooks/precompact.py"
+    },
+    {
+      "src": "hooks/handoff_gate.py",
+      "dest": ".claude/hooks/handoff_gate.py"
     }
   ]
 }

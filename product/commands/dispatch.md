@@ -12,6 +12,10 @@ because a 200k and a 1M window at the same percentage full leave very different 
 **A `hold` is a real verdict:** running `/dispatch` early is not free, it pays a cold rebuild for
 a window that still had work in it. Ask any time with
 `python3 .claude/scripts/context_band.py --workflow-dir .workflow`.
+**The band is now acted on, not only shown.** `--gate` adds the two verdicts a driver needs — whether an
+anchor is owed (`needs_handoff`) and whether a reset is safe (`clear_safe`) — the loop reads it at every
+scheduler boundary (`loop.md § Scheduler boundary`), and a `Stop` hook blocks a turn from ending while an
+anchor is owed. Running `/dispatch` at the boundary is how you meet that gate before it fires.
 `/dispatch` is the manual reset step: it writes a **complete, current** `.workflow/handoff.md` so that a `/clear` loses
 no build state. The SessionStart hook re-injects that anchor on `/clear`, so the next prompt
 resumes from it — **but a cleared session does not start on its own.** It sits idle until you
@@ -52,5 +56,7 @@ You (the orchestrator) do this now, in this turn:
 4. **Do not commit and do not run `verify`/`document`** — `/dispatch` is a mid-session context
    snapshot, not an item-close. If you happen to be at a clean item boundary you may follow the
    normal tail, but `/dispatch` itself only writes the anchor.
-5. **Tell the human plainly:** the handoff is written and it is now safe to `/clear`; on the next
-   session the loop resumes automatically from the anchor.
+5. **Tell the human plainly:** the handoff is written and it is now safe to `/clear` — and that the
+   cleared session needs a bare `continue`, because it **does not start on its own**. `SessionStart`
+   re-injects the anchor as context, and context is not a turn. (This step said "resumes
+   automatically" for as long as the claim was believed; it was the sixth copy of it.)

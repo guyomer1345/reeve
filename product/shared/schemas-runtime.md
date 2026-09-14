@@ -217,6 +217,23 @@ worse than no verdict.
 **Published best-effort and never fatally:** it is written from inside the status line, and a status line that
 raises blanks itself. A lost reading degrades the band to `unknown`, which is the safe direction — `unknown` is
 never `hold`, because a wrong `hold` tells a session to keep filling a window it should be leaving.
+**The acting end of that crossing is `handoff-gate.json` below** — for its first life this reading was still
+read by nobody but a human, which made the band a better banner rather than a control.
+
+## handoff-gate.json  · latched by `context_band.py` (`demand`/`gate`), counted by `hooks/handoff_gate.py` · *`.workflow/handoff-gate.json`; RUNTIME, gitignored, atomic write (temp + `os.replace`); lives beside `context.json` on the repo mount, deliberately NOT on the runtime half*
+- `{ armed_handoff_mtime, demands }` — the mtime `handoff.md` had at the instant the band **entered**
+  `handoff-now`, and how many times the `Stop` hook has demanded an anchor since.
+**It exists to give "freshly written" a moment to be fresh relative to.** Both consumers of the gate need that
+word: the `Stop` hook must stop demanding once the anchor exists, and the supervisor must not reset a session
+whose anchor predates the demand. A TTL or a "recently" would have been a guess; the latched mtime is a fact.
+**Armed and disarmed by asking.** The first `demand()`/`gate()` call that sees `handoff-now` writes it; the first
+that sees anything else removes it — in practice the turn after a `/clear`, which is what makes the demand
+once-per-fill-cycle rather than a nag. `--no-arm` asks without latching, for inspection only.
+**`demands` is a loop stop, not a metric.** Claude Code's `Stop` payload carries no `stop_hook_active`, so the
+count lives here; past `MAX_DEMANDS` the hook gives up and lets the turn end. A hook that blocks forever wedges
+the session it was protecting.
+**On the repo mount on purpose.** A project whose runtime root has gone missing still needs its anchor written —
+that is precisely when it needs it most — so nothing in this path may require resolving `runtime.json`.
 
 ## spec-approval.json  · written by `checkpoint` on an approve that crosses the autonomy floor, read by `checks.sh --check` · *`.workflow/spec-approval.json`; **COMMITTED** — it must ride the commit it authorises, the same law as `commit-receipt`; atomic write; rewrite-in-place (one live approval, history in git)*
 - `{ spec_sha256, ticket_id, spec_path }` — the digest of `docs/spec.md` **as approved**.

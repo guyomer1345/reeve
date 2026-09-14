@@ -10,14 +10,27 @@ import check_enum_coherence as e  # noqa: E402
 # An `integrations` kind: line BEFORE `request` — the anchor must not grab it.
 # The `inbox` kind: line has no `request`, so the checkpoint anchor skips it and
 # the inbox anchor (starts on `verdict|`) can't grab the demo|qa|… request line.
-SCHEMAS = """\
+# Two fixtures, because two of the five owners MOVED: D205 re-homed `checkpoint.kind` and
+# `checkpoint.verdict.outcome` to `schemas-bus.md`, and this file kept serving every owner line
+# out of one `schemas.md` blob. The gate reads the owner it declares, so those two invariants
+# were resolving to a KeyError and 15 tests here failed for a year of commits while the gate
+# itself stayed green against the real tree — a gate whose negative controls do not run.
+# Partitioned rather than duplicated: serving the same blob under both paths would have made
+# the tests pass again while still not checking that the gate looks in the declared file.
+SCHEMAS_BUS = """\
 - `integrations[]` — `{ name, kind: auth|payments, ... }`
 - `request` — `{ kind: demo|qa|setup|reconcile, what, blocking: true }`
 - `verdict` — `{ outcome: approve|changes|reject, notes }`
+"""
+SCHEMAS_MAIN = """\
 - inbox message is typed — `kind: verdict|intake|control` — one transport
 - **`kind: control`** — `{ op: reprioritize|pause|resume }` — honored at a boundary
 - `item` — the motion's item id · `kind: align|document:audit|doc-budget|update` — the motion that ran
 """
+# The whole set in one blob, for the anchor/collision unit tests below: their point is that the
+# five owner regexes cannot grab each other's lines, which is only worth asserting when every
+# line is present to be grabbed.
+SCHEMAS = SCHEMAS_BUS + SCHEMAS_MAIN
 
 # A CODE consumer declares the set as a literal. The prose word-search is worthless
 # against one: "resume" and "pause" are ordinary English that appear in any docstring
@@ -136,7 +149,8 @@ class Helpers(unittest.TestCase):
 class Enums(unittest.TestCase):
     def _files(self, roster, shared05=SHARED05_OK, bus=BUS_OK,
                verify=VERIFY_OK, loop=LOOP_OK):
-        return {"product/shared/schemas.md": SCHEMAS,
+        return {"product/shared/schemas.md": SCHEMAS_MAIN,
+                "product/shared/schemas-bus.md": SCHEMAS_BUS,
                 "product/skills/checkpoint/SKILL.md": CHECKPOINT,
                 "docs/design/10-roster.md": roster,
                 "docs/design/05-shared-state.md": shared05,

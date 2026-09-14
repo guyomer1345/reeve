@@ -3,8 +3,9 @@
 The on-demand half of the routing graph. [`loop.md`](loop.md) holds what the
 orchestrator needs **every turn** — the routing table, the side doors and the boundary order — and is
 budgeted as an always-loaded doc (`doc_budget.always_hard`, and its share of `always_total_hard`). This file holds the parts that are read
-**when the situation arises**: the per-kind drain semantics, the forecast divergence check, the one-time
-stack-wiring transition, and the maintenance-item contract. Each has a one-line pointer from `loop.md`.
+**when the situation arises**: the per-kind drain semantics, the context gate, the forecast divergence
+check, the one-time stack-wiring transition, and the maintenance-item contract. Each has a one-line pointer
+from `loop.md`.
 
 Split out of `loop.md` when that file crossed its always-loaded hard budget, per the split-and-pointer
 convention in [`memory-model.md`](../shared/memory-model.md). `loop.md § <name>` for any section below resolves
@@ -60,6 +61,36 @@ judgment — which ticket a verdict resumes, whether an ask is worth promoting a
 rejection routes — and that half stays with the orchestrator. `record` recomputes `consumed_through` (the
 low-watermark: every message at or below it is consumed, so the bus may collect it) and **prunes the
 consumed-set to ids above it**, which is what keeps `handoff.md` bounded — a cold start reads that file whole.
+
+
+## the context gate
+`python3 .claude/scripts/context_band.py --gate --json` at the scheduler boundary. It returns the band
+(`hold` / `handoff-at-boundary` / `handoff-now`) plus the two things the band alone never said:
+
+- **`needs_handoff`** — the band says `handoff-now` and `handoff.md` has not moved since it started saying so.
+  This is **yours**: rewrite the anchor, then say plainly that a `/clear` is safe and that the cleared session
+  needs a bare `continue` — it does not start on its own.
+- **`clear_safe`** — the anchor is written **and** nothing is waiting on a human (`parked_open == 0`). This one
+  is not for you; it is what a supervisor reads before resetting the session. `blocked_by` says why not.
+
+**Why both, when the old rule was one flag.** Writing an anchor is always safe, so nothing may veto it — not an
+open checkpoint, not an unreachable runtime root, which is exactly when the anchor matters most. *Resetting* a
+session is not always safe. Conflating them either withholds the anchor or clears the screen a person was
+mid-conversation with.
+
+**A `Stop` hook enforces the `handoff-now` half.** `hooks/handoff_gate.py` blocks the turn from ending until the
+anchor exists. It is a **backstop, not the path**: it fires mid-turn, wherever you happen to be, while a
+boundary handoff is written at a clean seam and is both cheaper and truer. Meet it here and it never fires. It
+gives up after two demands rather than wedging the session, and says so when it does — a turn that can never end
+costs more than an unwritten anchor.
+
+**`handoff-at-boundary` is this boundary.** Finish the drain, write the anchor, stop picking. The hook does not
+fire on it, by design: that verdict means there is still runway, and interrupting a turn to spend it would
+defeat the floor half of the band.
+
+**The band is derived, and `context.json` is its only input** — published by the status line, which is the one
+surface Claude Code exposes a token count to. A session with no status line configured gets `unknown`, and
+`unknown` never reads as `hold`.
 
 ## the dispatch boundary
 `loop.md` carries the rule. This is how the batch is actually formed, and why the failure direction is what it is.

@@ -21,7 +21,8 @@ construction record and the shipped package stop sharing a namespace). Paths bel
   `settings.json` (loop permission rules: `allow` local / outward via the outbox), and the fixed
   `checks.sh` mechanical-gate runner (D52/D57/D58; `checks.sh` D127)
 - `hooks/` — the enforced gates installed to `.claude/hooks/`: `guard.sh` (secret-scan + verify-before-commit +
-  the push floor), `pre-commit.sh`, the shared `verify_check.py`, `session_start.py`, `precompact.py` (D58/D110/D129/D136/D144)
+  the push floor), `pre-commit.sh`, the shared `verify_check.py`, `session_start.py`, `precompact.py`, `handoff_gate.py` (the `Stop` gate that
+  makes the context band a control rather than a banner) (D58/D110/D129/D136/D144/D215)
 - `scripts/` — the shipped helpers `/start` copies to `.claude/scripts/` per the manifest `install[]` map
   (the daemon, drain, retention, code-map engine, coverage gates, reconcile + rebind runners, statusline)
 

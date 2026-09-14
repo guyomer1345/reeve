@@ -41,34 +41,22 @@ def _project_dir(status):
 def _warn_pct_configured(project_dir):
     """config.context.warn_pct as the operator SET it, or None when they did not.
 
-    Distinct from `_warn_pct` below, and the distinction is load-bearing: an explicitly set
-    percentage is a standing instruction that outranks the band's arithmetic, while an ABSENT
-    one must not be silently materialised into a ceiling nobody asked for — that would make the
-    band unreachable, since a default 30% ceiling fires long before runway ever runs low.
+    One line, because the reading MOVED: it is an input to the band, the band now has a second
+    reader (the gate), and a percentage read two ways is the drift this package keeps paying for.
+    `context_band.warn_pct_configured` owns it; this name survives as the local spelling.
     """
     try:
-        with open(os.path.join(project_dir, ".workflow", "config.json")) as fh:
-            cfg = json.load(fh)
-        pct = (cfg.get("context") or {}).get("warn_pct")
-        if isinstance(pct, (int, float)) and 0 < pct <= 100:
-            return float(pct)
+        import context_band
+        return context_band.warn_pct_configured(project_dir)
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _warn_pct(project_dir):
     """The percentage to use when runway is NOT computable (no window size reported). Absent →
     the shipped default, because in that degraded path a coarse signal beats none."""
-    try:
-        with open(os.path.join(project_dir, ".workflow", "config.json")) as fh:
-            cfg = json.load(fh)
-        pct = (cfg.get("context") or {}).get("warn_pct")
-        if isinstance(pct, (int, float)) and 0 < pct <= 100:
-            return float(pct)
-    except Exception:
-        pass
-    return float(WARN_PCT_DEFAULT)
+    pct = _warn_pct_configured(project_dir)
+    return float(WARN_PCT_DEFAULT) if pct is None else pct
 
 
 def _tokens(status):
