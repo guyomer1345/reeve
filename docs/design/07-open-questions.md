@@ -1148,3 +1148,27 @@ slice inherits whether or not anyone looks at it.
   validation is the same one `D198` named: real `planner`/`execute` agents through a live `/start`. It has been
   carried across three slices and is no longer a footnote — **it is the largest single unknown in Phase 12**, and
   every mechanism built since `12c` has been proven against a scripted stand-in.
+
+## Newly open from asking how a DRIVE is watched (2026-09-14, before the clear)
+Both found by inspecting the live `-p` runs rather than by reasoning, and both are about the
+**unattended** mode specifically — the one with the least evidence behind it.
+
+- **The context band is BLIND during a drive, which is the mode it was built for. `[D206 residual — sharp]`**
+  `statusline.py` is the band's only sensor, and **the status line does not run under `claude -p`**. Measured on
+  the live drives: the target had a `statusLine` configured in `settings.json` and `.workflow/context.json` was
+  **never created** across every `-p` session. So `context_band.py` reads *"no recent context reading"* and
+  returns `unknown` for the entire duration of an unattended run. `D206` crossed the sensor/actuator wall for the
+  **interactive** case and left the unattended one exactly where it was. Consequences: a driven session has no
+  hand-off governor at all, and `drive.py` cannot consult the band between sessions either (it was never wired
+  to — correctly at the time, since there is nothing to read). **Candidate fixes, none obviously right:** a
+  `Stop`/`PostToolUse` hook that publishes what it can see (hooks get no token metrics — this may be impossible);
+  the driver estimating runway from its own transcript the way `D187`'s instrument reads a subagent's; or
+  accepting that a driven session is bounded by the session, not by the band, and saying so.
+- **The 5-second drop-in window is too short for a human to take by hand. `[D202 residual]`** `REEVE_DROPIN_SECONDS`
+  defaults to 5, and the handover is *whoever takes the lock keeps it*. The exit test only wins that race because
+  it uses `flock -w 20` to **wait** for the window; a human typing `loop.sh` into a terminal has a 5-second target
+  and will usually get *"an orchestrator already holds the lock"* instead — which reads as a refusal rather than
+  as "you mistimed it". The mechanism is right and the ergonomics are not. Options: a much longer default, a
+  documented `flock -w` incantation, or `loop.sh` itself waiting for the window when it finds the lock held by a
+  **driver** (distinguishable, since the driver could publish that it is one). Decide with the smoke drive, which
+  is when this gets exercised for real.
