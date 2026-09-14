@@ -24,6 +24,14 @@ HOOK = HERE.parent / "hooks" / "handoff_gate.py"
 M = cb.PER_NODE_TOKENS
 
 
+
+# A REAL anchor: fresh mtime is only half of "written" — `context_band` also requires the
+# anchor to name a base commit, because a resume reads `git log <base_sha>..HEAD` and one
+# without it cannot say what moved (`D219` #3). A bare "# handoff" is the exact shape a
+# real drive produced and nothing caught.
+ANCHOR = "# handoff\n\nbase_sha: 1a2b3c4\n"
+FRESH = "# fresh\n\nbase_sha: 9f8e7d6\n"
+
 def _project(tmp_path, runway_nodes=0.5, window=1_000_000, with_scripts=True):
     """A project as installed: the band under .claude/scripts, a reading under .workflow."""
     wf = tmp_path / ".workflow"
@@ -44,7 +52,7 @@ def _run(cwd, **extra):
                           cwd=str(cwd), capture_output=True, text=True)
 
 
-def _anchor(cwd, text="# handoff\n", bump=0.0):
+def _anchor(cwd, text=ANCHOR, bump=0.0):
     path = Path(cwd) / ".workflow" / "handoff.md"
     path.write_text(text)
     if bump:
@@ -81,7 +89,7 @@ def test_it_stops_blocking_once_the_anchor_lands(tmp_path):
     """The negative control. Without it the hook is a wedge, not a gate."""
     p = _project(tmp_path)
     _blocked(_run(p))
-    _anchor(p, "# fresh\n", bump=10)
+    _anchor(p, FRESH, bump=10)
     r = _run(p)
     assert r.returncode == 0
     assert r.stdout.strip() == ""

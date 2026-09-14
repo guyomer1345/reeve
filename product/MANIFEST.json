@@ -70,6 +70,10 @@
       "dest": ".claude/scripts/check_autonomy_floor.py"
     },
     {
+      "src": "scripts/check_codemap_fresh.py",
+      "dest": ".claude/scripts/check_codemap_fresh.py"
+    },
+    {
       "src": "scripts/spec_approval.py",
       "dest": ".claude/scripts/spec_approval.py"
     },
@@ -144,6 +148,10 @@
     {
       "src": "hooks/dispatch_return.py",
       "dest": ".claude/hooks/dispatch_return.py"
+    },
+    {
+      "src": "hooks/worker_budget.py",
+      "dest": ".claude/hooks/worker_budget.py"
     },
     {
       "src": "hooks/session_start.py",

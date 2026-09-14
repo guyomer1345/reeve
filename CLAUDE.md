@@ -14,6 +14,7 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
 - **`docs/design/`** — this construction record: the numbered design docs `00`–`11` + the `08` decision log +
   `reviews/`. Dense and internal by design; a consumer never needs it.
 - **`scripts/`** — meta-only tooling that never ships (`check-no-spec-refs.sh`, `check-status-coherence.sh`,
+  `check_owner_sweep.py`,
   `check_enum_coherence.py`, `check-template-budgets.py`, `check_install_closure.py`, `build-release.py`, `dev-reinstall.sh`,
   `exit_test_wave_coherence.py`, `smoke_drive.py`), plus their
   tests. **`smoke_drive.py` is the one that runs the package as an INSTALLED WHOLE** — throwaway repo,
@@ -51,9 +52,13 @@ The **`docs/design/` spec folder is the source of truth.** Don't duplicate what 
   table · phase / what's-left → `docs/design/11-roadmap.md` · decisions → `docs/design/08-decision-log.md` · open design-questions →
   `docs/design/07-open-questions.md` · structure → `graph.json`. Every other doc *points* to the owner or is *generated* from it; a new source is **adopted**
   deliberately (declare its owner), never accreted. **On capture, run the blast-radius sweep:** grep every guiding
-  doc for the fact you just changed, update its owner, repoint the rest — then `scripts/check-status-coherence.sh`
-  is the mechanical backstop (roster counts, `D1–DN` ranges, and roadmap `**[…]**` tags stay in their owner;
-  auto-runs at commit via `.git/hooks/pre-commit`). Same logic applies to any single-source-of-truth claim.
+  doc for the fact you just changed, update its owner, repoint the rest — then **two** mechanical backstops, both
+  auto-running at commit via `.git/hooks/pre-commit`. `scripts/check-status-coherence.sh` keeps roster counts,
+  `D1–DN` ranges and roadmap `**[…]**` tags in their owner. `scripts/check_owner_sweep.py` catches the sweep you
+  did not do: a decision that says it settled an `07` question while `07` still reads as open, and an `[ask #N]`
+  carrying both a CLOSED queue entry and an open one (a ghost that gets built twice). **Its stated blind spot is a
+  section HEADER that contradicts the items under it** — prose agreeing with prose is not decidable, so that half
+  is still yours. Same logic applies to any single-source-of-truth claim.
 
 ## Where we are
 **Status is single-source — read the current phase + what's left from `docs/design/11-roadmap.md` (its _Recommended

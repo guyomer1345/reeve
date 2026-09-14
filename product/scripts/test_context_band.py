@@ -21,6 +21,14 @@ import context_band as cb
 M = cb.PER_NODE_TOKENS
 
 
+
+# A REAL anchor: fresh mtime is only half of "written" — `context_band` also requires the
+# anchor to name a base commit, because a resume reads `git log <base_sha>..HEAD` and one
+# without it cannot say what moved (`D219` #3). A bare "# handoff" is the exact shape a
+# real drive produced and nothing caught.
+ANCHOR = "# handoff\n\nbase_sha: 1a2b3c4\n"
+FRESH = "# fresh\n\nbase_sha: 9f8e7d6\n"
+
 def _at(runway_nodes, window=1_000_000):
     """A reading with exactly this many nodes of runway left."""
     return window - runway_nodes * M, window
@@ -180,7 +188,7 @@ def _wf(tmp_path, runway_nodes, window=1_000_000):
     return wf
 
 
-def _handoff(wf, text="# handoff\n", bump=0.0):
+def _handoff(wf, text=ANCHOR, bump=0.0):
     os.makedirs(wf, exist_ok=True)
     path = os.path.join(wf, "handoff.md")
     with open(path, "w") as fh:
@@ -203,7 +211,7 @@ def test_writing_the_anchor_DISCHARGES_the_demand(tmp_path):
     wf = _wf(tmp_path, 0.5)
     _handoff(wf)                              # an anchor that predates the demand
     assert cb.demand(wf)["needs_handoff"] is True
-    _handoff(wf, "# fresh\n", bump=10)        # one written since
+    _handoff(wf, FRESH, bump=10)        # one written since
     d = cb.demand(wf)
     assert d["handoff_written"] is True
     assert d["needs_handoff"] is False
@@ -259,7 +267,7 @@ def test_clear_safe_once_the_anchor_is_fresh_and_nobody_is_waiting(tmp_path):
     wf = _wf(tmp_path, 0.5)
     _handoff(wf)
     cb.demand(wf)
-    _handoff(wf, "# fresh\n", bump=10)
+    _handoff(wf, FRESH, bump=10)
     g = cb.gate(wf)
     assert g["parked_open"] == 0
     assert g["clear_safe"] is True, g["blocked_by"]
@@ -270,7 +278,7 @@ def test_a_parked_checkpoint_blocks_the_reset(tmp_path):
     wf = _wf(tmp_path, 0.5)
     _handoff(wf)
     cb.demand(wf)
-    _handoff(wf, "# fresh\n", bump=10)
+    _handoff(wf, FRESH, bump=10)
     os.makedirs(os.path.join(wf, "parked"))
     with open(os.path.join(wf, "parked", "TCK-1.json"), "w") as fh:
         json.dump({"ticket_id": "TCK-1"}, fh)
@@ -285,7 +293,7 @@ def test_an_unreachable_runtime_root_reads_as_somebody_IS_waiting(tmp_path):
     wf = _wf(tmp_path, 0.5)
     _handoff(wf)
     cb.demand(wf)
-    _handoff(wf, "# fresh\n", bump=10)
+    _handoff(wf, FRESH, bump=10)
     with open(os.path.join(wf, "runtime.json"), "w") as fh:
         json.dump({"runtime_root": str(tmp_path / "gone")}, fh)
     g = cb.gate(wf)
@@ -321,7 +329,7 @@ def test_gate_cli_exit_code_is_may_i_reset(tmp_path, capsys):
     assert cb.main(["--workflow-dir", wf, "--gate"]) == 1        # anchor owed
     out = json.loads(capsys.readouterr().out)
     assert out["needs_handoff"] is True
-    _handoff(wf, "# fresh\n", bump=10)
+    _handoff(wf, FRESH, bump=10)
     assert cb.main(["--workflow-dir", wf, "--gate"]) == 0        # reset is safe
     assert json.loads(capsys.readouterr().out)["clear_safe"] is True
 
@@ -335,3 +343,65 @@ def test_the_operator_ceiling_reaches_the_gate_too(tmp_path):
     d = cb.demand(wf, project_dir=str(tmp_path))
     assert d["verdict"] == "handoff-now"
     assert d["operator_ceiling"] == 1
+
+
+# ------------------------------------------------- the anchor must NAME A BASE (D219 #3)
+
+def test_a_fresh_anchor_with_no_base_sha_does_not_discharge_the_demand(tmp_path):
+    """The exact shape a real drive produced: an item that went all the way round — planned,
+    executed, verified, documented, committed — and then wrote an anchor nothing could resume
+    from. A resume reads `git log <base_sha>..HEAD`; without the field it cannot see what
+    moved, and `12h`'s supervisor clears sessions on purpose.
+    """
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf, "# handoff\n\nEverything is fine.\n")   # armed at this mtime
+    cb.demand(wf)
+    _handoff(wf, "# handoff\n\nStill no base commit named.\n", bump=10)
+    d = cb.demand(wf)
+    assert d["anchor_fresh"] is True, "the file did move — that half is not what failed"
+    assert d["anchor_names_base"] is False
+    assert d["handoff_written"] is False
+    assert d["needs_handoff"] is True
+    assert "base_sha" in d["reason"], "the demand must say WHICH half is missing"
+
+
+def test_adding_the_base_sha_alone_discharges_it(tmp_path):
+    """The fix path is additive: the anchor's prose stands and the field is added."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf, "# handoff\n\nEverything is fine.\n")
+    cb.demand(wf)
+    _handoff(wf, "# handoff\n\nEverything is fine.\n\n- base_sha: 81d362e\n", bump=10)
+    d = cb.demand(wf)
+    assert d["handoff_written"] is True and d["needs_handoff"] is False
+
+
+def test_clear_is_NOT_safe_on_an_anchor_naming_no_base(tmp_path):
+    """The supervisor's half. Resetting a session whose anchor cannot be resumed from is the
+    one reset that loses the loop's place outright."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf, "# handoff\n")
+    cb.demand(wf)
+    _handoff(wf, "# handoff\n\nrewritten, still no base\n", bump=10)
+    g = cb.gate(wf)
+    assert g["clear_safe"] is False
+    assert any("base_sha" in b for b in g["blocked_by"])
+
+
+@pytest.mark.parametrize("value,ok", [
+    ("base_sha: 81d362e", True),
+    ("- base_sha: 1a2b3c4d5e6f7890", True),
+    ("**base_sha**: `deadbee`", True),
+    ("base_sha = 81d362e", True),
+    ("base sha: 81d362e", True),
+    ("base_sha: none", False),
+    ("base_sha: unknown", False),
+    ("base_sha:", False),
+    ("the base_sha field belongs here", False),
+    ("nothing about it at all", False),
+])
+def test_what_counts_as_naming_a_base_commit(tmp_path, value, ok):
+    """Permissive on spelling, strict on substance. The `none`/`unknown`/empty rows are the
+    shapes a session writes when it did not look, and they must not pass."""
+    path = tmp_path / "handoff.md"
+    path.write_text("# handoff\n\n%s\n" % value)
+    assert cb.anchor_names_base(str(path)) is ok

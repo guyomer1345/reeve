@@ -12,6 +12,35 @@ reason. Same conventions as its siblings — on-disk paths are fixed, and each s
 convention in `shared/memory-model.md`. A reference of the form `schemas.md § <name>` for any section below
 resolves here — the name is the anchor, and the parts are one schema.*
 
+## worker_budget.py  · a `PostToolUse` hook that runs INSIDE a worker · *writes only a latch beside that worker's transcript; its output is an instruction in the worker's own context*
+The actuator for the worker-window half of `schemas.md § dispatch-return`, which owns the contract. It tells a
+running worker it is near the end of its window, so it can **yield** — return `status: continue` with its state
+in `scratch/` — and let the orchestrator dispatch a fresh one.
+
+- **Why this is possible at all, since it was written off as impossible.** The objection was that a subagent
+  cannot spawn its own successor. True, and beside the point: it does not need to. It needs to *stop cleanly*,
+  and the thing that can dispatch is already waiting on its return.
+- **The signal is the worker's own transcript**, and it is real rather than assumed: measured over 364 subagent
+  runs, the per-agent JSONL is appended *during* the run and every assistant line carries full `usage`.
+  Occupancy is `cache_read + cache_creation + input_tokens` of the last such line. Nothing is needed from the
+  parent, which is why this is a worker-side hook and not a poller the orchestrator has to keep alive.
+- **It advises and cannot compel.** `PostToolUse` may add context; it cannot stop a worker, rewrite a tool result
+  or make a model return anything. A worker that ignores it runs to its real limit exactly as before. **Stated
+  plainly because the contract above used to read as a control when nothing enforced it**: what this buys is a
+  reachable yield point, not a bound.
+- **Once per worker, not once per turn.** Past the threshold a worker stays past it, so an un-latched hook would
+  repeat the instruction on every remaining tool call — noise, and a growing share of the window it is protecting.
+  The latch sits beside that worker's transcript, keyed on its agent id.
+- **The threshold is a FRACTION, defaulting to 75% and settable via `REEVE_WORKER_YIELD_PCT`.** Not the measured
+  median: `execute` runs 194.1k at the median with 21% over 300k, so a threshold at the median would split every
+  ordinary item in two and one at the tail would fire too late to act on. The denominator is a conservative
+  assumed window, so a worker with a larger one yields earlier than it had to — the safe direction.
+- **Silence on every failure.** An unreadable payload, a transcript it cannot *positively* locate, an unfamiliar
+  usage block, a torn latch: all exit 0 saying nothing. It runs after every tool call of every worker, and unlike
+  the context band nothing downstream depends on it having spoken.
+- **It never fires for the orchestrator.** A payload with no agent id is the router's own turn, whose governor is
+  `context_band.py` and whose remedy is a handoff and a clear — advice this hook's instruction cannot give.
+
 ## dispatch_return.py  · a `PostToolUse(Agent|Task)` detector, run by the harness after every dispatch · *writes nothing; its whole output is a warning in the caller's transcript*
 The mechanical half of `schemas.md § dispatch-return`, which owns the contract itself and is where the reasoning
 lives. **The contract is advisory; this is a detector, not its enforcement** — and the distance between those two

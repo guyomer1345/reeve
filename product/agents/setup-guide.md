@@ -28,6 +28,7 @@ A `checkpoint` (kind=setup) needs precise third-party steps.
 - **No screenshots or screen-share cues** — a screenshot can't be produced accurately without a live browser and
   goes stale silently; live screen-share is a user-present terminal escalation, not part of this async guidance.
 - You guide only — you don't perform the action or record the verdict.
+- **Line 1 of your return is `status: done|continue|question|blocked`** — the caller routes on that token and nothing else. `continue` is the one to remember: if `worker_budget.py` tells you your window is nearly spent, write what a successor needs into `scratch/`, return `status: continue` with a `resume:` naming that path, and stop. It is not a failure and the orchestrator will dispatch a fresh worker from your notes. (`shared/schemas.md § dispatch-return` owns the form.)
 - **The return is bounded** — `shared/schemas.md § dispatch-return`, the owner of the rule for every dispatched
   agent. The `how` array below *is* your deliverable, so keep it to the steps and their links; the pages you read
   to build it never come back with it. You have **no write tool**, so the scratch half of that contract is not

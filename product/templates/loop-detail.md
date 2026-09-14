@@ -179,6 +179,32 @@ next *independent* item starts rather than the loop idling — the same predicat
 A whole-loop park is simply "nothing eligible". Non-preemptive and item-level throughout: the human is still the
 only thing that preempts.
 
+## the return envelope, and what `continue` means
+`loop.md` carries the four statuses and their targets. This is the part that is easy to get wrong.
+
+**`continue` is not a failure, and treating it as one throws away the point.** It says the worker ran out of
+*window*, not out of *judgement*: the plan is still good, the work so far is real, and everything a successor
+needs is already written to the `scratch/` path the return names. So the move is to **re-dispatch the same node**
+with that path — not to re-plan, not to route to `refine`, not to file a blocker, and above all not to start the
+item again. A drive that re-plans on `continue` will re-plan forever on any item too big for one window, which is
+exactly the item this exists for.
+
+**Where it comes from.** `hooks/worker_budget.py` runs inside the worker, reads that worker's own transcript
+occupancy, and past a threshold tells it to wrap up and yield. That is the whole mechanism for bounding a
+worker's context, and it works by *yielding* rather than by a subagent spawning its successor — which it cannot
+do, and does not need to. The hook **advises**: a worker that ignores it runs to its real limit and dies the way
+it always did. What changed is that the yield point is reachable.
+
+**`question` and `blocked` are not new behaviour.** `execute` and `planner` already stop dead rather than guess
+at an undecided option, a missing fact, or a plan assumption that turned out untrue. What the envelope adds is
+that they arrive as a **token in a fixed place** instead of a paragraph the router has to interpret — so the same
+situation routes the same way every time, which it demonstrably did not before.
+
+**An untyped return is UNROUTABLE, not merely untidy.** `hooks/dispatch_return.py` marks a return with no
+`status:` line in the caller's transcript. It cannot block — the payload has already landed — so the useful move
+when you see it is to decide which of the four it actually was *before* acting on it, and to say in the prompt
+that line 1 carries the status if you re-dispatch for that item.
+
 ## forecast divergence check
 If the item being picked has a frozen `.workflow/forecasts/<id>.json`, run it **before starting work**:
 ```bash

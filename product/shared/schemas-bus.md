@@ -32,7 +32,7 @@ so this kind buys the notification through the machinery that owns it instead of
 ticket id and token are **derived from (goal, reason)**, so a driver relaunched against the same terminal state
 rewrites one record rather than filing a ticket per launch — an away channel that repeats itself is one a human
 learns to ignore.
-- `request` — `{ kind: demo|qa|setup|reconcile|forecast|steer, what, expected, how?(←setup-guide), tasks?[], blocking: true, token }`.
+- `request` — `{ kind: demo|qa|setup|reconcile|forecast|steer|spec, what, expected, how?(←setup-guide), tasks?[], blocking: true, token }`.
   **`token`** (`{ticket}:{step}:{uuid}`) correlates the async verdict back to this parked ticket. **`tasks[]`** is the
   *set* of setup items a `kind=setup` checkpoint carries (a lone setup is a one-element set); the orchestrator
   coalesces a plan's foreseeable setups (spec `integrations[]`) into one checkpoint **at first-setup-contact** (not

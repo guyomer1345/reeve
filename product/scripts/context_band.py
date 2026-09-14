@@ -52,13 +52,22 @@ package has now made four times over.
 The gate answers two questions that were previously conflated into one, and separating them is
 the substance:
 
-    needs_handoff   The band says `handoff-now` and no anchor has been written since it began
-                    saying so. Writing an anchor is ALWAYS safe, so this is deliberately not
-                    gated on anything else -- not on whether a checkpoint is open, not on
+    needs_handoff   The band says `handoff-now` and no USABLE anchor has been written since it
+                    began saying so. Writing an anchor is ALWAYS safe, so this is deliberately
+                    not gated on anything else -- not on whether a checkpoint is open, not on
                     whether the runtime half is reachable. Its consumer is `hooks/handoff_gate.py`,
                     a `Stop` hook, which BLOCKS the turn from ending until the anchor exists.
                     That is the actuator: a session cannot spend its reserve and then quietly
                     stop with nothing to resume from.
+                    "Usable" is TWO conditions and the second was found the same way the
+                    dialog was -- by a real drive, not by reasoning. The file must have moved
+                    since the latch armed, AND it must NAME A BASE COMMIT: a resume reads
+                    `git log <base_sha>..HEAD`, so an anchor without one leaves the resumed
+                    session unable to see what moved while its predecessor was alive. A drive
+                    that went all the way round wrote exactly that. `anchor_fresh`
+                    and `anchor_names_base` are reported separately, because "nothing was
+                    written" and "something was, and it cannot be resumed from" are different
+                    things to go and fix.
     clear_safe      The band says `handoff-now`, the anchor IS written, and nothing is waiting
                     on a human. Its consumer is the supervisor, whose whole job is the reset
                     (`/clear` then `continue`) and which must never reset a session that a
@@ -78,6 +87,7 @@ the demand is made once per fill cycle rather than nagging every turn afterwards
 """
 import argparse
 import json
+import re
 import os
 import sys
 
@@ -107,6 +117,37 @@ GATE_FILE = "handoff-gate.json"
 # removed by `hooks/handoff_gate.py` when a turn ends (a dialog blocks the turn, so a `Stop` is
 # proof the dialog is gone). Present ⇒ somebody is being waited on, and no reset may happen.
 AWAITING_FILE = "awaiting-input.json"
+
+
+# WHAT MAKES AN ANCHOR AN ANCHOR, and why mtime alone was not enough. A resume reads
+# `git log <base_sha>..HEAD` to see what moved while the session that wrote the anchor was
+# alive; an anchor naming no base commit cannot answer that, so the resumed session is left
+# guessing at exactly the thing it was cleared to be told. `/dispatch` has always NAMED the
+# field and nothing has ever checked it -- and a real drive duly went all the way round
+# (planned, executed, verified, documented, committed) and wrote one without it.
+# This is load-bearing twice over now that `12h`'s supervisor clears sessions ON PURPOSE.
+#
+# Permissive on spelling, strict on substance: any `base_sha` label followed by a hex commit
+# id. `base_sha: none` / `unknown` / an empty value all fail, correctly -- they are the shapes
+# a session writes when it did not look.
+BASE_SHA_RE = re.compile(r"(?i)base[_\s-]?sha\W{0,6}\b([0-9a-f]{7,40})\b")
+
+
+def anchor_names_base(path):
+    """Does the anchor at `path` name a base commit? -- the content half of "written".
+
+    WHAT THIS CANNOT PROVE, stated here rather than left to be discovered: that the sha is
+    REAL, or that it is current. Resolving it needs git, and `demand()` is deliberately
+    answerable from the repo mount with no subprocess -- so this checks the SHAPE. A shape
+    check catches the failure that actually happened (no field at all) and not a fabricated
+    id. Currency is not checked because it is not wanted: an anchor names the commit it was
+    written at, and a resume reading further back than necessary loses nothing.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return BASE_SHA_RE.search(fh.read()) is not None
+    except OSError:
+        return False
 
 
 def band(used_tokens, window_tokens, warn_pct=None):
@@ -290,9 +331,21 @@ def demand(workflow_dir, project_dir=None, now=None, arm=True):
             _write_latch(workflow_dir, latch)
 
     armed = float(latch.get("armed_handoff_mtime") or 0.0)
-    written = _mtime(handoff) > armed
+    fresh = _mtime(handoff) > armed
+    # "Written" is FRESH AND USABLE, not merely touched. Both halves report separately so an
+    # operator reading `--json` can tell "nothing was written" from "something was, and it
+    # cannot be resumed from" -- two different things to go and do.
+    names_base = anchor_names_base(handoff)
+    written = fresh and names_base
     out.update({"needs_handoff": not written, "handoff_written": written,
+                "anchor_fresh": fresh, "anchor_names_base": names_base,
                 "demands": int(latch.get("demands") or 0), "armed_at_mtime": armed})
+    if fresh and not names_base:
+        # Say WHICH half is missing. The generic band reason would send the session to rewrite
+        # an anchor it has just written, with no hint as to what was wrong with it.
+        out["reason"] = ("the anchor was rewritten but names no `base_sha`, so a resumed "
+                         "session cannot read `git log <base_sha>..HEAD` and cannot see what "
+                         "moved. Add it (`git rev-parse HEAD`) — the rest of the anchor stands.")
     return out
 
 
@@ -354,7 +407,10 @@ def gate(workflow_dir, project_dir=None, now=None, arm=True):
     if out["verdict"] != "handoff-now":
         blocked.append("the band says %s, not handoff-now" % out["verdict"])
     if not out["handoff_written"]:
-        blocked.append("no handoff has been written since the band began asking for one")
+        blocked.append(
+            "the handoff names no `base_sha`, so nothing could resume from it"
+            if out.get("anchor_fresh")
+            else "no handoff has been written since the band began asking for one")
     dialog = awaiting_input(workflow_dir)
     out["awaiting_input"] = dialog
     if dialog:

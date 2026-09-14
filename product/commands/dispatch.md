@@ -41,7 +41,10 @@ You (the orchestrator) do this now, in this turn:
      work you can still see, and route the human to `/rebind` — do not paper over it by
      hand-writing a `parked[]` you cannot verify;
    - `base_sha` = the current `HEAD` (`git rev-parse HEAD`) — the commit the resume reads
-     `git log <base_sha>..HEAD` against;
+     `git log <base_sha>..HEAD` against. **This one is CHECKED**, not merely asked for: the
+     context gate does not count an anchor as written until it names a commit id, so a handoff
+     without it leaves the `Stop` hook still blocking and `clear_safe` still false. Write the
+     sha itself — `none`, `unknown` and an empty value all read as absent, because they are;
    - in prose: what is **committed** vs what is **uncommitted in the working tree** right now
      (`/clear` wipes the conversation, not the filesystem — uncommitted edits and this handoff
      survive), what the next action is, and any in-flight decision or open question. A resumed

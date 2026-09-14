@@ -247,3 +247,108 @@ def test_the_receipt_carries_no_credential_shaped_field_names(proj):
     _stage(proj, LOCKED_SPEC)
     rec = sa.record(str(proj), "t-1")
     assert not {"token", "secret", "password", "api_key", "apikey"} & set(rec)
+
+
+# --- the block now ROUTES somewhere ------------------------------------------
+# The gate always refused correctly and then routed nowhere: its message said "raise a
+# checkpoint" and a real unattended drive read that, wrote the withheld change to a
+# spec-delta.md, noted it in the backlog, and carried on. The ask had no durable owner, so
+# `clear_safe`, the console and the handoff mirror all believed nobody was waiting.
+
+def _runtime(root):
+    """`parked/` lives under the runtime root, which `bus.Paths` resolves. A project with no
+    runtime pointer keeps it inside `.workflow/`, which is what these tests exercise."""
+    return root / ".workflow" / "parked"
+
+
+def test_a_block_PARKS_a_spec_checkpoint(proj):
+    _stage(proj, LOCKED_SPEC)
+    ok, msg = sa.check(str(proj), HERE, do_park=True)
+    assert ok is False
+    parked = sorted(p.name for p in _runtime(proj).glob("*.json"))
+    assert len(parked) == 1, parked
+    rec = json.loads((_runtime(proj) / parked[0]).read_text())
+    assert rec["checkpoint"]["kind"] == "spec"
+    assert rec["token"], "a tokenless park can be answered but never resumed"
+    assert rec["checkpoint"]["request"]["blocking"] is True
+    assert parked[0][:-5] in msg, "the refusal must name the ticket it raised"
+
+
+def test_the_gate_stays_READ_ONLY_without_the_flag(proj):
+    """Every other caller — align, a dry run, a test — must not open checkpoints."""
+    _stage(proj, LOCKED_SPEC)
+    ok, msg = _check(proj)
+    assert ok is False
+    assert not _runtime(proj).exists() or not list(_runtime(proj).glob("*.json"))
+    assert "Route it" in msg
+
+
+def test_re_running_the_gate_does_not_open_a_SECOND_checkpoint(proj):
+    """`checks.sh` runs on every commit attempt. Without idempotency a blocked change that is
+    retried buries the human in identical cards."""
+    _stage(proj, LOCKED_SPEC)
+    for _ in range(3):
+        sa.check(str(proj), HERE, do_park=True)
+    assert len(list(_runtime(proj).glob("*.json"))) == 1
+
+
+def test_editing_the_spec_opens_a_DIFFERENT_checkpoint(proj):
+    """Keyed on the spec digest, so a changed spec is a different ask — the human would be
+    approving text the first ticket never quoted."""
+    _stage(proj, LOCKED_SPEC)
+    sa.check(str(proj), HERE, do_park=True)
+    first = sorted(p.name for p in _runtime(proj).glob("*.json"))
+    _stage(proj, LOCKED_SPEC + "\n- **Search** — commitment: `locked`\n")
+    sa.check(str(proj), HERE, do_park=True)
+    now = sorted(p.name for p in _runtime(proj).glob("*.json"))
+    assert len(now) == 2 and first[0] in now
+
+
+def test_a_STALE_receipt_also_parks(proj):
+    """The other blocked path — approved v1, staging v2 — is the same situation to a human and
+    must reach one the same way."""
+    _stage(proj, LOCKED_SPEC)
+    sa.record(str(proj), "t-1")
+    _stage(proj, LOCKED_SPEC + "\n- **Search** — commitment: `locked`\n")
+    ok, msg = sa.check(str(proj), HERE, do_park=True)
+    assert ok is False and "DIFFERENT spec content" in msg
+    assert len(list(_runtime(proj).glob("*.json"))) == 1
+
+
+def test_a_park_that_FAILS_still_blocks_and_says_so(proj, monkeypatch):
+    """Fail-soft, and it is the opposite direction to everything else in this file. The gate has
+    already decided to refuse; parking is how the refusal reaches a person. A park that raised
+    would turn an actionable block into a crash — and the commit would still be blocked, with
+    nobody told why. The `/rebind` case (runtime root gone) is exactly when this matters."""
+    _stage(proj, LOCKED_SPEC)
+    monkeypatch.setattr(sa, "park", lambda *a, **k: ("SPEC-x", "the runtime root is gone"))
+    ok, msg = sa.check(str(proj), HERE, do_park=True)
+    assert ok is False
+    assert "could NOT be parked" in msg and "runtime root is gone" in msg
+    assert "/rebind" in msg
+
+
+def test_an_approved_change_parks_NOTHING(proj):
+    """The escape still works, and works without side effects."""
+    _stage(proj, LOCKED_SPEC)
+    sa.record(str(proj), "t-1")
+    ok, _ = sa.check(str(proj), HERE, do_park=True)
+    assert ok is True
+    assert not _runtime(proj).exists() or not list(_runtime(proj).glob("*.json"))
+
+
+def test_the_park_names_the_item_when_there_is_one(proj):
+    (proj / ".workflow" / "state.json").write_text(json.dumps({"current_item": "I-007"}))
+    _stage(proj, LOCKED_SPEC)
+    sa.check(str(proj), HERE, do_park=True)
+    rec = json.loads(next(_runtime(proj).glob("*.json")).read_text())
+    assert "I-007" in rec["checkpoint"]["request"]["what"]
+
+
+def test_the_cli_accepts_park_on_either_side_of_the_subcommand(proj):
+    """The argument-order trap this file already caught once, re-checked for the new flag."""
+    _stage(proj, LOCKED_SPEC)
+    for argv in (["check", "--scripts-dir", HERE, "--park", "--project-root", str(proj)],
+                 ["--project-root", str(proj), "check", "--scripts-dir", HERE, "--park"]):
+        assert sa.main(argv) == 2
+    assert len(list(_runtime(proj).glob("*.json"))) == 1

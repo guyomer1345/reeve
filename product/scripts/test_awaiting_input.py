@@ -109,10 +109,13 @@ def test_an_open_dialog_blocks_clear_safe(tmp_path):
     p = _project(tmp_path)
     wf = str(p / ".workflow")
     cb.publish(wf, 1_000_000 - 0.5 * M, 1_000_000, time.monotonic())
-    (p / ".workflow" / "handoff.md").write_text("# h\n")
+    (p / ".workflow" / "handoff.md").write_text("# h\n\nbase_sha: 1a2b3c4\n")
     cb.demand(wf)
     path = p / ".workflow" / "handoff.md"
-    path.write_text("# fresh\n")
+    # A REAL anchor — `context_band` requires one to name a base commit, not merely to have
+    # moved (`D219` #3). The control below is "nothing blocks clear_safe", so a half-anchor
+    # here would be testing the wrong blocker.
+    path.write_text("# fresh\n\nbase_sha: 9f8e7d6\n")
     os.utime(path, (os.path.getatime(path), os.path.getmtime(path) + 10))
     assert cb.gate(wf)["clear_safe"] is True            # the control
 

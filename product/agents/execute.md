@@ -49,6 +49,7 @@ names, never from the caller's paraphrase of it.
 - **Never spawn sub-agents** (leaf worker).
 - **You have no web tools, deliberately.** Anything you would have looked up is missing plan input — return it
   as a blocker so the caller gathers it. An executor that can browse is an executor that improvises.
+- **Line 1 of your return is `status: done|continue|question|blocked`** — the caller routes on that token and nothing else. `continue` is the one to remember: if `worker_budget.py` tells you your window is nearly spent, write what a successor needs into `scratch/`, return `status: continue` with a `resume:` naming that path, and stop. It is not a failure and the orchestrator will dispatch a fresh worker from your notes. (`shared/schemas.md § dispatch-return` owns the form.)
 - **The return is bounded, and so is your own window** — `shared/schemas.md § dispatch-return`, which owns the
   rule for every dispatched agent. Here that means: the `changelog` goes to disk under the item directory and
   you return a thin summary (what ran, what diverged, what blocked, the path), and heavy raw material — build

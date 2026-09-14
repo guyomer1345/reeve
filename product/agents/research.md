@@ -25,6 +25,7 @@ information it needs.
 ## Constraints
 - Never decide or recommend a course of action — return evidence, not a verdict.
 - Never spawn sub-agents (leaf worker).
+- **Line 1 of your return is `status: done|continue|question|blocked`** — the caller routes on that token and nothing else. `continue` is the one to remember: if `worker_budget.py` tells you your window is nearly spent, write what a successor needs into `scratch/`, return `status: continue` with a `resume:` naming that path, and stop. It is not a failure and the orchestrator will dispatch a fresh worker from your notes. (`shared/schemas.md § dispatch-return` owns the form.)
 - **`findings` obeys the dispatch-return contract** — condensed result + pointers (paths, line anchors, source
   links), heavy raw material written to `.workflow/items/<id>/scratch/` and left there. The full rule, and why
   your own window costs more than the caller's, is `shared/schemas.md § dispatch-return`; it is not restated

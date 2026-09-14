@@ -54,6 +54,18 @@ ENUMS = [
         "consumer_re": {"product/scripts/bus.py": r"PARK_KINDS\s*=\s*\(([^)]*)\)"},
     },
     {
+        "name": "dispatch-return.status",
+        # The typed return envelope. The owner is the contract; `hooks/dispatch_return.py` is
+        # the DECIDER -- its STATUSES tuple is what a return is actually graded against, so a
+        # status the contract declares and the tuple omits is one the detector would report as
+        # untyped, which is exactly the silent disagreement this gate exists to catch.
+        # `loop.md` is presence-coverage: it routes the statuses and must mention each.
+        "owner": "product/shared/schemas.md",
+        "owner_re": r"status:\s*(done(?:\|[a-z]+)+)",
+        "consumers": ["product/hooks/dispatch_return.py", "product/templates/loop.md"],
+        "consumer_re": {"product/hooks/dispatch_return.py": r"STATUSES\s*=\s*\(([^)]*)\)"},
+    },
+    {
         "name": "inbox.kind",
         "owner": "product/shared/schemas.md",
         # the typed-inbox message kinds (D93); anchors on `verdict|` so it can't

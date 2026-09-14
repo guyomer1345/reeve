@@ -492,3 +492,87 @@ def test_both_views_state_the_spec_diff_limit(tmp_path):
     _edit(root, "one row per leg", "one row per transaction")
     assert "SPEC DIFF only" in af.render(_run(root))
     assert "never a cap" in af.LIMIT
+
+
+# ---------------------------------------------------------------- the wrap window (D219 #4)
+
+# THE SHAPE VERBATIM FROM THE DRIVE THAT REPORTED IT (`D219` #4), not an idealised one — the
+# same discipline as REAL_SHAPES above, and for the same reason. Both elements are tagged
+# `unspecified`; the word `locked` appears only in a sentence explaining that nothing is. The
+# old wrap window armed on the marker, stayed open, and read the prose three lines down as
+# part of it — so `unspecified` elements were reported as `locked` ones.
+PROSE_ABOUT_COMMITMENTS = """# Spec — notes
+
+## purpose
+A tiny note-taking CLI over a flat file. — `provisional`
+
+## screens
+- **list** — `unspecified`
+  Prints one line per note, numbered from 1.
+- **NOTE — this section changed with I-001.** It previously recorded "each note's `text`, one
+  per line", which was a reading of the pre-`done` code. The old wording was an `unspecified`
+  ingest reconstruction, never a
+  `locked` invariant, so A2 supersedes it rather than contradicting it.
+- **NOTE — still `unspecified`.** The command now exists, but no human has confirmed that
+  *position* is the right address (see D-002 § confidence, and D-001 — nothing in this spec is
+  `locked`). Matching by text prefix remains a live alternative.
+"""
+
+
+def test_prose_mentioning_locked_is_not_a_locked_element(tmp_path):
+    """D219 #4 — the spurious `locked-block` that stopped a real drive.
+
+    The block's first line uses an em-dash as ordinary punctuation. Under the old rule that
+    armed the wrap window, every backticked commitment word below it in the block became a
+    marker, so editing a paragraph ABOUT commitment tags routed as editing a locked element.
+    A gate that fires on the word rather than the structure stops drives that have nothing
+    locked in them.
+    """
+    root = _project(tmp_path, PROSE_ABOUT_COMMITMENTS)
+    _edit(root, "The command now exists, but no human has confirmed that",
+          "The command exists, but no human has yet confirmed that")
+    res = _run(root)
+    assert res["status"] == "clear", _rules(res)
+
+
+def test_the_wrap_window_closes_on_a_line_that_contributes_nothing(tmp_path):
+    """A real marker earlier in the block must not licence prose further down it.
+
+    `purpose` is genuinely tagged `provisional` — below the floor. If the window stayed open
+    to the end of the block, the sentence mentioning `` `locked` `` two lines later would
+    widen that element to a locked one and route.
+    """
+    root = _project(tmp_path, PROSE_ABOUT_COMMITMENTS + (
+        "\n## data_model\nOne line per note, tab-separated. — `provisional`\n"
+        "The `locked` form was rejected: see the decision record.\n"))
+    _edit(root, "One line per note, tab-separated.", "One note per line, tab-separated.")
+    res = _run(root)
+    assert res["status"] == "clear", _rules(res)
+
+
+def test_a_dangling_introducer_still_opens_the_window(tmp_path):
+    """The one shape that asserts no token and still means a marker is coming.
+
+    The window must arm on it, or a marker written entirely on its continuation line is
+    missed — and a missed marker is an UNDER-route, the failure direction this file does not
+    accept.
+    """
+    root = _project(tmp_path, "# Spec\n\n## audience\nSolo operator. — commitment:\n"
+                              "`locked`\n")
+    _edit(root, "Solo operator.", "Solo operator, plus a reviewer.")
+    res = _run(root)
+    assert res["status"] == "route"
+    assert af.RULE_LOCKED_BLOCK in _rules(res)
+
+
+def test_a_genuine_wrapped_mixed_marker_still_widens(tmp_path):
+    """The case the window exists for, pinned from the other side: the continuation line
+    carries no introducer of its own and must still contribute."""
+    root = _project(tmp_path, "# Spec\n\n## screens\n"
+                              "- **Dashboard** — the scorecard. — commitment: `locked` (existence) /\n"
+                              "  `provisional` (layout, styling)\n")
+    _edit(root, "the scorecard.", "the scorecard and a drill-down.")
+    res = _run(root)
+    assert res["status"] == "route"
+    detail = [f for f in res["findings"] if f["rule"] == af.RULE_LOCKED_BLOCK][0]["detail"]
+    assert "MIXED" in detail and "`provisional`" in detail

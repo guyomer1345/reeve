@@ -32,6 +32,7 @@ import argparse
 import hashlib
 import json
 import os
+import secrets
 import subprocess
 import sys
 
@@ -129,8 +130,13 @@ def _floor_crosses(project_root, scripts_dir):
     return p.returncode != 0, True
 
 
-def check(project_root, scripts_dir):
-    """The commit gate. Returns (ok, message)."""
+def check(project_root, scripts_dir, do_park=False):
+    """The commit gate. Returns (ok, message).
+
+    `do_park` is opt-in rather than always-on so the gate stays READ-ONLY for every other
+    caller -- `align`, a dry run, a test -- and the one caller that wants the side effect
+    (`checks.sh`, the commit path) asks for it at the call site where it is visible.
+    """
     crossed, ran = _floor_crosses(project_root, scripts_dir)
     if not crossed:
         return True, "autonomy floor: clear — no approval receipt needed"
@@ -145,24 +151,127 @@ def check(project_root, scripts_dir):
 
     rec = read_receipt(project_root)
     if not rec:
-        return False, (
+        msg = (
             "BLOCKED: this change crosses the autonomy floor (it touches a `locked` element, "
             "weakens a commitment marker, or alters an acceptance criterion) and carries no "
             "approval receipt.\n"
             "  This is not a formality: the floor exists because a loop grading its own "
-            "decisions drifts toward 'not fundamental'.\n"
-            "  Route it — raise a checkpoint, get a verdict, and record it with "
-            "`spec_approval.py record --ticket <id>`.")
+            "decisions drifts toward 'not fundamental'.")
+        return False, msg + _routed(project_root, scripts_dir, want, do_park)
     got = rec.get("spec_sha256")
     if got != want:
-        return False, (
+        msg = (
             "BLOCKED: an approval receipt exists but it is for DIFFERENT spec content "
             "(approved %s…, staging %s…).\n"
             "  The spec changed after it was approved, so the approval does not cover this "
-            "commit. Re-route it; editing after approval is exactly what the digest is here "
-            "to catch." % (str(got)[:12], want[:12]))
+            "commit — editing after approval is exactly what the digest is here to catch."
+            % (str(got)[:12], want[:12]))
+        return False, msg + _routed(project_root, scripts_dir, want, do_park)
     return True, ("autonomy floor: crossed, and covered by the approval receipt for ticket %s"
                   % rec.get("ticket_id", "?"))
+
+
+# ============================================================== the park
+
+# The gate BLOCKS and has always routed nowhere. Its message said "raise a checkpoint, get a
+# verdict" -- prose, addressed to whatever was running, and a real unattended drive read it,
+# wrote the withheld change to `items/<id>/spec-delta.md`, left a note in `backlog.md` and
+# carried on. The ask had no durable owner: `parked/` is what `clear_safe`, the console and the
+# `handoff.md` mirror all read, and none of them knew a human was needed. So the gate raises the
+# park itself. It cannot be skipped, because it happens inside the refusal.
+PARK_KIND = "spec"
+PARKED_REL = os.path.join(".workflow", "parked")
+
+
+def park_id(digest):
+    """Keyed on the SPEC DIGEST, which makes re-parking idempotent for free.
+
+    `checks.sh` runs on every commit attempt, so a change that is blocked and retried would
+    otherwise open a checkpoint per attempt and bury the human in identical cards. Keying on
+    content also gets the other half right without a second rule: edit the spec and it is a
+    DIFFERENT ask, correctly opening its own ticket, because the text a human would be
+    approving is not the text the last ticket quoted.
+    """
+    return "SPEC-%s" % digest[:12]
+
+
+def already_parked(project_root, ticket_id):
+    return os.path.exists(os.path.join(project_root, PARKED_REL, ticket_id + ".json"))
+
+
+def park(project_root, scripts_dir, digest, item=None):
+    """-> (ticket_id, problem). Composes the record and hands it to `bus.py park`, which owns
+    the runtime root, the deadline and the mirror -- this file does not learn those.
+
+    FAIL SOFT, and that direction is the opposite of everything else in here. The gate's job is
+    to BLOCK, and it has already decided to; parking is how the block reaches a person. If the
+    runtime root is unreachable -- the `/rebind` case -- a park that raised would convert a
+    clear, actionable refusal into a crash, and the commit would still be blocked but nobody
+    would be told why. So a failure to park is reported beside the refusal, never instead of it.
+    """
+    tid = park_id(digest)
+    if already_parked(project_root, tid):
+        return tid, None
+    runner = os.path.join(scripts_dir, "bus.py")
+    if not os.path.isfile(runner):
+        return tid, "bus.py is not installed beside this gate"
+    rec = {
+        "ticket_id": tid,
+        "token": secrets.token_urlsafe(16),
+        "loop_position": "blocked at the commit gate by the autonomy floor",
+        "checkpoint": {
+            "kind": PARK_KIND,
+            "request": {
+                "kind": PARK_KIND,
+                "what": ("A spec change crosses the autonomy floor and needs your approval"
+                         + (" (item %s)" % item if item else "")
+                         + ". The change is staged in `docs/spec.md`; approve it, edit it, or "
+                           "reject it."),
+                "expected": ("approve → the change stands and the receipt is recorded · "
+                             "changes → your edits become the change · "
+                             "reject → the change is discarded and the item continues under "
+                             "the spec as it stands"),
+                "blocking": True,
+            },
+        },
+        "predicted_outcome": "approve",
+    }
+    try:
+        run = subprocess.run([sys.executable, runner, "park", "--workflow-dir",
+                              os.path.join(project_root, ".workflow")],
+                             input=json.dumps(rec), capture_output=True, text=True, timeout=60)
+    except Exception as exc:
+        return tid, "bus.py park could not be run (%s)" % exc
+    if run.returncode != 0:
+        tail = (run.stderr or run.stdout or "").strip().splitlines()
+        return tid, "bus.py park refused (%s)" % (tail[-1] if tail else "no output")
+    return tid, None
+
+
+def current_item(project_root):
+    try:
+        with open(os.path.join(project_root, ".workflow", "state.json"), encoding="utf-8") as fh:
+            return (json.load(fh) or {}).get("current_item")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _routed(project_root, scripts_dir, digest, do_park):
+    """The refusal's tail: what is being done about it, in the same breath as the block.
+
+    Both blocked paths share this because they are the same situation to a human -- a spec
+    change nobody has approved -- and they differed only in how they got there.
+    """
+    if not do_park:
+        return ("\n  Route it — raise a `spec` checkpoint, get a verdict, and record it with "
+                "`spec_approval.py record --ticket <id>`.")
+    tid, problem = park(project_root, scripts_dir, digest, current_item(project_root))
+    if problem:
+        return ("\n  A `spec` checkpoint could NOT be parked (%s), so this block has not "
+                "reached anybody. Raise it by hand, or run /rebind if the runtime root is "
+                "gone." % problem)
+    return ("\n  Parked as `spec` checkpoint %s — a human has been asked. Answer it at the "
+            "console; the verdict resumes the item." % tid)
 
 
 def _common(ap):
@@ -187,7 +296,10 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd", required=True)
     rec = _common(sub.add_parser("record", help="stamp the approved spec's digest"))
     rec.add_argument("--ticket", required=True)
-    _common(sub.add_parser("check", help="the commit gate (exit 2 = blocked)"))
+    chk = _common(sub.add_parser("check", help="the commit gate (exit 2 = blocked)"))
+    chk.add_argument("--park", action="store_true",
+                     help="on a block, raise the `spec` checkpoint that asks a human (the "
+                          "commit path passes this; every other caller stays read-only)")
     args = ap.parse_args(argv)
     # SUPPRESS keeps an unset flag out of the namespace entirely, so a value given on either
     # side survives instead of the subparser's default overwriting the top-level one with None.
@@ -206,7 +318,7 @@ def main(argv=None):
               % (r["spec_sha256"][:12], r["ticket_id"]), file=sys.stderr)
         return 0
 
-    ok, msg = check(args.project_root, scripts)
+    ok, msg = check(args.project_root, scripts, do_park=getattr(args, "park", False))
     print(msg, file=sys.stderr)
     return 0 if ok else 2
 

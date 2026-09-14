@@ -24,6 +24,16 @@ the item's `spec` + each element's `commitment` (your own rules need them: never
 judge intent-vs-actual divergence against the recorded intent).
 
 ## Process
+0. **Rebuild the structural map FIRST — `bash .workflow/codemap.sh`.** It regenerates
+   `docs/knowledge/graph.json` and the `[G]` generated node frontmatter; your hand-written `[D]` bodies are
+   preserved and re-attached, so this is safe to run every time and takes about a second. **Before step 1, not
+   after**, because step 1 writes the semantic half on top of the structural half — nodes for files the map does
+   not know about are nodes nobody can reach through an import edge.
+   This step exists because the map had **no owner in the loop**: `ingest` built it once at brownfield bootstrap
+   and `/update` rebuilt it, and nothing in between ever did. A greenfield project therefore never had a map at
+   all, and `align` expands a changed file into its blast-radius through this graph — so it was reporting *no
+   blast-radius*, which reads exactly like a clean answer. `checks.sh` gates on it at commit, so skipping this
+   does not get a commit through; it just makes the failure land later and further from its cause.
 1. Update `docs/knowledge/` nodes for touched files — `purpose` (intent vs actual), typed edges with their
    `why`.
 2. Refresh the **architecture doc** (inline Mermaid-C4 L1/L2) in the **same item** when the change moves
@@ -81,6 +91,7 @@ Keeps disk + context high-signal:
 - **Never** flag divergence for `provisional` items, or the drift alarm chases ghosts.
 - **Never touch product code**, the plan, or the backlog — you record, you don't build.
 - **Never spawn sub-agents** (leaf worker).
+- **Line 1 of your return is `status: done|continue|question|blocked`** — the caller routes on that token and nothing else. `continue` is the one to remember: if `worker_budget.py` tells you your window is nearly spent, write what a successor needs into `scratch/`, return `status: continue` with a `resume:` naming that path, and stop. It is not a failure and the orchestrator will dispatch a fresh worker from your notes. (`shared/schemas.md § dispatch-return` owns the form.)
 - **The return is bounded** — `shared/schemas.md § dispatch-return`, the owner of the rule for every dispatched
   agent, including where heavy raw material goes. Here: the durable output is the files you wrote, so return a
   thin summary (nodes touched, whether the architecture doc moved, what was distilled or pruned) and never the

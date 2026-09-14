@@ -23,6 +23,7 @@ SCHEMAS_BUS = """\
 - `verdict` — `{ outcome: approve|changes|reject, notes }`
 """
 SCHEMAS_MAIN = """\
+**Line 1 is `status: done|continue|question|blocked`** — the typed dispatch-return envelope
 - inbox message is typed — `kind: verdict|intake|control` — one transport
 - **`kind: control`** — `{ op: reprioritize|pause|resume }` — honored at a boundary
 - `item` — the motion's item id · `kind: align|document:audit|doc-budget|update` — the motion that ran
@@ -42,6 +43,17 @@ VERDICT_OUTCOMES = ("approve", "changes", "reject")
 CONTROL_OPS = ("reprioritize", "pause", "resume")
 PARK_KINDS = ("demo", "qa", "setup", "reconcile")
 '''
+# The dispatch-return decider: the detector grades a return against this tuple, so a status the
+# contract declares and the tuple omits is one the detector calls untyped.
+RETURN_OK = '''\
+"""PostToolUse detector."""
+STATUSES = ("done", "continue", "question", "blocked")
+'''
+RETURN_STALE = '''\
+"""PostToolUse detector."""
+STATUSES = ("done", "question", "blocked")
+'''
+
 BUS_STALE_OPS = '''\
 """The console daemon. It survives /clear, --resume, and session death."""
 VERDICT_OUTCOMES = ("approve", "changes", "reject")
@@ -77,7 +89,8 @@ VERIFY_STALE = VERIFY_OK.replace(', "doc-budget"', "")
 VERIFY_EXTRA = VERIFY_OK.replace(', "update")', ', "update", "vibes")')
 # `loop.md` routes loop NODES. It names the three maintenance kinds and is DECLARED EXEMPT from
 # `update`, which is a command motion with no node in the graph.
-LOOP_OK = "| `document:audit` / `align` / `doc-budget` | maintenance due | `commit` |"
+LOOP_OK = ("| `document:audit` / `align` / `doc-budget` | maintenance due | `commit` |\n"
+           "| *any worker* | `status: continue` / `question` / `blocked` / done | route it |")
 LOOP_STALE = "| `document:audit` / `align` | maintenance due | `commit` |"  # missing doc-budget
 
 CODEMAP = "ARMS = [PythonArm(), JsTsArm(), GoArm(), JavaArm(), CSharpArm(), GenericArm()]  # precedence\n"
@@ -126,19 +139,26 @@ class Helpers(unittest.TestCase):
         self.assertEqual(e._num("5"), 5)
         self.assertIsNone(e._num("the"))
 
+    @staticmethod
+    def _enum(name):
+        """By NAME, never by position. These were indexed `ENUMS[0..2]` and every one of them
+        broke the day a sixth enum was registered ahead of them — a test that depends on the
+        order of a registry is a test that fails on an unrelated addition."""
+        return next(x for x in e.ENUMS if x["name"] == name)
+
     def test_enum_owner_anchored_to_request(self):
         # must pick the request kinds, not the earlier integrations kinds
-        vals = e.enum_values(SCHEMAS, e.ENUMS[0]["owner_re"])
+        vals = e.enum_values(SCHEMAS, self._enum("checkpoint.kind")["owner_re"])
         self.assertEqual(vals, ["demo", "qa", "setup", "reconcile"])
 
     def test_inbox_owner_anchored_to_verdict(self):
         # the inbox anchor picks the verdict|… line, never the demo|qa|… request
-        vals = e.enum_values(SCHEMAS, e.ENUMS[1]["owner_re"])
+        vals = e.enum_values(SCHEMAS, self._enum("inbox.kind")["owner_re"])
         self.assertEqual(vals, ["verdict", "intake", "control"])
 
     def test_outcome_owner_anchored(self):
         # the verdict-outcome anchor picks approve|changes|reject, no collision
-        vals = e.enum_values(SCHEMAS, e.ENUMS[2]["owner_re"])
+        vals = e.enum_values(SCHEMAS, self._enum("checkpoint.verdict.outcome")["owner_re"])
         self.assertEqual(vals, ["approve", "changes", "reject"])
 
     def test_registry_count_excludes_generic(self):
@@ -148,8 +168,9 @@ class Helpers(unittest.TestCase):
 
 class Enums(unittest.TestCase):
     def _files(self, roster, shared05=SHARED05_OK, bus=BUS_OK,
-               verify=VERIFY_OK, loop=LOOP_OK):
-        return {"product/shared/schemas.md": SCHEMAS_MAIN,
+               verify=VERIFY_OK, loop=LOOP_OK, ret=RETURN_OK):
+        return {"product/hooks/dispatch_return.py": ret,
+                "product/shared/schemas.md": SCHEMAS_MAIN,
                 "product/shared/schemas-bus.md": SCHEMAS_BUS,
                 "product/skills/checkpoint/SKILL.md": CHECKPOINT,
                 "docs/design/10-roster.md": roster,
@@ -160,6 +181,14 @@ class Enums(unittest.TestCase):
 
     def test_clean_passes(self):
         self.assertEqual(e.check_enums(reader(self._files(ROSTER_OK))), [])
+
+    def test_the_return_decider_dropping_a_status_is_caught(self):
+        """`continue` is the status that makes a worker's context bound real. If the detector's
+        tuple loses it while the contract still declares it, a worker that yields correctly gets
+        told its return was untyped — and the one path that recovers a blown window is the one
+        that breaks."""
+        errs = e.check_enums(reader(self._files(ROSTER_OK, ret=RETURN_STALE)))
+        self.assertTrue(any("dispatch-return.status" in x and "continue" in x for x in errs), errs)
 
     def test_code_consumer_dropping_a_member_is_caught(self):
         """The control enum is CLOSED because a control op has no effect anchor: the

@@ -97,7 +97,7 @@ overlap into one adjudicator.
 | verify | skill | artifact conformance (adjudicate) | `skills/verify` |
 | debug | skill | root-cause behaviour ≠ intended (adjudicate) | `skills/debug` |
 | refine | skill | route corrections back through planner→execute | `skills/refine` |
-| checkpoint | skill | pause for a human verdict (demo / qa / setup / reconcile / forecast / steer) | `skills/checkpoint` |
+| checkpoint | skill | pause for a human verdict (demo / qa / setup / reconcile / forecast / steer / spec) | `skills/checkpoint` |
 | setup-guide | agent | precise human steps for a manual external task | `agents/setup-guide` |
 | document | agent *(D178)* | fold changes + decisions into the knowledge base | `agents/document` |
 | ingest | skill | brownfield: build the knowledge base + reconstructed spec from existing code | `skills/ingest` |

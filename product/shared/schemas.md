@@ -384,6 +384,24 @@ the machine walks it. It de-risks the **process** question, the orthogonal axis 
 Which nodes dispatch is not this file's call — the orchestrator brief's *How to run a node* owns that list, and
 this covers exactly the agents it names. Each agent file points here; none restates it.
 
+**THE RETURN IS TYPED. Line 1 is `status: done|continue|question|blocked`**, and the rest is the condensed
+result. One token the caller can route on, in a fixed place, because the alternative — the caller reading prose
+to work out what just happened — is the thing that made every rule below advisory. What each status owes:
+- **`done`** — the work is finished. `summary`: one line. The condensed result follows.
+- **`continue`** — the worker stopped **because of its window, not its judgement**. It owes `resume:` — the
+  `scratch/` path holding everything a successor needs. **The caller re-dispatches the SAME node** with that
+  path; it does not re-plan and it does not treat this as a failure. This is the status that makes a worker's
+  context bound real: a subagent cannot spawn its own successor, so it yields and the orchestrator — which can —
+  starts a fresh one. `hooks/worker_budget.py` is what tells a worker it is time (§ `worker_budget.py` in
+  `schemas-runtime.md`).
+- **`question`** — an undecided option the worker must not guess. It owes `question:` — the one thing to decide
+  and the options it saw. The caller routes it (`decision-engineer`, or a human); the worker never resolves it.
+- **`blocked`** — a plan assumption turned out untrue, or something needed is missing. It owes `blocker:` —
+  what is untrue or absent. The caller routes to `refine`/`debug`.
+`question` and `blocked` are not new behaviour: `execute` and `planner` already stop dead on exactly these two
+rather than improvising. What is new is that they arrive as a **token rather than a paragraph**, so the caller
+routes them the same way every time.
+
 **A return is a CONDENSED RESULT PLUS POINTERS.** Paths, line anchors, ids, counts, the verdict, the blocker —
 what the caller needs in order to *route*, and nothing it could re-read for itself. Never a whole file body,
 never long raw tool output, never a transcript, never the diff. The caller carries this for the rest of the item,
@@ -412,7 +430,18 @@ stays here" is half the rule. Nothing a worker has read can be un-read:
   4.1×.
 
 **What is enforced, and what is not — a judgement wearing a gate's clothes is worse than an honest advisory.**
-This contract is **ADVISORY**: nothing stops a worker pasting a body back or loading one it did not need. One
-half of it has a **detector** — `hooks/dispatch_return.py` sizes what came back and warns — and it cannot block,
-is an absurdity ceiling rather than a budget, and cannot see the worker-window half at all. What it does, what it
-deliberately ignores, and the gap it leaves: [`schemas-runtime.md § dispatch_return.py`](schemas-runtime.md).
+Three different answers, and they are worth separating because this contract used to give one:
+- **The `status` line is ROUTED, which is stronger than enforced.** A return that omits it is not blocked, it is
+  *unusable*: the caller has nothing to route on and says so. `hooks/dispatch_return.py` marks the omission in
+  the caller's transcript at the moment it happens.
+- **The worker's own window now has an ACTUATOR**, where it previously had only a measurement.
+  `hooks/worker_budget.py` runs inside the worker, reads that worker's own transcript occupancy, and past a
+  threshold tells it to wrap up and return `continue`. The orchestrator re-dispatches. This is the half that was
+  called impossible on the reasoning that a subagent cannot spawn its own successor — true, and beside the point:
+  it does not have to, it only has to **yield**.
+- **The SIZE of a return is still ADVISORY, and that is the honest word for it.** Nothing can truncate a payload
+  that has already landed; `dispatch_return.py` sizes it and warns, an absurdity ceiling rather than a budget.
+  The typed envelope reduces the pressure on this half rather than enforcing it — a schema is a smaller thing to
+  fill than a blank page — but a worker that pastes a file body into `summary:` is still only *noticed*.
+What each hook does, what it deliberately ignores, and the gaps they leave:
+[`schemas-runtime.md § dispatch_return.py`](schemas-runtime.md) · [`§ worker_budget.py`](schemas-runtime.md).

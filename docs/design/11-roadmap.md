@@ -80,7 +80,7 @@ pays off), or **[later]** (deliberately deferred). Update as items close.
   duplication is real rather than hypothetical, and the triage has two callers to be designed against instead of
   one. **[stageable — deferred past Phase 10 on a trigger, D175]**
 
-### Space 3 — Website / console + bus  *(role decided; unbuilt — NOT merely "later")*
+### Space 3 — Website / console + bus  *(daemon · console · cockpit · remote half all BUILT; the per-item tags below are the live state)*
 - **The console + bus are ONE component, built in increments (D113 — replaces the old "C1 read-only console → C2
   comms bus" split).** That split was stale against D94/D100: a read-only console *is* a detached daemon serving a
   browser — **the console IS the bus**, so "C1, no bus needed" describes nothing buildable, and C1-alone cannot
@@ -1100,11 +1100,11 @@ below is a *reading* of it, and a reading can drift from its source. Argue from 
 |---|---|---|---|
 | 1 | standing directives that do not decay (*"notify me every time X"*) | `12a` · `D189` | ✅ |
 | 2 | do `doc_budget`/`align` default if unset? | answered — they do | ✅ |
-| 3 | **cap an agent's tokens; it self-dispatches and a fresh one starts** | `D187` measured only | ⚠️ **OPEN** |
+| 3 | **cap an agent's tokens; it self-dispatches and a fresh one starts** | `12k` · `D221` — `worker_budget.py` tells a worker to yield; the orchestrator re-dispatches | ✅ |
 | 4 | org mode on hold | parked | ✅ |
 | 5 | always judge what can run in parallel | `12c` · `D192`/`D195`–`D198` | ✅ |
 | 6 | use the hangs — dispatch during a wait | `12g` · `D216` — `PreToolUse` refuses an `execute` no wave verdict covers | ✅ |
-| 7 | **returns limited to a reasonable size** + temp store with a deletion rule | `12b` · `D191` — store ✅, **limit advisory** | ⚠️ **OPEN (half)** |
+| 7 | **returns limited to a reasonable size** + temp store with a deletion rule | `12b` · `D191` store · `12k` · `D221` typed envelope; **size still advisory, and said so** | ✅ |
 | 8 | goal-driven drive; stop when not progressing, re-research, continue | `12d` · `D199`/`D200` | ✅ |
 | 9 | at 30–35%, RUN dispatch and tell me to clear | `12f` · `D215` — a `Stop` hook blocks the turn until the anchor is written | ✅ |
 | 10 | autonomous dispatch→clear→continue, interruptible | `12h` · `D218` — a tmux poller beside a real interactive session | ✅ |
@@ -1114,14 +1114,20 @@ actuator was not.** A band that reports and nothing acts on · a detector that w
 · a measurement that concluded instead of enforcing · a parallelism rule written as prose. In each case the hard
 half — *knowing when* — shipped, and the asked-for half — *doing something* — did not. **Any new slice here is
 checked against that:** name the actuator, or say plainly that none is possible and why.
-**One remains** (#3+#7, which are one problem). #9 and #6 were the first discharged under that rule (`D215`,
-`D216`) and are worth reading as the template: in both, the rule was written *and* a hook was built to make
-skipping it impossible — because the rule on its own would have been the same prose the ask already had. Both
-entries also **name what their actuator cannot prove**, in the shipped file rather than only in the log, which
-is the other half of the rule: the failure was never that the actuator was hard, it was that its absence was
-invisible.
+**ALL TEN ARE NOW DISCHARGED** (`D221` closed the last, #3+#7). #9 and #6 were the first under that rule
+(`D215`, `D216`) and are the template: the rule was written *and* a hook was built to make skipping it
+impossible, because the rule alone would have been the same prose the ask already had. Every entry also **names
+what its actuator cannot prove**, in the shipped file rather than only in the log — the failure was never that
+the actuator was hard, it was that its absence was invisible.
+**How the last one actually fell is worth keeping**, because it is the counter-lesson to the rest of this
+ledger. #3+#7 sat OPEN across two phases behind a premise — *a subagent cannot spawn its own successor* — that
+`07` had recorded as a reason it was impossible. It is true, and it was never the obstacle: **a worker does not
+need to spawn its successor, it needs to yield**, and the orchestrator that is already waiting on its return can
+dispatch. The maintainer dissolved it in two sentences on being shown the state (`D221`). *An ask carried as
+impossible is still an ask; the ledger tracks whether it is DONE, and nothing was tracking whether its
+impossibility had been re-examined.*
 
-### The ordered build sequence  ·  ▶ START HERE (D186's Steps 0–6 are ALL CLOSED — what comes next is the first subsection below)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is BUILT and CAPTURED — all ten asks discharged, `D221` — but NOT yet re-validated as an installed whole. The next thing to do is `#### ▶ NEXT — re-run the smoke drive`, then the standing queue**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1183,71 +1189,69 @@ documented step wearing a new hat.
 **Its first run was RED, which is the whole point.** Four defects, none visible to 1,298 unit tests. One is
 fixed and gated (below); three are the queue that follows.
 
-#### NEXT — what the first smoke drive found. `[from `D219`]` `[core]`
-In the order the run exposed them. Each is a between-components defect; none is a bug *in* a component.
-**Re-running is now cheap where it can be** (`D220`): the receipt is keyed on the **package** rather than on
-`HEAD` and kept **per mode**, so a docs commit costs nothing and fixing one path does not re-prove the other;
-`--assert-only <tree>` re-checks the seams in seconds with no model calls, and `--resume <tree>` skips phases
-already done. Verify a fix against the kept trees first, and pay for a drive only when a phase must actually
-re-run. **The first run's trees were kept** at `/tmp/reeve-smoke-greenfield-gv6x_ayv` and
-`/tmp/reeve-smoke-brownfield-10f4hha0` — machine-local and **perishable** (they do not survive a reboot, and
-nothing should be made to depend on them). While they exist they are worth about an hour each: `--assert-only`
-re-checks a fix against them in seconds. Once they are gone, `--mode <one>` re-earns one of them.
+#### `12j`–`12m` — the closure set. ✅ **CLOSED 2026-09-14 — `D221`.** `[smoke findings 1-4 + asks #3/#7]`
+Four slices built together; **`D221` owns the calls, what was built, and — more usefully — the two diagnoses the
+maintainer corrected before anything was written.** Not restated here. In one line each:
+- **`12j` the floor PARKS** — a seventh checkpoint kind (`spec`), raised by `spec_approval.py check --park` from
+  inside the refusal, keyed on the spec digest. *This replaced smoke finding 1*, whose stated cause was wrong:
+  greenfield needing a human at inception is **correct and by design**; the real defect was the brownfield
+  drive's blocked spec change landing as prose with nothing parked.
+- **`12k` the TYPED return** — `status: done|continue|question|blocked`, plus `hooks/worker_budget.py`, which
+  reads a worker's own transcript occupancy and tells it to yield. **Discharges the last open ask.**
+- **`12l` the code map gets a loop owner** — `document` rebuilds it, `checks.sh` gates on it. It had **no owner
+  in the loop at all**, so greenfield never built one and `align`'s blast-radius lens read an empty graph.
+  *(Found while verifying finding 3's fix; it had no queue entry, which is what `12m` is about.)*
+- **`12m` the sweep gets a backstop** — `check_owner_sweep.py` in the commit chain. Found exactly the two real
+  bookkeeping defects and nothing else.
+**Smoke findings 2 and 4 closed the same day**: the resume anchor now must NAME a base commit (`context_band.py`
+counts an anchor as written only then, which reaches both the `Stop` hook and `clear_safe`), and the autonomy
+floor's wrap window no longer arms on ordinary punctuation — *a wrap continues a marker, it cannot create one*.
+Both were reproduced against the kept smoke trees before being fixed, and the floor fix was verified on the real
+withheld `spec-delta.md`: 2 spurious `locked-block` findings → 0, with all 9 legitimate `acceptance-criteria`
+findings intact.
 
-1. **Greenfield never mints a goal, and brownfield does.** The INVERSE of the finding that made comparing both
-   paths a requirement — so the asymmetry is real and was mis-attributed. The greenfield session named the
-   cause itself: `planner:decompose` is blocked because `goal.acceptance[]` derives from the spec's
-   definition-of-done and `converge.py` treats an empty acceptance set as never-`met`, so a goal minted there
-   would have no reachable stop. *"This project could be bootstrapped unattended, but it cannot be built
-   unattended."* **That sentence is the slice.** Greenfield's whole point is an unattended build.
-2. **A `handoff.md` with no `base_sha`**, written by a brownfield path that otherwise went all the way round.
-   A resume reads `git log <base_sha>..HEAD`; without it a cleared or dead session cannot see what changed —
-   and this is now load-bearing twice over, because the supervisor (`12h`) clears sessions on purpose.
-   The `/dispatch` command names the field; nothing checks it. **Name the actuator.**
-3. ~~**The code-map seam passes vacuously on 0 nodes.**~~ ✅ **FIXED — `D220`.** *Empty is not clean*: the
-   seam now fails when the map has no nodes and the project root has source. It immediately turned greenfield
-   red for a real reason — that run had written **10 source files** and the map was still empty.
-4. **The autonomy floor raises a spurious `locked-block`** on prose containing the word `` `locked` `` —
-   reported by the brownfield session in passing. A commitment marker that fires on the word rather than the
-   structure will keep stopping drives that have nothing locked in them.
+#### ▶ NEXT — re-run the smoke drive, and close the one residual it should prove. `[validation for `D221`]`
+**Start the next session here.** Phase 12's slices are all built and captured; what has NOT happened is running
+the package as an installed whole since `D221` touched it. Four of that decision's changes are
+**between-component** — a new checkpoint kind raised from inside a commit gate, a hook that runs inside a worker,
+a gate that shells out to the project's own `codemap.sh`, a typed return the router has to route on — and
+`D219` is the standing proof that 1,200-odd unit tests cannot see that class. **The receipt is already stale**
+(`D220` keys it on the shipped file digest, which `D221` changed), so `build-release.py --out` refuses until this
+runs; that is the gate working, not an obstacle to route around.
+- **Do the cheap half first.** `--assert-only` on the kept trees costs seconds and zero model calls; `--resume`
+  re-enters a tree and skips finished phases. Pay for a full drive only where a phase must actually re-run.
+  The kept trees are machine-local and **perishable** — if they are gone, `--mode <one>` re-earns one.
+- **`worker_budget.py` HAS NEVER BEEN OBSERVED TO FIRE, and it is built to fail silent** — the sharpest thing
+  the drive can settle. Its reading half is **verified against real data** (`occupancy()` run against a real
+  subagent transcript from the brownfield drive: 87,090 tokens, 43.5%), and the on-disk layout `D187` described
+  is confirmed. What is unverified is its *trigger*: it acts only if the `PostToolUse` payload inside a worker
+  carries `agent_id` and a locatable transcript path, and if it does not, the hook is a **permanent no-op that
+  nothing would report**. Note the asymmetry that makes this worse than it looks: `handoff_gate.py` reads
+  `agent_id` as a *skip-if-present* guard, so it is safe either way; this one reads it as a *required* condition.
+  **So ask #3 is discharged by a mechanism that may not run.** Two moves, in order: make the silence
+  **observable** (a breadcrumb when the hook runs and cannot locate itself, so absence is measurable rather than
+  invisible), then let the drive assert on it. Until that lands, `#3`'s ✅ in the ledger above is doing more work
+  than the evidence supports, and this entry is the place that says so.
+- **What else the drive would exercise for the first time:** a `spec` checkpoint actually parking from inside
+  `checks.sh`; the code-map gate running against a real wrapper of either generation; a worker returning
+  `continue` and the router re-dispatching it.
 
-**Already fixed, and gated so the class cannot return:** `prioritize/SKILL.md` and `agents/document.md`
-documented `converge.py status --workflow-dir .workflow`, which **errors** — a shipped instruction to run a
-command that dies on contact. `scripts/check_documented_invocations.py` now asks every documented script's own
-parser whether it would accept its documented invocation (nothing is executed: `parse_args` is intercepted), and
-it is in the commit chain. *Its own first version was a false green and is recorded as such in `D219`.*
-
-#### Then — never wait alone, ENFORCED. `[ask #6]` `[core]`
-*"In all of this time... we should dispatch work to be done."* `D192` made this a first-class capability —
-**the orchestrator may never wait alone** — and `12c` built the wave machinery under it. What it did **not**
-build is anything that makes it happen: the rule lives in `loop.md`/`loop-detail.md` as an instruction, so a
-router that simply blocks on a dispatch violates nothing and nothing notices. **Name the actuator.** The
-independence gate (`check_wave_independence.py`) already computes what is safe to run beside what, so the
-missing piece is a *check at the blocking boundary*, not new judgement. Candidate: before any blocking dispatch,
-the boundary requires a recorded answer to *"what else is viable?"* — which makes the omission visible the way a
-missing `discharge` is.
-
-#### Then — bounding a WORKER, both halves. `[asks #3 + #7]` `[core — research-gated]`
-**These are one problem and were split across two slices, which is part of why neither closed.**
-- **#7, the return bound.** *"Give each skill/agent we dispatch a return format that is limited to a reasonable
-  amount of context."* The temp-store half shipped well (`12b`: scratch, promote-then-prune — his own concern
-  about deletion answered without inventing a TTL). The **limit** is a `PostToolUse` detector that fires *after*
-  the return has landed: it warns, it cannot truncate, and the tokens are already paid for.
-- **#3, the worker's own window.** *"Limit the tokens an agent can reach before it should itself /dispatch and
-  start a new one."* `D187` measured (194.1k median, 21% over 300k — a tail, not a median) and stopped there.
-**Both need a mechanism nobody has found yet**, and `07` carries the reasons: no live signal observes a running
-subagent's token count, a subagent cannot spawn its own successor, and `PostToolUse` can add context but not
-rewrite a tool result. **So this slice starts as RESEARCH, not a build** — and its honest possible outcome is
-*"no actuator exists; here is the strongest mitigation and here is what stays advisory."* Saying that plainly
-would already be better than the current state, where a contract reads as a control until someone asks what
-enforces it.
-
-#### Then — the standing queue, unchanged in content and now actually next
-The **cold-context reviewer** (promotable, and the strongest Phase-13 candidate) and the **inline-node topology
-question**; then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage ·
-project-map tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the
-code-map observed layer. **Org mode stays parked at the maintainer's word.** Open questions and their current
-state live in `07`, which owns them.
+#### Then — the standing queue. `[no ask — post-Phase-12]`
+With Phase 12 closed this is what the work order points at, and it is the first entry here that traces to no
+numbered ask, because the request it came from is discharged. **Two named candidates, neither blocked on a
+decision from the maintainer:**
+- **The cold-context reviewer** — the strongest Phase-13 candidate and the biggest remaining *correctness* gap:
+  `verify` is artifact conformance by design, `debug` is on-fail only, `align` is periodic, so a change that is
+  logically wrong but passes its own tests and matches its own changelog goes straight to `commit`. Read-only, so
+  it does not touch the single-writer rule `D178` upheld; it fits as a leaf agent, and `11e` being green is the
+  condition it was held back for. **Promotable now** — what is open is whether to build it, not what it is.
+- **The inline-node topology question** — `D180` measured it (`planner` is the expensive inline node, above
+  `verify`) and named the cheapest candidate fix (`D84`'s authoring-thinness, with a fan-out threshold that
+  `verify/SKILL.md` licenses but does not quantify). **Untested, not undecided.**
+Then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage · project-map
+tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the code-map observed
+layer. **Org mode stays parked at the maintainer's word.** Open questions and their current state live in `07`,
+which owns them.
 
 ---
 
@@ -1409,7 +1413,7 @@ listed here as unscheduled, was **BUILT the same day — `D206`**. It turned out
 `warn_pct` measurement at all: the blocker was that the statusline could see a token count and not act on it
 while the loop could act and not see, and crossing that wall needed no number.)*
 
-### Phase 12 — Standing intent: make the operator's recurring instructions part of the machine **[OPEN 2026-09-13 — designed D185; per-slice state lives in `### The ordered build sequence` above, which owns it. Opened from LIVED USE, not from a premise re-check (Phase 10) or an instrument reading (Phase 11): the maintainer noticed what he keeps re-typing. Org mode is explicitly parked and no slice here touches it]**
+### Phase 12 — Standing intent: make the operator's recurring instructions part of the machine **[COMPLETE 2026-09-14 — designed D185, closed D221 with all ten asks of the ACCEPTANCE LEDGER discharged; per-slice state lives in `### The ordered build sequence` above, which owns it. Opened from LIVED USE, not from a premise re-check (Phase 10) or an instrument reading (Phase 11): the maintainer noticed what he keeps re-typing. Org mode is explicitly parked and no slice here touches it]**
 Five behaviours were being re-established conversationally, session after session, and every one of them decays at
 the next `/clear`. They have **one root cause** — there is no owner in the package for a standing operator
 directive about how the *loop* behaves (`docs/decisions/` is build decisions, `rules/` is product code enforced by
@@ -1551,4 +1555,6 @@ the instrument itself was 2.8–3.5x high, the writer's discovery is flat with i
 sub-linearly, and the constrained window turns out to be the **router's** (43–53% of a drive's fed-in tokens,
 98–179k per item) — where an inline node costs 9–29k against a dispatched node's 0.3–2.6k, and `planner` outweighs
 `verify`. That question is logged in `07`, not scheduled here.
-**`### Phase 12` (D185, 2026-09-13) is the live pointer — standing intent.** It is the third kind of phase-opening this repo has had: not a stale-claim sweep (Phase 10) and not an instrument reading (Phase 11), but **lived use** — the maintainer noticing which instructions he re-types every session. Five of them, one root cause: the package has no owner for a standing operator directive about how the *loop* behaves, so each one decays at the next `/clear`. The channel is built first and everything else registers in it; then return contracts, the wave coordinator D91's predicate has been waiting on since it was decided, an acceptance-derived convergence measure, and last — because it multiplies every defect above it — a `loop.sh` that drives session after session toward a goal on its own. **Where to start reading if you know nothing else: `### The ordered build sequence` (D186)** — it places Phase 12 against the two decided-but-unbuilt entries that come first (D184's remainder, then D183), and it is the only copy of that order.
+**`### Phase 12` is COMPLETE (D185 → D221, 2026-09-13 → 2026-09-14); the live pointer is now
+`### The ordered build sequence` § `▶ NEXT — the standing queue`, which is the only open entry left in it.
+What Phase 12 was, kept because the way it opened is the part worth reusing — standing intent.** It is the third kind of phase-opening this repo has had: not a stale-claim sweep (Phase 10) and not an instrument reading (Phase 11), but **lived use** — the maintainer noticing which instructions he re-types every session. Five of them, one root cause: the package has no owner for a standing operator directive about how the *loop* behaves, so each one decays at the next `/clear`. The channel is built first and everything else registers in it; then return contracts, the wave coordinator D91's predicate has been waiting on since it was decided, an acceptance-derived convergence measure, and last — because it multiplies every defect above it — a `loop.sh` that drives session after session toward a goal on its own. **Where to start reading if you know nothing else: `### The ordered build sequence` (D186)** — it places Phase 12 against the two decided-but-unbuilt entries that come first (D184's remainder, then D183), and it is the only copy of that order.

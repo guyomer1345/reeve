@@ -7910,3 +7910,83 @@ positive.
 **Builds on:** **D219** (the drive and its first run), **D125** (`MANIFEST.json` as the single answer to what
 ships, which is what makes a package digest well-defined).
 → `11` (§ the ordered build sequence — finding 3 is discharged; 1, 2 and 4 remain).
+
+## D221 — the closure set: four holes shut, and TWO of them only after the maintainer corrected the diagnosis **[DECIDED + BUILT 2026-09-14. Discharges the LAST open ask (#3 + #7) and the remaining smoke-drive findings. 1,259 tests, 10 meta-gates green]**
+Four slices, commissioned together after a state review. **Two of the four were re-scoped by the maintainer
+before a line was written, and in both cases what I had reported was wrong in a way that would have produced the
+wrong build.** That is recorded first, because it is the more useful half of this entry.
+
+**CORRECTION 1 — "greenfield cannot build unattended" was a harness artifact reported as a product defect.**
+`D219`'s finding 1 said greenfield never mints a goal, and I traced it to a missing human gate. The maintainer's
+answer: *"if you mean the setup needs human work thats completely acceptable, its how its meant to be until we
+agree on the resolution of the project."* He is right. `discuss` **is** a conversation with a human; the smoke
+drive ran inception with nobody there, which is an artificial condition, and the floor refusing to let a loop
+mark its own spec `locked` is the floor working. **What survived the correction is a different defect on a
+different path:** the brownfield drive — human genuinely absent, mid-item — had `document` produce a spec change,
+the floor blocked it, and the change went to `items/I-001/spec-delta.md` with a backlog note saying *"nothing
+else should touch `docs/spec.md` until this lands"*. **Nothing parked.** So the real finding is
+**the floor blocks and routes nowhere**, which is path-independent and has nothing to do with greenfield.
+
+**CORRECTION 2 — "no actuator exists for bounding a worker" was wrong, and the maintainer dissolved it in two
+sentences.** `07` had carried three reasons it was impossible; the sharpest was *a subagent cannot spawn its own
+successor*. His answer: *"we just need an accepted format that agents/skills return their work in, and in that
+there will be a status field — done, continue, question…"* **A worker does not need to spawn its successor. It
+needs to YIELD.** `continue` + the orchestrator's existing ability to dispatch is the whole mechanism, and it had
+been sitting behind a premise nobody re-examined for two phases. The measurement that makes it real was already
+on file: `D187` proved a subagent's own transcript is appended *during* the run with full `usage` per line.
+
+**WHAT WAS BUILT.**
+- **`12j` — the floor parks.** A **seventh checkpoint kind, `spec`**, and `spec_approval.py check --park` raises
+  it *from inside the gate that already refuses*. It cannot be skipped because it happens in the refusal. Keyed
+  on the **spec digest**, so re-running a blocked commit does not bury the human in identical cards and editing
+  the spec correctly opens a different ticket. **Fail-soft, against the grain of every other rule in that file:**
+  the gate has already decided to block, and a park that raised would turn an actionable refusal into a crash
+  with nobody told why — the `/rebind` case is exactly when that matters.
+- **`12k` — the typed return.** Line 1 of every dispatched worker's return is
+  `status: done|continue|question|blocked`. `hooks/worker_budget.py` runs **inside** a worker, reads its own
+  transcript occupancy, and past a threshold (75%, `REEVE_WORKER_YIELD_PCT`) tells it to write state to
+  `scratch/` and return `continue`; the orchestrator re-dispatches the same node. `dispatch_return.py` now reports
+  an **untyped** return as well as an oversized one — *unroutable* is a different complaint from *too big*.
+  **The three enforcement levels are now stated separately** where the contract used to give one answer: the
+  status is routed, the worker window has an actuator, and the return SIZE is still advisory and is called that.
+- **`12l` — the code map gets an owner in the loop.** It had none: `ingest` built it once at brownfield
+  bootstrap, `/update` rebuilt it, and **nothing in the loop ever did** — so a greenfield project never had a map
+  at all and a brownfield one carried its bootstrap map forever, while `align` expanded blast-radius through it
+  and reported nothing, which reads exactly like a clean answer. `document` step 0 rebuilds it; `checks.sh` gates
+  on it. **The gate regenerates through the project's own `codemap.sh` rather than re-implementing "what is
+  source"** — and that choice paid immediately: two trees built from the *same package version* were found with
+  **different wrappers** (`codemap.py ./project "$@"` vs `codemap.py .`), because the wrapper is written out from
+  prose at bootstrap. A gate that passed `--out` and trusted it would have compared the map against itself and
+  reported fresh forever.
+- **`12m` — the sweep gets a backstop.** `scripts/check_owner_sweep.py`, in the commit chain: a decision that
+  says it settled an `07` question must have `07` name it, and an `[ask #N]` may not carry both a CLOSED queue
+  entry and an open one. Run on the tree it was written against it found **exactly the two real defects and
+  nothing else** (14 settle-claims, 13 swept, 1 not). **Its blind spot is stated in the file rather than
+  discovered later:** a section header contradicting the items beneath it is prose agreeing with prose and is not
+  decidable, so that half stays human — which is how `Space 3`'s "unbuilt" header survived over seven BUILT tags.
+
+**FOUR STALE ENTRIES CORRECTED**, all found by the same root cause — closing a slice updated the decision log and
+the queue and swept nothing else: the ghost `ask #6` entry (`D216` had already built what it proposed), the
+`Space 3` header, and two `07` questions closed by `D183`/`D184` and built in `D188` that `07` never heard about.
+
+**WHAT THIS DECISION HAS NOT EARNED, recorded here rather than left for the next reader to discover.** None of
+it has been run as an installed whole — the smoke receipt is stale by construction (`D220` keys it on the
+shipped digest, which this changed) and four of these changes are exactly the between-component class `D219`
+proved unit tests cannot see. **The sharpest instance: `worker_budget.py` has never been observed to fire.** Its
+reading half is verified against real data (`occupancy()` over a real subagent transcript — 87,090 tokens,
+43.5%), its trigger is not, and it fails **silent** when it cannot locate itself, so a payload shape that differs
+from the assumed one makes it a permanent no-op nothing would report. **Ask #3 is therefore discharged by a
+mechanism that may not run**, and the ✅ in the ledger is provisional on the next drive. Carried as an open
+question in `07` and owned by `11` § `▶ NEXT`. *This is the same failure this entry congratulates `12m` for
+catching one level up — an actuator whose absence is invisible — and it is named rather than smoothed over.*
+
+**One defect found in this repo's own tests, worth naming:** `test_check_enum_coherence.py` indexed the enum
+registry by POSITION (`ENUMS[0..2]`), so registering a sixth enum broke three unrelated tests. Now keyed by name.
+
+**Builds on:** **D219**/**D220** (the findings and the cheap re-entry that made verifying them seconds rather
+than hours), **D187** (the live signal, measured two phases before anything could use it), **D214** (an
+owner-less fact goes missing silently — `12m` is that lesson applied to the sweep instead of the request),
+**D189** (the directive channel, whose `mechanized`-entry rule is the same "point, do not restate" discipline).
+→ `11` (§ the ACCEPTANCE LEDGER — asks #3 and #7 discharged; § the ordered build sequence — all four findings
+closed), `07` (the live-signal question closed; two stale entries struck), `10` (the seventh checkpoint kind),
+`CLAUDE.md` (the second mechanical backstop, and its stated blind spot).

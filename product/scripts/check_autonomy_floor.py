@@ -472,11 +472,34 @@ class Side(object):
         A MARKER WRAPS, and the wrap is not hypothetical — a real spec writes
         `` — commitment: `locked` (existence) / `` on one line and `` `provisional` (layout,
         styling) `` on the next, so a strictly per-line read sees a locked-only marker where
-        the author wrote a mixed one. So once an introducer has been seen in this block, the
-        block's later own-lines contribute their BACKTICKED tokens too. That can only widen
-        the set, which is the safe direction on both counts: a wider set can add `locked`
-        (route, correct) and can turn a locked-only marker into the MIXED one it really is
-        (which is the detail that tells an operator why the gate could not decide for them).
+        the author wrote a mixed one. The wrap window therefore lets a continuation line
+        contribute its BACKTICKED tokens without an introducer of its own.
+
+        A WRAP CONTINUES A MARKER; IT CANNOT CREATE ONE, and that distinction is the whole
+        rule here. The first version armed the window on the mere PRESENCE of an introducer
+        and then left it open to the end of the block, so an ordinary em-dash in prose —
+        punctuation, not a marker — made every later backticked `locked` in that block a
+        commitment. A real brownfield drive was stopped by exactly that: a bullet whose prose
+        happened to mention `` `locked` `` parsed as a locked element. A gate that
+        fires on the WORD rather than the STRUCTURE stops drives that have nothing locked in
+        them, and a gate that always fires is one an operator learns to wave through — which
+        costs more than the over-route it was buying.
+
+        So the window arms on a line that ACTUALLY ASSERTED a marker, or on a DANGLING
+        introducer (`` — commitment: `` at end of line — a marker whose tokens are all on the
+        next line, the one shape that asserts nothing and still means one is coming). And what
+        it accepts is a CONTINUATION, not merely a line with a token in it: a marker broken
+        across lines resumes WITH its token, so `` `provisional` (layout, styling) `` continues
+        one and `` The `locked` form was rejected `` does not. The window then closes on the
+        first line that is not a continuation.
+        Both halves are needed. Arming correctly but accepting any token would still let the
+        sentence immediately under a genuine `provisional` marker widen it to `locked` — which
+        is the same defect one line further down.
+
+        THE FAIL DIRECTION IS STILL ROUTE where it is genuinely ambiguous: a dangling
+        introducer arms, a mixed marker still reports MIXED, and every widening the window
+        does can still only ADD `locked`. What was removed is not routing on ambiguity — it is
+        routing on punctuation.
         """
         b = self.blocks[block_idx]
         found, tail = set(), False
@@ -484,11 +507,11 @@ class Side(object):
             if self.owner[i] != block_idx:
                 continue
             line = self.lines[i]
-            found |= markers_in_line(line)
-            if tail:
-                found |= set(MARKER_TOKEN_RE.findall(line))
-            if COMMITMENT_INTRO_RE.search(line) or DASH_INTRO_RE.search(line):
-                tail = True
+            own = markers_in_line(line)
+            cont = tail and is_marker_continuation(line)
+            wrapped = set(MARKER_TOKEN_RE.findall(line)) if cont else set()
+            found |= own | wrapped
+            tail = bool(own) or cont or intro_dangles(line)
         return found
 
     def truncated(self, block_idx):
@@ -526,6 +549,44 @@ def markers_in_line(line):
     for m in DASH_INTRO_RE.finditer(line):
         found |= set(MARKER_TOKEN_RE.findall(line[m.end():]))
     return found
+
+
+def intro_dangles(line):
+    """True when this line's LAST introducer has no word after it — `` — commitment: `` or a
+    trailing `` — `` at end of line.
+
+    The one shape that asserts no token and still means a marker is coming, so it is the only
+    thing besides a real assertion that may open the wrap window (see `markers`). "No word"
+    rather than "nothing": a marker really does wrap mid-parenthesis (`` … `locked` (existence)
+    / `` → `` `provisional` (layout) ``), and the trailing `/` or `(` left behind must not read
+    as content that closed the marker off.
+    """
+    end = None
+    for rx in (COMMITMENT_INTRO_RE, DASH_INTRO_RE):
+        for m in rx.finditer(line):
+            end = m.end() if end is None else max(end, m.end())
+    return end is not None and re.search(r"\w", line[end:]) is None
+
+
+# A marker that wraps is broken MID-MARKER, so its continuation OPENS with the token — after
+# at most the joining punctuation the break left behind (`/`, `(`, a comma, a dash). Prose
+# that merely mentions a commitment level opens with a word instead, which is the whole
+# difference between `` `provisional` (layout, styling) `` and `` The `locked` form was
+# rejected ``. Backticked only, for the same reason the DASH introducer is: the unbackticked
+# word is too common in prose to mean anything.
+CONTINUATION_RE = re.compile(r"^[\s/(),.;:—–-]*`(%s)`" % "|".join(COMMITMENTS))
+
+
+def is_marker_continuation(line):
+    """True when this line reads as the TAIL of a marker broken across lines (see `markers`).
+
+    The residual, named rather than left to be discovered: a marker whose continuation line
+    starts with an UNBACKTICKED token is missed, and a missed marker under-routes. That is
+    accepted on the same grounds the dash introducer already accepts it — every marker form a
+    real spec writes backticks its tokens, and the unbackticked word appears in ordinary prose
+    often enough that honouring it would put the gate back where a live drive found it.
+    """
+    return CONTINUATION_RE.match(line) is not None
 
 
 # ============================================================== the rules

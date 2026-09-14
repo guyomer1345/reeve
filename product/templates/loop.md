@@ -33,6 +33,8 @@ from each section below. Read it when that situation arises, not every turn.
 | `create-demo` | refine cap hit (`config.demo.max_refine_rounds`) — never auto-proceed | escalate → `discuss` (live realignment, carrying the refine history) |
 | `execute` | changelog | `verify` |
 | `execute` | structural divergence (the plan is wrong) | `planner:plan-one` (re-plan) |
+| *any worker* | `status: continue` | **re-dispatch the SAME node** with the scratch path it named |
+| *any worker* | `status: question` / `blocked` | `decision-engineer` / `refine` (`debug` if behaviour ≠ intent) |
 | `verify` | **pass** | `checkpoint:qa?` |
 | `verify` | **fail** | `debug` |
 | `debug` | root cause | `refine` |
@@ -47,6 +49,7 @@ from each section below. Read it when that situation arises, not every turn.
 | `checkpoint:forecast` | changes | `create-forecast` (re-forecast with the edits — the record stays a draft) |
 | `checkpoint:forecast` | reject | `discuss` |
 | `checkpoint:setup` | fail (couldn't complete) | re-attempt `checkpoint` (re-guides via setup-guide) / escalate to human |
+| `checkpoint:spec` | approve / changes · reject | apply the delta → **record the receipt** → resume · discard → `refine` |
 | `document` | knowledge + Sessions updated | `commit` |
 | `commit` | snapshot made | `close-issue?` |
 | `close-issue` | issue closed (or no linked issue → skip) | `converge?` (if a goal) → `prioritize` |

@@ -40,6 +40,7 @@ must never have is noise, and the one thing it must never do is interfere with a
 already fine.
 """
 import json
+import re
 import sys
 
 PLUGIN = "reeve"
@@ -95,6 +96,24 @@ def extract_text(response):
     return None
 
 
+# Line 1 of a return is `status: done|continue|question|blocked`. Read leniently — leading
+# whitespace, a bold or fenced spelling, any case — because a return that MEANT to declare its
+# status and spelled it oddly is not the failure worth reporting. What is worth reporting is a
+# return that declares nothing, because the caller then has to read prose to find out what
+# happened, which is the habit the typed envelope exists to end.
+STATUSES = ("done", "continue", "question", "blocked")
+STATUS_RE = re.compile(r"(?im)^\W{0,4}status\W{0,4}\s*(%s)\b" % "|".join(STATUSES))
+
+
+def declared_status(text):
+    """The status this return declares, or None. Searched over the HEAD of the payload only —
+    a `status:` line 400 lines down is prose about a status, not a declaration of one."""
+    if not isinstance(text, str):
+        return None
+    m = STATUS_RE.search("\n".join(text.splitlines()[:5]))
+    return m.group(1).lower() if m else None
+
+
 def main():
     payload = read_payload()
     if not isinstance(payload, dict):
@@ -108,7 +127,24 @@ def main():
     if not is_package_agent(agent):
         return 0
     text = extract_text(payload.get("tool_response"))
-    if text is None or len(text) <= CEILING_CHARS:
+    if text is None:
+        return 0
+
+    status = declared_status(text)
+    if status is None:
+        # Not a size complaint, and deliberately reported even when the return is small: an
+        # untyped return is not too big, it is UNROUTABLE. The caller is told once, here, rather
+        # than working it out from prose every time.
+        sys.stderr.write(
+            "dispatch-return is UNTYPED: `%s` returned no `status:` line, so there is nothing to "
+            "route on. Line 1 of a return is `status: done|continue|question|blocked` "
+            "(`shared/schemas.md` section dispatch-return).\n"
+            "The tool call succeeded and nothing is being undone. Read the return and decide "
+            "which of the four it was before you act on it — and if you re-dispatch for this "
+            "item, say in the prompt that line 1 must carry the status.\n" % agent)
+        return 2
+
+    if len(text) <= CEILING_CHARS:
         return 0
 
     # Exit 2 on PostToolUse shows stderr to the model as a warning and blocks nothing — which is

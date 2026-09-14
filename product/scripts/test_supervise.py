@@ -27,6 +27,13 @@ M = cb.PER_NODE_TOKENS
 pytestmark = pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux is the transport")
 
 
+
+# A REAL anchor: fresh mtime is only half of "written" — `context_band` also requires the
+# anchor to name a base commit, because a resume reads `git log <base_sha>..HEAD` and one
+# without it cannot say what moved (`D219` #3). A bare "# handoff" is the exact shape a
+# real drive produced and nothing caught.
+ANCHOR = "# handoff\n\nbase_sha: 1a2b3c4\n"
+
 def _project(tmp_path, runway_nodes=0.5, window=1_000_000, anchor=True):
     """An installed project whose band says hand off now and whose anchor is fresh."""
     p = tmp_path
@@ -37,11 +44,11 @@ def _project(tmp_path, runway_nodes=0.5, window=1_000_000, anchor=True):
     for name in ("context_band.py", "bus.py"):
         shutil.copy(HERE / name, scripts / name)
     cb.publish(str(wf), window - runway_nodes * M, window, time.monotonic())
-    (wf / "handoff.md").write_text("# handoff\n")
+    (wf / "handoff.md").write_text(ANCHOR)
     cb.demand(str(wf))                               # arms the latch at this mtime
     if anchor:
         path = wf / "handoff.md"
-        path.write_text("# fresh\n")
+        path.write_text("# fresh\n" + ANCHOR)
         os.utime(path, (os.path.getatime(path), os.path.getmtime(path) + 10))
     return p
 

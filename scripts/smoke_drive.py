@@ -43,6 +43,7 @@ because `--permission-mode bypassPermissions` is refused.
 """
 import argparse
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -238,15 +239,29 @@ def seam_viability_was_recorded(repo):
     return True, "considered %d candidate(s)" % len(rec.get("considered") or [])
 
 
+# The SAME question the shipped gate asks, deliberately asked the same way: `context_band.py`
+# now refuses to call an anchor written until it names a base commit, and a seam that accepted
+# a weaker anchor than the gate does would go green on a tree the package itself would block.
+# Kept as its own expression rather than importing the shipped module — this harness asserts
+# over a finished tree from outside, and importing the thing under test is how a seam starts
+# agreeing with a bug.
+BASE_SHA_RE = re.compile(r"(?i)base[_\s-]?sha\W{0,6}\b([0-9a-f]{7,40})\b")
+
+
 def seam_resume_anchor(repo):
     """A handoff naming a base commit — what a cleared or dead session resumes from."""
     path = os.path.join(repo, ".workflow", "handoff.md")
     if not os.path.exists(path):
         return False, "no .workflow/handoff.md"
     text = open(path, encoding="utf-8").read()
-    if "base_sha" not in text:
-        return False, "the anchor names no base_sha, so a resume cannot read the diff since it"
-    return True, "anchor present, names a base commit"
+    m = BASE_SHA_RE.search(text)
+    if not m:
+        # The word alone was the old bar, and it is not enough: `base_sha: unknown` is the
+        # shape a session writes when it did not look, and it reads as a field that is there.
+        why = ("names `base_sha` but no commit id after it"
+               if "base_sha" in text else "names no base_sha at all")
+        return False, "the anchor %s, so a resume cannot read the diff since it" % why
+    return True, "anchor present, names base commit %s" % m.group(1)[:12]
 
 
 SEAMS = [
@@ -363,6 +378,17 @@ def _break_anchor(repo):
         fh.write("# handoff\nno commit named here\n")
 
 
+def _break_anchor_by_naming_no_commit(repo):
+    """The half the old seam let through: the FIELD is there and the COMMIT is not.
+
+    `base_sha: unknown` reads as a field that was filled in, and a substring check for the
+    word cannot tell it from one that was. Same shape as *empty is not clean* one seam over —
+    an assertion that cannot distinguish "answered" from "answered with nothing".
+    """
+    with open(os.path.join(repo, ".workflow", "handoff.md"), "w", encoding="utf-8") as fh:
+        fh.write("# handoff\nbase_sha: unknown\n")
+
+
 def _break_code_map_by_emptying_it(repo):
     """The case the harness's own first run passed vacuously: a map with nothing in it, over a
     project that has source to map."""
@@ -378,6 +404,7 @@ BREAKS = [
     ("goal minted", _break_goal),
     ("viability recorded at the boundary", _break_viability),
     ("resume anchor written", _break_anchor),
+    ("resume anchor written", _break_anchor_by_naming_no_commit),
 ]
 
 

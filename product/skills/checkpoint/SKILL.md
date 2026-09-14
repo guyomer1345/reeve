@@ -1,6 +1,6 @@
 ---
 name: checkpoint
-description: Pause autonomous work to get a human verdict on the live app, then resume on the answer. Six kinds — demo (approve a sandbox), qa (test a built feature), setup (perform a manual external action), reconcile (confirm a brownfield-reconstructed spec), forecast (approve the chain of events the loop proposes to walk), steer (the drive reached its goal or stopped moving and needs direction). Parks the ticket durably and yields — never a live wait; routes by kind on both pass and fail (see Route).
+description: Pause autonomous work to get a human verdict on the live app, then resume on the answer. Seven kinds — demo (approve a sandbox), qa (test a built feature), setup (perform a manual external action), reconcile (confirm a brownfield-reconstructed spec), forecast (approve the chain of events the loop proposes to walk), steer (the drive reached its goal or stopped moving and needs direction), spec (approve a spec change the autonomy floor blocked). Parks the ticket durably and yields — never a live wait; routes by kind on both pass and fail (see Route).
 ---
 
 # Checkpoint — the human-in-the-loop gate
@@ -30,7 +30,7 @@ Two boundary types. **Judgment** — the human gives an opinion:
   plan's foreseeable setups into one checkpoint at first-setup-contact.
 
 ## Inputs
-A `checkpoint.request` `{ kind: demo|qa|setup|reconcile|forecast|steer, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
+A `checkpoint.request` `{ kind: demo|qa|setup|reconcile|forecast|steer|spec, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
 **A `setup` `tasks[]` entry is `{ id, what, secrets?[], provides?[] }`** — `secrets[]` naming the credential **key
 names** that task will hand back (`POLAR_WEBHOOK_SECRET`), never values. Fill it whenever the task returns a
 credential: it is what makes the console render a labelled input per key instead of asking a human to hand-compose a
@@ -134,6 +134,20 @@ Routing keys off `outcome`, **per kind** (a rejection is not always a defect, so
     `acceptance[]` entry per confirmed criterion, each with an `id` and a `source` naming the spec element.
     **Enumerate only what they locked**: an entry drawn from an element still tagged `unspecified` is an
     acceptance nothing will bind, which `converge.py` reports as `unbound` — correctly, and unhelpfully.
+
+- **spec** — approve → **apply the withheld change**, record the receipt, then resume the item that
+  produced it · changes → the human's edits ARE the change: apply theirs, record the receipt, resume ·
+  reject → discard the withheld change and route to `refine`; the item proceeds under the spec as it stands.
+  - **This kind exists because the floor BLOCKED and routed nowhere.** `check_autonomy_floor.py` fires,
+    `spec_approval.py check` refuses the commit, and before this the loop's only move was to write the change
+    to `items/<id>/spec-delta.md`, leave a note in `backlog.md`, and carry on — an ask with no durable owner,
+    invisible to `clear_safe`, to the console, and to the `handoff.md` mirror. A real unattended drive did
+    exactly that and left a landmine under `docs/spec.md`. **The park is now raised by the gate itself**
+    (`spec_approval.py check --park`), so it happens whether or not anything remembered to.
+  - **You are not composing this park, you are ANSWERING one.** The record already exists when you arrive;
+    read `checkpoint.request.what` for the delta's path. Do not raise a second one.
+  - **Record the receipt AFTER the spec edit is staged, never before** — the rule below is the same one, and
+    it is the whole reason this kind cannot shortcut to `spec_approval.py record`.
 
 **On ANY approve whose change edits `docs/spec.md` across the autonomy floor** — a `locked` element, a weakened
 commitment marker, or an acceptance criterion — **record the approval before you resume**:

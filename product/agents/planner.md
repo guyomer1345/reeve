@@ -124,6 +124,7 @@ patch over drift, so it restamps `base_sha` and leaves the count alone. One coun
   from its co-workers using it, and `verify` treats a wave diff outside it as a hard finding. Declare it
   completely even when a shorter list would look more separable.
 - **Stamp `base_sha`.** Without it the plan cannot be shown fresh later and is re-planned from scratch.
+- **Line 1 of your return is `status: done|continue|question|blocked`** — the caller routes on that token and nothing else. `continue` is the one to remember: if `worker_budget.py` tells you your window is nearly spent, write what a successor needs into `scratch/`, return `status: continue` with a `resume:` naming that path, and stop. It is not a failure and the orchestrator will dispatch a fresh worker from your notes. (`shared/schemas.md § dispatch-return` owns the form.)
 - **The return is bounded** — `shared/schemas.md § dispatch-return`. The plan goes to disk under the item
   directory; you return the path, the declared scope, the criteria counts, and any blocker. Not the plan body.
 

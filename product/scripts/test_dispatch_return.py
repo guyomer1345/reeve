@@ -16,15 +16,21 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
 HERE = Path(__file__).resolve().parent            # product/scripts
 HOOK = HERE.parent / "hooks" / "dispatch_return.py"
 
 WARNED = 2
 SILENT = 0
 
-# Comfortably over the hook's 20 000-character ceiling, and comfortably under it.
-HUGE = "x" * 25000
-SMALL = "wrote 3 files; changelog at .workflow/items/S2a/changelog.md; no divergences"
+# Comfortably over the hook's 20 000-character ceiling, and comfortably under it. BOTH carry a
+# `status:` line, because the hook now has two complaints and these fixtures exist to exercise
+# exactly one of them — an untyped fixture would make every size test pass for the wrong reason.
+_HEAD = "status: done\nsummary: wrote a lot\n"
+HUGE = _HEAD + "x" * (25000 - len(_HEAD))          # exactly 25000, so the reported size is pinned
+SMALL = ("status: done\nsummary: wrote 3 files; changelog at "
+         ".workflow/items/S2a/changelog.md; no divergences")
 
 
 def _run(subagent_type="reeve:execute", response=None, tool="Agent"):
@@ -58,13 +64,14 @@ def test_a_normal_return_is_silent():
 
 
 def test_the_boundary_is_inclusive_so_exactly_at_ceiling_is_fine():
-    r = _run(response={"type": "text", "text": "y" * 20000})
+    r = _run(response={"type": "text", "text": _HEAD + "y" * (20000 - len(_HEAD))})
     assert r.returncode == SILENT
 
 
 def test_content_block_lists_are_measured_whole():
     """A subagent return may arrive as content blocks; three 8k blocks is a 24k return."""
-    blocks = [{"type": "text", "text": "z" * 8000} for _ in range(3)]
+    blocks = [{"type": "text", "text": _HEAD + "z" * 8000}] + \
+             [{"type": "text", "text": "z" * 8000} for _ in range(2)]
     r = _run(response={"content": blocks})
     assert r.returncode == WARNED
 
@@ -127,7 +134,7 @@ def test_the_hook_is_registered_for_posttooluse_on_the_dispatch_tools():
     tools — the same pair `dispatch_guard.py` matches at PreToolUse."""
     settings = json.loads((HERE.parent / "templates" / "settings.json").read_text(encoding="utf-8"))
     post = settings["hooks"]["PostToolUse"]
-    entry = [e for e in post if e["matcher"] == "Agent|Task"]
+    entry = [e for e in post if e.get("matcher") == "Agent|Task"]
     assert entry, "no PostToolUse(Agent|Task) entry"
     assert any("dispatch_return.py" in h["command"] for h in entry[0]["hooks"])
 
@@ -137,3 +144,76 @@ def test_the_hook_ships():
     manifest = json.loads((HERE.parent / "MANIFEST.json").read_text(encoding="utf-8"))
     dests = {row["dest"] for row in manifest["install"]}
     assert ".claude/hooks/dispatch_return.py" in dests
+
+
+# --- the TYPED envelope ------------------------------------------------------
+# Line 1 of a return is `status: done|continue|question|blocked`. A return without one is not
+# too big, it is UNROUTABLE: the caller has to read prose to find out what just happened, which
+# is the habit the envelope exists to end.
+
+def test_an_UNTYPED_return_is_reported_even_when_it_is_small():
+    r = _run(response={"type": "text", "text": "wrote 3 files, all good"})
+    assert r.returncode == WARNED
+    assert "UNTYPED" in r.stderr
+    assert "status: done|continue|question|blocked" in r.stderr
+    assert "over contract" not in r.stderr, "this is not a size complaint"
+
+
+@pytest.mark.parametrize("status", ["done", "continue", "question", "blocked"])
+def test_every_status_in_the_enum_is_accepted(status):
+    r = _run(response={"type": "text", "text": "status: %s\nsummary: fine" % status})
+    assert r.returncode == SILENT, r.stderr
+
+
+@pytest.mark.parametrize("spelling", [
+    "status: done",
+    "Status: Done",
+    "**status:** done",
+    "  status: done",
+    "`status: done`",
+    "- status: done",
+])
+def test_the_status_line_is_read_LENIENTLY(spelling):
+    """A return that MEANT to declare its status and spelled it oddly is not the failure worth
+    reporting. The one worth reporting is a return that declares nothing at all."""
+    r = _run(response={"type": "text", "text": spelling + "\nsummary: fine"})
+    assert r.returncode == SILENT, (spelling, r.stderr)
+
+
+def test_a_status_buried_in_the_BODY_does_not_count():
+    """Only the head of the payload is searched. A `status:` line 400 lines down is prose about
+    a status, not a declaration of one — and accepting it would let any return that happens to
+    discuss statuses pass as typed."""
+    text = "\n".join(["paragraph %d" % i for i in range(40)]) + "\nstatus: done\n"
+    assert _run(response={"type": "text", "text": text}).returncode == WARNED
+
+
+def test_an_unknown_status_word_does_not_count():
+    assert _run(response={"type": "text", "text": "status: finished\nsummary: x"}).returncode == WARNED
+
+
+def test_size_and_type_are_reported_SEPARATELY():
+    """An oversized return that IS typed gets the size complaint; the untyped one gets the type
+    complaint first, because there is no point telling a caller how to trim a payload it cannot
+    route in the first place."""
+    typed_big = _run(response={"type": "text", "text": HUGE})
+    assert "over contract" in typed_big.stderr and "UNTYPED" not in typed_big.stderr
+    untyped_big = _run(response={"type": "text", "text": "x" * 25000})
+    assert "UNTYPED" in untyped_big.stderr and "over contract" not in untyped_big.stderr
+
+
+def test_a_foreign_agent_is_still_never_judged():
+    """The envelope is this package's contract. A general worker never agreed to it, and warning
+    about it would train the caller to ignore the warning that matters."""
+    for foreign in ("general-purpose", "Explore", "other-plugin:execute"):
+        r = _run(subagent_type=foreign, response={"type": "text", "text": "no status here"})
+        assert r.returncode == SILENT, foreign
+
+
+def test_the_worker_budget_hook_ships_and_is_registered():
+    """Its counterpart: `continue` is only reachable if something tells a worker to yield."""
+    settings = json.loads((HERE.parent / "templates" / "settings.json").read_text(encoding="utf-8"))
+    post = settings["hooks"]["PostToolUse"]
+    assert any("worker_budget.py" in h["command"] for e in post for h in e["hooks"])
+    manifest = json.loads((HERE.parent / "MANIFEST.json").read_text(encoding="utf-8"))
+    assert ".claude/hooks/worker_budget.py" in {r["dest"] for r in manifest["install"]}

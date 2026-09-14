@@ -220,6 +220,18 @@ case "$MODE" in
       python3 "$SCRIPTS/check_decision_coverage.py"   "$m" || fail=1
     done
 
+    # The code map, which had no owner in the loop at all. `ingest` built it once at brownfield
+    # bootstrap and `/update` rebuilt it; no node between them ever did, so a greenfield project
+    # never had one and a brownfield one carried its bootstrap map forever -- while `align` went
+    # on reading it for blast-radius and reporting nothing, which looks exactly like a clean
+    # answer. `document` now rebuilds it as the routine path; this is the backstop that makes
+    # skipping it impossible. The remedy is one command and about a second, which is what makes
+    # it affordable as a gate rather than a warning.
+    if [ -f "$SCRIPTS/check_codemap_fresh.py" ] && [ -f .workflow/codemap.sh ]; then
+      echo "+ code map freshness" >&2
+      python3 "$SCRIPTS/check_codemap_fresh.py" || fail=1
+    fi
+
     # The autonomy floor, with its escape. The floor alone is a CONSULTATION -- `loop.md` asks
     # the orchestrator to run it, and a loop that simply does not is exactly the case the floor
     # exists for. Running it here makes it an enforcement; the approval receipt is what keeps
@@ -228,7 +240,7 @@ case "$MODE" in
     # blocks again rather than waving through.
     if [ -f "$SCRIPTS/spec_approval.py" ]; then
       echo "+ autonomy floor" >&2
-      python3 "$SCRIPTS/spec_approval.py" check --scripts-dir "$SCRIPTS" || fail=1
+      python3 "$SCRIPTS/spec_approval.py" check --scripts-dir "$SCRIPTS" --park || fail=1
     fi
 
     # Chain-forecast gates over every committed forecast. Two lints because they settle

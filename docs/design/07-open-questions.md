@@ -778,7 +778,13 @@ fan-out-controller question, and only the reviewer is still simply open.
 Found by *installing* the fix, not by building it. D182 closed the maintenance-item hole the same day; carrying
 the new package into a live project immediately opened five more, and four of them are the same shape as D182
 itself — **a legitimate motion with no sanctioned path through a gate that is right to be closed.**
-- **A package-level commit (`/update`) has no sanctioned path `[real, reproduced]`.** D182 gave *three* non-item
+- **~~A package-level commit (`/update`) has no sanctioned path~~ `[CLOSED (D183) — BUILT in D188]`.** The
+  answer was neither of the two this entry proposed: rather than a fourth `kind` or a `phase: update` marker,
+  **D183 ruled that `building` with no current item is LEGAL at a boundary**, so the gate stopped asking about
+  `status` at all and the receipt generalized to *every* non-item commit motion. That dissolves this entry and
+  the one below it together, which is what "decide this one first; it is upstream of the other" was pointing at.
+  *The original reasoning is kept because the framing was right and the proposed answers were both wrong:*
+  D182 gave *three* non-item
   commit motions a receipt (`align` / `document:audit` / `doc-budget`) and `MAINT_KINDS` is a closed set, so the
   `/update` package-refresh commit — 7 package files, zero item files, `status: building` — fails closed with no
   legal escape. The drive's model **correctly refused to fake a `kind: align` receipt**, which is the validation
@@ -796,7 +802,12 @@ itself — **a legitimate motion with no sanctioned path through a gate that is 
   orchestrator has a state-publishing bug and the gate correctly caught it — and the durable fix is for the loop to
   publish `idle` at that boundary itself, which would dissolve the finding above as a side effect. Decide this one
   first; it is upstream of the other.
-- **The package ships an always-loaded doc over its own HARD budget, and no meta-gate can see it `[real, measured]`.**
+- **~~The package ships an always-loaded doc over its own HARD budget, and no meta-gate can see it~~
+  `[CLOSED (D184) — BUILT in D188]`.** The gate hole is shut: `scripts/check-template-budgets.py` measures every
+  template **at source**, through the shipped gate's own estimator and role rule, and runs in this repo's commit
+  chain. The unit also gained a **TOTAL** ceiling across the always-loaded set, which is the part this entry did
+  not ask for and needed most — a per-file cap cannot see a third always-loaded file being added. *The measurement
+  that found it, kept because it is why the rule has the shape it has:*
   `templates/loop.md` measured **3984** est. tokens before D182 against a 4000 `always_hard` — *16 tokens of
   headroom* — and **4219** after. So the D182 paragraph tipped it, and the install failed the package's own
   `check_doc_budget.py` on the target. **The token count is the symptom; the gate hole is the finding:** the budget
@@ -946,10 +957,26 @@ sub-questions deferred to the build, in the order the slices need them.
   means a second receipt — which is real design, not a wiring line. The receipt shape from the non-item commit
   work is the strongest candidate (a routed-and-approved spec change carries its checkpoint verdict as evidence),
   and that is a slice, not a follow-up. Until then this is a consultation and must be described as one.
-- **Can any live signal observe a running subagent's token count? `[measurement]`** If a hook can see it, the
-  absurdity-ceiling is enforceable. If not — the likelier answer — it is a **self-reported** budget in the agent
-  brief plus a post-hoc `measure-dispatch.py` gate, which is a materially weaker mechanism and must be described as
-  one rather than implied to be a cap.
+- **Does `worker_budget.py` ever actually FIRE? `[real, UNVERIFIED — opened by building D221]`** Its reading
+  half is verified against real data (`occupancy()` over a real subagent transcript: 87,090 tokens, 43.5%), and
+  the `<project>/<session>/subagents/agent-<id>.jsonl` layout `D187` described is confirmed on disk. **Its
+  trigger is not.** The hook acts only if the `PostToolUse` payload *inside a worker* carries `agent_id` and a
+  locatable transcript path, which cannot be established without a live run — and it is written to fail **silent**
+  when it cannot positively locate itself, so if the payload differs it is a permanent no-op and nothing reports
+  it. Contrast `handoff_gate.py`, which reads `agent_id` as a *skip-if-present* guard and is therefore safe
+  either way; this one makes it a *required* condition, which inverts the risk. **Consequence, stated because it
+  is uncomfortable: ask #3 in the Phase-12 ledger is discharged by a mechanism nobody has seen run.** The remedy
+  is not more reasoning — it is to make the silence **observable** (a breadcrumb on "ran, could not locate") and
+  let the smoke drive assert on it. Owned in `11` § `▶ NEXT — re-run the smoke drive`.
+- **~~Can any live signal observe a running subagent's token count?~~ `[CLOSED (D187 measured · D221 BUILT)]`**
+  Yes, and the "likelier answer" this entry braced for was wrong. `D187` found the per-agent transcript is
+  appended *during* the run with full `usage` on every assistant line, and `D221` built `hooks/worker_budget.py`
+  on it: the hook runs **inside** the worker, reads its own occupancy, and past a threshold tells it to yield.
+  **The second half of the entry — "a hook can see it, so the ceiling is enforceable" — is the part that did not
+  survive.** Seeing it does not make it enforceable: `PostToolUse` can add context, not stop a worker. What it
+  buys is a *reachable yield point* — the worker returns `status: continue` with its state in `scratch/` and the
+  orchestrator dispatches a fresh one. That is weaker than a cap and stronger than a self-report, and it is
+  described as exactly that in the shipped file rather than implied to be a cap.
 - **~~Is `warn_pct` 30 right for the ROUTER specifically?~~ ANSWERED 2026-09-13 — `D206`, and the answer is that
   the question was the wrong one, exactly as this entry suspected.** It is not "30 or lower": **a percentage does
   not target the right quantity at all.** What a session needs is enough left to finish what it holds and write a

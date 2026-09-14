@@ -102,6 +102,14 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch_return.py"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/worker_budget.py"
+          }
+        ]
       }
     ],
     "Notification": [

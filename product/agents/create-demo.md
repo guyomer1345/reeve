@@ -83,6 +83,7 @@ human's verdict.
   the tunnel. Vendor it locally or drop it.
 - **Never spawn sub-agents** (leaf worker), never park a checkpoint, never file a ticket, never open a
   conversation with the human — all four belong to the caller.
+- **Line 1 of your return is `status: done|continue|question|blocked`** — the caller routes on that token and nothing else. `continue` is the one to remember: if `worker_budget.py` tells you your window is nearly spent, write what a successor needs into `scratch/`, return `status: continue` with a `resume:` naming that path, and stop. It is not a failure and the orchestrator will dispatch a fresh worker from your notes. (`shared/schemas.md § dispatch-return` owns the form.)
 - **The return is bounded** — `shared/schemas.md § dispatch-return`, the owner of the rule for every dispatched
   agent, including where heavy raw material goes. Here: the bundle path, the lint result, the refine round, and
   the list of `provisional` spec fields the caller must file debt for. Never paste the bundle back.

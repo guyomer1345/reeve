@@ -807,7 +807,7 @@ def upsert_handoff_block(text, block):
 # handoff.md is COMMITTED. The record does not MOVE to the committed half, it PROJECTS
 # onto it — which is what keeps the projection small, bounded, and safe to read back.
 DEFAULT_DEADLINE_HOURS = 24
-PARK_KINDS = ("demo", "qa", "setup", "reconcile", "forecast", "steer")
+PARK_KINDS = ("demo", "qa", "setup", "reconcile", "forecast", "steer", "spec")
 # A ticket id becomes a FILENAME, so this is a path-safety check before it is a format
 # check: one component, no separator, and it cannot be `.`/`..` because it must open on
 # an alphanumeric.
