@@ -62,7 +62,12 @@ the substance:
     clear_safe      The band says `handoff-now`, the anchor IS written, and nothing is waiting
                     on a human. Its consumer is the supervisor, whose whole job is the reset
                     (`/clear` then `continue`) and which must never reset a session that a
-                    person is mid-conversation with.
+                    person is mid-conversation with. "Waiting on a human" is TWO things and the
+                    second was found by probing, not by reasoning: a parked checkpoint, and an
+                    OPEN DIALOG (a permission prompt, an elicitation). A live probe drove a real
+                    session into a permission prompt and it sat there -- invisible to `parked/`,
+                    and a supervisor reading the two-part gate would have cleared the screen
+                    somebody was looking at.
 
 FRESHNESS NEEDS A MOMENT TO BE FRESH RELATIVE TO, and that moment is when the band ENTERED
 `handoff-now` -- not "recently", not a TTL. So `gate()`/`demand()` latch it: the first call that
@@ -97,6 +102,11 @@ STALE_SECONDS = 900          # a reading older than this describes a session tha
 # resolve the runtime root to do so (a project whose runtime half has gone missing still needs
 # its anchor written -- that is exactly when it needs it most).
 GATE_FILE = "handoff-gate.json"
+
+# Written by `hooks/awaiting_input.py` when Claude Code raises a dialog a person must answer,
+# removed by `hooks/handoff_gate.py` when a turn ends (a dialog blocks the turn, so a `Stop` is
+# proof the dialog is gone). Present ⇒ somebody is being waited on, and no reset may happen.
+AWAITING_FILE = "awaiting-input.json"
 
 
 def band(used_tokens, window_tokens, warn_pct=None):
@@ -286,6 +296,29 @@ def demand(workflow_dir, project_dir=None, now=None, arm=True):
     return out
 
 
+def awaiting_input(workflow_dir):
+    """The open dialog, or None. A file that exists but will not parse still counts as open —
+    the safe direction is "somebody is being waited on"."""
+    path = os.path.join(workflow_dir, AWAITING_FILE)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            val = json.load(fh)
+    except (OSError, ValueError):
+        return {"kind": "unknown"}
+    return val if isinstance(val, dict) else {"kind": "unknown"}
+
+
+def clear_awaiting(workflow_dir):
+    """Called from the `Stop` hook. A turn that has ended cannot be sitting in a dialog."""
+    try:
+        os.remove(os.path.join(workflow_dir, AWAITING_FILE))
+        return True
+    except OSError:
+        return False
+
+
 def _parked_open(workflow_dir):
     """How many checkpoints are waiting on a human — or None when that cannot be established.
 
@@ -322,6 +355,11 @@ def gate(workflow_dir, project_dir=None, now=None, arm=True):
         blocked.append("the band says %s, not handoff-now" % out["verdict"])
     if not out["handoff_written"]:
         blocked.append("no handoff has been written since the band began asking for one")
+    dialog = awaiting_input(workflow_dir)
+    out["awaiting_input"] = dialog
+    if dialog:
+        blocked.append("a %s dialog is open — somebody is being asked something right now"
+                       % (dialog.get("kind") or "unknown"))
     n = _parked_open(workflow_dir)
     out["parked_open"] = n
     if n is None:

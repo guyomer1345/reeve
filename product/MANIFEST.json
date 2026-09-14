@@ -34,6 +34,10 @@
       "dest": ".claude/scripts/loop.sh"
     },
     {
+      "src": "scripts/supervise.sh",
+      "dest": ".claude/scripts/supervise.sh"
+    },
+    {
       "src": "scripts/drive.py",
       "dest": ".claude/scripts/drive.py"
     },
@@ -152,6 +156,10 @@
     {
       "src": "hooks/handoff_gate.py",
       "dest": ".claude/hooks/handoff_gate.py"
+    },
+    {
+      "src": "hooks/awaiting_input.py",
+      "dest": ".claude/hooks/awaiting_input.py"
     }
   ]
 }

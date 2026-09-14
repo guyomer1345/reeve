@@ -10,7 +10,14 @@
       "TodoWrite",
       "WebSearch",
       "WebFetch",
-      "Bash"
+      "Bash",
+      "Bash(tmux new-session:*)",
+      "Bash(tmux send-keys:*)",
+      "Bash(tmux capture-pane:*)",
+      "Bash(tmux has-session:*)",
+      "Bash(tmux list-panes:*)",
+      "Bash(tmux list-sessions:*)",
+      "Bash(tmux display-message:*)"
     ],
     "ask": [
       "Bash(git remote add:*)",
@@ -93,6 +100,16 @@
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dispatch_return.py"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/awaiting_input.py"
           }
         ]
       }

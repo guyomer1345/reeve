@@ -19,6 +19,11 @@
 #
 # Pass-through: every argument goes to `claude` unchanged (`loop.sh --resume …`, etc.).
 #
+# `--supervise` (must be the FIRST argument) starts the self-clearing supervisor beside an
+# ordinary interactive session: it polls the context gate and, when a reset is safe, sends
+# `/clear` then `continue` into this pane. Requires already being inside tmux — see below for
+# why that is a refusal rather than a gap.
+#
 # `--drive` (must be the FIRST argument) turns this launcher into a session DRIVER: hold the
 # lock, run a session, and when it exits start the next one against the same goal until the
 # goal is met, the operator pauses, or nothing is moving. Everything it decides between
@@ -63,6 +68,40 @@ fi
 # Record the holder pid for humans. After `exec claude` this process keeps the same pid,
 # so the file names claude's real pid. The flock — not this value — is the authority.
 echo "$$" >&9
+
+# `--supervise` (first argument): start the self-clearing supervisor beside this session, then
+# launch normally. The supervisor polls `context_band.py --gate` and, when a reset is safe,
+# sends `/clear` then `continue` into THIS pane.
+#
+# IT REQUIRES ALREADY BEING INSIDE tmux, and that is a deliberate refusal rather than a missing
+# feature. The lock above is held on fd 9 by the process that becomes `claude`, for claude's
+# whole lifetime — that is what the relaunch-runner probes. If this script instead launched tmux
+# and let the server fork claude as its child, the lock would belong to the tmux CLIENT, and
+# detaching (which is the normal thing to do with tmux) would release it while the orchestrator
+# was still running. Two orchestrators against one `.workflow/` is the exact hazard this file
+# exists to prevent, so tmux is the terminal claude is started IN, never something started for it.
+if [ "${1:-}" = "--supervise" ]; then
+  shift
+  if [ -z "${TMUX:-}" ] || [ -z "${TMUX_PANE:-}" ]; then
+    echo "loop.sh --supervise: not inside tmux, and the supervisor drives this session through" >&2
+    echo "         tmux send-keys — there is no other way to put keystrokes into a running" >&2
+    echo "         session's stdin. Start tmux first, then run this inside it:" >&2
+    echo "             tmux new-session -s reeve" >&2
+    echo "             .claude/scripts/loop.sh --supervise" >&2
+    exit 78
+  fi
+  if [ -x "$HERE/supervise.sh" ]; then
+    # Detached and best-effort: a supervisor that fails to start must never stop the session
+    # it was going to supervise. It logs to the runtime tree, not to this pane, which the TUI
+    # is about to take over.
+    nohup "$HERE/supervise.sh" --pane "$TMUX_PANE" --project . \
+      >>"$WF/supervise.log" 2>&1 &
+    echo "loop.sh: supervisor started on pane $TMUX_PANE (log: $WF/supervise.log)" >&2
+  else
+    echo "loop.sh: supervise.sh not found beside this script; starting unsupervised." >&2
+  fi
+  exec claude "$@"
+fi
 
 if [ "${1:-}" != "--drive" ]; then
   exec claude "$@"

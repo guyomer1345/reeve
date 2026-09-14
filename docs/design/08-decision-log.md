@@ -7759,3 +7759,63 @@ supervisor works only on the machine where someone added them by hand.
 
 **Builds on:** **D213** (the design and the instruction to probe), **D215** (the gate the supervisor polls).
 → `11` (§ the ordered build sequence — the supervisor entry's unknowns are closed and one constraint is added).
+
+## D218 — the self-clearing supervisor: a poller beside a REAL interactive session, and the third gate the probe forced **[DECIDED + BUILT 2026-09-14 — discharges ask #10; supersedes `12e`'s `--drive` as the answer to "run more autonomously"]**
+**The ask, in his words:** *let the loop keep going past a full context — clear and resume itself — without me
+typing `/clear`.* `12e` answered it with `loop.sh --drive`, a shell loop around headless `claude -p`, which
+self-clears and has **no UI, no live tool calls, no status line**. *"We are not using -p driver for anything."*
+Autonomy was never meant to be paid for with the thing being made autonomous.
+
+**The call (`D213`'s design, now built).** `scripts/supervise.sh`: one bash process per orchestrator, polling
+beside an ordinary interactive session in a tmux pane. Every interval it asks **one** question —
+`context_band.py --gate`'s `clear_safe` — and when the answer is yes it sends **`/clear`, then `continue`**.
+Two sends, not one, because a cleared session **does not start on its own**: `SessionStart` injects the anchor as
+*context*, and context is not a turn. A supervisor built on the old (false) claim would have sent `/clear` and
+waited forever.
+
+**It never writes the handoff, and that division is the design.** Writing a complete anchor needs the context to
+know what a complete one says; a poller does not have it. The orchestrator writes its own, and `D215`'s `Stop`
+hook makes that non-optional. This process's whole job is the **reset**.
+
+**THE PROBE FOUND A THIRD GATE, AND IT WAS NOT IN THE DESIGN** (`D217`). `clear_safe` asked two things: anchor
+written, no parked checkpoint. A live probe drove a real session into a **permission prompt**, where it sat —
+waiting on a human exactly as much as a checkpoint is, and invisible to `parked/`. So a third condition ships:
+`hooks/awaiting_input.py` on `Notification` writes `.workflow/awaiting-input.json` for
+`permission_prompt` / `elicitation_dialog` / `elicitation_url_dialog` / `agent_needs_input`, and the `Stop` hook
+removes it — a dialog blocks the turn, so a turn that ended is proof the dialog is gone. **No TTL, deliberately:**
+a guessed expiry would clear the flag while a person was still looking at the prompt.
+**`idle_prompt` is excluded, and the exclusion carries its own test.** It means the session is idle awaiting a
+prompt — the supervisor's own trigger. Listing it would disable the feature exactly when it should fire, and
+nothing would say why.
+**Rejected: reading the screen.** `tmux capture-pane` plus string-matching dialog chrome would make correctness
+depend on the wording of a UI this package does not control, failing silently the first time a label changed.
+`Notification` states the fact, so this crosses the same wall `context.json` does.
+
+**tmux IS the terminal, never something the launcher starts.** `loop.sh --supervise` **refuses** unless already
+inside tmux, and the refusal is load-bearing rather than a missing feature: the orchestrator lock is held on fd 9
+by the process that becomes `claude`, for claude's whole lifetime, and that is what the relaunch-runner probes.
+Had the launcher started tmux and let the server fork claude, the lock would belong to the tmux **client** —
+and detaching, the normal thing to do with tmux, would release it while the orchestrator was still running. Two
+orchestrators against one `.workflow/` is precisely the hazard that file exists to prevent.
+
+**The tmux permission rules SHIP** (`templates/settings.json`), raised by the maintainer while this was built:
+without them the supervisor works only on a machine where someone added them by hand, which is not a feature.
+
+**Fail direction throughout: do nothing.** Every unreadable file, missing pane, absent tool and unexpected exit
+leaves the session alone. A supervisor that fails by not resetting costs a session that stops where it would
+have stopped anyway; one that fails by resetting wrongly destroys a conversation somebody was having. It also
+honours the durable **pause latch** — a paused loop must not be reset out from under the person who paused it.
+
+**Evidence.** 18 new tests. Every *holding* case is asserted explicitly rather than inferred from the gate's own
+tests — no anchor, runway left, checkpoint parked, dialog open, pane gone, project uninitialised, no `--pane`
+given. The *firing* case is driven **through a real tmux pane** against a stand-in that records what it receives,
+and asserts it received exactly `["/clear", "continue"]` — a test that called a bash function and checked a
+variable would prove nothing about the part that can actually be wrong.
+
+**`--drive` is now demoted in fact, not only on paper.** It remains (the relaunch-runner is a different, older
+mechanism with its own job) but it is no longer the answer to "run more autonomously", and whether it should
+survive is a live question rather than an assumption.
+
+**Builds on:** **D123** (the away analogue), **D136** (the governor), **D213** (the design and the correction),
+**D215** (the gate this polls), **D217** (the probe that added the third condition).
+→ `11` (§ acceptance ledger #10 → discharged), `product/shared/schemas-runtime.md` (§ `awaiting-input.json`).

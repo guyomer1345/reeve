@@ -249,6 +249,22 @@ record with a null `head` (no git) reads as **stale**, so the boundary re-derive
 **Absent or unreadable ⇒ the dispatch is refused**, which is the whole point: an empty record must never pass
 vacuously. See `hooks/dispatch_guard.py` for the four failures and for what a `PreToolUse` hook cannot prove.
 
+## awaiting-input.json  · written by `hooks/awaiting_input.py` (`Notification`), removed by `hooks/handoff_gate.py` (`Stop`), read through `context_band.py` · *`.workflow/awaiting-input.json`; RUNTIME, gitignored, atomic write; repo mount, beside the rest of the gate*
+- `{ kind, session_id }` — which dialog is open (`permission_prompt` · `elicitation_dialog` ·
+  `elicitation_url_dialog` · `agent_needs_input`).
+**"Waiting on a human" turned out to be two things, and the second was found by probing.** The reset gate asked
+whether a checkpoint was parked; a live probe drove a real session into a **permission prompt**, where it sat —
+invisible to `parked/`. A supervisor on the old gate would have cleared a screen somebody was looking at.
+**`idle_prompt` is deliberately NOT a dialog kind.** It means the session is idle waiting for a prompt, which is
+exactly the state a reset exists to act on. Listing it would disable the supervisor precisely when it should
+fire, and nothing would say why — so the exclusion carries its own test.
+**Cleared by `Stop`, never by a TTL.** A dialog blocks the turn, so a turn that ended is proof the dialog is
+gone — approved, denied or cancelled alike. A guessed expiry would clear the flag while a person was still
+looking at the prompt.
+**Present, unreadable, or torn ⇒ still open.** A file nobody can read is not evidence that nobody is waiting.
+**A hook and not a screen-scrape.** The alternative was matching dialog chrome out of `tmux capture-pane` — a
+gate whose correctness depended on the wording of a UI this package does not control.
+
 ## spec-approval.json  · written by `checkpoint` on an approve that crosses the autonomy floor, read by `checks.sh --check` · *`.workflow/spec-approval.json`; **COMMITTED** — it must ride the commit it authorises, the same law as `commit-receipt`; atomic write; rewrite-in-place (one live approval, history in git)*
 - `{ spec_sha256, ticket_id, spec_path }` — the digest of `docs/spec.md` **as approved**.
 **There is deliberately NO `token` field, and the absence is load-bearing.** This file is committed, and

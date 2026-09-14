@@ -16,6 +16,7 @@ a window that still had work in it. Ask any time with
 anchor is owed (`needs_handoff`) and whether a reset is safe (`clear_safe`) — the loop reads it at every
 scheduler boundary (`loop.md § Scheduler boundary`), and a `Stop` hook blocks a turn from ending while an
 anchor is owed. Running `/dispatch` at the boundary is how you meet that gate before it fires.
+**And it can now be automatic.** `loop.sh --supervise` (inside tmux) runs a poller beside this session that sends `/clear` then `continue` for you once `clear_safe` holds — the anchor written, no checkpoint parked, no dialog open. It never writes the handoff: that stays yours, because only this session knows what a complete one says.
 `/dispatch` is the manual reset step: it writes a **complete, current** `.workflow/handoff.md` so that a `/clear` loses
 no build state. The SessionStart hook re-injects that anchor on `/clear`, so the next prompt
 resumes from it — **but a cleared session does not start on its own.** It sits idle until you

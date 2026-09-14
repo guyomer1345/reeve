@@ -91,6 +91,10 @@ def main():
     import context_band as cb
 
     workflow = os.path.join(cwd, ".workflow")
+    # A turn that has ended cannot be sitting in a dialog, whether it was approved, denied or
+    # cancelled — so this is where `awaiting-input.json` is retired. Deliberately not a TTL: a
+    # guessed expiry would clear the flag while a person was still looking at the prompt.
+    cb.clear_awaiting(workflow)
     verdict = cb.demand(workflow, project_dir=cwd, now=time.monotonic())
     if not verdict.get("needs_handoff"):
         return 0
