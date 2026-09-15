@@ -28,19 +28,31 @@ class Seams(unittest.TestCase):
             red = [n for n, ok in sd._verdicts(repo).items() if not ok]
             self.assertEqual(red, [], "a tree with every seam intact went red")
 
-    def test_every_seam_can_go_red_and_trips_nothing_else(self):
+    def test_every_seam_can_go_red_and_trips_nothing_unexpected(self):
+        """A break names the seam it must turn red, and may name others it is ALLOWED to trip.
+
+        The allowance covers one honest case rather than serving as a general escape: a break
+        that removes or rewrites a shipped file is supposed to be caught by `install closed`
+        too — it compares bytes against the manifest — and calling its correct answer a false
+        positive would train exactly the wrong reflex. Every other break still names one seam.
+        """
         for target, breaker in sd.BREAKS:
-            with self.subTest(seam=target), tempfile.TemporaryDirectory() as tmp:
+            expected = {target} if isinstance(target, str) else set(target)
+            primary = target if isinstance(target, str) else target[0]
+            with self.subTest(seam=primary), tempfile.TemporaryDirectory() as tmp:
                 repo = sd._good_tree(os.path.join(tmp, "broken"))
                 breaker(repo)
                 red = {n for n, ok in sd._verdicts(repo).items() if not ok}
-                self.assertIn(target, red, "breaking `%s` did not turn it red" % target)
-                self.assertEqual(red, {target},
-                                 "breaking `%s` also tripped %s" % (target, red - {target}))
+                self.assertIn(primary, red, "breaking `%s` did not turn it red" % primary)
+                self.assertEqual(red - expected, set(),
+                                 "breaking `%s` also tripped %s" % (primary, red - expected))
 
     def test_every_seam_has_a_break(self):
         """A seam with no negative control is a seam nobody has proved measures anything."""
-        self.assertEqual({n for n, _ in sd.SEAMS}, {n for n, _ in sd.BREAKS},
+        covered = set()
+        for target, _ in sd.BREAKS:
+            covered |= {target} if isinstance(target, str) else set(target)
+        self.assertEqual({n for n, _ in sd.SEAMS}, covered,
                          "a seam with no negative control, or a break for no seam")
 
 

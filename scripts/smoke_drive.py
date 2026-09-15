@@ -364,6 +364,78 @@ def seam_shipped_hooks_are_REGISTERED(repo):
     return True, "all %d shipped hook(s) registered" % len(want)
 
 
+def seam_the_report_RENDERS_in_the_installed_tree(repo):
+    """The four-field report, produced by the tree's own copy against the tree's own state.
+
+    Between-component by construction and free of model cost: it runs the INSTALLED
+    `status_report.py`, which imports `converge.py` out of the same installed directory and reads
+    the real `goal.json`, `parked/` and items this drive produced. Unit tests build their own
+    fixtures; this is the first thing that renders a report over a project a model actually made.
+
+    What it checks beyond "it ran": the four fields are present in order, and **no id reaches the
+    output without its name** — the lint runs over the block the renderer just produced, which is
+    the one place that invariant can be checked against real data rather than a fixture.
+    """
+    script = os.path.join(repo, ".claude", "scripts", "status_report.py")
+    if not os.path.exists(script):
+        return False, "status_report.py is not installed — the report has no producer"
+    p = subprocess.run(["python3", script, "--workflow", ".workflow"], cwd=repo,
+                       capture_output=True, text=True, timeout=120)
+    if p.returncode != 0:
+        return False, "the renderer failed: %s" % (p.stderr or "").strip()[:200]
+    block = p.stdout
+    for field in ("GOAL —", "ACHIEVED", "IN FLIGHT", "LEFT", "[reeve-report state:"):
+        if field not in block:
+            return False, "the block is missing `%s`" % field
+    lint = subprocess.run(["python3", script, "--workflow", ".workflow", "--check", "-"],
+                          cwd=repo, input=block, capture_output=True, text=True, timeout=120)
+    if lint.returncode != 0:
+        return False, ("the report printed an id with no name: %s"
+                       % (lint.stderr or "").strip().splitlines()[:1])
+    return True, "four fields + marker, every id named (%d chars)" % len(block)
+
+
+def seam_the_turn_gate_REFUSES_a_stop_for_nothing(repo):
+    """The hook, run the way the harness runs it, against the tree this drive actually built.
+
+    `shipped hooks are registered` proves it would be invoked; this proves that when it IS
+    invoked it can reach its own judgement — import `turn_check` out of the installed scripts
+    directory, read the real `state.json`/`parked/`/`goal.json`, and block. That is the whole
+    between-component surface, and it costs no model calls, which is why it is asserted here
+    rather than by driving another real session.
+
+    **What it cannot prove, stated rather than implied:** that Claude Code invokes `Stop` hooks at
+    all. Nothing in a throwaway tree can establish that; the registration seam and a sibling hook
+    already live in the field are the evidence for it.
+
+    SKIPPED, not failed, when the tree is legitimately allowed to stop — a drive that ended with
+    the backlog empty (`idle`) or a checkpoint parked has no stop-for-nothing to refuse, and
+    grading it red would be grading the drive's luck.
+    """
+    hook = os.path.join(repo, ".claude", "hooks", "turn_gate.py")
+    if not os.path.exists(hook):
+        return False, "turn_gate.py is not installed — nothing enforces the turn ladder"
+    checker = os.path.join(repo, ".claude", "scripts", "turn_check.py")
+    if not os.path.exists(checker):
+        return False, "turn_check.py is not installed — the hook has no judgement to reach"
+    verdict = subprocess.run(["python3", checker, "--workflow", ".workflow", "--json"], cwd=repo,
+                             capture_output=True, text=True, timeout=120)
+    try:
+        owed = json.loads(verdict.stdout or "{}")
+    except ValueError:
+        return False, "turn_check.py did not answer: %s" % (verdict.stderr or "")[:200]
+    payload = json.dumps({"hook_event_name": "Stop", "cwd": repo})
+    p = subprocess.run(["python3", hook], input=payload, capture_output=True, text=True,
+                       timeout=120, env=dict(os.environ, REEVE_DRIVE="1"))
+    blocked = p.returncode == 2 or '"decision": "block"' in (p.stdout or "")
+    if not owed.get("demand"):
+        return True, "nothing owed (%s) — the tree may legitimately stop; not graded" % owed.get("why", "")[:80]
+    if not blocked:
+        return False, ("the ladder says `%s` is owed and the hook let the turn end — it is "
+                       "installed and inert" % owed["demand"])
+    return True, "refused a stop owing `%s`" % owed["demand"]
+
+
 SEAMS = [
     ("install closed", seam_install_closed),
     ("commit landed through the guard", seam_commit_landed_through_the_guard),
@@ -374,6 +446,8 @@ SEAMS = [
     ("resume anchor written", seam_resume_anchor),
     ("worker budget observed a real worker", seam_worker_budget_saw_a_real_worker),
     ("shipped hooks are registered", seam_shipped_hooks_are_REGISTERED),
+    ("the report renders", seam_the_report_RENDERS_in_the_installed_tree),
+    ("the turn gate refuses a stop for nothing", seam_the_turn_gate_REFUSES_a_stop_for_nothing),
 ]
 
 
@@ -422,7 +496,10 @@ def _good_tree(repo):
     shutil.copy(os.path.join(PRODUCT, "templates", "settings.json"),
                 os.path.join(repo, ".claude", "settings.json"))
     _json(repo, ".workflow/config.json", {"project_root": "."})
-    _json(repo, ".workflow/goal.json", {"id": "G-1", "statement": "ship it"})
+    _json(repo, ".workflow/goal.json",
+          {"id": "G-1", "statement": "ship it",
+           "acceptance": [{"id": "ga-1", "text": "the thing works"}]})
+    _json(repo, ".workflow/state.json", {"status": "building", "node": "execute"})
     _json(repo, ".workflow/wave-decision.json",
           {"considered": ["i1"], "batch": ["i1"], "head": "deadbeef"})
     with open(os.path.join(repo, ".workflow", "handoff.md"), "w", encoding="utf-8") as fh:
@@ -539,6 +616,33 @@ def _break_registration_by_staleness(repo):
         json.dump(obj, fh)
 
 
+def _break_report_by_uninstalling_the_renderer(repo):
+    """The report has no producer — which is what "the format is a rule in a SKILL.md" looks
+    like from outside once the rule is the only thing left."""
+    os.remove(os.path.join(repo, ".claude", "scripts", "status_report.py"))
+
+
+def _break_report_by_dropping_a_field(repo):
+    """A renderer that still runs and still looks like a report. The four fields are the ask;
+    a block missing one is the "long and jumbled" prose it replaced, wearing the marker."""
+    with open(os.path.join(repo, ".claude", "scripts", "status_report.py"), "w",
+              encoding="utf-8") as fh:
+        fh.write("print('GOAL — something\n\nACHIEVED (0)\n\n[reeve-report state:000000000000]')\n")
+
+
+def _break_turn_gate_by_uninstalling_it(repo):
+    os.remove(os.path.join(repo, ".claude", "hooks", "turn_gate.py"))
+
+
+def _break_turn_gate_by_making_it_INERT(repo):
+    """THE FAILURE THE SEAM EXISTS FOR, and the one `D222` taught: a hook that is installed,
+    registered, runs, and does nothing. Indistinguishable from a healthy loop unless something
+    asks the ladder what was owed and then checks that the hook acted on it."""
+    with open(os.path.join(repo, ".claude", "hooks", "turn_gate.py"), "w",
+              encoding="utf-8") as fh:
+        fh.write("import sys\nsys.exit(0)\n")
+
+
 BREAKS = [
     ("code map sees only product files", _break_code_map_by_emptying_it),
     ("install closed", _break_install),
@@ -553,6 +657,12 @@ BREAKS = [
     ("worker budget observed a real worker", _break_worker_budget_by_never_seeing_a_worker),
     ("worker budget observed a real worker", _break_worker_budget_by_losing_the_transcript),
     ("shipped hooks are registered", _break_registration_by_staleness),
+    (("the report renders", "install closed"), _break_report_by_uninstalling_the_renderer),
+    (("the report renders", "install closed"), _break_report_by_dropping_a_field),
+    (("the turn gate refuses a stop for nothing", "install closed"),
+     _break_turn_gate_by_uninstalling_it),
+    (("the turn gate refuses a stop for nothing", "install closed"),
+     _break_turn_gate_by_making_it_INERT),
 ]
 
 
@@ -567,7 +677,7 @@ def _verdicts(repo):
 
 
 def self_test():
-    """Green on a good tree; then exactly one red per break. No model calls."""
+    """Green on a good tree; then the named red per break and nothing unexpected. No model calls."""
     print("== self-test: can every seam go red? ==")
     ok = True
     with tempfile.TemporaryDirectory() as tmp:
@@ -578,15 +688,23 @@ def self_test():
                    ", ".join(n for n, v in base.items() if not v) or "") and ok
 
     for target, breaker in BREAKS:
+        # A break names the seam it must turn red, and MAY name others it is allowed to trip.
+        # The allowance exists for one honest case rather than as a general escape: a break
+        # that removes or rewrites a SHIPPED file is supposed to be noticed by `install closed`
+        # too — that seam compares bytes against the manifest, and a self-test that called its
+        # correct answer a false positive would be training the wrong reflex. Every other break
+        # names exactly one seam and the containment assertion is unchanged for them.
+        expected = {target} if isinstance(target, str) else set(target)
+        primary = target if isinstance(target, str) else target[0]
         with tempfile.TemporaryDirectory() as tmp:
             repo = _good_tree(os.path.join(tmp, "broken"))
             breaker(repo)
             v = _verdicts(repo)
             failed = {n for n, passed in v.items() if not passed}
-            ok = check("breaking `%s` turns it red" % target, target in failed) and ok
-            ok = check("breaking `%s` trips nothing else" % target,
-                       failed <= {target},
-                       "also red: %s" % ", ".join(sorted(failed - {target}))) and ok
+            ok = check("breaking `%s` turns it red" % primary, primary in failed) and ok
+            ok = check("breaking `%s` trips nothing unexpected" % primary,
+                       failed <= expected,
+                       "also red: %s" % ", ".join(sorted(failed - expected))) and ok
     return ok
 
 
