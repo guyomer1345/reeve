@@ -1307,9 +1307,22 @@ Three defects wearing one complaint; all three closed. **`D224` and `D225` own t
   themselves to achieve a goal not for just planning etc."* A gate that fires while he is sitting there planning
   would be the same nuisance in the opposite direction.
 
-#### ▶ NEXT — the smoke drive on BOTH modes, and the rollout it gates. `[validation for `D222` + `13a` + `13b`]`
-**Start the next session here.** Both modes green on the FINAL package digest, so `build-release.py --out` is
-unblocked and the maintainer can do what he said he would after this batch: *"ill update every repo i use this
+#### ▶ NEXT — the smoke drive on BOTH modes, RE-RUN. **The first run went red; `D226` fixed what it found.** `[validation for `D222` + `13a` + `13b`]`
+**Start the next session here, and the FIRST command is not the drive.** The run of 2026-09-15 came back with
+three red seams and four session findings; `D226` owns them and every fix is landed. **Before re-running:**
+1. **`bash scripts/dev-reinstall.sh`** (or `claude plugin marketplace update reeve && claude plugin update
+   reeve`), **then restart the session.** The drive now REFUSES while the installed plugin is not this repo's
+   `HEAD` — the first run drove a plugin five commits old and would have attested a mixture. If the refusal
+   fires, that is the gate working; do not reach for `--allow-stale`.
+2. **`python3 scripts/smoke_drive.py --self-test`** — free, and it proves the seams can still go red.
+3. **`python3 scripts/smoke_drive.py --mode both --keep`** — about an hour per mode, real model calls.
+**Read a greenfield timeout carefully:** it now says whether the session was *still writing* (window too
+short) or *stopped* (the `ask #12` failure, which is what happened last time — 24 minutes with no tool call,
+`state.json` frozen at the dispatch boundary). The kept trees from the red run are at
+`/tmp/reeve-smoke-{greenfield-uvqtdbrx,brownfield-aoqahr31}` while that machine keeps them; the brownfield
+one still holds the un-committed `docs/spec.md` and the parked `SPEC-…` ticket that `07`'s first-spec
+question needs.
+Then both modes green on the FINAL package digest, so `build-release.py --out` is unblocked and the maintainer can do what he said he would after this batch: *"ill update every repo i use this
 plugin on."* Last, not first: the receipt is keyed on the shipped file set, so every earlier run is thrown away
 by the next edit — and this batch changed `settings.json`, four scripts and a hook.
 **What has never run as an installed whole, and is exactly the between-component class `D219` proved unit tests

@@ -221,6 +221,20 @@ def load_graph(wf, code_root, docs_root):
 
 ROW = re.compile(r"^\s*[-*]\s+(?:\[[ xX]\]\s*)?(?:\*\*|`)?(?P<id>[A-Za-z0-9][A-Za-z0-9._/-]*)"
                  r"(?:\*\*|`)?\s*(?P<rest>[·:—-].*)?$")
+# THE OTHER SHAPE A REAL BACKLOG USES, and it was found by running one: `ingest` writes its
+# reconstructed queue as `### debt-001 — title` HEADINGS, while `/start` writes `### title`
+# followed by a `- \`id\` · kind: …` list item. The list form was the only one parsed, so in a
+# brownfield project EVERY candidate reported "no backlog row, dependencies unknown" and the
+# readiness half of this gate was inert. It fails toward HOLD, which is the safe direction and
+# is exactly why nobody would ever have noticed: no wave could form, no wave was refused, and
+# the parallelism the operator asked for simply never happened. Read both shapes; the writers
+# are prose and will keep differing.
+# TWO GUARDS, because a heading is also how a backlog names its SECTIONS and a phantom row is
+# worse than a missed one -- it consumes batch capacity and reports reasons about an item that
+# does not exist. Level 3 or deeper (`## Open` and `# backlog` are sections; items sit under
+# them), and a separator with text after it (`### debt-001 — title`), which `## Open` has not.
+HEADING_ROW = re.compile(r"^\s*#{3,6}\s+(?:\*\*|`)?(?P<id>[A-Za-z0-9][A-Za-z0-9._/-]*)"
+                         r"(?:\*\*|`)?\s*(?P<rest>[·:—-]\s*\S.*)$")
 DEPS = re.compile(r"\b(?:deps|depends_on|depends on)\b\s*[:=]?\s*(?P<v>[^·|]*)", re.I)
 EMPTY_DEPS = {"", "-", "--", "—", "none", "n/a", "na", "nil", "[]"}
 
@@ -229,7 +243,8 @@ def parse_backlog(wf):
     """-> (rows, present). Each row: `{id, order, deps, deps_raw, unparsed_deps}`.
 
     The backlog is prose with structure in it, not a data file, and the shapes below are the
-    ones real queues use: a bolded or backticked id at the head of a list item, fields
+    ones real queues use: a bolded or backticked id at the head of a list item OR of a heading
+    (`ingest` writes headings, `/start` writes list items -- see `HEADING_ROW`), fields
     separated by middots, and a `deps:` (or `depends_on:`) field that is either a comma list of
     ids or the word `none`. A dependency field this cannot reduce to ids is kept VERBATIM in
     `unparsed_deps` and rejects the candidate -- prose like "X plus a clean audit path" is a
@@ -246,7 +261,7 @@ def parse_backlog(wf):
     for line in text.splitlines():
         if line.lstrip().startswith(">"):
             continue                     # a banner/blockquote is commentary, never a row
-        m = ROW.match(line)
+        m = ROW.match(line) or HEADING_ROW.match(line)
         if not m:
             continue
         ident = m.group("id")

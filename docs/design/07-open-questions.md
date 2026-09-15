@@ -957,6 +957,22 @@ sub-questions deferred to the build, in the order the slices need them.
   means a second receipt — which is real design, not a wiring line. The receipt shape from the non-item commit
   work is the strongest candidate (a routed-and-approved spec change carries its checkpoint verdict as evidence),
   and that is a slice, not a follow-up. Until then this is a consultation and must be described as one.
+- **Does an item that introduces a NEW DIRECTORY always run alone? `[real, UNVERIFIED — reported by the
+  brownfield smoke session, 2026-09-15, D226]`** `check_wave_independence.py`'s `resolve_scope` `new` branch
+  requires `os.path.isdir(os.path.dirname(cand))`, so a plan declaring `tests/test_load.py` before `tests/`
+  exists is unresolvable scope and the item is held serial. Conservative and correct as a rule; the question
+  is whether the *consequence* is acceptable — **any item creating a directory can never join a wave**, which
+  is most first items of most projects, and it is invisible because holding serial is the safe direction.
+  Not reproduced here: the report is a session's, and the fix (treat a to-be-created path as owned by the
+  item declaring it, if no other candidate declares a prefix of it) is a real change to the independence
+  rule, not a wiring line.
+- **Does the autonomy floor have a FIRST-SPEC case? `[real, UNVERIFIED — reported by the brownfield smoke
+  session, 2026-09-15, D226]`** It read three **newly created** `acceptance_criteria` regions as *edited*,
+  parked `SPEC-54bd0d975588`, and blocked the repo's very first spec commit. If it holds, every brownfield
+  project stops at its first spec for a human — which may be correct by design (that is exactly `D221`'s
+  correction about inception needing a person) or may be the floor mistaking creation for change. **The two
+  readings want opposite fixes**, and deciding between them needs the diff the floor actually saw, which the
+  kept tree still has.
 - **~~Does `worker_budget.py` ever actually FIRE?~~ `[ANSWERED 2026-09-15 — D222, and the answer is worse than
   the question assumed]`** It ran, and it was **reading the wrong file**. The locator accepted the payload's
   `transcript_path` on the sole evidence that it was a file — which makes it the *session* transcript — so a

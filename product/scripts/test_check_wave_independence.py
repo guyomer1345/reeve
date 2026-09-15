@@ -837,3 +837,54 @@ def test_an_unreadable_record_reads_as_absent(tmp_path):
     with open(wi.decision_path(root), "w") as fh:
         fh.write("{ not json")
     assert wi.read_decision(root) is None
+
+
+# --- the backlog shape `ingest` actually writes --------------------------------------------
+# Found by running the package on a real brownfield project, not by reading the code: `ingest`
+# writes `### debt-001 — title` HEADINGS while `/start` writes `### title` followed by a
+# `- `id` · kind: …` list item. Only the list form parsed, so every candidate in that project
+# reported "no backlog row, dependencies unknown" and the readiness half of this gate was inert.
+# It fails toward HOLD — the safe direction — which is exactly why nobody noticed: no wave could
+# form, no wave was refused, and the parallelism the operator asked for simply never happened.
+
+def _heading_backlog(root, rows):
+    lines = ["# backlog — notes", "", "The live OPEN queue.", "", "## Open", ""]
+    for ident, rest in rows:
+        lines.append("### %s — %s" % (ident, rest))
+        lines.append("Prose about it.")
+        lines.append("")
+    with open(os.path.join(root, ".workflow", "backlog.md"), "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+
+def test_a_heading_backlog_is_READ(tmp_path):
+    root = _clean(tmp_path)
+    _heading_backlog(root, [("item-1", "first"), ("item-2", "second"), ("item-3", "third")])
+    res = wi.scan(root)
+    assert [c["id"] for c in res["candidates"]] == ["item-1", "item-2", "item-3"]
+    assert res["batch"] == ["item-1", "item-2", "item-3"], "a real ingest queue never fanned out"
+
+
+def test_a_heading_row_carries_its_DEPENDENCIES_too(tmp_path):
+    root = _clean(tmp_path)
+    _heading_backlog(root, [("item-1", "first"), ("item-2", "second · deps: item-1")])
+    res = wi.scan(root, max_batch=9)
+    assert "item-2" not in res["batch"]
+    assert _clauses(res, "item-2") == {wi.DEPENDENCY}
+
+
+def test_a_SECTION_heading_is_not_an_item(tmp_path):
+    """A phantom row is worse than a missed one: it consumes batch capacity and reports reasons
+    about an item that does not exist. `# backlog — notes` and `## Open` are sections."""
+    root = _clean(tmp_path)
+    _heading_backlog(root, [("item-1", "first")])
+    rows, present = wi.parse_backlog(root)
+    assert present and [r["id"] for r in rows] == ["item-1"], rows
+
+
+def test_a_heading_with_no_separator_is_not_an_item(tmp_path):
+    root = _clean(tmp_path)
+    with open(os.path.join(root, ".workflow", "backlog.md"), "a") as fh:
+        fh.write("\n### Notes for the reader\nprose\n")
+    res = wi.scan(root, max_batch=9)
+    assert "Notes" not in [c["id"] for c in res["candidates"]]

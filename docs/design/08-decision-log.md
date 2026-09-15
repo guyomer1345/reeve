@@ -8248,3 +8248,69 @@ is wedged below the TUI, `continue` lands in a buffer nobody reads, and the esca
 the floor asks), **D222** (the breadcrumb that made a per-tool-call pulse exist at all, which is not why it was
 built).
 → `11` (ask #12 closed), `05` + `shared/schemas-runtime.md` (`monitor.json`), `MANIFEST.json`, `commands/start.md`.
+
+## D226 — the first Phase-13 drive went RED, and the sharpest finding is that it was grading a MIXTURE **[DECIDED + BUILT 2026-09-15, from the run itself. 1,514 tests + 29 subtests, 8 meta-gates, 35 self-test steps]**
+The drive ran both modes end to end and came back with three red seams and four findings its own
+sessions wrote down. **Five of the seven are defects in the measuring instrument, not the package** — which
+is worth stating first, because a harness that grades the wrong thing is the more expensive failure: the
+package's defects announce themselves eventually, and a false green does not.
+
+**THE HOLE THAT MATTERS: the drive attests a mixture, and nothing said so.** The tree gets its scripts and
+hooks from the manifest at `HEAD`. The **skills, commands and agents do not** — `/reeve:start` and every
+`reeve:*` capability resolve to the **installed plugin cache**, pinned at whatever commit was last installed.
+This run drove a plugin at `0fdac78`, **five commits behind and predating `D221`, `D222`, `D224` and `D225`**:
+current scripts, older skills driving them, and `install closed` green throughout because it grades the tree
+and the tree was fine. `stale_plugin()` now refuses the drive unless the installed sha **is** this repo's
+`HEAD`, and **"cannot tell" refuses exactly like "stale"** — the failure being prevented is a receipt that
+reads as proof while measuring something else, so an unreadable plugin record is not a reason to proceed.
+`--allow-stale` exists and is named rather than silent. *The previous receipt, and `D220`'s whole
+per-mode-digest design, were keyed on the shipped file set and never on the thing actually executing the
+skills.*
+
+**TWO SEAMS WERE GRADING THE ABSENCE OF A HUMAN — one of them was `D221`'s correction, repeating.**
+- **`goal minted` on brownfield.** The two paths do not mint a goal the same way: `planner:decompose`
+  derives it (greenfield, no human past the spec), while **brownfield's is written by the reconcile
+  checkpoint from acceptance a human just confirmed**. This drive has nobody there. The session refused to
+  manufacture a confirmation and said so, citing the same forgery rule that stops it faking a spec receipt —
+  **and the EARLIER receipt passed this seam, meaning a previous session did mint one unattended.** The seam
+  was rewarding the worse behaviour. It now requires a goal on greenfield and reports brownfield's absence as
+  correct.
+- **`code map` on greenfield.** `document` is the map's only loop owner (`D221`'s `12l`); the item timed out
+  before reaching it, so there was nothing to grade. Red there reports a defect in a mechanism that never
+  ran.
+
+**ONE REAL PRODUCT DEFECT, and it silently defeated an ask.** `check_wave_independence.py`'s row parser
+matches a **list item** (`- \`debt-001\` · …`), which is what `/start` writes. **`ingest` writes headings**
+(`### debt-001 — …`). So in a brownfield project every candidate reported *"no backlog row, dependencies
+unknown"* and the readiness half of the gate was **inert** — it fails toward HOLD, the safe direction, which
+is exactly why nobody would ever notice: no wave could form, no wave was refused, and the parallelism of
+**ask #5** simply never happened. Both shapes are read now, with two guards so a section heading cannot
+become a phantom row (level ≥ 3 and a separator with text) — a phantom is worse than a miss, because it eats
+batch capacity and reports reasons about an item that does not exist.
+
+**THE LEAK WAS THE HARNESS'S, AND THE PACKAGE CAUGHT IT.** `test_codemap.py` reached every tree because
+`install_package` copied `scripts/codemap` wholesale, ignoring the manifest's own `exclude` — which `/start`
+honours and documents. The drive's session found it at step 7 and could not delete it (`.claude/` sits above
+the settings allowlist), so it gitignored it and filed a debt item. That is the product's verification
+working. **One real product fix came out of it:** step 7 flagged `__pycache__/*.pyc` as leaked, and those are
+never copied — Python creates them the instant a hook imports an installed script. A check that reports a
+package defect for a runtime artifact, and reports it again the moment you delete it, trains people to
+ignore it. Skipped in the scan, gitignored in step 8.
+
+**THE GREENFIELD STALL IS REAL, AND IT IS `ask #12` VERBATIM.** The item phase hit its 30-minute timeout with
+`state.json` reading *"at the dispatch boundary: grading the batch before marking phase-1-capture in
+flight"* — and the last write anywhere under `.workflow/` was **24 minutes earlier**. The worker-budget
+breadcrumb moves on *every tool call*, so no tool call ran in that time: **not slow, stopped.** `D225`'s
+monitor would have nudged at ten minutes and escalated at thirty; the drive runs no supervisor, so nothing
+caught it. A timeout now reports **which** it was (`_was_it_moving`), because *slow* and *stopped* want
+opposite fixes and a bare timeout cannot tell them apart.
+
+**WHAT IS NOT YET SETTLED**, carried to `07` rather than left in a log line: two findings the brownfield
+session reported that this decision has **not verified** — `resolve_scope`'s `new` branch holding any item
+that introduces a directory, and the autonomy floor reading a **first** spec's created `acceptance_criteria`
+regions as edited (which parked `SPEC-54bd0d975588` and blocked the very first spec commit).
+
+**Builds on:** **D219**/**D220** (the drive and the per-mode receipt — this is the third time the receipt's
+own trustworthiness has been the finding), **D221** (the correction this repeats one level up), **D225**
+(the monitor, whose premise the stall independently confirms).
+→ `11` (§ `▶ NEXT` — the re-run and its prerequisites), `07` (two unverified findings).

@@ -149,6 +149,17 @@ def seam_spec_approval_accepted(repo):
     return True, "receipt written and its digest still matches"
 
 
+def _an_item_was_promoted(repo):
+    """Did any item reach `document`? The code map has exactly one loop owner and that is it,
+    so a drive whose item never got there has nothing to grade — grading it red would report a
+    defect in the mechanism when the truth is that the mechanism never ran."""
+    items = os.path.join(repo, ".workflow", "items")
+    for name in sorted(os.listdir(items)) if os.path.isdir(items) else []:
+        if os.path.exists(os.path.join(items, name, "promoted.json")):
+            return True
+    return False
+
+
 def seam_code_map_sees_only_product_files(repo):
     """The map is of the PRODUCT. A map that had ingested the workflow's own machinery would
     make every later blast-radius answer wrong, quietly."""
@@ -159,6 +170,9 @@ def seam_code_map_sees_only_product_files(repo):
                 path = os.path.join(repo, alt)
                 break
         else:
+            if not _an_item_was_promoted(repo):
+                return True, ("no map, and nothing was due to build one — `document` owns the "
+                              "rebuild and no item reached it in this drive")
             return False, "no code map was generated"
     try:
         with open(path, encoding="utf-8") as fh:
@@ -207,10 +221,25 @@ def _product_source(repo):
 
 
 def seam_goal_minted(repo):
-    """A goal on BOTH bootstrap paths. Brownfield failing to mint one is the defect that made
-    comparing the two modes a requirement rather than a nicety."""
+    """A goal on the path that can mint one WITHOUT A HUMAN, and only that path.
+
+    It used to require one on both, and that was this harness making `D221`'s mistake a second
+    time. The two paths do not mint it the same way: `planner:decompose` derives it from the
+    roadmap it just emitted (greenfield, no human needed past the spec), while **brownfield's is
+    written by the RECONCILE CHECKPOINT from the acceptance a human just confirmed**. This drive
+    runs with nobody there. So a brownfield tree with no goal is the correct outcome of an
+    unattended run, and a session that minted one anyway would have manufactured a confirmation
+    nobody gave — which the drive that found this refused to do, in those words, citing the same
+    forgery rule that stops it faking a spec receipt.
+
+    **The earlier receipt PASSED this seam on brownfield**, which means a previous session did
+    mint one unattended. The seam was rewarding the worse behaviour; that is the whole finding.
+    """
     path = os.path.join(repo, ".workflow", "goal.json")
     if not os.path.exists(path):
+        if tree_mode(repo) == "brownfield":
+            return True, ("no goal, and that is correct here — brownfield mints it from "
+                          "acceptance a human confirms at reconcile, and this run had no human")
         return False, "no .workflow/goal.json — this path never minted a goal"
     try:
         with open(path, encoding="utf-8") as fh:
@@ -739,6 +768,55 @@ TARGET_SETTINGS = {
 }
 
 
+def _exclude_patterns():
+    """The manifest's own `exclude` globs, as `shutil.ignore_patterns` wants them (basenames),
+    plus `__pycache__` — which is never copied but is created the instant anything imports the
+    installed scripts, and a tree carrying one fails the package's own leak check."""
+    pats = [os.path.basename(p) for p in load_manifest().get("exclude", [])]
+    return pats + ["__pycache__"]
+
+
+PLUGIN_STATE = os.path.expanduser("~/.claude/plugins/installed_plugins.json")
+
+
+def stale_plugin():
+    """-> why the installed plugin cannot be trusted for this run, or None.
+
+    THE HOLE THIS CLOSES was found by a drive that had already been paid for. The tree gets its
+    scripts and hooks from the manifest at HEAD; the SKILLS, COMMANDS and AGENTS come from the
+    plugin cache, which is pinned at whatever commit was last installed. The first run of the
+    Phase-13 package drove `/reeve:start` from a plugin five commits old that predated every
+    decision under test, and nothing anywhere said so — `install closed` was green, because it
+    grades the tree, and the tree was fine.
+
+    UNKNOWABLE IS NOT STALE. A missing or unreadable plugin record, or an installed sha that is
+    not an ancestor question this repo can answer, returns a reason too — the gate refuses on
+    "cannot tell", because the whole failure being prevented is a receipt that reads as proof
+    while measuring something else.
+    """
+    head = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"],
+                          capture_output=True, text=True)
+    if head.returncode != 0:
+        return "this repo has no HEAD to compare the installed plugin against"
+    head = head.stdout.strip()
+    try:
+        with open(PLUGIN_STATE, encoding="utf-8") as fh:
+            state = json.load(fh)
+    except (OSError, ValueError) as exc:
+        return "the installed-plugin record is unreadable (%s)" % exc
+    entries = []
+    for name, rows in (state.get("plugins") or {}).items():
+        if "reeve" in name:
+            entries.extend(rows if isinstance(rows, list) else [rows])
+    if not entries:
+        return "no `reeve` plugin is installed, so `/reeve:start` would not resolve at all"
+    shas = {e.get("gitCommitSha") for e in entries if isinstance(e, dict)}
+    if shas == {head}:
+        return None
+    return ("the installed plugin is at %s and this repo is at %s"
+            % (", ".join(sorted(s[:12] if s else "?" for s in shas)), head[:12]))
+
+
 def install_package(repo, resuming=False):
     """The manifest install, performed by the harness.
 
@@ -763,7 +841,14 @@ def install_package(repo, resuming=False):
         src, dest = os.path.join(PRODUCT, entry["src"]), os.path.join(repo, entry["dest"])
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         if os.path.isdir(src):
-            shutil.copytree(src, dest, dirs_exist_ok=True)
+            # THE MANIFEST'S `exclude` APPLIES TO A DIRECTORY ENTRY, and this harness ignored it
+            # — so `scripts/codemap/test_codemap.py` landed in every tree this drive built, and
+            # the drive's own session found it at `/start` step 7 and could not delete it
+            # (`.claude/` sits above the settings allowlist). `/start` gets this right and says
+            # so in prose; the harness that stands in for `/start` did not, which made the leak
+            # look like a product defect when it was the measuring instrument's.
+            shutil.copytree(src, dest, dirs_exist_ok=True,
+                            ignore=shutil.ignore_patterns(*_exclude_patterns()))
         else:
             shutil.copy(src, dest)
     if resuming:
@@ -816,6 +901,32 @@ def seed(repo, mode):
     git(repo, "commit", "-qm", "seed", "--allow-empty")
 
 
+def _was_it_moving(repo):
+    """After a timeout: was the session WORKING, or had it stopped? -> one sentence.
+
+    A timeout on its own says nothing about which, and the two want opposite fixes: a session
+    still writing needs a longer window, a session that stopped writing is the defect. The
+    answer is already on disk — `monitor.py`'s pulse is the newest write the loop made, and the
+    worker-budget breadcrumb moves on EVERY tool call, so a quiet pulse means no tool call ran.
+    The first run to hit this timed out with its last write 24 minutes earlier and `state.json`
+    still reading *"grading the batch before marking <item> in flight"*: not slow, stopped.
+    """
+    try:
+        sys.path.insert(0, os.path.join(PRODUCT, "scripts"))
+        import monitor
+        beat = monitor.pulse(os.path.join(repo, ".workflow"))
+    except Exception:                              # noqa: BLE001 — a diagnosis never fails a run
+        return "could not tell whether it was still moving"
+    if beat is None:
+        return "the loop never wrote anything at all"
+    import time
+    quiet = int(time.time() - beat) // 60
+    if quiet < 2:
+        return "still writing when it was killed — the window is too short, not the loop"
+    return ("STOPPED: the loop wrote nothing for the last %dm, so no tool call ran in that "
+            "time — a longer timeout would not have helped" % quiet)
+
+
 def drive(repo, prompt, timeout):
     """One real session. `claude -p` nested inside a session works — that is measured, not
     assumed — and it is the only way to hand a whole instruction to a real model unattended."""
@@ -824,7 +935,7 @@ def drive(repo, prompt, timeout):
         p = subprocess.run(["claude", "-p", prompt], cwd=repo, capture_output=True,
                            text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
-        return False, "timed out after %ds" % timeout
+        return False, "timed out after %ds — %s" % (timeout, _was_it_moving(repo))
     except OSError as exc:
         return False, "could not launch claude: %s" % exc
     tail = (p.stdout or p.stderr or "").strip().splitlines()[-3:]
@@ -963,6 +1074,11 @@ def main(argv=None):
     ap.add_argument("--mode", choices=["greenfield", "brownfield", "both"], default="both")
     ap.add_argument("--timeout", type=int, default=1800, help="seconds per session")
     ap.add_argument("--keep", action="store_true", help="keep the throwaway trees")
+    ap.add_argument("--allow-stale", action="store_true",
+                    help="drive even though the INSTALLED PLUGIN is not this repo's HEAD. The "
+                         "skills, commands and agents come from the plugin cache, not from the "
+                         "tree this harness builds, so a stale one means the receipt attests a "
+                         "mixture. Named rather than silent, and never a default.")
     ap.add_argument("--force", action="store_true",
                     help="re-run a mode already attested for this exact package")
     args = ap.parse_args(argv)
@@ -997,6 +1113,20 @@ def main(argv=None):
         # SKIP WHAT IS ALREADY PROVEN ON THIS PACKAGE. The receipt is per mode and keyed on the
         # shipped tree, so re-running a green mode against an unchanged package proves nothing
         # and costs an hour. `--force` says otherwise out loud.
+        # LAST, after the arguments are validated: a bad --mode is a usage error and must
+        # still read as one. This refuses on the ENVIRONMENT, which is a different answer.
+        stale = stale_plugin()
+        if stale and not args.allow_stale:
+            print("smoke_drive: REFUSING to drive — %s" % stale)
+            print("             The drive invokes `/reeve:start` and the `reeve:*` skills, and "
+                  "those resolve to the INSTALLED PLUGIN, not to the tree this harness builds. "
+                  "A run against a stale plugin attests a mixture: current scripts and hooks in "
+                  "the tree, older commands and skills driving them — and the receipt would say "
+                  "the package works.")
+            print("             Fix it (`scripts/dev-reinstall.sh`, or `claude plugin "
+                  "marketplace update reeve && claude plugin update reeve`, then restart), or "
+                  "pass --allow-stale if you genuinely mean to grade a mixture.")
+            return 70
         todo = [m for m in modes if args.force or args.resume or not attested(m)]
         for skipped in [m for m in modes if m not in todo]:
             print("  %s: already attested for this package — skipping (--force to re-run)"

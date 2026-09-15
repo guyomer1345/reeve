@@ -120,7 +120,7 @@ loop's normal `state.json` takes over when the motion ends.
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
    `bundles/` (org mode's review bundles — regenerable from git at any time, so they are a hand-off artifact
    rather than a record; the history they summarise is already committed), 
-   `orchestrator.lock`, `control.json`, `context.json`, `handoff-gate.json`, `turn-gate.json`, `monitor.json`, `wave-decision.json`, `awaiting-input.json`, `supervise.log`, `alerts.json`, `worker-budget/` (the worker-budget hook's per-exit breadcrumbs — rewritten on EVERY tool call of every worker, so committing them would churn the very diffs `verify` reads), `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
+   `orchestrator.lock`, `control.json`, `context.json`, `handoff-gate.json`, `turn-gate.json`, `monitor.json`, `wave-decision.json`, `.claude/scripts/**/__pycache__/` (created by Python the first time a hook imports an installed script — never copied, never a leak, and it comes back if you delete it), `awaiting-input.json`, `supervise.log`, `alerts.json`, `worker-budget/` (the worker-budget hook's per-exit breadcrumbs — rewritten on EVERY tool call of every worker, so committing them would churn the very diffs `verify` reads), `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
    material — the one runtime path that sits *inside* a committed directory, so it needs its own line or the
    allowlist's commit-by-default rule takes it; `shared/schemas.md § scratch`), and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,
@@ -459,7 +459,12 @@ loop's normal `state.json` takes over when the motion ends.
    for e in man["install"]:
        d = os.path.join(project, e["dest"])
        if os.path.isdir(d):
-           for root, _, files in os.walk(d):
+           for root, dirs, files in os.walk(d):
+               # `__pycache__` is not a leak. Nothing copies it — Python creates it the instant a
+               # hook imports an installed script — so flagging it reports a package defect for a
+               # runtime artifact, and it reappears the moment you delete it. It is GITIGNORED
+               # (step 8) rather than policed here.
+               dirs[:] = [x for x in dirs if x != "__pycache__"]
                for f in files:
                    if any(fnmatch.fnmatch(f, os.path.basename(p)) for p in man.get("exclude", [])):
                        leaked.append(os.path.relpath(os.path.join(root, f), project))

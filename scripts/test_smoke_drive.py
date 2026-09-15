@@ -9,10 +9,12 @@ The release gate gets the same treatment, because it is the thing that will actu
 drive happen: an emit with no current receipt must be refused, and `--no-smoke` must be the only
 way past it.
 """
+import json
 import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -120,6 +122,9 @@ def test_resume_does_not_inherit_mode_both(tmp_path, monkeypatch):
     os.makedirs(os.path.join(repo, ".git"))
     ran = []
     monkeypatch.setattr(sd.shutil, "which", lambda _n: "/usr/bin/claude")
+    # The plugin-currency guard is a different refusal and has its own tests; this one is about
+    # which MODE a resume drives, and it must not depend on the state of a cache on this disk.
+    monkeypatch.setattr(sd, "stale_plugin", lambda: None)
     monkeypatch.setattr(sd, "run_mode", lambda m, *a, **k: ran.append(m) or False)
     sd.main(["--resume", repo])
     assert ran == ["brownfield"], "drove the same tree as both modes: %r" % ran
@@ -130,3 +135,93 @@ def test_a_contradicting_mode_flag_is_refused(tmp_path, capsys):
     os.makedirs(os.path.join(repo, ".git"))
     assert sd.main(["--resume", repo, "--mode", "greenfield"]) == 2
     assert "contradicts the tree" in capsys.readouterr().out
+
+
+class PluginCurrency(unittest.TestCase):
+    """The hole a paid-for run found: the tree gets its scripts from the manifest at HEAD, but
+    the SKILLS, COMMANDS and AGENTS come from the plugin cache, pinned at whatever was last
+    installed. The first Phase-13 run drove `/reeve:start` from a plugin five commits old that
+    predated every decision under test — and every seam stayed green, because they grade the
+    tree and the tree was fine. A receipt that reads as proof while measuring a mixture is the
+    exact failure this whole harness exists to prevent, one level up."""
+
+    def _state(self, tmp, shas):
+        path = os.path.join(tmp, "installed_plugins.json")
+        with open(path, "w") as fh:
+            json.dump({"plugins": {"reeve@reeve": [
+                {"scope": "user", "gitCommitSha": s} for s in shas]}}, fh)
+        return path
+
+    def _with_state(self, path):
+        old = sd.PLUGIN_STATE
+        sd.PLUGIN_STATE = path
+        self.addCleanup(setattr, sd, "PLUGIN_STATE", old)
+
+    def _head(self):
+        return subprocess.run(["git", "-C", sd.ROOT, "rev-parse", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+
+    def test_a_plugin_at_HEAD_is_not_stale(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._with_state(self._state(tmp, [self._head()]))
+            self.assertIsNone(sd.stale_plugin())
+
+    def test_an_OLDER_plugin_is_refused_and_says_both_shas(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._with_state(self._state(tmp, ["0fdac78c024df8fc1032235f93097bc2ba07f45a"]))
+            why = sd.stale_plugin()
+            self.assertIn("0fdac78c024d", why)
+            self.assertIn(self._head()[:12], why)
+
+    def test_UNKNOWABLE_is_refused_too(self):
+        """The failure being prevented is a receipt that reads as proof while measuring
+        something else, so "cannot tell" must refuse exactly like "stale" does."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._with_state(os.path.join(tmp, "nothing-here.json"))
+            self.assertIn("unreadable", sd.stale_plugin())
+
+    def test_NO_reeve_plugin_at_all_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "installed_plugins.json")
+            with open(path, "w") as fh:
+                json.dump({"plugins": {"something-else@x": [{"gitCommitSha": "abc"}]}}, fh)
+            self._with_state(path)
+            self.assertIn("no `reeve` plugin", sd.stale_plugin())
+
+
+class InstallLeak(unittest.TestCase):
+    def test_a_directory_entry_HONOURS_the_manifest_exclude(self):
+        """`scripts/codemap/test_codemap.py` landed in every tree this harness built, and the
+        drive's own session found it at `/start` step 7 and could not delete it. The leak was
+        the measuring instrument's, not the package's — `/start` gets this right in prose."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = os.path.join(tmp, "t")
+            os.makedirs(repo)
+            sd.install_package(repo)
+            leaked = []
+            for root, dirs, files in os.walk(os.path.join(repo, ".claude")):
+                dirs[:] = [d for d in dirs if d != "__pycache__"]
+                leaked += [f for f in files if f.startswith("test_") and f.endswith(".py")]
+            self.assertEqual(leaked, [], "an excluded file was installed into the tree")
+
+
+class TimeoutDiagnosis(unittest.TestCase):
+    """A timeout says nothing about WHICH failure it was, and the two want opposite fixes."""
+
+    def test_a_quiet_tree_is_reported_as_STOPPED(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wf = os.path.join(tmp, ".workflow")
+            os.makedirs(wf)
+            with open(os.path.join(wf, "state.json"), "w") as fh:
+                fh.write("{}")
+            old = time.time() - 3600
+            os.utime(os.path.join(wf, "state.json"), (old, old))
+            self.assertIn("STOPPED", sd._was_it_moving(tmp))
+
+    def test_a_LIVE_tree_is_reported_as_still_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            wf = os.path.join(tmp, ".workflow")
+            os.makedirs(wf)
+            with open(os.path.join(wf, "state.json"), "w") as fh:
+                fh.write("{}")
+            self.assertIn("still writing", sd._was_it_moving(tmp))
