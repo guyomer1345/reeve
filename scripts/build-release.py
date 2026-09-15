@@ -154,8 +154,14 @@ def check_install_covered(m, files):
     return errs
 
 
-def package_digest(m=None, files=None):
+def package_digest(m=None, files=None, root=None):
     """A sha256 over the SHIPPED file set — the identity a smoke receipt attests to.
+
+    `root` points the same computation at a DIFFERENT copy of the package — an installed plugin
+    in the CLI's cache, rather than this working tree. One implementation answers "what is this
+    package" for both, because two answers to that is the drift this repo's own law forbids, and
+    because comparing an install to the tree is only meaningful if both are measured the same
+    way. Raises the same way on a copy that is missing a shipped file: incomplete is not equal.
 
     THE KEY IS THE PACKAGE, NOT `HEAD`, and that choice is what makes a two-hour gate usable.
     Keying on the commit meant a docs-only commit — a decision-log entry, a roadmap edit —
@@ -174,7 +180,7 @@ def package_digest(m=None, files=None):
     for rel in sorted(files):
         h.update(rel.encode("utf-8"))
         h.update(b"\0")
-        with open(os.path.join(PRODUCT, rel), "rb") as fh:
+        with open(os.path.join(root or PRODUCT, rel), "rb") as fh:
             h.update(hashlib.sha256(fh.read()).digest())
     return h.hexdigest()
 

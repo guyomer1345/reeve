@@ -11,6 +11,7 @@ way past it.
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -144,41 +145,81 @@ class PluginCurrency(unittest.TestCase):
     installed. The first Phase-13 run drove `/reeve:start` from a plugin five commits old that
     predated every decision under test — and every seam stayed green, because they grade the
     tree and the tree was fine. A receipt that reads as proof while measuring a mixture is the
-    exact failure this whole harness exists to prevent, one level up."""
+    exact failure this whole harness exists to prevent, one level up.
 
-    def _state(self, tmp, shas):
+    The gate compares the PACKAGE, not `HEAD` — see `test_a_meta_only_commit_...` below for why
+    the first version of it had to be rewritten."""
+
+    CURRENT = os.path.join(sd.ROOT, "product")     # by construction, this repo's own package
+    OLD_SHA = "0fdac78c024df8fc1032235f93097bc2ba07f45a"
+
+    def _state(self, tmp, rows):
         path = os.path.join(tmp, "installed_plugins.json")
         with open(path, "w") as fh:
-            json.dump({"plugins": {"reeve@reeve": [
-                {"scope": "user", "gitCommitSha": s} for s in shas]}}, fh)
-        return path
-
-    def _with_state(self, path):
+            json.dump({"plugins": {"reeve@reeve": rows}}, fh)
         old = sd.PLUGIN_STATE
         sd.PLUGIN_STATE = path
         self.addCleanup(setattr, sd, "PLUGIN_STATE", old)
+        return path
 
     def _head(self):
         return subprocess.run(["git", "-C", sd.ROOT, "rev-parse", "HEAD"],
                               capture_output=True, text=True).stdout.strip()
 
-    def test_a_plugin_at_HEAD_is_not_stale(self):
+    def _user(self, path=None, sha=None):
+        return {"scope": "user", "gitCommitSha": sha or self._head(),
+                "installPath": path or self.CURRENT}
+
+    def _divergent(self, tmp):
+        """A real install copy whose CONTENT differs by one shipped byte."""
+        dst = os.path.join(tmp, "installed")
+        shutil.copytree(self.CURRENT, dst)
+        target = os.path.join(dst, "MANIFEST.json")
+        with open(target, "a") as fh:
+            fh.write("\n")
+        return dst
+
+    def test_an_install_carrying_this_package_is_not_stale(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self._with_state(self._state(tmp, [self._head()]))
+            self._state(tmp, [self._user()])
             self.assertIsNone(sd.stale_plugin())
 
-    def test_an_OLDER_plugin_is_refused_and_says_both_shas(self):
+    def test_an_install_with_DIFFERENT_CONTENT_is_refused_and_names_both_digests(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self._with_state(self._state(tmp, ["0fdac78c024df8fc1032235f93097bc2ba07f45a"]))
+            self._state(tmp, [self._user(path=self._divergent(tmp), sha=self.OLD_SHA)])
             why = sd.stale_plugin()
             self.assertIn("0fdac78c024d", why)
-            self.assertIn(self._head()[:12], why)
+            self.assertIn(sd.package_digest()[:12], why)
+
+    def test_a_META_ONLY_commit_does_NOT_invalidate_a_current_install(self):
+        """THE REWRITE, in one test. Keying on `HEAD` was `D220`'s already-rejected mistake
+        reappearing one layer up: the receipt is keyed on the shipped file set precisely because
+        a commit that cannot change behaviour must not invalidate an attestation about
+        behaviour. A gate keyed on `HEAD` refused after a fix to this very harness, and on a
+        `--resume` the prescribed remedy cannot help — `dev-reinstall.sh` updates the user-scope
+        install and cannot reach a kept tree's own local registration. That left `--allow-stale`
+        as the only door, which is the deadlock this gate had already been rewritten once to
+        escape. Measured: two installs, two commits apart, digesting identically."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._state(tmp, [self._user(sha="0" * 40)])   # same bytes, different commit
+            self.assertIsNone(sd.stale_plugin())
+
+    def test_an_install_MISSING_a_shipped_file_never_compares_equal(self):
+        """An old install predating a file that now ships must not digest to "close enough"."""
+        with tempfile.TemporaryDirectory() as tmp:
+            dst = os.path.join(tmp, "partial")
+            shutil.copytree(self.CURRENT, dst)
+            os.remove(os.path.join(dst, "MANIFEST.json"))
+            self._state(tmp, [self._user(path=dst)])
+            self.assertIn("unreadable", sd.stale_plugin())
 
     def test_UNKNOWABLE_is_refused_too(self):
         """The failure being prevented is a receipt that reads as proof while measuring
         something else, so "cannot tell" must refuse exactly like "stale" does."""
         with tempfile.TemporaryDirectory() as tmp:
-            self._with_state(os.path.join(tmp, "nothing-here.json"))
+            old = sd.PLUGIN_STATE
+            sd.PLUGIN_STATE = os.path.join(tmp, "nothing-here.json")
+            self.addCleanup(setattr, sd, "PLUGIN_STATE", old)
             self.assertIn("unreadable", sd.stale_plugin())
 
     def test_NO_reeve_plugin_at_all_is_refused(self):
@@ -186,42 +227,28 @@ class PluginCurrency(unittest.TestCase):
             path = os.path.join(tmp, "installed_plugins.json")
             with open(path, "w") as fh:
                 json.dump({"plugins": {"something-else@x": [{"gitCommitSha": "abc"}]}}, fh)
-            self._with_state(path)
+            old = sd.PLUGIN_STATE
+            sd.PLUGIN_STATE = path
+            self.addCleanup(setattr, sd, "PLUGIN_STATE", old)
             self.assertIn("no `reeve` plugin", sd.stale_plugin())
 
 
-class PluginCurrencyScope(unittest.TestCase):
-    """The gate `D226` built deadlocked on its own exhaust, and it took one reinstall to see it.
+class PluginCurrencyScope(PluginCurrency):
+    """The gate deadlocked on its own exhaust, and it took one reinstall to see it.
 
     Every drive leaves a permanent `scope: local` registration for its throwaway `/tmp` tree,
-    pinned at whatever was installed that day, and nothing removes it — seven had piled up. The
-    gate compared the WHOLE record against HEAD, so from the second run onwards a correct
-    reinstall could never satisfy it: the operator does exactly what the refusal instructs, is
-    refused again, and the only door left is `--allow-stale`, which is the mixture the gate
-    exists to refuse. A control whose only reachable outcome is its own override is worse than
-    no control, because it reads as one."""
-
-    def _write(self, tmp, rows):
-        path = os.path.join(tmp, "installed_plugins.json")
-        with open(path, "w") as fh:
-            json.dump({"plugins": {"reeve@reeve": rows}}, fh)
-        old = sd.PLUGIN_STATE
-        sd.PLUGIN_STATE = path
-        self.addCleanup(setattr, sd, "PLUGIN_STATE", old)
-
-    def _head(self):
-        return subprocess.run(["git", "-C", sd.ROOT, "rev-parse", "HEAD"],
-                              capture_output=True, text=True).stdout.strip()
-
-    OLD = "0fdac78c024df8fc1032235f93097bc2ba07f45a"
+    and nothing removes it — seven had piled up. The gate read the WHOLE record, so from the
+    second run onwards a correct reinstall could never satisfy it: the operator does exactly
+    what the refusal instructs, is refused again, and the only door left is `--allow-stale`,
+    which is the mixture the gate exists to refuse. A control whose only reachable outcome is
+    its own override is worse than no control, because it reads as one."""
 
     def test_a_DEAD_local_registration_does_not_make_a_current_install_stale(self):
-        """The measured deadlock: user-scope at HEAD, local-scope leftovers at an old sha."""
         with tempfile.TemporaryDirectory() as tmp:
-            self._write(tmp, [
+            self._state(tmp, [
                 {"scope": "local", "projectPath": "/tmp/reeve-smoke-greenfield-gone",
-                 "gitCommitSha": self.OLD},
-                {"scope": "user", "gitCommitSha": self._head()},
+                 "gitCommitSha": self.OLD_SHA, "installPath": self._divergent(tmp)},
+                self._user(),
             ])
             self.assertIsNone(sd.stale_plugin())
 
@@ -229,35 +256,47 @@ class PluginCurrencyScope(unittest.TestCase):
         """Not an is-it-on-disk question. A local entry reaches exactly one directory, so a
         kept tree that this run is not driving cannot supply its skills either way."""
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as other:
-            self._write(tmp, [
-                {"scope": "local", "projectPath": other, "gitCommitSha": self.OLD},
-                {"scope": "user", "gitCommitSha": self._head()},
+            self._state(tmp, [
+                {"scope": "local", "projectPath": other, "gitCommitSha": self.OLD_SHA,
+                 "installPath": self._divergent(tmp)},
+                self._user(),
             ])
             self.assertIsNone(sd.stale_plugin())
 
-    def test_a_RESUME_into_a_tree_pinned_to_an_old_plugin_IS_refused(self):
-        """The other half, and the reason this is scoping rather than filtering: the kept trees
-        from the red run really are bound to the plugin that produced them, and `--resume` walks
-        straight back into it. Dropping local entries wholesale would have gone quiet here."""
+    def test_a_RESUME_into_a_tree_pinned_to_an_older_PACKAGE_is_refused(self):
+        """The other half, and the reason this is scoping rather than filtering: a kept tree is
+        bound to the plugin that produced it, and `--resume` walks straight back into it."""
         with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tree:
-            self._write(tmp, [
-                {"scope": "local", "projectPath": tree, "gitCommitSha": self.OLD},
-                {"scope": "user", "gitCommitSha": self._head()},
+            self._state(tmp, [
+                {"scope": "local", "projectPath": tree, "gitCommitSha": self.OLD_SHA,
+                 "installPath": self._divergent(tmp)},
+                self._user(),
             ])
-            why = sd.stale_plugin(tree)
-            self.assertIn("0fdac78c024d", why)
+            self.assertIn("0fdac78c024d", sd.stale_plugin(tree))
+
+    def test_a_RESUME_into_a_tree_pinned_to_the_SAME_package_is_allowed(self):
+        """The measured false refusal: the kept tree's local install was two commits old and
+        byte-identical. Refusing there is what made the remedy unreachable."""
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tree:
+            self._state(tmp, [
+                {"scope": "local", "projectPath": tree, "gitCommitSha": "0" * 40,
+                 "installPath": self.CURRENT},
+                self._user(),
+            ])
+            self.assertIsNone(sd.stale_plugin(tree))
 
     def test_an_UNRECOGNISED_scope_still_governs_so_cannot_tell_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:
-            self._write(tmp, [{"gitCommitSha": self.OLD}])
+            self._state(tmp, [{"gitCommitSha": self.OLD_SHA,
+                               "installPath": self._divergent(tmp)}])
             self.assertIn("0fdac78c024d", sd.stale_plugin())
 
     def test_ONLY_local_entries_for_other_trees_reads_as_not_installed(self):
         """A fresh `/tmp` tree resolves nothing from another directory's local registration, so
         the honest answer is the same one an empty record gives — not a silent pass."""
         with tempfile.TemporaryDirectory() as tmp:
-            self._write(tmp, [{"scope": "local", "projectPath": "/tmp/reeve-smoke-gone",
-                               "gitCommitSha": self._head()}])
+            self._state(tmp, [{"scope": "local", "projectPath": "/tmp/reeve-smoke-gone",
+                               "installPath": self.CURRENT}])
             self.assertIn("would not resolve", sd.stale_plugin())
 
 

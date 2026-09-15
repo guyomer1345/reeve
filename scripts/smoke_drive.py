@@ -827,6 +827,38 @@ def _exclude_patterns():
 PLUGIN_STATE = os.path.expanduser("~/.claude/plugins/installed_plugins.json")
 
 
+def _build_release():
+    """`build-release.py` as a module. It OWNS what the package is — `shipped_files` and the
+    digest over them — and a second answer to that is the drift this repo's own law forbids."""
+    import importlib.util
+    path = os.path.join(ROOT, "scripts", "build-release.py")
+    spec = importlib.util.spec_from_file_location("build_release", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def package_digest():
+    """The identity the receipt attests to."""
+    return _build_release().package_digest()
+
+
+def installed_digest(path):
+    """-> the shipped-file digest of an INSTALLED plugin, or None if it cannot be computed.
+
+    `claude plugin install` copies `product/` to the root of a cache directory, so the same
+    manifest walk that measures this tree measures the install. `None` means CANNOT TELL — a
+    missing directory, an unreadable file, or a copy that is missing a shipped file entirely
+    (an old install predating a file that now ships digests to nothing, and must not be allowed
+    to compare equal to anything)."""
+    if not path or not os.path.isdir(path):
+        return None
+    try:
+        return _build_release().package_digest(root=path)
+    except Exception:
+        return None
+
+
 def stale_plugin(repo=None):
     """-> why the installed plugin cannot be trusted for this run, or None.
 
@@ -837,25 +869,30 @@ def stale_plugin(repo=None):
     decision under test, and nothing anywhere said so — `install closed` was green, because it
     grades the tree, and the tree was fine.
 
-    UNKNOWABLE IS NOT STALE. A missing or unreadable plugin record, or an entry whose scope this
-    repo cannot read, returns a reason too — the gate refuses on "cannot tell", because the whole
-    failure being prevented is a receipt that reads as proof while measuring something else.
+    IT COMPARES THE PACKAGE, NOT `HEAD`, and that is the second correction this gate has needed.
+    Keying on the commit was `D220`'s already-rejected mistake reappearing one layer up: the
+    receipt is keyed on the shipped file set precisely because a commit that cannot change
+    behaviour must not invalidate an attestation about behaviour. A gate keyed on `HEAD` refuses
+    after any meta-only commit — a fix to this very harness — and the prescribed remedy does not
+    work on a `--resume`, because `dev-reinstall.sh` updates the user-scope install and cannot
+    reach a kept tree's own local registration. That leaves `--allow-stale` as the only door,
+    which is the deadlock this gate was rewritten once already to escape. Measured on the run of
+    2026-09-15: two installs, two commits apart, digesting to the same `2fb64f8d2fee`.
+
+    UNKNOWABLE IS NOT CURRENT. A missing or unreadable plugin record, an install whose files
+    cannot be read, and an install missing a shipped file all return a reason — the gate refuses
+    on "cannot tell", because the whole failure being prevented is a receipt that reads as proof
+    while measuring something else.
 
     ONLY THE ENTRIES THAT COULD GOVERN *THIS* RUN ARE READ, and getting that wrong deadlocked the
     gate on its own exhaust. Every drive leaves a permanent `scope: local` registration behind for
-    its throwaway `/tmp` tree, pinned at whatever was installed that day, and nothing ever removes
-    it. Comparing the whole record therefore meant that after the FIRST run no reinstall could
-    ever satisfy the gate again: the honest operator, having done exactly what the refusal told
-    him to do and being refused anyway, is left with `--allow-stale` — the one escape hatch that
-    reinstates the mixture. A control whose only reachable outcome is its own override is worse
-    than no control. The governing set is: every non-local entry (those resolve anywhere), plus
-    the local entry for the tree actually being driven, which exists only on `--resume`. A local
-    entry for some other directory cannot reach this run, alive or dead."""
-    head = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"],
-                          capture_output=True, text=True)
-    if head.returncode != 0:
-        return "this repo has no HEAD to compare the installed plugin against"
-    head = head.stdout.strip()
+    its throwaway `/tmp` tree, and nothing ever removes it. The governing set is every non-local
+    entry, plus the local entry for the tree actually being driven, which exists only on
+    `--resume`. A local entry for some other directory cannot reach this run, alive or dead."""
+    try:
+        want = package_digest()
+    except Exception as exc:
+        return "this repo's own package digest cannot be computed (%s)" % exc
     try:
         with open(PLUGIN_STATE, encoding="utf-8") as fh:
             state = json.load(fh)
@@ -872,11 +909,16 @@ def stale_plugin(repo=None):
     if not governing:
         return ("no `reeve` plugin is installed for this run — the record holds only local "
                 "registrations for other directories, so `/reeve:start` would not resolve")
-    shas = {e.get("gitCommitSha") for e in governing}
-    if shas == {head}:
+    bad = []
+    for e in governing:
+        got = installed_digest(e.get("installPath"))
+        if got != want:
+            bad.append("%s (%s)" % (str(e.get("gitCommitSha") or "?")[:12],
+                                    "unreadable" if got is None else got[:12]))
+    if not bad:
         return None
-    return ("the installed plugin is at %s and this repo is at %s"
-            % (", ".join(sorted(s[:12] if s else "?" for s in shas)), head[:12]))
+    return ("the installed plugin does not carry this package: %s, and this repo ships %s"
+            % (", ".join(sorted(set(bad))), want[:12]))
 
 
 def _governs(entry, target):
@@ -1140,17 +1182,6 @@ def run_mode(mode, timeout, keep, resume=None):
 def head():
     p = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"], capture_output=True, text=True)
     return (p.stdout.strip() or None) if p.returncode == 0 else None
-
-
-def package_digest():
-    """The identity the receipt attests to. `build-release.py` owns it — it owns `shipped_files`,
-    and a second answer to "what is the package" is the drift this repo's own law forbids."""
-    import importlib.util
-    path = os.path.join(ROOT, "scripts", "build-release.py")
-    spec = importlib.util.spec_from_file_location("build_release", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod.package_digest()
 
 
 def record_mode(mode):
