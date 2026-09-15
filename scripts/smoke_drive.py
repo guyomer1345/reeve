@@ -319,6 +319,27 @@ def workers_ran(repo):
     return n, "%d subagent transcript(s) under %s" % (n, d)
 
 
+def _promoted_items(repo):
+    """-> ([items carrying the finished marker], [every item dir]).
+
+    `promoted.json` is the package's own finished marker, not one invented here: it is what
+    `check_wave_independence.py` treats as "dependency finished", what retention keys pruning on,
+    and what `forecast.py` prunes a forecast against. Written by `document`, so it also proves
+    the item reached the tail of the loop rather than dying after execute."""
+    idir = os.path.join(repo, ".workflow", "items")
+    names = sorted(os.listdir(idir)) if os.path.isdir(idir) else []
+    done = []
+    for name in names:
+        try:
+            with open(os.path.join(idir, name, "promoted.json"), encoding="utf-8") as fh:
+                rec = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if isinstance(rec, dict) and rec.get("promoted"):
+            done.append(name)
+    return done, names
+
+
 def seam_worker_budget_saw_a_real_worker(repo):
     """The hook behind ask #3, which had never been observed to run at all.
 
@@ -377,10 +398,25 @@ def seam_worker_budget_saw_a_real_worker(repo):
         return False, ("only %s, and %s — so this drive cannot say whether the hook is broken "
                        "or was never given a worker to see" % (", ".join(seen), how))
     if n == 0:
+        # TWO VERY DIFFERENT UPSTREAM FAILURES, and saying "the loop stopped early" for both is
+        # the misdescription this seam has already been fixed for once. If an item went ALL THE
+        # WAY ROUND with no worker anywhere, the loop did not stop — the orchestrator did the
+        # leaf work ITSELF. `planner`, `execute` and `document` are dispatch-only in the
+        # orchestrator brief ("You never do a node's work yourself"; the mechanism is "a property
+        # of the node, not a judgement call"), and nothing in the package detects the breach:
+        # `dispatch_guard.py` governs HOW you dispatch and refuses a lone wait, never the failure
+        # to dispatch at all. That is the architecture's core invariant sitting on prose.
+        done, _ = _promoted_items(repo)
+        if done:
+            return False, ("only %s and %s, yet %s went all the way round — so the loop did not "
+                           "stop, the ORCHESTRATOR DID THE LEAF WORK ITSELF. `planner`/`execute`"
+                           "/`document` are dispatch-only, and nothing enforces it."
+                           % (", ".join(seen), how, ", ".join(done)))
         return False, ("only %s, and NO WORKER EVER RAN (%s) — so this seam tested nothing. The "
-                       "failure is upstream: something stopped the loop before it dispatched. "
-                       "`no-agent-id` is the hook's normal exit on the orchestrator's own tool "
-                       "calls and is not evidence against it." % (", ".join(seen), how))
+                       "failure is upstream: the loop stopped before it dispatched, and no item "
+                       "completed either. `no-agent-id` is the hook's normal exit on the "
+                       "orchestrator's own tool calls and is not evidence against it."
+                       % (", ".join(seen), how))
     return False, ("only %s, yet %s — a real worker ran and the hook never saw one, so "
                    "`agent_id` does not reach it and the mechanism is a permanent no-op"
                    % (", ".join(seen), how))
@@ -1083,19 +1119,9 @@ def an_item_actually_completed(repo, session_detail):
     on, and what `forecast.py` prunes a forecast against. Written by `document`, so it also
     proves the item reached the tail of the loop rather than dying after execute.
     """
-    idir = os.path.join(repo, ".workflow", "items")
-    done = []
-    for name in sorted(os.listdir(idir)) if os.path.isdir(idir) else []:
-        try:
-            with open(os.path.join(idir, name, "promoted.json"), encoding="utf-8") as fh:
-                rec = json.load(fh)
-        except (OSError, ValueError):
-            continue
-        if isinstance(rec, dict) and rec.get("promoted"):
-            done.append(name)
+    done, started = _promoted_items(repo)
     if done:
         return True, "%s promoted / %s" % (", ".join(done), session_detail)
-    started = sorted(os.listdir(idir)) if os.path.isdir(idir) else []
     return False, ("the session exited 0 but NO item carries a `promoted.json` marker, so "
                    "nothing went round (%s). The session's own last words: %s"
                    % ("items started: " + ", ".join(started) if started

@@ -153,6 +153,22 @@ def names(workflow, docs_root):
     return {k: v for k, v in out.items() if v}
 
 
+def _untitled(ident, title):
+    """A title with its own id stripped off the front.
+
+    `ITEM-001 (ITEM-001 - topwords: top-N word frequency report)` says the id twice and reads
+    like boilerplate, which is the "long and jumbled" complaint this report was generated to
+    answer. The gloss exists to say WHAT the id is; repeating the id is not that. Only a LEADING
+    occurrence is removed, and only with its separator -- an id appearing mid-title is part of
+    the sentence. If stripping would leave nothing, the title stands as it is rather than
+    becoming an empty parenthesis.
+    """
+    if not title.startswith(ident):
+        return title
+    rest = title[len(ident):].lstrip(" \u2014-:\u2013")
+    return rest or title
+
+
 def gloss(ident, known, drop_if_unresolvable=False):
     """`D-001 (the thing it decided)` -- or a printed admission that it cannot be resolved.
 
@@ -161,7 +177,7 @@ def gloss(ident, known, drop_if_unresolvable=False):
     """
     title = known.get(ident)
     if title:
-        return "%s (%s)" % (ident, title)
+        return "%s (%s)" % (ident, _untitled(ident, title))
     if drop_if_unresolvable:
         # For an OPTIONAL attribution only, and there is one structural case that needs it: a
         # promoted item's directory -- `plan.md` with it -- is pruned by `retention.py`, so the
@@ -182,6 +198,13 @@ def bare_ids(text, known=None):
 
     Fenced code blocks are skipped whole: a command line or a JSON body quoting an id is machine
     text that a human is not being asked to dereference.
+
+    AND SO IS THE GLOSS ITSELF, which this lint learned the hard way by failing a report that was
+    correct. An item titled `ITEM-001 — topwords` renders as `ITEM-001 (ITEM-001 — topwords)`,
+    and the id INSIDE the parentheses was flagged as bare — the lint demanding a name for a thing
+    that was, at that moment, being named. The suggested fix it printed was character-for-
+    character what the line already said. Once an id is named, its gloss is the name; ids in
+    there are part of it, not pointers a reader has to go and dereference.
     """
     out, fenced = [], False
     for n, line in enumerate(text.splitlines(), 1):
@@ -190,9 +213,14 @@ def bare_ids(text, known=None):
             continue
         if fenced:
             continue
+        skip_to = 0
         for m in ID_RE.finditer(line):
+            if m.start() < skip_to:
+                continue
             after = line[m.end():m.end() + 4].lstrip(" `")
             if after.startswith("("):
+                close = line.find(")", m.end())
+                skip_to = (close + 1) if close != -1 else len(line)
                 continue
             out.append((m.group(1), n))
     return out

@@ -192,3 +192,36 @@ def test_nothing_is_stored(tmp_path):
     before = {p for p in Path(tmp_path).rglob("*")}
     sr.render(sr.build(wf))
     assert {p for p in Path(tmp_path).rglob("*")} == before
+
+
+# ============================================================ the lint that failed a correct report
+# An item titled `ITEM-001 - topwords` renders as `ITEM-001 (ITEM-001 - topwords)`, and the id
+# INSIDE the parentheses was flagged as bare — the lint demanding a name for the very thing it
+# was looking at being named. The fix it printed was character-for-character what the line
+# already said. Found by a real drive, which went red on a report that was correct.
+
+def test_an_id_inside_its_own_gloss_is_not_bare():
+    line = "  - ITEM-001 (ITEM-001 — topwords: top-N word frequency report) — not current"
+    assert sr.bare_ids(line) == []
+
+
+def test_a_genuinely_bare_id_AFTER_a_gloss_is_still_caught():
+    """The skip must end at the closing paren, not swallow the rest of the line."""
+    line = "  - ITEM-001 (topwords) blocked by ITEM-009 — see it"
+    assert [i for i, _ in sr.bare_ids(line)] == ["ITEM-009"]
+
+
+def test_a_gloss_no_longer_repeats_the_id_it_is_glossing():
+    known = {"ITEM-001": "ITEM-001 — topwords: top-N word frequency report"}
+    assert sr.gloss("ITEM-001", known) == "ITEM-001 (topwords: top-N word frequency report)"
+
+
+def test_an_id_appearing_MID_title_is_left_alone():
+    """Only a LEADING occurrence is boilerplate; elsewhere it is part of the sentence."""
+    known = {"ITEM-002": "regression pin for ITEM-001"}
+    assert sr.gloss("ITEM-002", known) == "ITEM-002 (regression pin for ITEM-001)"
+
+
+def test_a_title_that_is_ONLY_its_id_keeps_the_title_rather_than_emptying():
+    known = {"ITEM-003": "ITEM-003"}
+    assert sr.gloss("ITEM-003", known) == "ITEM-003 (ITEM-003)"

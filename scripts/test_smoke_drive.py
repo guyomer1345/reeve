@@ -487,3 +487,54 @@ class TurnGateProbeIsolation(unittest.TestCase):
             sd.seam_the_turn_gate_REFUSES_a_stop_for_nothing(tmp)
             self.assertFalse(os.path.exists(os.path.join(tmp, ".workflow", "turn-gate.json")),
                              "the probe must not leave a latch a real session would then read")
+
+
+class InlineExecutionIsItsOwnVerdict(unittest.TestCase):
+    """"No worker ran" has two causes that want opposite responses, and reporting the wrong one
+    is the misdescription this seam has already been repaired for once.
+
+    A loop that STOPPED before dispatching is an upstream failure to go and find. A loop that
+    took an item all the way round with no worker anywhere did not stop at all — the orchestrator
+    did the leaf work itself, which the brief forbids in as many words ("You never do a node's
+    work yourself"; `planner`/`execute`/`document` are dispatch-only, "a property of the node,
+    not a judgement call"). Nothing in the package detects that breach: `dispatch_guard.py`
+    governs HOW a dispatch is made and refuses a lone wait, never the failure to dispatch."""
+
+    def _repo(self, tmp, promoted=None, started=None):
+        os.makedirs(os.path.join(tmp, ".workflow", "worker-budget"))
+        with open(os.path.join(tmp, ".workflow", "worker-budget", "no-agent-id.json"), "w") as fh:
+            json.dump({"outcome": "no-agent-id"}, fh)
+        for name in (started or []) + (promoted or []):
+            os.makedirs(os.path.join(tmp, ".workflow", "items", name), exist_ok=True)
+        for name in promoted or []:
+            with open(os.path.join(tmp, ".workflow", "items", name, "promoted.json"), "w") as fh:
+                json.dump({"promoted": True}, fh)
+        return tmp
+
+    def test_an_item_that_went_round_with_NO_worker_names_the_orchestrator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._repo(tmp, promoted=["ITEM-002"])
+            with mock.patch.object(sd, "workers_ran", return_value=(0, "0 transcripts")):
+                ok, why = sd.seam_worker_budget_saw_a_real_worker(tmp)
+            self.assertFalse(ok)
+            self.assertIn("ORCHESTRATOR DID THE LEAF WORK ITSELF", why)
+            self.assertIn("ITEM-002", why)
+            self.assertNotIn("stopped before it dispatched", why)
+
+    def test_NOTHING_completed_still_reads_as_a_loop_that_stopped_early(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._repo(tmp, started=["ITEM-001"])
+            with mock.patch.object(sd, "workers_ran", return_value=(0, "0 transcripts")):
+                ok, why = sd.seam_worker_budget_saw_a_real_worker(tmp)
+            self.assertFalse(ok)
+            self.assertIn("stopped before it dispatched", why)
+            self.assertNotIn("ORCHESTRATOR", why)
+
+    def test_a_real_worker_still_outranks_both_readings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._repo(tmp, promoted=["ITEM-002"])
+            d = os.path.join(tmp, ".workflow", "worker-budget", "located.json")
+            with open(d, "w") as fh:
+                json.dump({"pct": 17.6, "used": 1, "count": 2, "fired": False}, fh)
+            ok, _ = sd.seam_worker_budget_saw_a_real_worker(tmp)
+            self.assertTrue(ok)
