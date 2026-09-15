@@ -3683,5 +3683,96 @@ class OrgArchiveRemoteBadge(Tmp):
         self.assertIn("org", rm.snapshot())
 
 
+# --- the steer floor --------------------------------------------------------
+class SteerFloor(Tmp):
+    """*"anything that isnt goal chaning is resolved in the orchestrator."*
+
+    Six of the seven checkpoint kinds are inherently a person's — a demo to look at, a QA pass,
+    a manual external action, a reconstructed spec, a forecast, a spec change the floor blocked.
+    `steer` is the one a session can mint out of a feeling, because it is a claim about the GOAL,
+    and the goal already has a mechanical verdict. So the floor asks the goal.
+    """
+
+    def _wf(self, acceptance=2, discharged=(), goal=True):
+        wf = os.path.join(self.root, ".workflow")
+        os.makedirs(os.path.join(wf, "items"), exist_ok=True)
+        os.makedirs(os.path.join(wf, "parked"), exist_ok=True)
+        if goal:
+            with open(os.path.join(wf, "goal.json"), "w") as fh:
+                json.dump({"id": "G-1", "statement": "ship it",
+                           "acceptance": [{"id": "ga-%d" % i, "text": "a%d" % i}
+                                          for i in range(1, acceptance + 1)]}, fh)
+        with open(os.path.join(wf, "goal-ledger.jsonl"), "w") as fh:
+            for n, refs in enumerate(discharged):
+                fh.write(json.dumps({"goal": "G-1", "item": "I-%d" % n, "refs": list(refs)}) + "\n")
+        return wf
+
+    def _rec(self, kind="steer"):
+        return {"ticket_id": "t1", "token": "tok",
+                "checkpoint": {"kind": kind, "request": {"what": "tell me what to do"}}}
+
+    def test_a_healthy_goal_REFUSES_a_steer(self):
+        refusal = bus.steer_floor(self._wf(), self._rec())
+        self.assertIn("the goal disagrees", refusal)
+        self.assertIn("decision-engineer", refusal)
+
+    def test_a_MET_goal_allows_it(self):
+        wf = self._wf(acceptance=2, discharged=(["ga-1"], ["ga-2"]))
+        self.assertIsNone(bus.steer_floor(wf, self._rec()))
+
+    def test_a_STALLED_goal_allows_it(self):
+        wf = self._wf(acceptance=2, discharged=(["ga-1"],) + tuple([[]] * 6))
+        self.assertIsNone(bus.steer_floor(wf, self._rec()))
+
+    def test_NO_goal_allows_it(self):
+        """With nothing to contradict, steering is exactly the right ask — and refusing would
+        make the one legitimate case impossible."""
+        self.assertIsNone(bus.steer_floor(self._wf(goal=False), self._rec()))
+
+    def test_it_judges_ONLY_the_steer_kind(self):
+        for kind in ("demo", "qa", "setup", "reconcile", "forecast", "spec"):
+            self.assertIsNone(bus.steer_floor(self._wf(), self._rec(kind)), kind)
+
+    def test_an_unreadable_goal_allows_it(self):
+        """A park is how the machine ASKS FOR HELP; one that hard-fails on a torn file is a
+        checkpoint that never opens."""
+        wf = self._wf()
+        with open(os.path.join(wf, "goal.json"), "w") as fh:
+            fh.write("{not json")
+        self.assertIsNone(bus.steer_floor(wf, self._rec()))
+
+    def test_a_CURRENT_monitor_stall_allows_it(self):
+        """*"The drive has stopped moving"* is a claim `converge.py` cannot make — a goal can be
+        healthy while the session sitting on it is dead."""
+        wf = self._wf()
+        subprocess.run(["git", "init", "-q", self.root], check=True)
+        with open(os.path.join(self.root, "f"), "w") as fh:
+            fh.write("x")
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        subprocess.run(["git", "-C", self.root, "add", "-A"], check=True)
+        subprocess.run(["git", "-C", self.root, "commit", "-qm", "x"], check=True, env=env)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(bus.__file__)))
+        import drive
+        with open(os.path.join(wf, "monitor.json"), "w") as fh:
+            json.dump({"state": "stalled", "fingerprint": drive.fingerprint(wf)}, fh)
+        self.assertIsNone(bus.steer_floor(wf, self._rec()))
+
+    def test_a_STALE_monitor_stall_does_NOT(self):
+        """The currency check is what keeps the escape from being a bypass: a stall from an hour
+        ago, on work that has since moved, licenses nothing now."""
+        wf = self._wf()
+        with open(os.path.join(wf, "monitor.json"), "w") as fh:
+            json.dump({"state": "stalled", "fingerprint": "something-else-entirely"}, fh)
+        self.assertIsNotNone(bus.steer_floor(wf, self._rec()))
+
+    def test_write_park_REFUSES_and_writes_nothing(self):
+        wf = self._wf()
+        paths = bus.Paths(wf)
+        with self.assertRaises(bus.Invalid):
+            bus.write_park(paths, self._rec())
+        self.assertEqual(os.listdir(paths.parked), [])
+
+
 if __name__ == "__main__":
     unittest.main()

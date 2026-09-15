@@ -145,3 +145,71 @@ def test_it_sends_clear_THEN_continue_into_a_real_pane(tmp_path):
         assert lines == ["/clear", "continue"], (lines, r.stderr)
     finally:
         subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
+
+
+# --- the heartbeat: the session a `Stop` hook cannot see ---------------------------------
+# The turn gate catches every stop-for-nothing at the instant it happens. A session that never
+# ends a turn — idling, or sat in a dialog — never reaches it, and the supervisor is the only
+# process still watching. These pin the transport half; `test_monitor.py` owns the judgement.
+
+def _heartbeat_project(tmp_path, quiet_seconds=None):
+    """The reset gate must HOLD (there is runway), because that is when the heartbeat runs —
+    a dead session and a healthy one look identical from the reset gate's side."""
+    p = _project(tmp_path, runway_nodes=cb.COMFORTABLE_NODES + 10)
+    shutil.copy(HERE / "monitor.py", p / ".claude" / "scripts" / "monitor.py")
+    shutil.copy(HERE / "drive.py", p / ".claude" / "scripts" / "drive.py")
+    shutil.copy(HERE / "converge.py", p / ".claude" / "scripts" / "converge.py")
+    if quiet_seconds:
+        wf = p / ".workflow"
+        old = time.time() - quiet_seconds
+        for path in list(wf.rglob("*")) + [wf]:
+            os.utime(path, (old, old))
+    return p
+
+
+def test_a_QUIET_drive_is_nudged_through_the_real_transport(tmp_path):
+    p = _heartbeat_project(tmp_path, quiet_seconds=1200)
+    sink = tmp_path / "sink.txt"
+    reader = tmp_path / "reader.sh"
+    reader.write_text('while IFS= read -r line; do echo "$line" >> "%s"; done\n' % sink)
+    session = "reeve-hb-%d" % os.getpid()
+    subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
+    subprocess.run(["tmux", "new-session", "-d", "-s", session, "bash %s" % reader],
+                   check=True, capture_output=True)
+    try:
+        r = subprocess.run(["bash", str(SUP), "--pane", session, "--project", str(p), "--once"],
+                           capture_output=True, text=True)
+        assert r.returncode == 1, "the RESET must still hold — this is a nudge, not a clear"
+        assert "nudging" in r.stderr, r.stderr
+        deadline = time.time() + 20
+        got = ""
+        while time.time() < deadline and "continue" not in got:
+            got = sink.read_text() if sink.exists() else ""
+            time.sleep(0.5)
+        assert [l for l in got.splitlines() if l.strip()] == ["continue"], got
+    finally:
+        subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
+
+
+def test_a_MOVING_drive_is_left_alone(tmp_path):
+    """The failure that would matter most: keystrokes into a session that was working."""
+    p = _heartbeat_project(tmp_path)
+    r = _once(p, "nosuchpane")
+    assert "nudging" not in r.stderr and "STALLED" not in r.stderr
+
+
+def test_a_PAUSED_loop_is_never_nudged(tmp_path):
+    """`paused` returns before the heartbeat runs at all — a paused loop is stopped on purpose."""
+    p = _heartbeat_project(tmp_path, quiet_seconds=1200)
+    (p / ".workflow" / "control.json").write_text(json.dumps({"paused": True}))
+    shutil.copy(HERE / "drain.py", p / ".claude" / "scripts" / "drain.py")
+    r = _once(p, "nosuchpane")
+    assert "nudging" not in r.stderr
+
+
+def test_a_project_without_the_monitor_INSTALLED_still_supervises(tmp_path):
+    """The heartbeat is additive: an older tree that predates it must not break the reset."""
+    p = _heartbeat_project(tmp_path, quiet_seconds=1200)
+    (p / ".claude" / "scripts" / "monitor.py").unlink()
+    r = _once(p, "nosuchpane")
+    assert r.returncode == 1 and "holding" in r.stderr

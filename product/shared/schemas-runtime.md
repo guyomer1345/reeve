@@ -283,6 +283,36 @@ wrong reason.
 from *continue the loop* to *leave a report* is progress and resets the count, because they are different
 demands and a session that satisfied the first should not inherit the second's patience.
 
+## monitor.json  · written by `scripts/monitor.py` (driven by `supervise.sh`), read by `bus.py`'s steer floor · *`.workflow/monitor.json`; RUNTIME, gitignored, atomic write; repo mount*
+- `{ at, state, action, why, fingerprint, pulse, quiet_for, nudges, nudges_total, escalations_total, quiet_periods }`
+  — `state` ∈ `{ moving, quiet, stalled, waiting, unknown }`, `action` ∈ `{ none, nudge, escalate }`.
+**It exists for the one failure a `Stop` hook cannot see: the session that never ends a turn.** The turn gate
+catches every stop-for-nothing at the instant it happens; a session that idles, or sits in a dialog, never
+reaches it. That residue is a poller's job and nothing else's.
+**The pulse is the newest write the LOOP made**, which needs no new hook and no cooperation from the session: a
+driving loop writes `state.json` every iteration, item artifacts as nodes complete, and a worker-budget
+breadcrumb on every tool call. So *"the loop has written nothing for ten minutes"* is an observation that the
+machine stopped touching its own state, not a guess about a model's intentions.
+**It is an ALLOW-LIST, not all of `.workflow/`, and a test found the reason rather than anyone reasoning to it:**
+the supervisor's own gate call writes there — `context_band.py --gate` arms or disarms `handoff-gate.json` on
+every poll — so a monitor watching the whole directory would watch a dead session and see its own heartbeat
+reflected back for ever. The observers' files (`context.json`, `handoff-gate.json`, `turn-gate.json`,
+`monitor.json`, `supervise.log`) are excluded by not being listed, which is the safe direction: a new observer is
+silently fine, a new loop artifact is silently missed, and only the second failure is quiet rather than wrong.
+**WAITING IS NOT STALLING.** A parked checkpoint, an open dialog, or the pause latch all mean a human owes an
+answer — the drive is stopped on purpose, so the state is `waiting` and the action is always `none`. Nudging
+there would be shouting at a session that is behaving correctly.
+**One nudge, then a checkpoint.** `nudge` sends a bare `continue` (what a session that quietly ended a turn
+needs; a working session just queues it). Only a still-quiet drive escalates, and it escalates by parking a
+`steer` — the same argument `drive.py` makes for its own terminal stops: a checkpoint is what the away channel
+already alerts on, so raising one buys the notification through the machinery that owns it.
+**It is the second evidence the STEER FLOOR accepts, and only while CURRENT.** `bus.py`'s floor refuses a
+`steer` park the goal's own verdict does not support; *"the drive has stopped moving"* is a claim `converge.py`
+cannot make, so this record stands in — but the stall must name the fingerprint the loop is still sitting on. A
+session cannot talk its way through the floor; it can only be observed through it.
+**`nudges_total` / `escalations_total` / `quiet_periods` are the counters that turn *"it pauses a lot"* into a
+number.** Advisory, monotone within a run, and never read by any gate.
+
 ## wave-decision.json  · written ONLY by `check_wave_independence.py --record`, read by `hooks/dispatch_guard.py` · *`.workflow/wave-decision.json`; RUNTIME, gitignored, atomic write (temp + `os.replace`); lives on the repo mount beside the backlog it grades*
 - `{ decided_at, head, batch[], fan_out, considered[], max_batch, held }` — the boundary's recorded answer to
   **"what else could run right now?"**, exactly as the gate computed it.

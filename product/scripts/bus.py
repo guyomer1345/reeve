@@ -1011,6 +1011,83 @@ def publish_parked_mirror(paths):
     return block
 
 
+def steer_floor(workflow_dir, rec):
+    """-> a refusal string, or None. The one park kind a session can mint out of a FEELING.
+
+    THE COMPLAINT: *"the workflow pauses a lot of no reason ... sometimes its really minor
+    decisions that have no reason to stop and wait for my intervence ... anything that isnt goal
+    chaning is resolved in the orchestrator."* Six of the seven checkpoint kinds are inherently a
+    person's — a demo to look at, a QA pass, a manual external action, a reconstructed spec to
+    confirm, a forecast to approve, a spec change the floor blocked. `steer` is the exception:
+    it says *the drive needs direction*, and that is a claim about the GOAL, which `converge.py`
+    already answers mechanically. So this asks the one question that makes the claim checkable —
+    does the goal agree — and refuses when it does not.
+
+    IT IS CHECKED HERE, AT THE MOMENT OF PARKING, and not at the end of the turn, because this is
+    where the evidence is. A turn-end gate can only refuse the STOP, which would trap the session
+    with a ticket it cannot un-park.
+
+    PERMISSIVE WITHOUT A GOAL, deliberately. With no `goal.json` there is nothing to contradict,
+    and steering is exactly the right ask in that state; refusing would make the one legitimate
+    case impossible. Same for a convergence that will not compute — a park is how the machine
+    ASKS FOR HELP, and a park that hard-fails on an unreadable file is a checkpoint that never
+    opens. `drive.py`'s own steer parks pass by construction: it raises one only on a verdict
+    that already said met or stalled.
+    """
+    if (rec.get("checkpoint") or {}).get("kind") != "steer":
+        return None
+    if not os.path.exists(os.path.join(workflow_dir, "goal.json")):
+        return None
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import converge
+        m = converge.measure(converge.read_goal(workflow_dir), converge.read_ledger(workflow_dir),
+                             converge.open_bindings(workflow_dir))
+    except Exception:                              # noqa: BLE001 — never block the ask on this
+        return None
+    if m.get("met") or m.get("stalled"):
+        return None
+    if not m.get("goal") or m.get("progress") == "unknown":
+        # A goal that will not parse, or enumerates no acceptance, MEASURES nothing — and a
+        # floor that reads "cannot tell" as "you are wrong" refuses the ask at exactly the
+        # moment the project is least able to answer it itself.
+        return None
+    if monitor_saw_a_stall(workflow_dir):
+        return None
+    return ("a `steer` park says the drive needs direction, and the goal disagrees: %s, %d "
+            "promotion(s) with no new acceptance out of %s before it counts as stalled. Resolve "
+            "it in the loop — an open build decision goes to `decision-engineer`, a false plan "
+            "assumption to `refine` — or park the kind that fits what you are actually asking. "
+            "(Anything that is not goal-changing is the orchestrator's.)"
+            % (m.get("progress"), m.get("streak") or 0, m.get("stall_limit")))
+
+
+def monitor_saw_a_stall(workflow_dir):
+    """The OTHER evidence a steer is allowed on, and the reason it is not a bypass.
+
+    *"The drive has stopped moving"* is a claim `converge.py` cannot make — a goal can be
+    perfectly healthy while the session sitting on it is dead — so the floor accepts the drive
+    monitor's observation instead. What keeps it honest is that the stall must be CURRENT: the
+    record has to name the fingerprint the loop is still sitting on. A stall from an hour ago,
+    on work that has since moved, does not license a park now. A session cannot talk its way
+    through this; it can only be observed through it.
+    """
+    try:
+        with open(os.path.join(workflow_dir, "monitor.json"), encoding="utf-8") as fh:
+            rec = json.load(fh)
+    except (OSError, ValueError):
+        return False
+    if not isinstance(rec, dict) or rec.get("state") != "stalled":
+        return False
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import drive
+        now = drive.fingerprint(workflow_dir)
+    except Exception:                              # noqa: BLE001
+        return False
+    return bool(now) and rec.get("fingerprint") == now
+
+
 def write_park(paths, rec, summary=None, deadline=None):
     """Park a ticket: the durable record, then the committed projection of it.
 
@@ -1020,6 +1097,9 @@ def write_park(paths, rec, summary=None, deadline=None):
     checkpoint that no daemon can see.
     """
     validate_park(rec)
+    refusal = steer_floor(paths.workflow, rec)
+    if refusal:
+        raise Invalid(refusal)
     rec = json.loads(json.dumps(rec))  # never mutate the caller's object
     rec["summary"] = park_summary(rec, summary)
     rec["deadline"] = stamp_deadline(paths, deadline or rec.get("deadline"))

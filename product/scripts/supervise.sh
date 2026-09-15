@@ -82,6 +82,37 @@ GATE="$PROJECT/.claude/scripts/context_band.py"
 
 log() { printf '%s supervise: %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 
+# THE HEARTBEAT. `context_band.py` answers "may this session be reset"; it says nothing about
+# whether the session is still ALIVE. A session that idles, or sits in a dialog, never ends a
+# turn — so the `Stop` gate that catches every other stop-for-nothing cannot see it, and the
+# supervisor is the only process left watching. Judgement lives in `monitor.py` (testable, and
+# runnable by a human); this file is transport, as it is for the gate.
+#   action `nudge`    -> send a bare `continue`, which is what a session that quietly ended a
+#                        turn needs and what a working session simply queues behind its turn.
+#   action `escalate` -> monitor.py has already parked a `steer`; the daemon's away channel
+#                        takes it from there. Nothing to send.
+MONITOR="$PROJECT/.claude/scripts/monitor.py"
+
+heartbeat() {
+  [ -f "$MONITOR" ] || return 0
+  action="$(python3 "$MONITOR" tick --workflow-dir "$PROJECT/$WORKFLOW" \
+              --project-root "$PROJECT" --json 2>/dev/null \
+            | python3 -c 'import json,sys
+try:
+    r = json.load(sys.stdin); print("%s\t%s" % (r.get("action","none"), r.get("why","")))
+except Exception: print("none\t")' )"
+  why="${action#*$'\t'}"; action="${action%%$'\t'*}"
+  case "$action" in
+    nudge)
+      log "no motion — $why; nudging $PANE"
+      tmux has-session -t "$PANE" >/dev/null 2>&1 || { log "pane $PANE is gone"; return 0; }
+      tmux send-keys -t "$PANE" "continue" Enter || log "nudge failed; holding"
+      ;;
+    escalate) log "STALLED — $why; a steer checkpoint was parked" ;;
+  esac
+  return 0
+}
+
 # The loop is PAUSED. The latch is durable precisely so that an unattended driver sees it, and
 # a paused loop must not be reset out from under the person who paused it.
 paused() {
@@ -118,6 +149,9 @@ reset_session() {
 tick() {
   if paused; then log "loop is paused; holding"; return 1; fi
   if clear_safe; then reset_session; else
+    # The reset gate held. That is the normal state, and it is also what a dead session looks
+    # like — so this is exactly where the heartbeat belongs, rather than beside it.
+    heartbeat
     log "holding — $(why_held)"; return 1
   fi
 }

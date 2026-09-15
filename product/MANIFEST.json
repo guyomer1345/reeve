@@ -38,6 +38,10 @@
       "dest": ".claude/scripts/supervise.sh"
     },
     {
+      "src": "scripts/monitor.py",
+      "dest": ".claude/scripts/monitor.py"
+    },
+    {
       "src": "scripts/drive.py",
       "dest": ".claude/scripts/drive.py"
     },

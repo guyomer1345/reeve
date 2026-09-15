@@ -8177,3 +8177,74 @@ end, it cannot make the next thing the session does be the right thing.
 reused rather than re-invented), **D214** (an ask needs an actuator, not a rule).
 → `11` (asks #11/#12 — `13a` closed, `13b`'s turn-end half closed), `05` + `shared/schemas-runtime.md`
 (`turn-gate.json`), `loop.md`/`loop-detail.md`, `status/SKILL.md`, `MANIFEST.json`, `templates/settings.json`.
+
+## D225 — the park floor and the heartbeat: a `steer` must be a claim the GOAL agrees with, and the session that never ends a turn needs a watcher **[DECIDED + BUILT 2026-09-15. Closes ask #12. 1,503 tests + 25 subtests, 8 meta-gates]**
+`D224` closed the turn-end half of *"the workflow pauses a lot of no reason"*. Two shapes were left, and they
+are the two a `Stop` hook structurally cannot reach: **a pause the session parks rather than announces**, and
+**a session that never ends a turn at all.**
+
+**THE PARK FLOOR — judged where the evidence is.** *"anything that isnt goal chaning is resolved in the
+orchestrator."* Six of the seven checkpoint kinds are inherently a person's: a demo to look at, a QA pass, a
+manual external action, a reconstructed spec to confirm, a forecast to approve, a spec change the floor already
+blocked. **`steer` is the one a session can mint out of a feeling** — it claims *the drive needs direction*,
+which is a claim about the GOAL, and the goal already has a mechanical verdict. So `bus.py park` refuses a
+`steer` that `converge.py` does not support, in the refusal path that already exists.
+- **Not at turn end**, deliberately: the only verdict a `Stop` gate can reach for is *block the stop*, which
+  traps the session with a ticket it cannot un-park. A park is judged at the moment of parking.
+- **Permissive in exactly three states, each argued rather than defaulted:** no `goal.json` (nothing to
+  contradict, and steering is the right ask there — refusing would make the one legitimate case impossible); a
+  goal that will not parse or enumerates no acceptance (*"cannot tell"* read as *"you are wrong"* refuses the
+  ask at the moment the project is least able to answer it itself); and `drive.py`'s own steer parks, which pass
+  by construction because it raises one only on a verdict that already said met or stalled.
+
+**THE HEARTBEAT — because `tmux` is the fallback, not the mechanism.** He asked whether monitoring could go
+through the supervisor and asked for better fits to be considered. The answer: **the `Stop` gate is strictly
+better for every stop it can see** — always on, no second process, fires at the instant of the failure. What it
+cannot see is the session that never ends a turn: one that idles, or sits in a dialog, which `D217` found by
+driving a real session into a permission prompt and watching it wait. *That residue, and only that, is a
+poller's job.* `scripts/monitor.py` holds the judgement (testable, and runnable by a human); `supervise.sh`
+stays transport, as it already is for the reset gate.
+- **The pulse needs no new hook and no cooperation from the session:** the newest write the loop made.
+  `state.json` every iteration, item artifacts as nodes complete, and — since `D222` — a worker-budget
+  breadcrumb on **every single tool call**. So *"the loop has written nothing for ten minutes"* is an
+  observation that the machine stopped touching its own state, not a guess about a model's intentions.
+- **It is an ALLOW-LIST, and a TEST found the reason rather than anyone reasoning to it.** The first version
+  read the newest mtime anywhere under `.workflow/` and never fired: **the supervisor's own gate call writes
+  there** (`context_band.py --gate` arms or disarms the handoff latch on every poll), so the monitor was
+  watching a dead session and seeing its own heartbeat reflected back. Listing the loop's own paths is also the
+  safe direction — a new observer is silently fine, a new loop artifact is silently missed, and only the second
+  failure is quiet rather than wrong.
+- **WAITING IS NOT STALLING.** A parked checkpoint, an open dialog, the pause latch: the drive is stopped on
+  purpose and a human owes the answer. Nudging there is shouting at a session that is behaving correctly.
+- **Liveness is not the fingerprint.** Tying it to `drive.py`'s anchor set would call a long `execute` — which
+  lands no anchor for an hour — a stall, and drive keystrokes into a session that is working. The fingerprint is
+  kept for one job only: proving a recorded stall is *current*.
+- **One cheap nudge, then a checkpoint.** A bare `continue` is exactly what a session that quietly ended a turn
+  needs, and a working session simply queues it. Only a still-quiet drive escalates, and it escalates by parking
+  a `steer` — `drive.py`'s own argument for its terminal stops: the away channel alerts on checkpoints, so raise
+  one rather than build a second sender beside it. Idempotent by derived ticket id, or a stall nobody has
+  answered accumulates one ticket per poll, which is how an away channel trains someone to ignore it.
+
+**THE TWO HALVES MEET, and the meeting is the interesting part.** The floor refuses a `steer` the goal does not
+support; *"the drive has stopped moving"* is a claim `converge.py` **cannot** make — a goal can be perfectly
+healthy while the session sitting on it is dead. So the floor accepts the monitor's record as its second
+evidence, **and only while it is CURRENT**: the stall must name the fingerprint the loop is still sitting on.
+That is what keeps the escape from being a bypass — *a session cannot talk its way through the floor, it can
+only be observed through it.*
+
+**REJECTED.** *An eighth checkpoint kind for a stall* — the away channel and the console both key on the seven,
+and `steer` already means exactly this. *A `stalled` flag the orchestrator sets* — the thing being detected is a
+session that is not running, so nothing inside it can report. *Reading the session transcript for liveness* —
+needs the session id, which needs a hook to record it, which means a session that dies before recording it is
+invisible. *Nudging on the fingerprint* — see above; it would fire in the middle of long, healthy work.
+
+**WHAT IT HAS NOT EARNED.** The heartbeat has been driven through a real tmux pane against a recording stand-in,
+never against a real orchestrator that actually went quiet — the same gap `D218` carried, closed the same way:
+the smoke drive is next. And the ceiling is worth naming: a nudge is a keystroke, not a guarantee. If a session
+is wedged below the TUI, `continue` lands in a buffer nobody reads, and the escalation is what covers that.
+
+**Builds on:** **D224** (the turn ladder; this is the two shapes it structurally could not reach), **D218**/
+**D217** (the supervisor and the dialog condition its probe found), **D199**/**D200** (`converge.py`, the verdict
+the floor asks), **D222** (the breadcrumb that made a per-tool-call pulse exist at all, which is not why it was
+built).
+→ `11` (ask #12 closed), `05` + `shared/schemas-runtime.md` (`monitor.json`), `MANIFEST.json`, `commands/start.md`.

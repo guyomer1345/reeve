@@ -1141,7 +1141,7 @@ update every repo i use this plugin on."*
 | # | The ask, in his words (condensed) | Discharged by | State |
 |---|---|---|---|
 | 11 | **a standard report format** — four fields, goal-relative; and **names, not `D92`/`Ref X`**, which mean nothing to him; and it must stop being long and jumbled | `13a` · `D224` — the report is GENERATED, so the format is a fact rather than an intention | ✅ |
-| 12 | **stop pausing for nothing** — minor decisions must resolve in the orchestrator; and *"says okay now doing X and never dispatches X"*; **it needs monitoring**, possibly through the tmux supervisor | `13b` — turn-end half BUILT (`D224`); the park floor and the monitor are the open remainder | ⬜ open |
+| 12 | **stop pausing for nothing** — minor decisions must resolve in the orchestrator; and *"says okay now doing X and never dispatches X"*; **it needs monitoring**, possibly through the tmux supervisor | `13b` · `D224` the turn ladder · `D225` the park floor + the heartbeat | ✅ |
 
 **Both are checked against the `D214` rule: name the actuator, or say plainly that none is possible and why.**
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
@@ -1274,16 +1274,18 @@ rung 2 of `scripts/turn_check.py`. The complaint was three complaints and they n
   block, checked by re-rendering rather than by trusting a marker. Same shape as `D215`'s handoff gate, for the
   same reason — the rule alone would be the prose the ask already had.
 
-#### ▶ NEXT — `13b` — stop pausing for nothing, and MONITOR the drive. **Turn-end half BUILT (`D224`); two pieces left.** `[ask #12]`
-**Start the next session here.** Three defects wearing one complaint; the third is built, the other two are not.
-- ✅ **BUILT — the turn may not end for nothing** (`D224`, rung 1 of `turn_check.py`): an unattended turn ends
-  only for a reason from a closed mechanical set, and the block names which shape the failure is.
-- ⬜ **The park floor.** A gate at turn end can only refuse the stop, which traps a session with a ticket it
-  cannot un-park, so a park is judged **where the evidence is** — at `bus.py park`. The decidable rule: a
-  `steer` park requires `converge.py` to actually say met-or-stalled. It is the one kind a session can mint for
-  itself out of a feeling; the other six are inherently a person's.
-- ⬜ **The monitor.** `supervise.sh` grows a heartbeat, for the case NO `Stop` ever fires — a session that idles
-  or sits in a dialog, which `D217` found the hard way. Everything below stands.
+#### `13b` — stop pausing for nothing, and MONITOR the drive. ✅ **CLOSED 2026-09-15 — `D224` + `D225`.** `[ask #12]`
+Three defects wearing one complaint; all three closed. **`D224` and `D225` own the calls.** In one line each:
+- **The turn may not end for nothing** (`D224`, rung 1 of `turn_check.py`) — an unattended turn ends only for a
+  reason from a closed mechanical set, and the block names which shape the failure is.
+- **The park floor** (`D225`, in `bus.py park`'s existing refusal) — `steer` is the one kind a session can mint
+  out of a feeling, so it must be a claim `converge.py` agrees with. Judged at the park, not at turn end: a
+  turn-end gate can only refuse the stop, trapping the session with a ticket it cannot un-park.
+- **The heartbeat** (`D225`, `scripts/monitor.py` driven by `supervise.sh`) — for the one failure a `Stop` hook
+  structurally cannot see: the session that never ends a turn. **tmux is the fallback, not the mechanism**, and
+  the answer to *"consider better fits"* is that the `Stop` gate is better for everything it can reach.
+  The pulse is the loop's own writes, and it is an ALLOW-LIST because the supervisor's gate call writes to
+  `.workflow/` too — the first version watched a dead session and saw its own heartbeat. A test found that.
 - **"minor decisions that have no reason to stop and wait for my intervention."** The route already exists —
   `decision-engineer` is the authority of last resort for exactly this — and nothing enforces it. **The floor:
   a turn may not end by asking the human a question unless something is PARKED**, i.e. the question is one of
@@ -1305,10 +1307,16 @@ rung 2 of `scripts/turn_check.py`. The complaint was three complaints and they n
   themselves to achieve a goal not for just planning etc."* A gate that fires while he is sitting there planning
   would be the same nuisance in the opposite direction.
 
-#### Then — the greenfield smoke attestation, and the rollout it gates. `[validation for `D222` + `13a` + `13b`]`
-Both modes green on the FINAL package digest, so `build-release.py --out` is unblocked and the maintainer can do
-what he said he would do after this batch: *"ill update every repo i use this plugin on."* Last, not first: the
-receipt is keyed on the shipped file set, so every earlier run is thrown away by the next edit.
+#### ▶ NEXT — the smoke drive on BOTH modes, and the rollout it gates. `[validation for `D222` + `13a` + `13b`]`
+**Start the next session here.** Both modes green on the FINAL package digest, so `build-release.py --out` is
+unblocked and the maintainer can do what he said he would after this batch: *"ill update every repo i use this
+plugin on."* Last, not first: the receipt is keyed on the shipped file set, so every earlier run is thrown away
+by the next edit — and this batch changed `settings.json`, four scripts and a hook.
+**What has never run as an installed whole, and is exactly the between-component class `D219` proved unit tests
+cannot see:** a `Stop` hook that blocks a real turn and is then satisfied by a pasted block; a park refused by
+the steer floor inside `bus.py`; the heartbeat against a real orchestrator that actually went quiet (it has only
+ever met a recording stand-in). The `worker budget observed a real worker` seam covers the greenfield path for
+the first time here too.
 
 #### Then — the standing queue. `[no ask — post-Phase-12]`
 With Phase 12 closed this is what the work order points at, and it is the first entry here that traces to no
