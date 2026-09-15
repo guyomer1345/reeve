@@ -383,3 +383,26 @@ class PreconditionsAreEvidence(unittest.TestCase):
             ok, why = sd.an_item_actually_completed(repo, "…")
             self.assertTrue(ok, why)
             self.assertIn("B-1 promoted", why)
+
+
+class PerModeWindow(unittest.TestCase):
+    """One window could only ever be right for one mode. Greenfield was killed at exactly 1800s
+    INSIDE `document`, with verify already passed on 18 tests, and took two more seams down with
+    it — `document` owns the code-map rebuild and the resume anchor is written at turn end. Three
+    reds, one event, and none of them a product defect."""
+
+    def test_greenfield_gets_the_longer_window(self):
+        self.assertGreater(sd.mode_timeout("greenfield"), sd.mode_timeout("brownfield"),
+                           "greenfield builds from nothing; brownfield starts with code")
+
+    def test_an_explicit_timeout_overrides_both(self):
+        self.assertEqual(sd.mode_timeout("greenfield", 900), 900)
+        self.assertEqual(sd.mode_timeout("brownfield", 900), 900)
+
+    def test_an_unknown_mode_falls_back_rather_than_raising(self):
+        self.assertEqual(sd.mode_timeout("nonesuch"), sd.DEFAULT_TIMEOUT)
+
+    def test_the_brownfield_window_is_NOT_raised_to_match(self):
+        """The window is also how fast a STALL is reported. Raising both would make a genuinely
+        stopped brownfield session take twice as long to say so, for no gain."""
+        self.assertEqual(sd.mode_timeout("brownfield"), sd.DEFAULT_TIMEOUT)

@@ -1073,6 +1073,27 @@ def bootstrapped(repo):
     return os.path.exists(os.path.join(repo, ".workflow", "config.json"))
 
 
+# The window is PER MODE, because the two modes do measurably different amounts of work and one
+# number could only be wrong for one of them. MEASURED, not guessed: on the run of 2026-09-15 a
+# brownfield item went round comfortably inside 1800s, while greenfield was killed at exactly
+# 1800s **inside `document`**, with `verify` already passed on 18 tests. Its three red seams were
+# one event — `document` owns the code-map rebuild, and the resume anchor is written at turn end,
+# so both died with the node that was running. `_was_it_moving()` had already said "still
+# writing", and the tree agreed.
+#
+# Greenfield builds a feature from nothing: spec, plan, execute, verify, document, commit.
+# Brownfield starts with code and a backlog already reconstructed by `ingest`, so its first item
+# is a much shorter road. Raising both to the greenfield number would buy nothing and make a
+# genuinely stopped brownfield session take twice as long to report it — the window is also how
+# fast a stall is detected, which is why this is two numbers rather than one large one.
+MODE_TIMEOUT = {"greenfield": 3600, "brownfield": 1800}
+DEFAULT_TIMEOUT = 1800
+
+
+def mode_timeout(mode, override=None):
+    return override if override else MODE_TIMEOUT.get(mode, DEFAULT_TIMEOUT)
+
+
 def run_mode(mode, timeout, keep, resume=None):
     """One bootstrap path, end to end — or the part of it that is not already done.
 
@@ -1185,7 +1206,10 @@ def main(argv=None):
                     help="re-enter a kept tree, reinstall the package into it, and run only the "
                          "phases it cannot see are already done")
     ap.add_argument("--mode", choices=["greenfield", "brownfield", "both"], default="both")
-    ap.add_argument("--timeout", type=int, default=1800, help="seconds per session")
+    ap.add_argument("--timeout", type=int, default=None,
+                    help="seconds per session, overriding the per-mode default "
+                         "(greenfield %d, brownfield %d)"
+                         % (MODE_TIMEOUT["greenfield"], MODE_TIMEOUT["brownfield"]))
     ap.add_argument("--keep", action="store_true", help="keep the throwaway trees")
     ap.add_argument("--allow-stale", action="store_true",
                     help="drive even though the INSTALLED PLUGIN is not this repo's HEAD. The "
@@ -1250,7 +1274,8 @@ def main(argv=None):
             print("smoke_drive: REAL model calls, about an hour per mode. Never run this in CI.")
         for mode in todo:
             before = len(FAILURES)
-            if run_mode(mode, args.timeout, args.keep, resume=args.resume) \
+            if run_mode(mode, mode_timeout(mode, args.timeout), args.keep,
+                        resume=args.resume) \
                     and len(FAILURES) == before:
                 record_mode(mode)
 
