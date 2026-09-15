@@ -225,3 +225,69 @@ def test_an_id_appearing_MID_title_is_left_alone():
 def test_a_title_that_is_ONLY_its_id_keeps_the_title_rather_than_emptying():
     known = {"ITEM-003": "ITEM-003"}
     assert sr.gloss("ITEM-003", known) == "ITEM-003 (ITEM-003)"
+
+
+# ============================================================ the report failing its own lint
+# `names()` read three owners — the decisions index, `goal.json`, and each item's `plan.md` — and
+# an id is only in `items/` once something has PLANNED it. So every filed-but-unplanned item
+# resolved to nothing, and the report's own LEFT field is made of exactly those. A drive printed
+# `I-003` bare, failed its own lint for it, and offered "nothing names this id" about an entry
+# sitting under a `### I-003 — …` heading two files away.
+
+def _wf(tmp_path, backlog=None, goal=None, plans=None):
+    wf = tmp_path / ".workflow"
+    (wf / "items").mkdir(parents=True)
+    if backlog:
+        (wf / "backlog.md").write_text(backlog)
+    if goal:
+        (wf / "goal.json").write_text(json.dumps(goal))
+    for ident, head in (plans or {}).items():
+        (wf / "items" / ident).mkdir(parents=True, exist_ok=True)
+        (wf / "items" / ident / "plan.md").write_text("# %s\n" % head)
+    return str(wf)
+
+
+def test_an_unplanned_backlog_id_resolves_to_its_backlog_heading(tmp_path):
+    wf = _wf(tmp_path, backlog="### I-003 — re-present the reconcile to a human  · debt\n")
+    assert sr.names(wf, str(tmp_path))["I-003"] == "re-present the reconcile to a human"
+
+
+def test_a_PLAN_still_wins_over_the_backlog_line(tmp_path):
+    """Once planned, the plan is the thing that named it; the backlog line is the older,
+    thinner version of the same name."""
+    wf = _wf(tmp_path, backlog="### I-003 — thin early wording\n",
+             plans={"I-003": "the fuller name the plan gave it"})
+    assert sr.names(wf, str(tmp_path))["I-003"] == "the fuller name the plan gave it"
+
+
+def test_a_backlog_line_with_no_title_is_not_invented(tmp_path):
+    wf = _wf(tmp_path, backlog="### I-004\n")
+    assert "I-004" not in sr.names(wf, str(tmp_path))
+
+
+# --- authored prose the report re-prints -------------------------------------------------
+
+def test_a_bare_id_in_the_GOAL_STATEMENT_is_glossed(tmp_path):
+    known = {"I-003": "re-present the reconcile to a human"}
+    out = sr.name_ids_in_prose("NOTE: I-003 re-presents it.", known)
+    assert out == "NOTE: I-003 (re-present the reconcile to a human) re-presents it."
+
+
+def test_prose_BEFORE_an_already_glossed_id_survives(tmp_path):
+    """The cursor bug, pinned: one variable for "emitted so far" and "do not match inside this"
+    silently deleted the statement's first sentence while the lint went green — the worst
+    possible pair of outcomes."""
+    known = {"I-003": "re-present the reconcile to a human"}
+    text = "Close the gap. Derived under D-001 (no human confirmed it); I-003 re-presents it."
+    out = sr.name_ids_in_prose(text, known)
+    assert out.startswith("Close the gap. Derived under D-001 (no human confirmed it);")
+    assert "I-003 (re-present the reconcile to a human)" in out
+
+
+def test_an_UNRESOLVABLE_id_in_prose_is_left_exactly_as_written(tmp_path):
+    """Inventing a name here would hide the missing index row that is the real defect."""
+    assert sr.name_ids_in_prose("see I-009 for this", {}) == "see I-009 for this"
+
+
+def test_prose_with_no_ids_is_returned_unchanged(tmp_path):
+    assert sr.name_ids_in_prose("nothing to see", {"I-1": "x"}) == "nothing to see"

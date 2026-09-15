@@ -122,6 +122,12 @@ def roots(workflow):
 DECISION_ROW = re.compile(r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|")
 
 
+# `### I-003 — re-present the reconcile to a human  · checkpoint debt` -> (I-003, the title).
+# Permissive about the separator (em dash, en dash, hyphen) and about what trails the title,
+# because a backlog line carries tags after a `·` that are not part of the name.
+BACKLOG_ROW = re.compile(r"^#{2,4}\s+([A-Za-z][\w.-]*)\s*[\u2014\u2013-]\s*(.+?)\s*(?:\u00b7.*)?$")
+
+
 def names(workflow, docs_root):
     """{id: title} from each id's OWNER. Never invents, never falls back to another owner.
 
@@ -129,6 +135,15 @@ def names(workflow, docs_root):
     `docs/decisions/index.md`, which is a table precisely so it can be read; a goal acceptance's
     text is in `goal.json`, the only place it carries an id at all; an item's name is the first
     heading of its own `plan.md`, because the plan is the thing that named it.
+
+    AND `backlog.md`, FOR THE ONES NOT PLANNED YET, which this index went without and should not
+    have. An id is only in `items/` once something has planned it, so every filed-but-unplanned
+    item resolved to nothing -- and the report's own LEFT field is made of exactly those. A drive
+    printed `I-003` bare, failed its own lint for it, and offered the admission "nothing names
+    this id" about an entry sitting under a `### I-003 — re-present the reconcile to a human`
+    heading two files away. That is an owner this index was not reading, not an id without one.
+    Read BEFORE the item loop so a plan still wins: once planned, the plan is the thing that
+    named it, and the backlog line is the older, thinner version of the same name.
     """
     out = {}
     index = _read(os.path.join(docs_root, "docs", "decisions", "index.md")) or ""
@@ -143,6 +158,13 @@ def names(workflow, docs_root):
     for a in goal.get("acceptance") or []:
         if isinstance(a, dict) and a.get("id"):
             out[str(a["id"])] = (a.get("text") or "").strip() or None
+    for line in (_read(os.path.join(workflow, "backlog.md")) or "").splitlines():
+        m = BACKLOG_ROW.match(line.strip())
+        if not m:
+            continue
+        ident, title = m.group(1).strip(" `*"), m.group(2).strip(" `*·")
+        if ID_RE.fullmatch(ident) and title:
+            out[ident] = title
     items = os.path.join(workflow, "items")
     for item in sorted(os.listdir(items)) if os.path.isdir(items) else []:
         head = _read(os.path.join(items, item, "plan.md")) or ""
@@ -151,6 +173,45 @@ def names(workflow, docs_root):
                 out[item] = line[2:].strip()
                 break
     return {k: v for k, v in out.items() if v}
+
+
+def name_ids_in_prose(text, known):
+    """Gloss every bare id inside AUTHORED prose the report re-prints.
+
+    The four fields are composed here and name their own ids. The goal STATEMENT is not: a human
+    or a worker wrote it into `goal.json`, and this report prints it verbatim — so a statement
+    mentioning `I-003` emitted a bare id, and the report FAILED ITS OWN LINT. The rule that ids
+    are named is meant to hold for what the reader actually sees, and the report is generated
+    precisely so the format is a fact rather than an intention; a generator that emits prose it
+    will then reject has made it an intention again.
+
+    Only ids the index can resolve are touched. An unresolvable one is left exactly as written,
+    because inventing a name here would hide the missing index row that is the real defect — the
+    same reason `gloss` prints its admission instead of dropping the id.
+    """
+    if not text:
+        return text
+    # TWO CURSORS, NOT ONE. `last` is how much has been EMITTED; `skip_to` is how far the
+    # scanner may not match inside (an id already carrying its gloss). Folding them into one
+    # variable silently deleted everything before an already-glossed id — the statement lost its
+    # first sentence while the lint went green, which is the worst possible pair of outcomes.
+    out, last, skip_to = [], 0, 0
+    for m in ID_RE.finditer(text):
+        if m.start() < skip_to:
+            continue
+        after = text[m.end():m.end() + 4].lstrip(" `")
+        if after.startswith("("):
+            close = text.find(")", m.end())
+            skip_to = (close + 1) if close != -1 else len(text)
+            continue
+        title = known.get(m.group(1))
+        if not title:
+            continue
+        out.append(text[last:m.start()])
+        out.append(gloss(m.group(1), known))
+        last = m.end()
+    out.append(text[last:])
+    return "".join(out)
 
 
 def _untitled(ident, title):
@@ -316,7 +377,7 @@ def build(workflow, now=None, repo=None, docs_root=None):
     return {
         "goal": {
             "id": m.get("goal"),
-            "statement": (goal or {}).get("statement", ""),
+            "statement": name_ids_in_prose((goal or {}).get("statement", ""), known),
             "progress": m.get("progress"),
             "met": bool(m.get("met")),
             "stalled": bool(m.get("stalled")),

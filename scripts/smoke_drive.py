@@ -1128,25 +1128,38 @@ def an_item_actually_completed(repo, session_detail):
                       else "no item dir was ever created", session_detail))
 
 
-def drive(repo, prompt, timeout):
+def drive(repo, prompt, timeout, drive_turn=True):
     """One real session. `claude -p` nested inside a session works — that is measured, not
     assumed — and it is the only way to hand a whole instruction to a real model unattended.
 
-    `REEVE_DRIVE` IS EXPORTED BECAUSE THIS IS, LITERALLY, AN UNATTENDED DRIVE. `turn_gate.py` is
-    scoped to one at the maintainer's word — a gate firing while a human sat there planning would
-    be switched off within the hour, taking the unattended case with it — and it detects one from
-    exactly this variable, which `loop.sh` exports for real runs. Without it the shipped Stop hook
-    lay DORMANT in every smoke run, so the harness was grading a configuration no unattended user
-    runs, and the seam that checks the gate had to invoke it synthetically to see anything at all.
-    That is the between-component blind spot this harness exists for, found in the harness.
+    `REEVE_DRIVE` IS EXPORTED FOR THE DRIVE TURNS BECAUSE THEY ARE, LITERALLY, AN UNATTENDED
+    DRIVE. `turn_gate.py` is scoped to one at the maintainer's word — a gate firing while a human
+    sat there planning would be switched off within the hour, taking the unattended case with it
+    — and it detects one from exactly this variable, which `loop.sh` exports for real runs.
+    Without it the shipped Stop hook lay DORMANT in every smoke run, so the harness was grading a
+    configuration no unattended user runs, and the seam that checks the gate had to invoke it
+    synthetically to see anything at all.
 
-    It is bounded, not open-ended: `MAX_DEMANDS` lets the gate block twice and then give up, so a
-    session it disagrees with costs two extra turns rather than the whole window."""
+    NOT FOR BOOTSTRAP, and that is not a convenience. The gate's first rung asks whether a turn
+    may end AT ALL, and the set of reasons is closed: parked, met, stalled, paused, idle. After
+    `/start` the loop is `building` with a full backlog, so none of them hold and the bootstrap
+    turn may never end — it simply keeps building the project until the window expires. Measured:
+    a greenfield `/start` burned the whole 3600s having already committed the stack decision and
+    a feature, sitting in `planner:plan-one`. That is the gate working exactly as specified on a
+    turn that is not a drive turn. `/start` is a human-initiated setup step that hands back; the
+    drive is what happens afterwards, and `loop.sh` exports the variable for that, not for this.
+
+    It is bounded on the turns that do carry it: `MAX_DEMANDS` lets the gate block twice and then
+    give up, so a session it disagrees with costs two extra turns rather than the whole window."""
     print("  → %s" % prompt.splitlines()[0][:100])
+    env = dict(os.environ)
+    if drive_turn:
+        env["REEVE_DRIVE"] = "1"
+    else:
+        env.pop("REEVE_DRIVE", None)
     try:
         p = subprocess.run(["claude", "-p", prompt], cwd=repo, capture_output=True,
-                           text=True, timeout=timeout,
-                           env=dict(os.environ, REEVE_DRIVE="1"))
+                           text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return False, "timed out after %ds — %s" % (timeout, _was_it_moving(repo))
     except OSError as exc:
@@ -1229,7 +1242,7 @@ def run_mode(mode, timeout, keep, resume=None):
         if bootstrapped(repo):
             check("%s: /start completed" % mode, True, "already bootstrapped — skipped")
         else:
-            ok, detail = drive(repo, START_PROMPT, timeout)
+            ok, detail = drive(repo, START_PROMPT, timeout, drive_turn=False)
             if not check("%s: /start completed" % mode, ok, detail):
                 print("  tree kept at %s" % repo)
                 return False

@@ -538,3 +538,41 @@ class InlineExecutionIsItsOwnVerdict(unittest.TestCase):
                 json.dump({"pct": 17.6, "used": 1, "count": 2, "fired": False}, fh)
             ok, _ = sd.seam_worker_budget_saw_a_real_worker(tmp)
             self.assertTrue(ok)
+
+
+class BootstrapIsNotADriveTurn(unittest.TestCase):
+    """The gate's first rung asks whether a turn may end AT ALL, and the set of reasons is closed:
+    parked, met, stalled, paused, idle. After `/start` the loop is `building` with a full backlog,
+    so none hold and the bootstrap turn may never end — it keeps building until the window
+    expires. Measured: a greenfield `/start` burned the whole 3600s having already committed the
+    stack decision and a feature. The gate was working exactly as specified, on a turn that is
+    not a drive turn."""
+
+    def _env_for(self, drive_turn):
+        seen = {}
+
+        def fake_run(argv, **kw):
+            seen.update(kw.get("env") or {})
+            raise OSError("not actually launching claude")
+
+        with mock.patch.object(sd.subprocess, "run", fake_run):
+            sd.drive("/nonexistent", "prompt", 1, drive_turn=drive_turn)
+        return seen
+
+    def test_the_item_turn_carries_REEVE_DRIVE(self):
+        self.assertEqual(self._env_for(True).get("REEVE_DRIVE"), "1")
+
+    def test_the_bootstrap_turn_does_NOT(self):
+        self.assertIsNone(self._env_for(False).get("REEVE_DRIVE"))
+
+    def test_an_INHERITED_REEVE_DRIVE_is_stripped_from_bootstrap(self):
+        """The harness itself is often run from inside a drive; inheriting the variable would
+        put the gate back on the bootstrap turn by accident."""
+        with mock.patch.dict(os.environ, {"REEVE_DRIVE": "1"}):
+            self.assertIsNone(self._env_for(False).get("REEVE_DRIVE"))
+
+    def test_start_is_dispatched_as_a_NON_drive_turn(self):
+        """The wiring, not just the helper — the defect was at the call site."""
+        import inspect
+        src = inspect.getsource(sd.run_mode)
+        self.assertIn("START_PROMPT, timeout, drive_turn=False", src)
