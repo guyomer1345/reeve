@@ -23,7 +23,16 @@ once obeys neither.
      block says WHICH of the two shapes it is, because they send the reader to different places:
      a turn that moved no anchor said it would do something and did not; a turn that moved
      anchors and stopped anyway finished a piece and quit instead of picking up the next.
-  2. IS THE REPORT CURRENT? A turn that may legitimately end must leave the four-field,
+  2. IS THE ANCHOR AN ANCHOR? `handoff.md` carries one load-bearing field -- `base_sha`, the
+     commit a resumed session reads `git log <base_sha>..HEAD` against. It was ASKED FOR in
+     `/dispatch` and in `handoff_gate.py`'s instruction, and CHECKED nowhere except under
+     context pressure, so the ordinary path -- a session rewriting the anchor at the end of an
+     item, with plenty of context left -- could leave a handoff that is prose with no resume in
+     it. A real greenfield drive did exactly that, twice, while brownfield's was fine; the seam
+     that caught it is in `smoke_drive.py` and nothing inside the package was looking. This rung
+     fires ONLY when the file exists and the field does not: a project that has written no
+     anchor at all is `handoff_gate.py`'s business, under the band, and is not touched here.
+  3. IS THE REPORT CURRENT? A turn that may legitimately end must leave the four-field,
      goal-relative report behind it (`status_report.py`), because the human's next contact with
      this project is reading it.
 
@@ -147,8 +156,23 @@ REPORT = (
 )
 
 
+ANCHOR = (
+    "TURN GATE — %s\n\n"
+    "`.workflow/handoff.md` exists but is not a resume anchor: it names no `base_sha`, so a "
+    "session that picks this project up cannot run `git log <base_sha>..HEAD` and cannot see "
+    "what moved while you held it. Fix the file you already wrote — do not rewrite it whole and "
+    "do not start new work:\n"
+    "1. `git rev-parse HEAD`\n"
+    "2. Add a `base_sha: <that id>` line near the top of `.workflow/handoff.md`, with Write/Edit "
+    "and never a Bash `>` redirect. Say in the same line what the commit is (`F1-1's base; this "
+    "session's commit sits on top`) so a stranger knows what it anchors.\n"
+    "3. Leave both machine blocks (`drain:begin…`, `parked:begin…`) byte for byte, and leave the "
+    "rest of the anchor alone — the prose is fine, it is the one field that is missing."
+)
+
+
 def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None):
-    """-> {demand: None|'continue'|'report', why, instruction, fingerprint, digest}.
+    """-> {demand: None|'continue'|'anchor'|'report', why, instruction, fingerprint, digest}.
 
     `last_text` is the session's final assistant message; the report rung looks for the
     renderer's marker in it. `satisfied_digest` is the digest this session last satisfied, which
@@ -168,6 +192,24 @@ def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None):
         }[changed]
         out.update(demand="continue", why=why, instruction=CONTINUE % (why + shape))
         return out
+
+    # RUNG 2 -- the anchor exists but cannot be resumed from. Between the two on purpose:
+    # losing the loop's place costs more than a stale report, and less than a session that
+    # announced work and abandoned it. `anchor_names_base` is `context_band`'s, not a second
+    # matcher -- one owner for "does this name a base commit", which is the whole point of
+    # reusing it rather than re-deriving the regex here.
+    handoff = os.path.join(workflow, "handoff.md")
+    if os.path.exists(handoff):
+        try:
+            import context_band as cb
+            named = cb.anchor_names_base(handoff)
+        except Exception:
+            named = True                # cannot tell -> permissive, like every other path here
+        if not named:
+            why = ("the resume anchor names no `base_sha`, so nothing can tell what moved "
+                   "while this session held the project")
+            out.update(demand="anchor", why=why, instruction=ANCHOR % why)
+            return out
 
     try:
         import status_report as sr

@@ -6,6 +6,7 @@ test, because a missing one is not a bug that shows up as noise — it is a sess
 blocked forever with a legitimate reason to stop.
 """
 import json
+import os
 import subprocess
 
 import turn_check as tc
@@ -156,3 +157,66 @@ def test_rung_one_passing_does_not_require_a_goal_at_all(tmp_path):
     (tmp_path / ".workflow" / "goal.json").unlink()
     res = tc.check(wf, last_text="")
     assert res["demand"] == "report"          # still owed — the block renders "GOAL — none set"
+
+
+# ============================================================ rung 2 — the anchor is an anchor
+# `base_sha` is the anchor's one load-bearing field: a resumed session reads
+# `git log <base_sha>..HEAD` against it. It was ASKED FOR in `/dispatch` and in
+# `handoff_gate.py`'s instruction and CHECKED nowhere except under context pressure, so the
+# ordinary path — a session rewriting the anchor at the end of an item with plenty of context
+# left — could leave a handoff that is prose with no resume in it. A real greenfield drive did
+# exactly that, twice, while brownfield's was fine. Nothing inside the package was looking; the
+# seam that caught it lives in the smoke harness, one layer up.
+
+def _endable(tmp_path, anchor=None):
+    """A project whose turn MAY legitimately end, so rung 1 does not shadow rung 2."""
+    wf = project(tmp_path, status="idle")
+    if anchor is not None:
+        with open(os.path.join(wf, "handoff.md"), "w") as fh:
+            fh.write(anchor)
+    return wf
+
+
+def test_an_anchor_with_no_base_sha_blocks_the_turn(tmp_path):
+    res = tc.check(_endable(tmp_path, "# Handoff\n\nprose about where we are\n"))
+    assert res["demand"] == "anchor", res
+    assert "base_sha" in res["why"]
+    assert "git rev-parse HEAD" in res["instruction"], "it must say how to get the id"
+
+
+def test_base_sha_UNKNOWN_is_caught_too(tmp_path):
+    """The shape a session writes when it did not look. It reads as a field that is there."""
+    for filler in ("unknown", "none", ""):
+        res = tc.check(_endable(tmp_path, "# Handoff\n\nbase_sha: %s\n" % filler))
+        assert res["demand"] == "anchor", (filler, res)
+
+
+def test_a_REAL_base_sha_falls_through_to_the_next_rung(tmp_path):
+    res = tc.check(_endable(tmp_path, "# Handoff\n\nbase_sha: 29483cf (B-3's base)\n"))
+    assert res["demand"] != "anchor", res
+
+
+def test_NO_anchor_at_all_is_not_this_rungs_business(tmp_path):
+    """That is `handoff_gate.py`'s, under the band. A project that has never written one must
+    not be blocked here — the two gates would demand different things on the same turn, which
+    is the failure the ladder's one-rung-wins rule exists to prevent."""
+    wf = _endable(tmp_path)
+    assert not os.path.exists(os.path.join(wf, "handoff.md"))
+    assert tc.check(wf)["demand"] != "anchor"
+
+
+def test_an_unreadable_context_band_stays_PERMISSIVE(tmp_path, monkeypatch):
+    """Fail direction is permissive on every path in this file, and this rung is no exception:
+    a gate that stopped a session from ending AT ALL is the more expensive failure."""
+    wf = _endable(tmp_path, "# Handoff\n\nno base here\n")
+    monkeypatch.setitem(__import__("sys").modules, "context_band", None)
+    assert tc.check(wf)["demand"] != "anchor"
+
+
+def test_the_anchor_rung_does_not_outrank_a_turn_that_may_not_END(tmp_path):
+    """Rung order, asserted rather than assumed: a session that announced work and abandoned it
+    is told to continue, not to go and tidy a file."""
+    wf = project(tmp_path, status="building")
+    with open(os.path.join(wf, "handoff.md"), "w") as fh:
+        fh.write("# Handoff\n\nno base here\n")
+    assert tc.check(wf)["demand"] == "continue"
