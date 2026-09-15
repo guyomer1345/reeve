@@ -7990,3 +7990,116 @@ owner-less fact goes missing silently — `12m` is that lesson applied to the sw
 → `11` (§ the ACCEPTANCE LEDGER — asks #3 and #7 discharged; § the ordered build sequence — all four findings
 closed), `07` (the live-signal question closed; two stale entries struck), `10` (the seventh checkpoint kind),
 `CLAUDE.md` (the second mechanical backstop, and its stated blind spot).
+
+## D222 — the worker-budget hook was not merely unproven, it was READING THE WRONG FILE — and the drive that found it was attesting a mode it never ran **[DECIDED + BUILT 2026-09-15. Closes `11` § `▶ NEXT`'s residual for the brownfield path. 1,410 tests + 25 subtests, 7 meta-gates, smoke self-test 27 steps / 0 failures, brownfield drive green on the current package digest]**
+`D221` shipped `hooks/worker_budget.py` and discharged ask #3 with a stated caveat: the mechanism had never been
+observed to run, and it fails **silent** on every path, so a dead trigger and a healthy loop produce identical
+evidence — none. The remedy `07` proposed was a breadcrumb. **Building the breadcrumb is what found the real
+defect, which was worse than the caveat admitted: the hook was locating a transcript, reading it, and the
+transcript was the wrong one.**
+
+**WHAT THE BREADCRUMB FOUND — one defect in two halves, each of which hid the other.** The layout, confirmed on
+disk, is `<project>/<session-id>.jsonl` beside `<project>/<session-id>/subagents/agent-<aid>.jsonl`.
+- **The first route accepted the payload's `transcript_path` on the sole evidence that it was a file.** That
+  path *is* the session transcript. Measured on a kept smoke tree: the orchestrator's **122,955 tokens billed to
+  the worker as 55,791 — 61% where the truth was 28%**. Not silence. A **spurious yield on every worker of every
+  wave**, arriving sooner the fuller the parent got, which is precisely backwards.
+- **The fallback looked under `dirname(session)`** — the *project* directory, one level too high, a path that
+  cannot exist. It was the suspected no-op, and it never mattered, because the mis-attributing route above
+  returned first and shadowed it.
+**Fixing either alone leaves the mechanism broken** — tightening the first without the second turns a wrong
+answer into no answer; the second without the first is never reached. The invariant is now enforced rather than
+asserted: a candidate counts only if it sits under a `subagents/` directory **and** its filename names this
+agent (`is_worker_transcript`), so no future route can reintroduce the defect by adding a candidate.
+
+**THE BREADCRUMB ITSELF, and why silence needed a shape.** One small file per exit under
+`.workflow/worker-budget/<outcome>.json`: `located` · `no-transcript` · `no-usage` · `no-agent-id`. The design
+rule that makes it readable is the ordering: **`located.json` is the only file that proves anything on its own**
+— the reading half ran *inside a real worker* against that worker's own transcript. `no-agent-id` is
+**EXPECTED and proves nothing**, because the hook is registered on `PostToolUse` with no matcher and therefore
+fires on the orchestrator's own tool calls too; it becomes a finding only in the company of a missing `located`
+after a run **known** to have dispatched workers, which is a fact the drive holds and the hook cannot. That is
+why the evidence lives in the hook and the assertion lives in the drive.
+`located` is written **before** the threshold test, deliberately: a worker at 23% is the mechanism working, and
+if only a firing left a trace, a healthy loop would be indistinguishable from a no-op until something crossed
+75% — which may be never. Existence is the signal and existence is **monotone**, which is what makes one file
+per outcome safe under a parallel wave: concurrent writers can lose a `count` increment, they cannot un-write
+the file, and the file says on disk that its count is advisory. It never speaks to the model — an
+`additionalContext` on every tool call is the exact window cost this hook exists to protect — and it never
+creates `.workflow/`, because a hook that makes directories to record its own presence litters every tree a
+worker happens to be cwd'd into.
+
+**TWO NEW SEAMS, both from failures the drive itself surfaced.**
+- **`shipped hooks are REGISTERED`.** A `--resume` refreshed the package into a kept tree, put `worker_budget.py`
+  on disk, and left `.claude/settings.json` exactly as an older `/start` had written it — **no `PostToolUse`
+  registration at all**. The tree then ran a real item, dispatched real workers, and produced not one breadcrumb,
+  while `install closed` stayed **green the entire time**, because every manifest destination really was present.
+  *Installed and registered are different questions and only one of them was being asked.* The seam derives its
+  expectation from the package's own `templates/settings.json`, so it needs no list of its own to rot: ship a
+  hook, register it there, and this starts requiring it everywhere. The harness now reconciles settings **only on
+  a resume** — doing it on a fresh run would write the registrations `/start` is supposed to write, and the seam
+  would be grading the harness instead of the package.
+- **`worker budget observed a real worker`.** Three distinct reds, kept apart because they send the reader to
+  different files: no breadcrumbs at all (install/registration), only `no-agent-id` (the trigger is a permanent
+  no-op), `no-transcript` (the locator is wrong, and the recorded `tried` list says where it looked).
+
+**THE DRIVE WAS ATTESTING A MODE IT NEVER RAN.** `--resume DIR` inherited the default `--mode both` and drove the
+single given tree **twice, once under each label, then wrote both into the receipt** — and `build-release.py
+--out` trusts that receipt. This is not a lost run; it is a gate certifying a bootstrap path that never executed,
+which is the same class of defect as everything else in this entry. Found by reading the first four lines of a
+real resume, which announced `=== greenfield ===` over a brownfield tree. A tree now **records which mode built
+it** (`.git/smoke-mode`, under `.git/` so `git add -A` cannot sweep harness metadata into the diffs the seams
+read), an old unmarked tree falls back to its directory name, and a tree that cannot say what it is is
+**REFUSED, not guessed** — as is a `--mode` flag that contradicts the marker.
+
+**REJECTED.** *A counter in one file* — one worker of a wave clobbers another's outcome, and the thing being
+measured is concurrency. *A log line* — unbounded growth on a file written every tool call, for a question whose
+whole answer is a boolean. *Making the hook loud on failure* — the fail direction is silence by design and this
+changes no verdict; the breadcrumb is evidence on disk, and the tests pin that stdout stays empty. *Refusing to
+run without a locatable transcript* — a hook that can break a worker to report on itself is worse than the gap.
+
+**WHAT THIS HAS NOT EARNED.** The **greenfield** path is unattested against this package — its receipt entry is
+absent, so `build-release.py --out` still refuses, correctly. And the ceiling is unchanged and worth restating
+where it can be read: the drive proves the hook **runs and reads the right file**; it cannot prove the yield
+instruction was **obeyed**, because `PostToolUse` can add context and cannot stop a model. That is the honest
+distance travelled — from *cannot be shown to work* to *cannot be shown to be obeyed*.
+
+**Builds on:** **D221** (which named this residual in its own entry rather than leaving it to be discovered),
+**D219**/**D220** (the drive and the per-mode receipt that made re-entry cheap enough to find this), **D187**
+(the measurement the locator was supposed to be reading).
+→ `11` (§ the ordered build sequence — `▶ NEXT`'s residual closed for brownfield), `07` (the "does it ever fire"
+question answered for the brownfield path), `05` (the `worker-budget/` state row, previously uncaptured).
+
+## D223 — the acceptance ledger checks ITSELF, because a control that depends on being re-read is the control that already failed **[DECIDED + BUILT 2026-09-15, while filing the Phase-13 request. 31 sweep tests green]**
+`D214` built the ACCEPTANCE LEDGER because a request with no owner went missing silently. **The ledger is an
+owner that has to be read to work**, and the failure it was built for — *nobody noticed five of ten were
+undelivered* — is a failure of *reading*, not of recording. So the ledger reproduced the exact dependency it was
+meant to remove, one level up: it works as long as someone re-reads both tables end to end, which is the same
+"whoever remembered" that produced the four stale entries `D221` found.
+
+**The call: a third invariant in `check_owner_sweep.py` — an ask must have SOMETHING against it.** Either a
+`[ask #N]` queue heading, or a non-empty `Discharged by` cell of its own. It runs in the commit chain with the
+other two.
+
+**Why not "every ask has a queue entry", which is the rule the ledger's own prose states.** Because it fires on
+seven of the ten real rows: the `[ask #N]` tag postdates asks #1–#5, and two rows were discharged by a
+*disposition* rather than a slice (`answered — they do`, `parked`), which is legitimate. **A gate whose green
+state needs seven exemptions is a gate somebody switches off**, and then the invariant is worth less than
+nothing because its silence is now read as coverage. The decidable question `D214` actually asks is *does
+anything at all claim this ask*, and that is what is gated.
+
+**A second, cheaper catch fell out of it:** a cell citing `D<k>` that the decision log does not contain. A
+discharge that cites a decision nobody wrote reads exactly like a discharge, and it is the least effortful way
+for a row to look green while naming nothing.
+
+**Note it is the MIRROR of invariant 2 and neither implies the other** — one ask with two entries, one ask with
+none. Both were invisible without a gate, and both look like tidy bookkeeping until someone re-reads the source.
+
+**REJECTED.** *Gating the `State` column* (✅ with no evidence) — the state is the maintainer's judgement and a
+machine grading it would be judgement in a gate's clothes, which this file already refuses elsewhere. *Requiring
+the cited slice id to exist as a heading* — `12a`–`12e` are described in the D186 sequence's prose rather than as
+`####` headings, so it would fire on closed, correct work.
+
+**Builds on:** **D214** (the ledger this makes self-checking), **D221** (`12m`, the sweep backstop this extends —
+same argument, one level up), **D80** (one owner per fact).
+→ `CLAUDE.md` (the gate's three shapes), `11` (the Phase-13 ledger, which is the first table written under it).

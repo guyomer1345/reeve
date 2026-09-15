@@ -65,3 +65,56 @@ class ReleaseGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# --- a resume is ONE tree, and a tree is ONE mode ----------------------------
+# `--resume DIR` inherited the default `--mode both` and drove the single given tree twice, once
+# under each label, then attested both. That is not a lost run: it is a receipt asserting that a
+# bootstrap path was proven when that path never executed — and `build-release.py --out` trusts
+# the receipt. Found by reading the first four lines of a real resume, which announced
+# `=== greenfield ===` over a brownfield tree.
+
+def test_a_seeded_tree_records_which_mode_built_it(tmp_path):
+    repo = str(tmp_path / "anonymous-name")
+    sd.seed(repo, "brownfield")
+    assert sd.tree_mode(repo) == "brownfield", "the marker, not the directory name"
+
+
+def test_the_marker_is_not_committed_into_the_repo_under_test(tmp_path):
+    """Under `.git/`, or `git add -A` would put harness metadata into the diffs the seams read."""
+    repo = str(tmp_path / "r")
+    sd.seed(repo, "greenfield")
+    tracked = subprocess.run(["git", "-C", repo, "ls-files"], capture_output=True, text=True)
+    assert "smoke-mode" not in tracked.stdout
+
+
+def test_an_old_tree_without_a_marker_falls_back_to_its_name(tmp_path):
+    repo = tmp_path / "reeve-smoke-brownfield-abc123"
+    (repo / ".git").mkdir(parents=True)
+    assert sd.tree_mode(str(repo)) == "brownfield"
+
+
+def test_a_tree_that_cannot_say_what_it_is_gets_REFUSED_not_guessed(tmp_path, capsys):
+    repo = tmp_path / "some-tree"
+    (repo / ".git").mkdir(parents=True)
+    assert sd.tree_mode(str(repo)) is None
+    assert sd.main(["--resume", str(repo)]) == 2
+    assert "will not guess" in capsys.readouterr().out
+
+
+def test_resume_does_not_inherit_mode_both(tmp_path, monkeypatch):
+    """The defect itself: one tree, two modes, two attestations."""
+    repo = str(tmp_path / "reeve-smoke-brownfield-xyz")
+    os.makedirs(os.path.join(repo, ".git"))
+    ran = []
+    monkeypatch.setattr(sd.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(sd, "run_mode", lambda m, *a, **k: ran.append(m) or False)
+    sd.main(["--resume", repo])
+    assert ran == ["brownfield"], "drove the same tree as both modes: %r" % ran
+
+
+def test_a_contradicting_mode_flag_is_refused(tmp_path, capsys):
+    repo = str(tmp_path / "reeve-smoke-brownfield-xyz")
+    os.makedirs(os.path.join(repo, ".git"))
+    assert sd.main(["--resume", repo, "--mode", "greenfield"]) == 2
+    assert "contradicts the tree" in capsys.readouterr().out

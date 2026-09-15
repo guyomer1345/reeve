@@ -30,8 +30,9 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
   (canonical status). Its **`### The ordered build sequence`** is the live work order — read that first; it is
   the single owner of *what to build next, and why in that order*. It is marked **▶ START HERE**, and the
   **first subsection under it is the next thing to build** — everything below that is closed work kept for its
-  reasoning. **Read `### The Phase-12 ACCEPTANCE LEDGER` immediately above it first**: it is the owner of what
-  the maintainer actually ASKED FOR, and every queue entry cites an ask number. It exists because five of ten
+  reasoning. **Read the `ACCEPTANCE LEDGER` sections immediately above it first** (one per request — Phase 12's, then
+  Phase 13's; ask numbers are GLOBAL across them, because the asks are the maintainer's, not a phase's): they own
+  what the maintainer actually ASKED FOR, and every queue entry cites an ask number. It exists because five of ten
   asks were delivered as closed while unmet — a request with no durable owner goes missing silently (D214).
   **An ask with no item against it is work that has been lost.**
 - **`docs/design/08-decision-log.md`** — every decision: the call, why, what was rejected, the evidence.
@@ -55,8 +56,10 @@ The **`docs/design/` spec folder is the source of truth.** Don't duplicate what 
   doc for the fact you just changed, update its owner, repoint the rest — then **two** mechanical backstops, both
   auto-running at commit via `.git/hooks/pre-commit`. `scripts/check-status-coherence.sh` keeps roster counts,
   `D1–DN` ranges and roadmap `**[…]**` tags in their owner. `scripts/check_owner_sweep.py` catches the sweep you
-  did not do: a decision that says it settled an `07` question while `07` still reads as open, and an `[ask #N]`
-  carrying both a CLOSED queue entry and an open one (a ghost that gets built twice). **Its stated blind spot is a
+  did not do, in three decidable shapes: a decision that says it settled an `07` question while `07` still reads
+  as open; an `[ask #N]` carrying both a CLOSED queue entry and an open one (a ghost that gets built twice); and
+  an ACCEPTANCE LEDGER row with **nothing against it** — no tagged entry and no discharger named, which is
+  `D214`'s own defect mechanized (`D223`). **Its stated blind spot is a
   section HEADER that contradicts the items under it** — prose agreeing with prose is not decidable, so that half
   is still yours. Same logic applies to any single-source-of-truth claim.
 

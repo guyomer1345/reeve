@@ -1,6 +1,6 @@
 """Tests for check_owner_sweep.py — the backstop for the sweep nobody remembers to run.
 
-Meta-only. These pin the two invariants against SYNTHETIC text rather than the live docs, for the
+Meta-only. These pin the three invariants against SYNTHETIC text rather than the live docs, for the
 reason the autonomy-floor tests give: a test that reads the working record fails the day somebody
 edits it, and then proves nothing about the check.
 
@@ -125,3 +125,80 @@ def test_the_live_repo_is_clean():
 
 def test_the_cli_exit_code_is_the_verdict():
     assert cs.main([]) == 0
+
+
+# --- invariant 3: an ask has SOMETHING against it ----------------------------
+# `D214`'s own defect, mechanized. Five asks of ten closed while unmet because the request had no
+# owner; the ledger gave it one, and this makes the owner check itself rather than relying on
+# whoever remembers to re-read both tables. Note the shape it must NOT have: requiring a tagged
+# queue entry would fire on the seven historical rows that predate the tag or were discharged by
+# a disposition, and a gate needing seven exemptions is a gate somebody switches off.
+
+LEDGER = """### The Phase-9 ACCEPTANCE LEDGER — what was asked for
+Preamble prose.
+
+| # | The ask | Discharged by | State |
+|---|---|---|---|
+| 1 | a thing he asked for | `9a` · `D100` | OK |
+| 2 | another thing | %s | %s |
+
+### The ordered build sequence
+#### `9a` — the thing. CLOSED — `D100`. `[ask #1]`
+Body.
+"""
+
+LOG3 = "## D100 — a decision\nBody.\n"
+
+
+def _ledger(cell, state="open", tail=""):
+    return (LEDGER % (cell, state)) + tail
+
+
+def test_an_ask_with_NOTHING_against_it_is_flagged():
+    """The exact state that lost five of ten: a row nobody built and nobody dispositioned."""
+    out = cs.every_ask_has_an_entry(_ledger(""), LOG3)
+    assert len(out) == 1 and "ask #2" in out[0]
+
+
+def test_a_tagged_queue_entry_discharges_it():
+    out = cs.every_ask_has_an_entry(
+        _ledger("", tail="#### `9b` — the other thing. `[ask #2]`\n"), LOG3)
+    assert out == []
+
+
+def test_a_DISPOSITION_counts_as_a_discharger():
+    """Two of the ten real rows are `answered — they do` and `parked`. Neither is a slice and
+    both are legitimate; a gate that called them missing would be wrong about the thing it is
+    named for."""
+    assert cs.every_ask_has_an_entry(_ledger("answered — they do", "done"), LOG3) == []
+    assert cs.every_ask_has_an_entry(_ledger("parked", "done"), LOG3) == []
+
+
+@pytest.mark.parametrize("cell", ["-", "—", "TBD", "?", "n/a", "none", "**—**"])
+def test_a_cell_that_only_LOOKS_filled_is_still_empty(cell):
+    assert len(cs.every_ask_has_an_entry(_ledger(cell), LOG3)) == 1
+
+
+def test_a_citation_to_a_decision_NOBODY_WROTE_is_refused():
+    """A discharge that cites a decision the log does not contain reads exactly like a
+    discharge — and is the cheapest way for a row to look green while naming nothing."""
+    out = cs.every_ask_has_an_entry(_ledger("`9z` · `D999`", "done"), LOG3)
+    assert len(out) == 1 and "D999" in out[0]
+
+
+def test_rows_OUTSIDE_a_ledger_table_are_not_asks():
+    """The roadmap carries other tables; a bare `| 3 |` in one of them is not an ask."""
+    text = ("### Some other section\n\n| # | thing | owner | state |\n"
+            "|---|---|---|---|\n| 3 | a row in an unrelated table | | |\n")
+    assert cs.every_ask_has_an_entry(text, LOG3) == []
+
+
+def test_the_ledger_scope_ENDS_at_the_next_heading_of_equal_depth():
+    text = _ledger("`9a`", "done") + ("\n| 7 | a row under the build sequence heading | | |\n")
+    assert cs.every_ask_has_an_entry(text, LOG3) == [], "scope leaked past the ledger section"
+
+
+def test_the_live_docs_pass_all_three():
+    """The one test that reads the real record — not to pin its content, but because a gate
+    added in the same commit as the rows it grades must be shown to grade them green."""
+    assert cs.run() == []

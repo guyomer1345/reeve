@@ -1127,7 +1127,27 @@ dispatch. The maintainer dissolved it in two sentences on being shown the state 
 impossible is still an ask; the ledger tracks whether it is DONE, and nothing was tracking whether its
 impossibility had been re-examined.*
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is BUILT and CAPTURED — all ten asks discharged, `D221` — but NOT yet re-validated as an installed whole. The next thing to do is `#### ▶ NEXT — re-run the smoke drive`, then the standing queue**)
+### The Phase-13 ACCEPTANCE LEDGER — the second request, filed the day it was made **[the owner of asks #11–#12; same contract as the Phase-12 ledger above]**
+**The request is preserved verbatim at [`intake/phase-13-request.md`](intake/phase-13-request.md).** Filed at the
+moment it was made rather than reconstructed afterwards, which is the entire lesson of `D214`. Ask numbering
+continues the Phase-12 sequence deliberately: the asks are the maintainer's, not a phase's, and a global number
+is what `[ask #N]` tags and `check_owner_sweep.py` bind to.
+
+**Both asks come from the same lived loop** — set a goal, let the orchestrator drive it across many sessions,
+oversee — and both are about that loop being *legible* and *unattended*, not about what it builds. His closing
+line makes this batch the gate on a real rollout: *"after these 2 points and the earlier goals are finished ill
+update every repo i use this plugin on."*
+
+| # | The ask, in his words (condensed) | Discharged by | State |
+|---|---|---|---|
+| 11 | **a standard report format** — four fields, goal-relative; and **names, not `D92`/`Ref X`**, which mean nothing to him; and it must stop being long and jumbled | `13a` | ⬜ open |
+| 12 | **stop pausing for nothing** — minor decisions must resolve in the orchestrator; and *"says okay now doing X and never dispatches X"*; **it needs monitoring**, possibly through the tmux supervisor | `13b` | ⬜ open |
+
+**Both are checked against the `D214` rule: name the actuator, or say plainly that none is possible and why.**
+An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
+finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
+
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13 is OPEN — two asks, filed the moment they were made. The next thing to build is `#### ▶ NEXT — `13a` the standard report`; the greenfield smoke attestation is deliberately LAST, because the receipt is keyed on the package digest and 13a/13b will change it**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1210,31 +1230,74 @@ Both were reproduced against the kept smoke trees before being fixed, and the fl
 withheld `spec-delta.md`: 2 spurious `locked-block` findings → 0, with all 9 legitimate `acceptance-criteria`
 findings intact.
 
-#### ▶ NEXT — re-run the smoke drive, and close the one residual it should prove. `[validation for `D221`]`
-**Start the next session here.** Phase 12's slices are all built and captured; what has NOT happened is running
-the package as an installed whole since `D221` touched it. Four of that decision's changes are
-**between-component** — a new checkpoint kind raised from inside a commit gate, a hook that runs inside a worker,
-a gate that shells out to the project's own `codemap.sh`, a typed return the router has to route on — and
-`D219` is the standing proof that 1,200-odd unit tests cannot see that class. **The receipt is already stale**
-(`D220` keys it on the shipped file digest, which `D221` changed), so `build-release.py --out` refuses until this
-runs; that is the gate working, not an obstacle to route around.
-- **Do the cheap half first.** `--assert-only` on the kept trees costs seconds and zero model calls; `--resume`
-  re-enters a tree and skips finished phases. Pay for a full drive only where a phase must actually re-run.
-  The kept trees are machine-local and **perishable** — if they are gone, `--mode <one>` re-earns one.
-- **`worker_budget.py` HAS NEVER BEEN OBSERVED TO FIRE, and it is built to fail silent** — the sharpest thing
-  the drive can settle. Its reading half is **verified against real data** (`occupancy()` run against a real
-  subagent transcript from the brownfield drive: 87,090 tokens, 43.5%), and the on-disk layout `D187` described
-  is confirmed. What is unverified is its *trigger*: it acts only if the `PostToolUse` payload inside a worker
-  carries `agent_id` and a locatable transcript path, and if it does not, the hook is a **permanent no-op that
-  nothing would report**. Note the asymmetry that makes this worse than it looks: `handoff_gate.py` reads
-  `agent_id` as a *skip-if-present* guard, so it is safe either way; this one reads it as a *required* condition.
-  **So ask #3 is discharged by a mechanism that may not run.** Two moves, in order: make the silence
-  **observable** (a breadcrumb when the hook runs and cannot locate itself, so absence is measurable rather than
-  invisible), then let the drive assert on it. Until that lands, `#3`'s ✅ in the ledger above is doing more work
-  than the evidence supports, and this entry is the place that says so.
-- **What else the drive would exercise for the first time:** a `spec` checkpoint actually parking from inside
-  `checks.sh`; the code-map gate running against a real wrapper of either generation; a worker returning
-  `continue` and the router re-dispatching it.
+#### `12n` — the worker-budget residual, closed by finding the hook WRONG. ✅ **CLOSED 2026-09-15 — `D222`.** `[ask #3 · validation for `D221`]`
+The residual this slot carried was *"`worker_budget.py` has never been observed to fire, and it is built to fail
+silent"*. Making that silence observable is what found the real defect: **the hook ran, and read the session
+transcript instead of the worker's own** — 61% reported where the truth was 28%, i.e. a spurious yield on every
+worker of every wave, arriving sooner the fuller the orchestrator got. **`D222` owns the calls**, the second
+locator half that hid behind the first, the breadcrumb (`.workflow/worker-budget/<outcome>.json`), two new smoke
+seams (`worker budget observed a real worker`, `shipped hooks are REGISTERED` — a hook can be installed and
+never registered, and `install closed` stays green throughout), and the drive's own defect: **`--resume` inherited
+`--mode both` and attested a bootstrap path it never ran.**
+**What it did not earn, and why it is not this entry's job:** the greenfield receipt. Deliberately deferred to
+the tail of Phase 13 — `D220` keys the receipt on the package digest, and `13a`/`13b` will change it, so running
+greenfield now buys an attestation the next edit throws away.
+
+#### ▶ NEXT — `13a` the standard report: four fields, named references, hard budget, and a renderer instead of a rule. `[ask #11]`
+**Start the next session here.** The complaint is three complaints and they need three different answers.
+- **"a bunch of references to `D92`, `Ref X` … they mean nothing to me."** An internal id is a *pointer*, and a
+  pointer rendered to a human who cannot dereference it is noise that looks like rigour. **Rule: an id may appear
+  only alongside the name it points at** — `D92 (the Postgres-over-SQLite decision)`. Not a style note: a
+  resolver that reads the title from the id's owner, and a lint that refuses a bare one. An id whose title
+  cannot be resolved is printed **as unresolvable**, never silently dropped and never guessed — `missing` and
+  `zero` are different answers here too.
+- **"extremely long and jumbled."** Length is not fixable by asking for brevity. **Hard per-field budgets** —
+  N bullets, one line each, overflow rendered as `+N more (ask)`. A budget in a renderer holds; a budget in a
+  SKILL.md is a suggestion the model is free to feel strongly about.
+- **"these need a standardized format."** *A format described in prose is prose.* The actuator is that the
+  report is **GENERATED** — `status_report.py` renders it from `converge.py`'s measure, `parked/`, open items and
+  git, and the orchestrator pastes the block rather than composing one. Four fields, his, with four changes he
+  is owed an argument for:
+  1. **A goal line at the top.** Every one of his fields says *"for the goal"* and none of them names it.
+  2. **`decision for me to take` floats to the TOP when non-empty, and is OMITTED — not rendered empty — when
+     it is not.** He is right that it is usually empty; a section that usually says nothing trains the eye to
+     skip it, and the one time it matters it gets skipped too.
+  3. **`currently being worked on` must say whether it is MOVING** — item, age, and `converge`'s stall verdict.
+     Without that, field ② cannot distinguish working from stuck, which is the whole of ask #12.
+  4. **The same block on every human-facing surface**, not just `/status` — *"or it even just stops and gives
+     them to me"* is the orchestrator's own turn-end prose, which no skill owns today. That is the surface the
+     complaint is actually about.
+- **The actuator** is a `Stop` hook in a drive session: a turn that ends must carry the **current** generated
+  block, checked by re-rendering rather than by trusting a marker. Same shape as `D215`'s handoff gate, for the
+  same reason — the rule alone would be the prose the ask already had.
+
+#### `13b` — stop pausing for nothing, and MONITOR the drive. `[ask #12]`
+Three defects wearing one complaint, and they separate cleanly.
+- **"minor decisions that have no reason to stop and wait for my intervention."** The route already exists —
+  `decision-engineer` is the authority of last resort for exactly this — and nothing enforces it. **The floor:
+  a turn may not end by asking the human a question unless something is PARKED**, i.e. the question is one of
+  the seven checkpoint kinds. A `steer` park must be backed by `converge` actually saying met-or-stalled; an
+  escalated worker `blocked`/`question` must carry a recorded `decision-engineer` verdict. Anything else is
+  resolved in the loop, which is what he said: *"anything that isnt goal chaning is resolved in the orchestrator."*
+- **"says okay now doing X and never dispatches X."** This is a **liveness** defect and it has a deterministic
+  catch point: the turn ended. Work claimed in flight, nothing parked, no blocker recorded, no dispatch at this
+  `HEAD` → **block the Stop**. It needs no prose parsing and no supervisor running, which is why it is the
+  primary and tmux is not.
+- **"it needs monitoring … maybe through the tmux that was planned? consider better fits."** The considered
+  answer: **tmux is the fallback, not the mechanism.** A `Stop` hook is strictly better for the turn-ended stall
+  — always on, deterministic, no second process — but it is blind to the session that never ends a turn (idling,
+  or sat in a dialog, which `D217` already found the hard way). So: the `Stop` gate for the common case, and
+  `supervise.sh` grows a **heartbeat** for the case no `Stop` ever fires — newest mtime across the loop's own
+  state, a nudge once, then an alert to the human rather than a silent sit, with every stall written down so
+  *"it pauses a lot"* becomes a number instead of an impression.
+- **Scoped to unattended drive, at his word** — *"this is only when we are letting multiple sessions go by
+  themselves to achieve a goal not for just planning etc."* A gate that fires while he is sitting there planning
+  would be the same nuisance in the opposite direction.
+
+#### Then — the greenfield smoke attestation, and the rollout it gates. `[validation for `D222` + `13a` + `13b`]`
+Both modes green on the FINAL package digest, so `build-release.py --out` is unblocked and the maintainer can do
+what he said he would do after this batch: *"ill update every repo i use this plugin on."* Last, not first: the
+receipt is keyed on the shipped file set, so every earlier run is thrown away by the next edit.
 
 #### Then — the standing queue. `[no ask — post-Phase-12]`
 With Phase 12 closed this is what the work order points at, and it is the first entry here that traces to no

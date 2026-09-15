@@ -957,17 +957,18 @@ sub-questions deferred to the build, in the order the slices need them.
   means a second receipt — which is real design, not a wiring line. The receipt shape from the non-item commit
   work is the strongest candidate (a routed-and-approved spec change carries its checkpoint verdict as evidence),
   and that is a slice, not a follow-up. Until then this is a consultation and must be described as one.
-- **Does `worker_budget.py` ever actually FIRE? `[real, UNVERIFIED — opened by building D221]`** Its reading
-  half is verified against real data (`occupancy()` over a real subagent transcript: 87,090 tokens, 43.5%), and
-  the `<project>/<session>/subagents/agent-<id>.jsonl` layout `D187` described is confirmed on disk. **Its
-  trigger is not.** The hook acts only if the `PostToolUse` payload *inside a worker* carries `agent_id` and a
-  locatable transcript path, which cannot be established without a live run — and it is written to fail **silent**
-  when it cannot positively locate itself, so if the payload differs it is a permanent no-op and nothing reports
-  it. Contrast `handoff_gate.py`, which reads `agent_id` as a *skip-if-present* guard and is therefore safe
-  either way; this one makes it a *required* condition, which inverts the risk. **Consequence, stated because it
-  is uncomfortable: ask #3 in the Phase-12 ledger is discharged by a mechanism nobody has seen run.** The remedy
-  is not more reasoning — it is to make the silence **observable** (a breadcrumb on "ran, could not locate") and
-  let the smoke drive assert on it. Owned in `11` § `▶ NEXT — re-run the smoke drive`.
+- **~~Does `worker_budget.py` ever actually FIRE?~~ `[ANSWERED 2026-09-15 — D222, and the answer is worse than
+  the question assumed]`** It ran, and it was **reading the wrong file**. The locator accepted the payload's
+  `transcript_path` on the sole evidence that it was a file — which makes it the *session* transcript — so a
+  worker at 28% was told it was at 61%, and the fuller the orchestrator got the sooner every worker of every wave
+  would have yielded. Its fallback, the half suspected of being the no-op, looked one directory too high to ever
+  resolve, and shadowed by the first route it never mattered. **Both halves are fixed and the invariant is now
+  enforced** (under `subagents/` *and* named for this agent), the silence is observable
+  (`.workflow/worker-budget/<outcome>.json`, where `located` is the only file that proves anything alone), and
+  the brownfield smoke drive asserts on it. **Two residuals, both named rather than closed by assertion:** the
+  **greenfield** path has not attested this, and the yield instruction's ceiling is unchanged — `PostToolUse` can
+  add context, it cannot stop a model, so what is proven is that the hook *runs and reads the right transcript*,
+  never that a worker *obeyed*.
 - **~~Can any live signal observe a running subagent's token count?~~ `[CLOSED (D187 measured · D221 BUILT)]`**
   Yes, and the "likelier answer" this entry braced for was wrong. `D187` found the per-agent transcript is
   appended *during* the run with full `usage` on every assistant line, and `D221` built `hooks/worker_budget.py`

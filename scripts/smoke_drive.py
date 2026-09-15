@@ -264,6 +264,106 @@ def seam_resume_anchor(repo):
     return True, "anchor present, names base commit %s" % m.group(1)[:12]
 
 
+def seam_worker_budget_saw_a_real_worker(repo):
+    """The hook behind ask #3, which had never been observed to run at all.
+
+    `worker_budget.py` is built to fail silent on every path, and one of those paths — no
+    `agent_id` on the payload — is also its NORMAL exit, because it is registered on PostToolUse
+    with no matcher and therefore fires on the orchestrator's own tool calls. So a dead trigger
+    and a healthy loop produced exactly the same evidence: none. The ask was ticked off against
+    a mechanism nobody could show had ever executed.
+
+    The hook now drops a breadcrumb per exit under `.workflow/worker-budget/`, and THIS DRIVE
+    holds the fact that makes them readable: a real item went through a real `reeve:execute`,
+    so workers certainly ran. Under that condition `located.json` is not optional.
+
+    What it proves: the reading half ran inside a worker and resolved that worker's own
+    transcript. What it does NOT prove, stated here rather than left to be assumed: that the
+    yield INSTRUCTION was ever acted on. A worker is free to ignore it — `PostToolUse` can add
+    context, it cannot stop a model. That ceiling is the hook's by design; this seam closes the
+    gap between "cannot be proven to work" and "cannot be proven to be obeyed", which are very
+    different admissions.
+    """
+    d = os.path.join(repo, ".workflow", "worker-budget")
+    if not os.path.isdir(d):
+        return False, ("no breadcrumbs at all — the hook never ran on any tool call, so this is "
+                       "an INSTALL or registration failure, not a trigger failure")
+    seen = sorted(n[:-5] for n in os.listdir(d) if n.endswith(".json"))
+    if "located" in seen:
+        try:
+            with open(os.path.join(d, "located.json"), encoding="utf-8") as fh:
+                rec = json.load(fh)
+        except (OSError, ValueError) as exc:
+            return False, "located.json is unreadable: %s" % exc
+        return True, ("read a real worker at %s%% (%s tokens), %d observation(s); fired=%s"
+                      % (rec.get("pct"), rec.get("used"), rec.get("count"), rec.get("fired")))
+    if "no-transcript" in seen:
+        try:
+            with open(os.path.join(d, "no-transcript.json"), encoding="utf-8") as fh:
+                tried = (json.load(fh) or {}).get("tried") or []
+        except (OSError, ValueError):
+            tried = []
+        return False, ("a worker was identified and its transcript was NOT found — the locator "
+                       "is wrong. It tried: %s" % (", ".join(tried[:3]) or "nothing"))
+    return False, ("only %s — a real worker ran and the hook never saw one, so `agent_id` does "
+                   "not reach it and the mechanism is a permanent no-op" % ", ".join(seen))
+
+
+def _hook_scripts(settings_obj):
+    """Every hook script named anywhere in a settings object, by basename.
+
+    Basename rather than the whole command because `/start` is free to rewrite the path prefix
+    (`$CLAUDE_PROJECT_DIR` vs an absolute root) and that rewrite is not the thing under test.
+    """
+    names = set()
+    hooks = settings_obj.get("hooks")
+    if not isinstance(hooks, dict):
+        return names
+    for entries in hooks.values():
+        for entry in entries if isinstance(entries, list) else []:
+            for hook in (entry or {}).get("hooks") or []:
+                cmd = hook.get("command")
+                if not isinstance(cmd, str):
+                    continue
+                for tok in re.findall(r"[\w.-]+\.(?:py|sh)", cmd):
+                    names.add(os.path.basename(tok))
+    return names
+
+
+def seam_shipped_hooks_are_REGISTERED(repo):
+    """A hook file that is installed but not registered is a hook that does nothing.
+
+    `install closed` checks that every manifest destination EXISTS, and that is a different
+    question. Found the hard way: a `--resume` re-installed the package into a kept tree, put
+    `worker_budget.py` on disk, and left `.claude/settings.json` exactly as an older `/start`
+    had written it — no PostToolUse registration for it at all. The tree then ran a real item,
+    dispatched real workers, and produced not one breadcrumb, while `install closed` stayed
+    green. The registration is written by `/start`, and `--resume` skips `/start`.
+
+    The package's OWN `templates/settings.json` is the expectation, so this seam needs no list
+    of its own to drift out of date: ship a new hook, register it there, and this starts
+    requiring it everywhere.
+    """
+    tree = os.path.join(repo, ".claude", "settings.json")
+    if not os.path.exists(tree):
+        return False, "the tree has no .claude/settings.json — nothing is registered at all"
+    try:
+        with open(tree, encoding="utf-8") as fh:
+            got = _hook_scripts(json.load(fh))
+        with open(os.path.join(PRODUCT, "templates", "settings.json"), encoding="utf-8") as fh:
+            want = _hook_scripts(json.load(fh))
+    except (OSError, ValueError) as exc:
+        return False, "settings are unreadable: %s" % exc
+    if not want:
+        return False, "the package template registers no hooks — the seam has nothing to check"
+    missing = sorted(want - got)
+    if missing:
+        return False, ("installed but NOT REGISTERED: %s — %s on disk and never invoked"
+                       % (", ".join(missing),
+                          "it is" if len(missing) == 1 else "they are"))
+    return True, "all %d shipped hook(s) registered" % len(want)
+
+
 SEAMS = [
     ("install closed", seam_install_closed),
     ("commit landed through the guard", seam_commit_landed_through_the_guard),
@@ -272,6 +372,8 @@ SEAMS = [
     ("goal minted", seam_goal_minted),
     ("viability recorded at the boundary", seam_viability_was_recorded),
     ("resume anchor written", seam_resume_anchor),
+    ("worker budget observed a real worker", seam_worker_budget_saw_a_real_worker),
+    ("shipped hooks are registered", seam_shipped_hooks_are_REGISTERED),
 ]
 
 
@@ -317,12 +419,16 @@ def _good_tree(repo):
           {"spec_sha256": digest, "ticket_id": "TCK-1", "spec_path": "docs/spec.md"})
     _json(repo, "docs/knowledge/graph.json",
           {"root": ".", "nodes": [{"path": "src/app.py"}], "edges": []})
+    shutil.copy(os.path.join(PRODUCT, "templates", "settings.json"),
+                os.path.join(repo, ".claude", "settings.json"))
     _json(repo, ".workflow/config.json", {"project_root": "."})
     _json(repo, ".workflow/goal.json", {"id": "G-1", "statement": "ship it"})
     _json(repo, ".workflow/wave-decision.json",
           {"considered": ["i1"], "batch": ["i1"], "head": "deadbeef"})
     with open(os.path.join(repo, ".workflow", "handoff.md"), "w", encoding="utf-8") as fh:
         fh.write("# handoff\nbase_sha: deadbeef\n")
+    _json(repo, ".workflow/worker-budget/located.json",
+          {"outcome": "located", "count": 3, "used": 55_791, "pct": 27.9, "fired": False})
     with open(os.path.join(repo, "src", "app.py"), "w", encoding="utf-8") as fh:
         fh.write("x = 1\n")
 
@@ -395,6 +501,44 @@ def _break_code_map_by_emptying_it(repo):
     _json(repo, "docs/knowledge/graph.json", {"root": ".", "nodes": [], "edges": []})
 
 
+def _break_worker_budget_by_never_running(repo):
+    """The install/registration failure: no breadcrumbs at all."""
+    shutil.rmtree(os.path.join(repo, ".workflow", "worker-budget"))
+
+
+def _break_worker_budget_by_never_seeing_a_worker(repo):
+    """THE FAILURE THIS SEAM WAS BUILT FOR, and the one that hid for two phases: the hook runs
+    on every tool call and only ever takes the orchestrator exit. Indistinguishable from health
+    until something recorded which exit was taken."""
+    d = os.path.join(repo, ".workflow", "worker-budget")
+    os.remove(os.path.join(d, "located.json"))
+    _json(repo, ".workflow/worker-budget/no-agent-id.json",
+          {"outcome": "no-agent-id", "count": 412,
+           "payload_keys": ["cwd", "session_id", "tool_name", "transcript_path"]})
+
+
+def _break_worker_budget_by_losing_the_transcript(repo):
+    """The locator failure — an agent id arrived and its transcript was not found. Kept apart
+    from the one above because the two send you to different files: this one to the locator,
+    that one to the payload."""
+    d = os.path.join(repo, ".workflow", "worker-budget")
+    os.remove(os.path.join(d, "located.json"))
+    _json(repo, ".workflow/worker-budget/no-transcript.json",
+          {"outcome": "no-transcript", "count": 9, "agent_id": "a1",
+           "tried": ["/p/subagents/agent-a1.jsonl"]})
+
+
+def _break_registration_by_staleness(repo):
+    """THE REAL SHAPE: settings written by an older /start, package files refreshed over it."""
+    path = os.path.join(repo, ".claude", "settings.json")
+    with open(path, encoding="utf-8") as fh:
+        obj = json.load(fh)
+    obj["hooks"]["PostToolUse"] = [e for e in obj["hooks"]["PostToolUse"]
+                                   if "worker_budget" not in json.dumps(e)]
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(obj, fh)
+
+
 BREAKS = [
     ("code map sees only product files", _break_code_map_by_emptying_it),
     ("install closed", _break_install),
@@ -405,6 +549,10 @@ BREAKS = [
     ("viability recorded at the boundary", _break_viability),
     ("resume anchor written", _break_anchor),
     ("resume anchor written", _break_anchor_by_naming_no_commit),
+    ("worker budget observed a real worker", _break_worker_budget_by_never_running),
+    ("worker budget observed a real worker", _break_worker_budget_by_never_seeing_a_worker),
+    ("worker budget observed a real worker", _break_worker_budget_by_losing_the_transcript),
+    ("shipped hooks are registered", _break_registration_by_staleness),
 ]
 
 
@@ -473,13 +621,25 @@ TARGET_SETTINGS = {
 }
 
 
-def install_package(repo):
+def install_package(repo, resuming=False):
     """The manifest install, performed by the harness.
 
     `/start` does this itself in real life and CANNOT here: `.claude/` is write-guarded above
     the settings allowlist, so a non-interactive `/start` stalls on it. Doing it from the
     manifest keeps the thing under test — that every promised file lands where it is promised —
     honest, because `seam_install_closed` then checks this against the same manifest.
+
+    `.claude/settings.json` IS NOT A MANIFEST ENTRY, and on a resume that is a hole. The hook
+    REGISTRATIONS live there and `/start` writes them; a resume skips `/start`, so a kept tree
+    took the new hook FILES over an old tree's registrations and ran a whole item with a hook
+    that was on disk and never invoked — `install closed` green the entire time, because every
+    manifest destination really was present. For a real project the package's own answer is
+    `/update`, which owns `templates/settings.json` -> `.claude/settings.json` behind a confirm;
+    for a throwaway tree with nothing worth preserving, copying it is that same reconcile.
+
+    ONLY ON A RESUME, deliberately. Doing it on a fresh run would write the registrations that
+    `/start` is supposed to write, and `seam_shipped_hooks_are_REGISTERED` would then be
+    grading the harness instead of the package.
     """
     for entry in load_manifest().get("install", []):
         src, dest = os.path.join(PRODUCT, entry["src"]), os.path.join(repo, entry["dest"])
@@ -488,12 +648,47 @@ def install_package(repo):
             shutil.copytree(src, dest, dirs_exist_ok=True)
         else:
             shutil.copy(src, dest)
+    if resuming:
+        dest = os.path.join(repo, ".claude", "settings.json")
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copy(os.path.join(PRODUCT, "templates", "settings.json"), dest)
+        print("  refreshed .claude/settings.json (hook registrations) — /start is skipped here")
     _json(repo, ".claude/settings.local.json", TARGET_SETTINGS)
+
+
+# A tree's OWN RECORD of which bootstrap path made it. Under `.git/` on purpose: it is harness
+# metadata, and anywhere else `git add -A` would commit it into the repo under test and it would
+# show up in the very diffs the seams read.
+MODE_MARKER = os.path.join(".git", "smoke-mode")
+
+
+def tree_mode(repo):
+    """Which mode built this tree, or None if it cannot be known WITHOUT GUESSING.
+
+    `--resume` needs this because the receipt is per mode: attesting the wrong one is not a
+    lost run, it is a receipt that says a path was proven when it never ran. The directory name
+    is the fallback rather than the primary because the harness chose that name itself — it is
+    evidence, but it is evidence a human can rename.
+    """
+    try:
+        with open(os.path.join(repo, MODE_MARKER), encoding="utf-8") as fh:
+            val = fh.read().strip()
+        if val in ("greenfield", "brownfield"):
+            return val
+    except OSError:
+        pass
+    base = os.path.basename(os.path.normpath(repo))
+    for mode in ("greenfield", "brownfield"):
+        if base.startswith("reeve-smoke-%s-" % mode):
+            return mode
+    return None
 
 
 def seed(repo, mode):
     os.makedirs(repo, exist_ok=True)
     subprocess.run(["git", "init", "-q", repo], check=True, capture_output=True)
+    with open(os.path.join(repo, MODE_MARKER), "w", encoding="utf-8") as fh:
+        fh.write(mode + "\n")
     for k, v in (("user.email", "smoke@local"), ("user.name", "smoke")):
         git(repo, "config", k, v)
     for name, body in (BROWNFIELD_SEED if mode == "brownfield" else {}).items():
@@ -558,7 +753,7 @@ def run_mode(mode, timeout, keep, resume=None):
             print("  resuming %s" % repo)
             # The package under test may have moved since the tree was made; re-installing is
             # the whole point of resuming, and it is the cheap half.
-            install_package(repo)
+            install_package(repo, resuming=True)
 
         if bootstrapped(repo):
             check("%s: /start completed" % mode, True, "already bootstrapped — skipped")
@@ -663,6 +858,24 @@ def main(argv=None):
             print("smoke_drive: `claude` is not on PATH — this gate drives a real session.")
             return 69
         modes = ["greenfield", "brownfield"] if args.mode == "both" else [args.mode]
+        # A RESUME IS ONE TREE, AND A TREE IS ONE MODE. Left alone, `--resume DIR` inherited the
+        # default `--mode both` and drove that single tree twice — once labelled greenfield and
+        # once brownfield — then attested BOTH. A brownfield tree would have earned greenfield's
+        # ✅ on the receipt, which is worse than no receipt: the gate would have gone quiet on a
+        # path nothing had run. Caught by reading the first four lines of a real resume.
+        if args.resume:
+            found = tree_mode(args.resume)
+            if not found:
+                print("smoke_drive: cannot tell which mode built %s — it carries no marker and "
+                      "its name does not say. Re-run it fresh with --mode; a resume will not "
+                      "guess, because the receipt it writes is per mode." % args.resume)
+                return 2
+            if args.mode != "both" and args.mode != found:
+                print("smoke_drive: --mode %s contradicts the tree, which is %s. Refusing."
+                      % (args.mode, found))
+                return 2
+            modes = [found]
+            print("  resuming a %s tree" % found)
         # SKIP WHAT IS ALREADY PROVEN ON THIS PACKAGE. The receipt is per mode and keyed on the
         # shipped tree, so re-running a green mode against an unchanged package proves nothing
         # and costs an hour. `--force` says otherwise out loud.
