@@ -441,7 +441,49 @@ class PerModeWindow(unittest.TestCase):
     def test_an_unknown_mode_falls_back_rather_than_raising(self):
         self.assertEqual(sd.mode_timeout("nonesuch"), sd.DEFAULT_TIMEOUT)
 
-    def test_the_brownfield_window_is_NOT_raised_to_match(self):
-        """The window is also how fast a STALL is reported. Raising both would make a genuinely
-        stopped brownfield session take twice as long to say so, for no gain."""
-        self.assertEqual(sd.mode_timeout("brownfield"), sd.DEFAULT_TIMEOUT)
+    def test_the_brownfield_window_is_NOT_raised_to_MATCH_greenfield(self):
+        """The window is also how fast a STALL is reported, so the two must not collapse into
+        one big number. Brownfield has moved once — 1800s was measured before this harness
+        exported `REEVE_DRIVE`, and a live turn gate costs turns — but it stays the tighter of
+        the two, because brownfield still starts from a backlog `ingest` already reconstructed."""
+        self.assertLess(sd.mode_timeout("brownfield"), sd.mode_timeout("greenfield"))
+        self.assertGreater(sd.mode_timeout("brownfield"), sd.DEFAULT_TIMEOUT,
+                           "the live gate costs turns; the pre-gate number was measured without it")
+
+
+class TurnGateProbeIsolation(unittest.TestCase):
+    """The hook keeps a demand counter between turns and, past `MAX_DEMANDS`, DELIBERATELY gives
+    up — a hook that blocks forever wedges the session it was protecting. The first drive that
+    ran with the gate live left the counter spent, the hook exited 0 for exactly that documented
+    reason, and this seam called it "installed and inert": a red seam accusing a hook of doing
+    nothing, on the evidence of it doing precisely what it says it does."""
+
+    def _tree(self, tmp, latch=None):
+        for sub in (("claude", "hooks"), ("claude", "scripts"), (".workflow",)):
+            os.makedirs(os.path.join(tmp, *sub), exist_ok=True)
+        os.rename(os.path.join(tmp, "claude"), os.path.join(tmp, ".claude"))
+        for name, where in (("turn_gate.py", ".claude/hooks"),
+                            ("turn_check.py", ".claude/scripts")):
+            src = os.path.join(sd.ROOT, "product",
+                               "hooks" if where.endswith("hooks") else "scripts", name)
+            shutil.copy(src, os.path.join(tmp, *where.split("/"), name))
+        if latch is not None:
+            with open(os.path.join(tmp, ".workflow", "turn-gate.json"), "w") as fh:
+                fh.write(latch)
+        return tmp
+
+    def test_a_SPENT_latch_is_set_aside_for_the_probe_and_restored_byte_for_byte(self):
+        spent = '{"demands": 4, "fingerprint": "x", "rung": "report", "satisfied": null}'
+        with tempfile.TemporaryDirectory() as tmp:
+            self._tree(tmp, latch=spent)
+            sd.seam_the_turn_gate_REFUSES_a_stop_for_nothing(tmp)
+            with open(os.path.join(tmp, ".workflow", "turn-gate.json")) as fh:
+                self.assertEqual(fh.read(), spent,
+                                 "the tree is evidence — the probe must not edit it")
+
+    def test_a_tree_with_NO_latch_is_left_with_no_latch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._tree(tmp)
+            sd.seam_the_turn_gate_REFUSES_a_stop_for_nothing(tmp)
+            self.assertFalse(os.path.exists(os.path.join(tmp, ".workflow", "turn-gate.json")),
+                             "the probe must not leave a latch a real session would then read")

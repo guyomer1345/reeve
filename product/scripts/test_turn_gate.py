@@ -202,3 +202,67 @@ def test_it_DEFERS_while_an_anchor_is_owed(tmp_path):
     import time
     cb.publish(str(p / ".workflow"), 990_000, 1_000_000, time.monotonic())
     assert not blocked(run(p))
+
+
+# ============================================================ the write race the gate lost
+# MEASURED on the first drive that ran with the gate live. Transcript line 226: the session
+# pastes the report. Line 227, the very next: this gate blocking with "no goal report was given
+# this turn". A `Stop` hook races the flush of the message that triggered it, so "the last
+# assistant message" is not reliably the one the session just wrote — and with a window of one,
+# the block itself pushes the paste out of last position. The session answers the block, that
+# answer becomes the last message, and the report is never seen again. The run went demand,
+# paste, demand, paste, GAVE UP: a session that complied twice, recorded as "a stop for no
+# reason". A gate whose only terminal state is a false accusation gets switched off.
+
+def _load_hook():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("turn_gate_under_test", str(HOOK))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _transcript(tmp_path, *messages):
+    """A transcript whose assistant messages are `messages`, oldest first."""
+    path = tmp_path / "t.jsonl"
+    with open(path, "w", encoding="utf-8") as fh:
+        for text in messages:
+            fh.write(json.dumps({"type": "user", "message": {"content": "go"}}) + "\n")
+            fh.write(json.dumps({"type": "assistant",
+                                 "message": {"content": [{"type": "text", "text": text}]}}) + "\n")
+    return str(path)
+
+
+def test_a_marker_one_message_back_is_still_found(tmp_path):
+    """The exact shape of the race: the paste, then the session's answer to the block on top."""
+    tg = _load_hook()
+    t = _transcript(tmp_path, "older", "[reeve-report state:abc123]", "ok, continuing")
+    assert "abc123" in tg.last_assistant_text(t)
+
+
+def test_a_window_of_ONE_is_what_lost_it(tmp_path):
+    """The negative control — without this the fix above proves nothing."""
+    tg = _load_hook()
+    t = _transcript(tmp_path, "older", "[reeve-report state:abc123]", "ok, continuing")
+    assert "abc123" not in tg.last_assistant_text(t, limit=1)
+
+
+def test_the_window_is_BOUNDED_so_cost_does_not_grow_with_the_session(tmp_path):
+    tg = _load_hook()
+    t = _transcript(tmp_path, "[reeve-report state:ancient]", *["filler"] * 20)
+    assert "ancient" not in tg.last_assistant_text(t)
+
+
+def test_the_window_is_not_a_tolerance_for_a_STALE_report(tmp_path):
+    """Currency is the DIGEST's job, not the window's: an old marker in range still fails to
+    match the current digest, so widening cannot credit a report the loop has moved past."""
+    tg = _load_hook()
+    t = _transcript(tmp_path, "[reeve-report state:oldoldold]", "still working")
+    text = tg.last_assistant_text(t)
+    assert "oldoldold" in text and "currentdigest" not in text
+
+
+def test_an_unreadable_transcript_is_still_empty_not_an_exception(tmp_path):
+    tg = _load_hook()
+    assert tg.last_assistant_text(str(tmp_path / "nope.jsonl")) == ""
+    assert tg.last_assistant_text(None) == ""

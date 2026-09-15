@@ -71,14 +71,36 @@ def unattended(workflow):
         return False
 
 
-def last_assistant_text(transcript):
-    """The final assistant message of the session, or ''. Scanned from the end and stopped at the
-    first assistant line, so the cost does not grow with the session."""
+# How many assistant messages back the report marker is looked for. NOT a tolerance for a stale
+# report -- the DIGEST is what decides currency, and a report from an earlier state simply will
+# not match. This is a tolerance for a WRITE RACE, measured on a real drive: the session pasted
+# the report, and the very next line in the transcript is this gate blocking with "no goal report
+# was given this turn". The `Stop` hook races the flush of the message that triggered it, so "the
+# last assistant message" is not reliably the one the session just wrote.
+#
+# WHY THIS CONVERGES WHERE ONE MESSAGE DID NOT. Unseen once is recoverable; unseen forever is
+# not. With a window, a paste the hook could not see at stop N is certainly on disk by stop N+1,
+# so the race can DELAY credit by a turn but cannot deny it. With a window of one, the block
+# itself pushes the paste out of last position — the session answers the block, that answer
+# becomes the last message, and the report is never seen again. The observed run went: demand,
+# paste, demand again, paste again, GAVE UP — a session that complied twice, recorded as "a stop
+# for no reason". A gate whose only terminal state is a false accusation teaches the operator to
+# switch it off, which is the whole failure this rung exists to avoid.
+LOOKBACK = 4
+
+
+def last_assistant_text(transcript, limit=LOOKBACK):
+    """The last few assistant messages of the session, newest first, or ''.
+
+    Scanned from the end and stopped after `limit` of them, so the cost does not grow with the
+    session. Joined rather than returned separately: every caller is asking "did the session say
+    X", and none of them cares which message it was in."""
     try:
         with open(transcript, encoding="utf-8") as fh:
             lines = fh.readlines()
     except (OSError, UnicodeDecodeError, TypeError):
         return ""
+    out = []
     for raw in reversed(lines):
         try:
             rec = json.loads(raw)
@@ -88,10 +110,13 @@ def last_assistant_text(transcript):
             continue
         content = (rec.get("message") or {}).get("content")
         if isinstance(content, str):
-            return content
-        return "\n".join(b.get("text") or "" for b in content or []
-                         if isinstance(b, dict) and b.get("type") == "text")
-    return ""
+            out.append(content)
+        else:
+            out.append("\n".join(b.get("text") or "" for b in content or []
+                                 if isinstance(b, dict) and b.get("type") == "text"))
+        if len(out) >= limit:
+            break
+    return "\n".join(out)
 
 
 def main():

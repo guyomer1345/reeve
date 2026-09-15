@@ -488,6 +488,15 @@ def seam_the_turn_gate_REFUSES_a_stop_for_nothing(repo):
     SKIPPED, not failed, when the tree is legitimately allowed to stop — a drive that ended with
     the backlog empty (`idle`) or a checkpoint parked has no stop-for-nothing to refuse, and
     grading it red would be grading the drive's luck.
+
+    THE LATCH IS SET ASIDE FOR THE PROBE, and the first run with the gate live is why. The hook
+    keeps a demand counter between turns and, past `MAX_DEMANDS`, DELIBERATELY gives up and lets
+    the turn end — a hook that blocks forever wedges the session it was protecting. A drive that
+    left the counter spent therefore has a hook that exits 0 for the documented reason, and this
+    seam read that as "installed and inert": a red seam accusing a hook of doing nothing, on the
+    evidence of it doing exactly what it says it does. The probe asks whether the hook BLOCKS
+    when something is owed, so it asks from the state that question is about. The give-up path is
+    the unit suite's, where it can be tested without a spent latch being mistaken for a dead one.
     """
     hook = os.path.join(repo, ".claude", "hooks", "turn_gate.py")
     if not os.path.exists(hook):
@@ -502,8 +511,22 @@ def seam_the_turn_gate_REFUSES_a_stop_for_nothing(repo):
     except ValueError:
         return False, "turn_check.py did not answer: %s" % (verdict.stderr or "")[:200]
     payload = json.dumps({"hook_event_name": "Stop", "cwd": repo})
-    p = subprocess.run(["python3", hook], input=payload, capture_output=True, text=True,
-                       timeout=120, env=dict(os.environ, REEVE_DRIVE="1"))
+    latch = os.path.join(repo, ".workflow", "turn-gate.json")
+    saved = None
+    if os.path.exists(latch):
+        with open(latch, "rb") as fh:
+            saved = fh.read()
+        os.remove(latch)
+    try:
+        p = subprocess.run(["python3", hook], input=payload, capture_output=True, text=True,
+                           timeout=120, env=dict(os.environ, REEVE_DRIVE="1"))
+    finally:
+        # Restore byte for byte — the tree is evidence, and the next seam may read it.
+        if saved is not None:
+            with open(latch, "wb") as fh:
+                fh.write(saved)
+        elif os.path.exists(latch):
+            os.remove(latch)
     blocked = p.returncode == 2 or '"decision": "block"' in (p.stdout or "")
     if not owed.get("demand"):
         return True, "nothing owed (%s) — the tree may legitimately stop; not graded" % owed.get("why", "")[:80]
@@ -1140,7 +1163,15 @@ def bootstrapped(repo):
 # is a much shorter road. Raising both to the greenfield number would buy nothing and make a
 # genuinely stopped brownfield session take twice as long to report it — the window is also how
 # fast a stall is detected, which is why this is two numbers rather than one large one.
-MODE_TIMEOUT = {"greenfield": 3600, "brownfield": 1800}
+#
+# BROWNFIELD MOVED ONCE, and the reason is worth keeping rather than smoothing into a bigger
+# number: 1800s was measured BEFORE this harness exported `REEVE_DRIVE`, when the shipped turn
+# gate lay dormant in every run. With the gate live the loop is asked to justify each turn-end,
+# which is the point of it, and that costs turns. The run of 2026-09-15 finished its item — goal
+# MET, committed, every seam green — and was killed while still winding the session down. The
+# window is still the tighter of the two, because it is also how fast a genuinely STOPPED session
+# is reported, and brownfield still starts from a backlog `ingest` already reconstructed.
+MODE_TIMEOUT = {"greenfield": 3600, "brownfield": 2700}
 DEFAULT_TIMEOUT = 1800
 
 
