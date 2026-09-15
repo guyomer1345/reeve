@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from unittest import mock
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -296,3 +297,89 @@ class TimeoutDiagnosis(unittest.TestCase):
             with open(os.path.join(wf, "state.json"), "w") as fh:
                 fh.write("{}")
             self.assertIn("still writing", sd._was_it_moving(tmp))
+
+
+class PreconditionsAreEvidence(unittest.TestCase):
+    """Two steps that claimed more than they checked, and propped each other up doing it.
+
+    A drive whose loop was blocked at intake reported `one item went round` as a PASS — `claude
+    -p` exits 0 whenever the model finishes its turn, including the turn that explains it is
+    blocked — and that PASS was exactly the evidence a reader needed to accept the worker-budget
+    seam's unchecked precondition. The seam then declared the hook `a permanent no-op`, about a
+    mechanism the other mode proved working on the same package digest an hour later. A false
+    diagnosis in the fail direction is not the safe kind: it costs the next session a hunt for a
+    bug that is not there, and it discredits the seam that was right."""
+
+    def _wb(self, repo, *outcomes):
+        d = os.path.join(repo, ".workflow", "worker-budget")
+        os.makedirs(d, exist_ok=True)
+        for o in outcomes:
+            with open(os.path.join(d, o + ".json"), "w") as fh:
+                json.dump({"outcome": o, "pct": 17.6, "used": 35172, "count": 70,
+                           "fired": False}, fh)
+
+    def _item(self, repo, ident, promoted=True):
+        d = os.path.join(repo, ".workflow", "items", ident)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "promoted.json"), "w") as fh:
+            json.dump({"promoted": promoted}, fh)
+
+    # -- the seam --------------------------------------------------------------------------
+
+    def test_no_worker_ran_is_NOT_reported_as_a_broken_hook(self):
+        """The measured false diagnosis. `no-agent-id` is the hook's NORMAL exit on the
+        orchestrator's own tool calls; alone it is evidence of nothing."""
+        with tempfile.TemporaryDirectory() as repo:
+            self._wb(repo, "no-agent-id")
+            with mock.patch.object(sd, "workers_ran", return_value=(0, "0 transcripts")):
+                ok, why = sd.seam_worker_budget_saw_a_real_worker(repo)
+            self.assertFalse(ok)
+            self.assertIn("NO WORKER EVER RAN", why)
+            self.assertNotIn("permanent no-op", why)
+
+    def test_a_worker_that_DID_run_unseen_is_still_the_permanent_no_op_verdict(self):
+        """The other half: scoping the claim must not cost the finding it was built for."""
+        with tempfile.TemporaryDirectory() as repo:
+            self._wb(repo, "no-agent-id")
+            with mock.patch.object(sd, "workers_ran", return_value=(4, "4 transcripts")):
+                ok, why = sd.seam_worker_budget_saw_a_real_worker(repo)
+            self.assertFalse(ok)
+            self.assertIn("permanent no-op", why)
+
+    def test_CANNOT_TELL_refuses_rather_than_guessing_either_way(self):
+        with tempfile.TemporaryDirectory() as repo:
+            self._wb(repo, "no-agent-id")
+            with mock.patch.object(sd, "workers_ran", return_value=(None, "no transcript dir")):
+                ok, why = sd.seam_worker_budget_saw_a_real_worker(repo)
+            self.assertFalse(ok)
+            self.assertIn("cannot say", why)
+
+    def test_located_still_passes_and_reads_the_worker(self):
+        with tempfile.TemporaryDirectory() as repo:
+            self._wb(repo, "no-agent-id", "located")
+            ok, why = sd.seam_worker_budget_saw_a_real_worker(repo)
+            self.assertTrue(ok, why)
+            self.assertIn("17.6", why)
+
+    # -- the step --------------------------------------------------------------------------
+
+    def test_a_clean_session_exit_with_no_promoted_item_is_RED(self):
+        with tempfile.TemporaryDirectory() as repo:
+            ok, why = sd.an_item_actually_completed(repo, "all done!")
+            self.assertFalse(ok)
+            self.assertIn("no item dir was ever created", why)
+            self.assertIn("all done!", why, "the session's own words must survive into the detail")
+
+    def test_an_item_that_STARTED_but_never_promoted_is_RED_and_says_so(self):
+        with tempfile.TemporaryDirectory() as repo:
+            self._item(repo, "B-1", promoted=False)
+            ok, why = sd.an_item_actually_completed(repo, "…")
+            self.assertFalse(ok)
+            self.assertIn("items started: B-1", why)
+
+    def test_a_promoted_item_passes_and_names_it(self):
+        with tempfile.TemporaryDirectory() as repo:
+            self._item(repo, "B-1")
+            ok, why = sd.an_item_actually_completed(repo, "…")
+            self.assertTrue(ok, why)
+            self.assertIn("B-1 promoted", why)

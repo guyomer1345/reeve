@@ -49,27 +49,86 @@ def spec_digest(text):
     return hashlib.sha256(text).hexdigest()
 
 
-def _spec_path(project_root, spec_rel=None):
-    return os.path.join(project_root, spec_rel or SPEC_REL)
+def _floor(scripts_dir):
+    """The floor module itself, IMPORTED rather than re-derived. `None` if it cannot be loaded.
+
+    A drive found the two halves of this one gate disagreeing about where the spec lives: the
+    floor resolved `project_root`/`docs_root` out of `config.json` and read `project/docs/spec.md`
+    correctly, while this file hardcoded `docs/spec.md` and never opened the config. On any layout
+    with a nested project root the floor fired, this gate then could not read the staged spec, and
+    the commit was BLOCKED with no reachable escape — `check()` dies on the unreadable spec before
+    it consults any receipt, so the receipt this file exists to honour could never be reached. It
+    blocked the entire backlog of a greenfield project and could not be repaired from inside the
+    loop.
+
+    IMPORTED, NOT COPIED, and that is the actual fix. Two resolvers that must agree forever is
+    precisely the silent disagreement `spec_digest`'s own docstring refuses to risk for the
+    digest; it is no more acceptable for the path the digest is taken over. If the floor cannot
+    be loaded, the fallback below is the old hardcoded relative path — which resolves to nothing
+    on such a layout and therefore still BLOCKS. Fail-closed is preserved in every branch.
+    """
+    path = os.path.join(scripts_dir or os.path.dirname(os.path.abspath(__file__)),
+                        "check_autonomy_floor.py")
+    if not os.path.isfile(path):
+        return None
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_floor_for_approval", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    except Exception:
+        return None
+    return mod if hasattr(mod, "resolve_spec") else None
 
 
-def staged_spec(project_root, spec_rel=None):
+def spec_location(project_root, scripts_dir=None):
+    """-> (git_root, git_rel, path) for the spec THIS project actually keeps.
+
+    Three answers rather than one because the callers need different ones and deriving each from
+    the others is where the last bug lived. `git show :<rel>` needs a path relative to the GIT
+    TOPLEVEL, not to `project_root` — those coincide only when the project root is the repo root,
+    which is the single layout the old code worked on. `path` is for the worktree fallback, and
+    `git_rel` is also what the receipt records, so a reader can see which file was approved.
+    """
+    mod = _floor(scripts_dir)
+    path = None
+    if mod is not None:
+        try:
+            path, _ = mod.resolve_spec(project_root)
+        except Exception:
+            path = None
+    if not path:
+        path = os.path.normpath(os.path.join(project_root, SPEC_REL))
+    top = None
+    if mod is not None:
+        try:
+            top = mod.git_toplevel(project_root)
+        except Exception:
+            top = None
+    top = top or project_root
+    try:
+        rel = os.path.relpath(os.path.abspath(path), os.path.abspath(top)).replace(os.sep, "/")
+    except ValueError:                        # different drives on Windows
+        rel = SPEC_REL.replace(os.sep, "/")
+    return top, rel, path
+
+
+def staged_spec(project_root, scripts_dir=None):
     """The spec as it will be COMMITTED (the staged blob), not as it sits in the tree.
 
     The distinction is the point: a gate reading the worktree could be satisfied by a file the
     commit does not contain. Falls back to the worktree only when nothing is staged for the
     path, which is the ordinary case where the spec is unchanged.
     """
-    rel = spec_rel or SPEC_REL
+    top, rel, path = spec_location(project_root, scripts_dir)
     try:
-        p = subprocess.run(["git", "-C", project_root, "show", ":" + rel.replace(os.sep, "/")],
-                           capture_output=True)
+        p = subprocess.run(["git", "-C", top, "show", ":" + rel], capture_output=True)
         if p.returncode == 0:
             return p.stdout
     except OSError:
         return None
     try:
-        with open(_spec_path(project_root, spec_rel), "rb") as fh:
+        with open(path, "rb") as fh:
             return fh.read()
     except OSError:
         return None
@@ -84,14 +143,14 @@ def read_receipt(project_root):
     return val if isinstance(val, dict) else None
 
 
-def record(project_root, ticket_id, spec_rel=None):
+def record(project_root, ticket_id, scripts_dir=None):
     """Write the receipt for a spec the human has just approved.
 
     Stamps the digest of the spec AS IT IS NOW. Run it at the moment the approval is applied and
     not before: a receipt written ahead of the edit would licence whatever the edit turns out to
     be, which is the failure this file is built to prevent.
     """
-    body = staged_spec(project_root, spec_rel)
+    body = staged_spec(project_root, scripts_dir)
     if body is None:
         return None
     # NO `token` FIELD, and its absence is load-bearing rather than tidy. This file is
@@ -103,7 +162,7 @@ def record(project_root, ticket_id, spec_rel=None):
     # missed credential, so the scan does not move. `ticket_id` already carries the provenance;
     # the correlation token is the DRAIN's key and is meaningless once the verdict is applied.
     rec = {"spec_sha256": spec_digest(body), "ticket_id": ticket_id,
-           "spec_path": (spec_rel or SPEC_REL).replace(os.sep, "/")}
+           "spec_path": spec_location(project_root, scripts_dir)[1]}
     path = os.path.join(project_root, RECEIPT_REL)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
@@ -144,9 +203,9 @@ def check(project_root, scripts_dir, do_park=False):
         return False, ("autonomy floor could not be run, so this commit cannot be shown to be "
                        "goal-preserving. Fix the gate or route the change to a human.")
 
-    body = staged_spec(project_root)
+    body = staged_spec(project_root, scripts_dir)
     if body is None:
-        return False, "the floor fired but the staged spec could not be read — blocking"
+        return False, ("the floor fired but the staged spec could not be read at %s — blocking" % spec_location(project_root, scripts_dir)[1])
     want = spec_digest(body)
 
     rec = read_receipt(project_root)
@@ -310,7 +369,7 @@ def main(argv=None):
 
     scripts = args.scripts_dir or os.path.dirname(os.path.abspath(__file__))
     if args.cmd == "record":
-        r = record(args.project_root, args.ticket)
+        r = record(args.project_root, args.ticket, scripts)
         if r is None:
             print("spec-approval: cannot read the spec — nothing recorded", file=sys.stderr)
             return 2

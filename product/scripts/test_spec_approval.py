@@ -352,3 +352,82 @@ def test_the_cli_accepts_park_on_either_side_of_the_subcommand(proj):
                  ["--project-root", str(proj), "check", "--scripts-dir", HERE, "--park"]):
         assert sa.main(argv) == 2
     assert len(list(_runtime(proj).glob("*.json"))) == 1
+
+
+# ============================================================ the nested project root
+# A DRIVE, not a review, found this: the floor resolved `project_root`/`docs_root` out of
+# `config.json` and read `project/docs/spec.md`, while this gate hardcoded `docs/spec.md` and
+# never opened the config. The floor fired, the gate could not read the staged spec, and every
+# commit was BLOCKED with the escape unreachable — `check()` dies on the unreadable spec before
+# it consults any receipt, so the receipt could never be honoured. It blocked a greenfield
+# project's entire backlog and could not be repaired from inside the loop. The suite was green
+# throughout, because every test here used the one layout where the two spellings coincide.
+
+def _nested(tmp_path, spec_text):
+    """A project whose spec is NOT at `<root>/docs/spec.md` — the layout `/start` scaffolds."""
+    root = tmp_path / "repo"
+    (root / ".workflow").mkdir(parents=True)
+    (root / "project" / "docs").mkdir(parents=True)
+    (root / ".workflow" / "config.json").write_text(json.dumps({"project_root": "./project"}))
+    (root / "project" / "docs" / "spec.md").write_text(spec_text)
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "project/docs/spec.md"], check=True)
+    return root
+
+
+def test_the_spec_is_found_through_config_not_at_the_hardcoded_path(tmp_path):
+    root = _nested(tmp_path, LOCKED_SPEC)
+    assert sa.staged_spec(str(root), HERE) is not None, \
+        "the gate could not read a spec the floor reads fine — the original defect"
+
+
+def test_the_git_relative_path_is_used_for_the_STAGED_blob(tmp_path):
+    """`git show :<rel>` needs a path relative to the GIT TOPLEVEL. Deriving it from
+    `project_root` instead is what limited the old code to one layout."""
+    root = _nested(tmp_path, LOCKED_SPEC)
+    top, rel, path = sa.spec_location(str(root), HERE)
+    assert rel == "project/docs/spec.md"
+    assert os.path.realpath(top) == os.path.realpath(str(root))
+    assert os.path.isfile(path)
+    # and it really is the STAGED blob, not the worktree
+    (root / "project" / "docs" / "spec.md").write_text(LOCKED_SPEC + "\nunstaged\n")
+    assert b"unstaged" not in sa.staged_spec(str(root), HERE)
+
+
+def test_the_receipt_records_the_path_that_was_actually_approved(tmp_path):
+    root = _nested(tmp_path, LOCKED_SPEC)
+    rec = sa.record(str(root), "TCK-1", HERE)
+    assert rec["spec_path"] == "project/docs/spec.md", \
+        "a receipt naming a file that does not exist is unreadable to every downstream reader"
+    assert os.path.isfile(os.path.join(str(root), rec["spec_path"]))
+
+
+def test_the_ESCAPE_is_reachable_on_a_nested_layout(tmp_path):
+    """The whole point. Blocked -> approve -> committable, on the layout that could not get
+    past the first step. `a gate with no escape gets switched off` is this file's own header."""
+    root = _nested(tmp_path, LOCKED_SPEC)
+    ok, msg = sa.check(str(root), HERE)
+    assert not ok and "no approval receipt" in msg, msg
+    sa.record(str(root), "TCK-1", HERE)
+    ok, msg = sa.check(str(root), HERE)
+    assert ok, msg
+
+
+def test_editing_after_approval_still_blocks_on_a_nested_layout(tmp_path):
+    """The escape must not become a skeleton key just because the path now resolves."""
+    root = _nested(tmp_path, LOCKED_SPEC)
+    sa.record(str(root), "TCK-1", HERE)
+    (root / "project" / "docs" / "spec.md").write_text(LOCKED_SPEC + "\n  - and reset it\n")
+    subprocess.run(["git", "-C", str(root), "add", "project/docs/spec.md"], check=True)
+    ok, msg = sa.check(str(root), HERE)
+    assert not ok and "DIFFERENT spec content" in msg, msg
+
+
+def test_an_UNLOADABLE_floor_still_fails_closed(tmp_path):
+    """The fallback is the old hardcoded relative path, which resolves to nothing on this
+    layout — so it still BLOCKS. An escape hatch that opens when the gate malfunctions is not
+    an escape hatch, and that rule survives the fix."""
+    root = _nested(tmp_path, LOCKED_SPEC)
+    assert sa._floor(str(tmp_path / "no-scripts-here")) is None
+    ok, msg = sa.check(str(root), str(tmp_path / "no-scripts-here"))
+    assert not ok, msg

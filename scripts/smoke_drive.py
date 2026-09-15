@@ -43,6 +43,7 @@ because `--permission-mode bypassPermissions` is refused.
 """
 import argparse
 import json
+import glob
 import re
 import os
 import shutil
@@ -293,6 +294,31 @@ def seam_resume_anchor(repo):
     return True, "anchor present, names base commit %s" % m.group(1)[:12]
 
 
+def _session_dir(repo):
+    """-> Claude Code's transcript directory for a session run in `repo`, or None.
+
+    Meta-only coupling to the CLI's own layout, and acceptable for the same reason
+    `dev-reinstall.sh` reaches into the plugin cache: this harness grades an installed whole, so
+    it is allowed to read what the install actually produced. `None` means CANNOT TELL, and every
+    caller below turns that into a refusal rather than a pass."""
+    enc = "-" + re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(repo).lstrip("/"))
+    d = os.path.join(os.path.expanduser("~"), ".claude", "projects", enc)
+    return d if os.path.isdir(d) else None
+
+
+def workers_ran(repo):
+    """-> (count, how). GROUND TRUTH for "did a subagent actually run", from the transcripts the
+    CLI writes rather than from anything the package itself claims.
+
+    This exists because the seam below asserted it instead of checking it, and then reported a
+    confident diagnosis that was false. See `seam_worker_budget_saw_a_real_worker`."""
+    d = _session_dir(repo)
+    if d is None:
+        return None, "no transcript directory for this repo — cannot tell whether a worker ran"
+    n = len(glob.glob(os.path.join(d, "*", "subagents", "agent-*.jsonl")))
+    return n, "%d subagent transcript(s) under %s" % (n, d)
+
+
 def seam_worker_budget_saw_a_real_worker(repo):
     """The hook behind ask #3, which had never been observed to run at all.
 
@@ -302,11 +328,21 @@ def seam_worker_budget_saw_a_real_worker(repo):
     and a healthy loop produced exactly the same evidence: none. The ask was ticked off against
     a mechanism nobody could show had ever executed.
 
-    The hook now drops a breadcrumb per exit under `.workflow/worker-budget/`, and THIS DRIVE
-    holds the fact that makes them readable: a real item went through a real `reeve:execute`,
-    so workers certainly ran. Under that condition `located.json` is not optional.
+    The hook now drops a breadcrumb per exit under `.workflow/worker-budget/`, and the reading of
+    those breadcrumbs turns entirely on ONE precondition: that a real worker ran at all. This
+    seam used to state that precondition in this docstring — *"a real item went through a real
+    `reeve:execute`, so workers certainly ran"* — AND NEVER CHECK IT. On a drive whose loop was
+    blocked at intake, nothing dispatched a worker, only `no-agent-id` breadcrumbs existed, and
+    the seam reported *"`agent_id` does not reach it and the mechanism is a permanent no-op"* —
+    about a mechanism the other mode proved working on the same package digest an hour later.
 
-    What it proves: the reading half ran inside a worker and resolved that worker's own
+    A FALSE DIAGNOSIS IN THE FAIL DIRECTION IS NOT THE SAFE KIND. It costs the next session a
+    hunt for a bug that does not exist, and it discredits the seam that was right. So the
+    precondition is now evidence: `workers_ran()` counts the CLI's own subagent transcripts, and
+    "no worker ran" is a different verdict from "the hook missed a worker" — still red, because a
+    drive that never dispatched one has not tested this, but red for what actually happened.
+
+    What a PASS proves: the reading half ran inside a worker and resolved that worker's own
     transcript. What it does NOT prove, stated here rather than left to be assumed: that the
     yield INSTRUCTION was ever acted on. A worker is free to ignore it — `PostToolUse` can add
     context, it cannot stop a model. That ceiling is the hook's by design; this seam closes the
@@ -326,16 +362,28 @@ def seam_worker_budget_saw_a_real_worker(repo):
             return False, "located.json is unreadable: %s" % exc
         return True, ("read a real worker at %s%% (%s tokens), %d observation(s); fired=%s"
                       % (rec.get("pct"), rec.get("used"), rec.get("count"), rec.get("fired")))
-    if "no-transcript" in seen:
+    if "identified-no-transcript" in seen:
         try:
-            with open(os.path.join(d, "no-transcript.json"), encoding="utf-8") as fh:
-                tried = (json.load(fh) or {}).get("tried") or []
+            with open(os.path.join(d, "identified-no-transcript.json"), encoding="utf-8") as fh:
+                tried = json.load(fh).get("tried") or []
         except (OSError, ValueError):
             tried = []
         return False, ("a worker was identified and its transcript was NOT found — the locator "
                        "is wrong. It tried: %s" % (", ".join(tried[:3]) or "nothing"))
-    return False, ("only %s — a real worker ran and the hook never saw one, so `agent_id` does "
-                   "not reach it and the mechanism is a permanent no-op" % ", ".join(seen))
+    # Only `no-agent-id`, which is the hook's normal exit on the ORCHESTRATOR's own tool calls.
+    # It is evidence of nothing on its own; what it means depends on whether a worker ever ran.
+    n, how = workers_ran(repo)
+    if n is None:
+        return False, ("only %s, and %s — so this drive cannot say whether the hook is broken "
+                       "or was never given a worker to see" % (", ".join(seen), how))
+    if n == 0:
+        return False, ("only %s, and NO WORKER EVER RAN (%s) — so this seam tested nothing. The "
+                       "failure is upstream: something stopped the loop before it dispatched. "
+                       "`no-agent-id` is the hook's normal exit on the orchestrator's own tool "
+                       "calls and is not evidence against it." % (", ".join(seen), how))
+    return False, ("only %s, yet %s — a real worker ran and the hook never saw one, so "
+                   "`agent_id` does not reach it and the mechanism is a permanent no-op"
+                   % (", ".join(seen), how))
 
 
 def _hook_scripts(settings_obj):
@@ -955,6 +1003,40 @@ def _was_it_moving(repo):
             "time — a longer timeout would not have helped" % quiet)
 
 
+def an_item_actually_completed(repo, session_detail):
+    """-> (ok, detail). Did an ITEM go round, or did a SESSION merely exit cleanly?
+
+    `drive()` returns the process's exit status, and `claude -p` exits 0 whenever the model
+    finished its turn — including the turn where it explains, at length and correctly, that it
+    is blocked and can do nothing. So the step labelled "one item went round" passed on a drive
+    whose loop never left intake, and its PASS then propped up a sibling seam that assumed a
+    worker must have run. Two loose labels reinforced each other into a confident wrong
+    conclusion; this is the half that stops claiming more than it checked.
+
+    `promoted.json` is the package's own finished marker, not one invented here: it is what
+    `check_wave_independence.py` treats as "dependency finished", what retention keys pruning
+    on, and what `forecast.py` prunes a forecast against. Written by `document`, so it also
+    proves the item reached the tail of the loop rather than dying after execute.
+    """
+    idir = os.path.join(repo, ".workflow", "items")
+    done = []
+    for name in sorted(os.listdir(idir)) if os.path.isdir(idir) else []:
+        try:
+            with open(os.path.join(idir, name, "promoted.json"), encoding="utf-8") as fh:
+                rec = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        if isinstance(rec, dict) and rec.get("promoted"):
+            done.append(name)
+    if done:
+        return True, "%s promoted / %s" % (", ".join(done), session_detail)
+    started = sorted(os.listdir(idir)) if os.path.isdir(idir) else []
+    return False, ("the session exited 0 but NO item carries a `promoted.json` marker, so "
+                   "nothing went round (%s). The session's own last words: %s"
+                   % ("items started: " + ", ".join(started) if started
+                      else "no item dir was ever created", session_detail))
+
+
 def drive(repo, prompt, timeout):
     """One real session. `claude -p` nested inside a session works — that is measured, not
     assumed — and it is the only way to hand a whole instruction to a real model unattended."""
@@ -1021,6 +1103,9 @@ def run_mode(mode, timeout, keep, resume=None):
                 return False
 
         ok2, detail2 = drive(repo, ITEM_PROMPT, timeout)
+        # A clean exit is necessary and nowhere near sufficient — see the helper.
+        if ok2:
+            ok2, detail2 = an_item_actually_completed(repo, detail2)
         check("%s: one item went round" % mode, ok2, detail2)
         good = assert_seams(repo, mode)
         if keep or not good:
