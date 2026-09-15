@@ -779,7 +779,7 @@ def _exclude_patterns():
 PLUGIN_STATE = os.path.expanduser("~/.claude/plugins/installed_plugins.json")
 
 
-def stale_plugin():
+def stale_plugin(repo=None):
     """-> why the installed plugin cannot be trusted for this run, or None.
 
     THE HOLE THIS CLOSES was found by a drive that had already been paid for. The tree gets its
@@ -789,11 +789,20 @@ def stale_plugin():
     decision under test, and nothing anywhere said so — `install closed` was green, because it
     grades the tree, and the tree was fine.
 
-    UNKNOWABLE IS NOT STALE. A missing or unreadable plugin record, or an installed sha that is
-    not an ancestor question this repo can answer, returns a reason too — the gate refuses on
-    "cannot tell", because the whole failure being prevented is a receipt that reads as proof
-    while measuring something else.
-    """
+    UNKNOWABLE IS NOT STALE. A missing or unreadable plugin record, or an entry whose scope this
+    repo cannot read, returns a reason too — the gate refuses on "cannot tell", because the whole
+    failure being prevented is a receipt that reads as proof while measuring something else.
+
+    ONLY THE ENTRIES THAT COULD GOVERN *THIS* RUN ARE READ, and getting that wrong deadlocked the
+    gate on its own exhaust. Every drive leaves a permanent `scope: local` registration behind for
+    its throwaway `/tmp` tree, pinned at whatever was installed that day, and nothing ever removes
+    it. Comparing the whole record therefore meant that after the FIRST run no reinstall could
+    ever satisfy the gate again: the honest operator, having done exactly what the refusal told
+    him to do and being refused anyway, is left with `--allow-stale` — the one escape hatch that
+    reinstates the mixture. A control whose only reachable outcome is its own override is worse
+    than no control. The governing set is: every non-local entry (those resolve anywhere), plus
+    the local entry for the tree actually being driven, which exists only on `--resume`. A local
+    entry for some other directory cannot reach this run, alive or dead."""
     head = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"],
                           capture_output=True, text=True)
     if head.returncode != 0:
@@ -810,11 +819,30 @@ def stale_plugin():
             entries.extend(rows if isinstance(rows, list) else [rows])
     if not entries:
         return "no `reeve` plugin is installed, so `/reeve:start` would not resolve at all"
-    shas = {e.get("gitCommitSha") for e in entries if isinstance(e, dict)}
+    target = os.path.realpath(repo) if repo else None
+    governing = [e for e in entries if isinstance(e, dict) and _governs(e, target)]
+    if not governing:
+        return ("no `reeve` plugin is installed for this run — the record holds only local "
+                "registrations for other directories, so `/reeve:start` would not resolve")
+    shas = {e.get("gitCommitSha") for e in governing}
     if shas == {head}:
         return None
     return ("the installed plugin is at %s and this repo is at %s"
             % (", ".join(sorted(s[:12] if s else "?" for s in shas)), head[:12]))
+
+
+def _governs(entry, target):
+    """Can this registration supply the skills for the session this run is about to launch?
+
+    A `scope: local` entry is bound to one `projectPath` and reaches nothing else. Anything else —
+    `user`, `project`, an absent scope this repo does not recognise — is treated as reaching, so
+    an unreadable record refuses rather than being quietly filtered into agreement."""
+    if entry.get("scope") != "local":
+        return True
+    path = entry.get("projectPath")
+    if not path:
+        return True
+    return target is not None and os.path.realpath(path) == target
 
 
 def install_package(repo, resuming=False):
@@ -1115,7 +1143,7 @@ def main(argv=None):
         # and costs an hour. `--force` says otherwise out loud.
         # LAST, after the arguments are validated: a bad --mode is a usage error and must
         # still read as one. This refuses on the ENVIRONMENT, which is a different answer.
-        stale = stale_plugin()
+        stale = stale_plugin(args.resume)
         if stale and not args.allow_stale:
             print("smoke_drive: REFUSING to drive — %s" % stale)
             print("             The drive invokes `/reeve:start` and the `reeve:*` skills, and "

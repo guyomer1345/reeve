@@ -127,6 +127,50 @@ if [ -n "$bound" ]; then
   fi
 fi
 
+# ---- drop registrations for directories that no longer exist ---------------------------
+# Every drive of a throwaway tree leaves a PERMANENT `scope: local` registration behind, pinned
+# at whatever was installed that day; nothing removes it when the tree is deleted. Seven had
+# accumulated here, all for `/tmp/reeve-smoke-*` dirs that are long gone, and they do two kinds
+# of damage. They pin their cache dir into the `live` set below, so the keep-2 prune can never
+# reclaim it — the abandoned-directory problem this script was written to solve, returning
+# through the registry instead of the cache. And they made `smoke_drive.py`'s plugin-currency
+# gate refuse a CORRECT install, because it compared the whole record against HEAD (fixed there
+# too, by scoping to the entries that can govern a run; both halves were needed).
+#
+# Only entries whose `projectPath` is absent from disk are removed: a live project's local
+# install is somebody's real choice. Rewritten atomically, and a no-op when nothing is dead.
+python3 - <<'PYREG' || true
+import json, os, sys, tempfile
+cfg = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
+path = os.path.join(cfg, "plugins", "installed_plugins.json")
+try:
+    with open(path, encoding="utf-8") as fh:
+        reg = json.load(fh)
+except (OSError, ValueError):
+    sys.exit(0)
+dropped = 0
+for key, rows in list((reg.get("plugins") or {}).items()):
+    if not isinstance(rows, list):
+        continue
+    kept = []
+    for e in rows:
+        p = (e or {}).get("projectPath")
+        if (e or {}).get("scope") == "local" and p and not os.path.isdir(p):
+            dropped += 1
+            continue
+        kept.append(e)
+    reg["plugins"][key] = kept
+if not dropped:
+    print("==> registry: no dead project registrations")
+    sys.exit(0)
+d = os.path.dirname(path)
+fd, tmp = tempfile.mkstemp(dir=d)
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    json.dump(reg, fh, indent=2)
+os.replace(tmp, path)
+print("==> registry: dropped %d registration(s) for directories that no longer exist" % dropped)
+PYREG
+
 # ---- keep-2 cache prune (D164 call 4) -------------------------------------------------
 # With `version` deleted from plugin.json the cache key is the COMMIT SHA, so every update
 # extracts into a NEW directory (~2.4MB) and abandons the previous one. Claude Code has no

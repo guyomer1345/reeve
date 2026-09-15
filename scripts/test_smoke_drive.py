@@ -124,7 +124,7 @@ def test_resume_does_not_inherit_mode_both(tmp_path, monkeypatch):
     monkeypatch.setattr(sd.shutil, "which", lambda _n: "/usr/bin/claude")
     # The plugin-currency guard is a different refusal and has its own tests; this one is about
     # which MODE a resume drives, and it must not depend on the state of a cache on this disk.
-    monkeypatch.setattr(sd, "stale_plugin", lambda: None)
+    monkeypatch.setattr(sd, "stale_plugin", lambda _repo=None: None)
     monkeypatch.setattr(sd, "run_mode", lambda m, *a, **k: ran.append(m) or False)
     sd.main(["--resume", repo])
     assert ran == ["brownfield"], "drove the same tree as both modes: %r" % ran
@@ -187,6 +187,77 @@ class PluginCurrency(unittest.TestCase):
                 json.dump({"plugins": {"something-else@x": [{"gitCommitSha": "abc"}]}}, fh)
             self._with_state(path)
             self.assertIn("no `reeve` plugin", sd.stale_plugin())
+
+
+class PluginCurrencyScope(unittest.TestCase):
+    """The gate `D226` built deadlocked on its own exhaust, and it took one reinstall to see it.
+
+    Every drive leaves a permanent `scope: local` registration for its throwaway `/tmp` tree,
+    pinned at whatever was installed that day, and nothing removes it — seven had piled up. The
+    gate compared the WHOLE record against HEAD, so from the second run onwards a correct
+    reinstall could never satisfy it: the operator does exactly what the refusal instructs, is
+    refused again, and the only door left is `--allow-stale`, which is the mixture the gate
+    exists to refuse. A control whose only reachable outcome is its own override is worse than
+    no control, because it reads as one."""
+
+    def _write(self, tmp, rows):
+        path = os.path.join(tmp, "installed_plugins.json")
+        with open(path, "w") as fh:
+            json.dump({"plugins": {"reeve@reeve": rows}}, fh)
+        old = sd.PLUGIN_STATE
+        sd.PLUGIN_STATE = path
+        self.addCleanup(setattr, sd, "PLUGIN_STATE", old)
+
+    def _head(self):
+        return subprocess.run(["git", "-C", sd.ROOT, "rev-parse", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+
+    OLD = "0fdac78c024df8fc1032235f93097bc2ba07f45a"
+
+    def test_a_DEAD_local_registration_does_not_make_a_current_install_stale(self):
+        """The measured deadlock: user-scope at HEAD, local-scope leftovers at an old sha."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, [
+                {"scope": "local", "projectPath": "/tmp/reeve-smoke-greenfield-gone",
+                 "gitCommitSha": self.OLD},
+                {"scope": "user", "gitCommitSha": self._head()},
+            ])
+            self.assertIsNone(sd.stale_plugin())
+
+    def test_a_local_registration_for_ANOTHER_LIVE_tree_is_still_out_of_scope(self):
+        """Not an is-it-on-disk question. A local entry reaches exactly one directory, so a
+        kept tree that this run is not driving cannot supply its skills either way."""
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as other:
+            self._write(tmp, [
+                {"scope": "local", "projectPath": other, "gitCommitSha": self.OLD},
+                {"scope": "user", "gitCommitSha": self._head()},
+            ])
+            self.assertIsNone(sd.stale_plugin())
+
+    def test_a_RESUME_into_a_tree_pinned_to_an_old_plugin_IS_refused(self):
+        """The other half, and the reason this is scoping rather than filtering: the kept trees
+        from the red run really are bound to the plugin that produced them, and `--resume` walks
+        straight back into it. Dropping local entries wholesale would have gone quiet here."""
+        with tempfile.TemporaryDirectory() as tmp, tempfile.TemporaryDirectory() as tree:
+            self._write(tmp, [
+                {"scope": "local", "projectPath": tree, "gitCommitSha": self.OLD},
+                {"scope": "user", "gitCommitSha": self._head()},
+            ])
+            why = sd.stale_plugin(tree)
+            self.assertIn("0fdac78c024d", why)
+
+    def test_an_UNRECOGNISED_scope_still_governs_so_cannot_tell_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, [{"gitCommitSha": self.OLD}])
+            self.assertIn("0fdac78c024d", sd.stale_plugin())
+
+    def test_ONLY_local_entries_for_other_trees_reads_as_not_installed(self):
+        """A fresh `/tmp` tree resolves nothing from another directory's local registration, so
+        the honest answer is the same one an empty record gives — not a silent pass."""
+        with tempfile.TemporaryDirectory() as tmp:
+            self._write(tmp, [{"scope": "local", "projectPath": "/tmp/reeve-smoke-gone",
+                               "gitCommitSha": self._head()}])
+            self.assertIn("would not resolve", sd.stale_plugin())
 
 
 class InstallLeak(unittest.TestCase):
