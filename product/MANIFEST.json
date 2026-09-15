@@ -90,6 +90,14 @@
       "dest": ".claude/scripts/converge.py"
     },
     {
+      "src": "scripts/turn_check.py",
+      "dest": ".claude/scripts/turn_check.py"
+    },
+    {
+      "src": "scripts/status_report.py",
+      "dest": ".claude/scripts/status_report.py"
+    },
+    {
       "src": "scripts/check_directives.py",
       "dest": ".claude/scripts/check_directives.py"
     },
@@ -164,6 +172,10 @@
     {
       "src": "hooks/handoff_gate.py",
       "dest": ".claude/hooks/handoff_gate.py"
+    },
+    {
+      "src": "hooks/turn_gate.py",
+      "dest": ".claude/hooks/turn_gate.py"
     },
     {
       "src": "hooks/awaiting_input.py",

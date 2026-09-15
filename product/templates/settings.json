@@ -130,6 +130,14 @@
             "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/handoff_gate.py"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/turn_gate.py"
+          }
+        ]
       }
     ],
     "SessionStart": [

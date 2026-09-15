@@ -7,7 +7,7 @@ the live position lives in `state.json`. Nodes are skills/agents; edges are foll
 This file is read **before every turn**, so it is budgeted as an always-loaded doc and carries only what
 routing needs. The long-form detail — per-kind drain semantics, the forecast divergence check, the
 stack-wiring transition, the maintenance-item contract — lives in **`loop-detail.md`**, pointed to
-from each section below. Read it when that situation arises, not every turn.
+from each section below — read it when that situation arises.
 
 ## Routing table
 | node | on output | next |
@@ -61,9 +61,8 @@ from each section below. Read it when that situation arises, not every turn.
 <!-- Every side door must be named ON the line below: the contract linter reads only the line that
      starts with "Side doors", so a door introduced on a continuation line is silently unrouted. -->
 Side doors (callable from anywhere): `create-issue` → backlog · `research` (service) · `answer` · `status`.
-`answer` is entered from the boundary drain, never from a node — a question advances nothing, so it has no
-edge. `status` is the same shape: a pure read of where the project is, mutating nothing and returning to
-wherever it was called from.
+`answer` and `status` enter from the boundary drain, never from a node: neither advances anything, so neither
+has an edge.
 
 ## The autonomy boundary — who owns the decision
 Take every decision that does not change the goal; **route anything that may**. Before acting on a decision that
@@ -74,14 +73,14 @@ of your own read.** Judgment may escalate **above** that floor, never below it; 
 in `.workflow/directives.md`).
 
 **The gated rows (`create-demo?`) are the router's call, before any dispatch** — default **no demo**, decided
-per work-item. Its three conditions live once in the `create-demo` capability's *sandbox gate* section: read
-them there (this file is read every turn; that one is not).
+per work-item. Its three conditions live once in the `create-demo` capability's *sandbox gate*
+section; read them there.
 
 ## Dispatch boundary — form the batch, and never wait alone
 Concurrency exists only for work dispatched **together**, so the batch is the speed lever. Before any
 long-running dispatch: form the **largest legal batch** and send it in **one turn**. **Never dispatch a blocking
 call by itself while other viable work exists.** Both `execute` items that do not overlap and other viable work
-(research a queued item needs, an unblocked plan) go in the same batch — neither is subordinate.
+(research a queued item needs, an unblocked plan) go in the same batch.
 
 **Eligibility is not a judgement call.** Run `python3 .claude/scripts/check_wave_independence.py --record`:
 only its batch may fan out, a rejected candidate **runs serially**, and missing evidence never reads as
@@ -109,9 +108,11 @@ judgment: `loop-detail.md § the boundary drain, by kind`.**
 
 **Read the context gate here too** — `python3 .claude/scripts/context_band.py --gate --json`.
 `handoff-at-boundary` ⇒ finish the drain, write `handoff.md`, then stop picking. `handoff-now` ⇒ write it
-**now**, before anything else, and say a `/clear` is safe. A `Stop` hook enforces the `handoff-now` half, so
-skipping it is not silent — but it fires mid-turn, where a boundary handoff is cheaper and truer.
-→ **`loop-detail.md § the context gate`.**
+**now**, before anything else, and say a `/clear` is safe. **Ending a turn is an EVENT, not a default:** unattended,
+it needs a reason (parked · met · stalled · paused · `idle`) and leaves the report, `status_report.py` pasted
+whole; anything else is resolved here. `Stop` hooks enforce all three, so
+skipping one is not silent — but they fire mid-turn, where a boundary is cheaper and truer.
+→ **`loop-detail.md § the context gate` · `§ the turn gate`.**
 
 → **If the item being picked has a frozen `.workflow/forecasts/<id>.json`, run the divergence check before
 starting work — boundary only, never mid-item: `loop-detail.md § forecast divergence check`.**

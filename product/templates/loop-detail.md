@@ -261,3 +261,35 @@ accepts in place of a verdict; without it a maintenance item has **no legal comm
 and **deletes any earlier one**, so the directory holds only the current commit's receipt and the history of
 past maintenance is that directory's git log. Never fake a trivial `pass: true` verdict instead — the console
 reads that first line as "verify passed" (`shared/schemas.md § commit-receipt`).
+
+## the turn gate
+**The two complaints this answers happen at the same instant, which is why one gate answers both:** the loop
+*"pauses a lot for no reason ... sometimes its really minor decisions that have no reason to stop and wait for
+my intervence, sometimes it says 'okay now doing X' and never dispatches X"*, and the report it leaves behind is
+long, jumbled, and full of ids that mean nothing to the reader. Both land at the end of a turn, and the end of a
+turn is decidable. `hooks/turn_gate.py` (`Stop`) runs the ladder in `scripts/turn_check.py`; ask it yourself at
+any time with `python3 .claude/scripts/turn_check.py`.
+
+**Rung 1 — may this turn end at all?** Only for a reason from a closed, mechanical set: something is **parked**
+· the goal is **met** or **stalled** (`converge.py`, the same verdict the driver stops on) · the loop is
+**paused** (`control.json`) · the loop is **`idle`** — backlog empty, awaiting steering · `state.json` does not
+say `building`, so nothing is in flight to abandon. None of those and the block tells you *which shape* it is,
+because they send you to different places: a turn that **moved no anchor** announced an action and did not take
+it; a turn that **moved anchors and stopped anyway** finished a piece and quit instead of picking up the next.
+The four ways out are in the block itself — continue the loop · resolve it (`decision-engineer` for a build
+decision, `refine` for a false plan assumption) · **park** it if it genuinely belongs to a person · or stop
+properly, which means `state.json` says `idle` or `converge.py` says met.
+
+**Rung 2 — is the report current?** A turn that may legitimately end leaves the four-field, goal-relative block
+behind it. Paste it **whole**, including the `[reeve-report state:…]` line: the gate re-renders and compares
+digests, so a retyped or summarised block is simply asked for again. The digest covers what the report *says*,
+never when it was said, and an unchanged loop is never asked for the same block twice.
+
+**Scoped to an unattended drive** (`REEVE_DRIVE` / `REEVE_SUPERVISE`, exported by `loop.sh`, or
+`config.run.drive.gate_turns`), and it **defers while the context gate wants an anchor** — two hooks blocking
+one turn with two instructions is how a session obeys neither. It gives up after two demands on a rung rather
+than wedging the session, and **fails open on every error**.
+
+**Every id you write beside the block carries its name** — `D-001 (the Postgres-over-SQLite decision)`, never a
+bare `D-001`. An id is a pointer, and a pointer the reader cannot dereference is noise that looks like rigour.
+`status_report.py --check -` lints prose you are about to send and resolves the names for you.

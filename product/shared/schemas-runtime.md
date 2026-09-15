@@ -264,6 +264,25 @@ the session it was protecting.
 **On the repo mount on purpose.** A project whose runtime root has gone missing still needs its anchor written —
 that is precisely when it needs it most — so nothing in this path may require resolving `runtime.json`.
 
+## turn-gate.json  · written by `hooks/turn_gate.py` (`Stop`), judged by `scripts/turn_check.py` · *`.workflow/turn-gate.json`; RUNTIME, gitignored, atomic write (temp + `os.replace`); repo mount, beside the rest of the gate state*
+- `{ fingerprint, satisfied, demands, rung }` — the loop fingerprint at the **previous** stop, the report digest
+  this session last satisfied, and the demand counter with the rung it is counting.
+**It exists because two of the three questions a turn-end gate asks are only answerable ACROSS turns.** *Did this
+turn move anything?* needs the fingerprint the last turn ended on — `drive.py`'s, reused rather than reinvented,
+so the driver that decides whether to spawn and the gate that decides whether a turn may stop share one
+definition of "the loop moved". *Has the human already been given this report?* needs the digest that was last
+satisfied, and it is what stops an unchanged loop being asked for the same block twice — the nuisance objection
+that would otherwise get the gate switched off inside a day.
+**`satisfied` is a digest of the report's CONTENT, never of when it was written** (`status_report.py § digest`):
+goal, progress, parked tickets, in-flight items and their nodes, discharged and outstanding acceptance. A digest
+that moved on its own would make every report stale on arrival.
+**Written on every stop, including the ones that BLOCK.** Otherwise the first block would poison the fingerprint
+comparison for the second, and a session already being told it moved nothing would be told it again for the
+wrong reason.
+**`demands` is a loop stop, not a metric**, exactly as in `handoff-gate.json`, and it is keyed by `rung`: moving
+from *continue the loop* to *leave a report* is progress and resets the count, because they are different
+demands and a session that satisfied the first should not inherit the second's patience.
+
 ## wave-decision.json  · written ONLY by `check_wave_independence.py --record`, read by `hooks/dispatch_guard.py` · *`.workflow/wave-decision.json`; RUNTIME, gitignored, atomic write (temp + `os.replace`); lives on the repo mount beside the backlog it grades*
 - `{ decided_at, head, batch[], fan_out, considered[], max_batch, held }` — the boundary's recorded answer to
   **"what else could run right now?"**, exactly as the gate computed it.

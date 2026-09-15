@@ -18,7 +18,19 @@ cheap. If a human asks for something durable, that is a spec or a decision recor
 
 ## Workflow
 
-1. **Gather the mechanical half:**
+0. **Render the report the human actually reads, FIRST:**
+   ```bash
+   python3 .claude/scripts/status_report.py --workflow .workflow
+   ```
+   Paste that block **verbatim** — it is the answer, not an input to one. Four fields, goal-relative,
+   every id resolved to the name its owner records, and a hard line budget per field. Do not retype it,
+   reorder it, or drop the `[reeve-report state:…]` line; an unattended drive's `Stop` gate recognises a
+   current report by that line and will ask again for a hand-written one.
+   **Everything below is what you add ABOVE the block, in prose, and only where it earns its length.**
+   Under an active goal the block is usually the whole answer.
+
+1. **Gather the mechanical half** when the question is broader than the goal — *what is this project,
+   how does it connect, what did the last ten commits do*:
    ```bash
    python3 .claude/scripts/project_state.py
    ```
@@ -55,8 +67,15 @@ cheap. If a human asks for something durable, that is a spec or a decision recor
   reporting it as a failure is how a correct project gets treated as broken.
 
 ## Output
-Prose to the human, structured by the four faces the script gathers: **right now · what is intended · how
-it connects · what is done · what is left**. No file is written. Nothing is queued.
+**The generated block, verbatim, as the last thing you write** — `what was achieved · what is being worked
+on · a decision for you (only when there is one) · what is left`, all four relative to the active goal.
+Prose above it where a number needs meaning, where the sources disagree, or where the question was broader
+than the goal; then the four faces of `project_state.py` supply that prose. No file is written. Nothing is
+queued.
+
+**Never print an id without the name it points at.** `D-001 (the Postgres-over-SQLite decision)`, never a
+bare `D-001` — an id is a pointer, and a pointer the reader cannot dereference is noise that looks like
+rigour. `status_report.py --check -` lints any prose you are about to send, and resolves the name for you.
 
 ## Route
 Nothing. `status` is a **read**: it advances no node, claims no item, and mutates nothing. It is a side

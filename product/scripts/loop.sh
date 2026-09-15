@@ -100,6 +100,10 @@ if [ "${1:-}" = "--supervise" ]; then
   else
     echo "loop.sh: supervise.sh not found beside this script; starting unsupervised." >&2
   fi
+  # The turn gate reads this. It is exported HERE rather than written to a file because the fact
+  # it marks is about THIS PROCESS — a session nobody is watching — and a durable flag would
+  # outlive the session that set it and gate the human's next interactive run.
+  export REEVE_SUPERVISE=1
   exec claude "$@"
 fi
 
@@ -145,7 +149,7 @@ while true; do
   # A non-zero session is NOT a driver failure: a crashed or killed session is exactly the case
   # the fingerprint exists to judge, and it gets judged on what it left behind, not on its exit
   # code. `set -e` must not turn that into an abort.
-  set +e; claude -p "$DRIVE_PROMPT" "$@"; set -e
+  set +e; REEVE_DRIVE=1 claude -p "$DRIVE_PROMPT" "$@"; set -e
 
   # The drop-in window. Releasing and re-taking is the whole handover protocol: if anyone else
   # (a human launcher, or the daemon's relaunch-runner) takes the lock in the gap, the

@@ -83,6 +83,8 @@ loop's normal `state.json` takes over when the motion ends.
      context.json      # the session's last context reading — published by `statusline.py`, read by `context_band.py` — RUNTIME, add to .gitignore
      handoff-gate.json # the context gate's latch — when the band entered `handoff-now`, and how many times
                        # the `Stop` hook has asked for an anchor — RUNTIME, add to .gitignore
+     turn-gate.json    # the turn gate's cross-turn memory: the fingerprint the last turn ended on,
+                       # the report digest already given, the demand counter — RUNTIME, add to .gitignore
      wave-decision.json # the boundary's recorded answer to "what else is viable?" — written ONLY by
                        # `check_wave_independence.py --record`, read by the dispatch guard — RUNTIME, add to .gitignore
      worker-budget/    # RUNTIME — one breadcrumb per exit of the worker-budget hook, so the
@@ -116,7 +118,7 @@ loop's normal `state.json` takes over when the motion ends.
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
    `bundles/` (org mode's review bundles — regenerable from git at any time, so they are a hand-off artifact
    rather than a record; the history they summarise is already committed), 
-   `orchestrator.lock`, `control.json`, `context.json`, `handoff-gate.json`, `wave-decision.json`, `awaiting-input.json`, `supervise.log`, `alerts.json`, `worker-budget/` (the worker-budget hook's per-exit breadcrumbs — rewritten on EVERY tool call of every worker, so committing them would churn the very diffs `verify` reads), `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
+   `orchestrator.lock`, `control.json`, `context.json`, `handoff-gate.json`, `turn-gate.json`, `wave-decision.json`, `awaiting-input.json`, `supervise.log`, `alerts.json`, `worker-budget/` (the worker-budget hook's per-exit breadcrumbs — rewritten on EVERY tool call of every worker, so committing them would churn the very diffs `verify` reads), `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
    material — the one runtime path that sits *inside* a committed directory, so it needs its own line or the
    allowlist's commit-by-default rule takes it; `shared/schemas.md § scratch`), and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,

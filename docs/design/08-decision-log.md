@@ -8103,3 +8103,77 @@ the cited slice id to exist as a heading* — `12a`–`12e` are described in the
 **Builds on:** **D214** (the ledger this makes self-checking), **D221** (`12m`, the sweep backstop this extends —
 same argument, one level up), **D80** (one owner per fact).
 → `CLAUDE.md` (the gate's three shapes), `11` (the Phase-13 ledger, which is the first table written under it).
+
+## D224 — one gate at the end of the turn, because both complaints happen there: the report is GENERATED, and ending is an EVENT **[DECIDED + BUILT 2026-09-15. Discharges ask #11 and the turn-end half of ask #12. 1,476 tests + 25 subtests, 8 meta-gates, smoke self-test 27/0]**
+Two asks arrived together and looked unrelated — *"these need a standardized format ... references to `D92`,
+`Ref X` ... they mean nothing to me ... extremely long and jumbled"* and *"the workflow pauses a lot of no
+reason ... sometimes it says 'okay now doing X' and never dispatches X"*. **They happen at the same instant.**
+A turn ends: that is when a bad report is emitted, and that is when a session quits for nothing. The instant is
+decidable, so one `Stop` gate answers both and there is exactly one place to look when either misbehaves.
+
+**THE REPORT IS GENERATED, WHICH IS THE WHOLE CALL.** `scripts/status_report.py` renders four fields — his, with
+four changes — from `converge.py`'s `measure()`, `parked/`, the open items and git. Nothing is re-derived: the
+measurable half IS the verdict the driver stops on, so the report can never disagree with the thing that decides
+whether the drive continues. *A format described in a SKILL.md is prose*; a renderer is a format.
+- **An id is a POINTER.** Every id is resolved to the title its owner records — `docs/decisions/index.md` for a
+  decision, `goal.json` for an acceptance, the item's own `plan.md` heading for an item — and an id nothing
+  names is printed **UNRESOLVABLE**, never dropped and never guessed. The one exception is argued rather than
+  assumed: a *promoted* item's directory is pruned by `retention.py`, so the name of the item that discharged an
+  acceptance months ago is gone **by design**; that optional attribution is dropped instead, because crying wolf
+  on the normal case teaches the reader to ignore the word on the day it means something.
+- **Length is not fixable by asking for brevity.** Hard per-field line budgets and a per-line width, overflow as
+  `+N more (ask)` — never a silent truncation, which is how *"too long"* becomes *"wrong"*.
+- **The four changes to the format as asked for.** A goal line at the top (every field said *"for the goal"* and
+  none named it); `decision for you` **floats to the top when non-empty and is ABSENT when not** (he is right
+  that it is usually empty — a section that usually says nothing trains the eye to skip it, and then it is
+  skipped on the day it matters); `in flight` carries the node and the age, or the field cannot tell working
+  from stuck, which is the whole of the other ask; and a **marker carrying a digest of the material state**.
+- **The digest covers what the report SAYS, never when it was said.** A digest that moved on its own would make
+  every report stale on arrival and the gate that reads it a nuisance switched off within a day.
+
+**ENDING A TURN IS AN EVENT, NOT A DEFAULT.** `scripts/turn_check.py` is the ladder; `hooks/turn_gate.py` is the
+thin wiring. Rung 1: an unattended turn may end only for a reason from a **closed, mechanical set** — something
+parked · the goal met or stalled · the loop paused · `idle` · not `building` at all. Nothing else, and the block
+names **which shape** the failure is, because they send the reader to different places: *moved no anchor* is
+announcing an action and not taking it; *moved anchors and stopped anyway* is finishing a piece and quitting
+instead of picking up the next. That distinction reuses `drive.py`'s fingerprint rather than inventing a second
+notion of progress — the driver that decides whether to spawn and the gate that decides whether a turn may stop
+now share one definition of *the loop moved*. Rung 2: a turn that may legitimately end owes the current report.
+
+**WHY THE LADDER IS A CLOSED SET AND NOT A JUDGEMENT.** Every rung reads durable state the session does not
+author for this purpose — `drive.py`'s own argument, for the same reason: *a session that wants to stop is the
+last thing that should be asked whether stopping is allowed*.
+
+**THREE THINGS THAT MAKE IT SURVIVABLE**, each of which is the reason a gate like this usually gets switched off:
+- **Scoped to an unattended drive** (`REEVE_DRIVE`/`REEVE_SUPERVISE`, exported by `loop.sh`, or
+  `config.run.drive.gate_turns`), at his word: *"this is only when we are letting multiple sessions go by
+  themselves ... not for just planning."* Firing mid-conversation would be the same nuisance in the other
+  direction.
+- **An unchanged loop is never asked for the same report twice** — the latch holds the digest last satisfied.
+- **It defers to `handoff_gate.py`** while an anchor is owed. Two hooks blocking one turn with two instructions
+  is how a session ends up obeying neither.
+It gives up after two demands per rung (counted **by rung**, so satisfying one does not inherit the other's
+spent patience) and **fails open on every error**: a session wrongly allowed to end costs a turn, one wrongly
+prevented from ending loses everything it was doing.
+
+**COST: ZERO NET always-loaded rent.** The standing rule went into `loop.md` and the file came back to 3,201 →
+trimmed to exactly its pre-change 6,707-token set total, detail in `loop-detail.md § the turn gate`. A rule that
+costs rent every turn of every session must pay for itself out of the same file.
+
+**REJECTED.** *Prose detection* ("does this message look like a status report") — a heuristic over the model's
+own wording fires on the wrong turns and gets argued with on the rest; the digest makes it decidable and makes a
+correct marker cost exactly one run of the renderer. *Blocking on a bare id* — a style rule is not worth wedging
+a loop for, so that half is an advisory nudge and says so. *Re-litigating a PARK at turn end* — the only verdict
+available there is "block the stop", which traps the session with a ticket it cannot un-park; a park is judged
+at the moment of parking, where the evidence is. *Two separate hooks* — the second would have to defer to the
+first, and a third to both.
+
+**WHAT IT HAS NOT EARNED.** The gate has never run inside a real unattended drive; that is the smoke drive's job
+and it is the last entry of this phase. And the ceiling is worth stating: a `Stop` hook can refuse to let a turn
+end, it cannot make the next thing the session does be the right thing.
+
+**Builds on:** **D199**/**D200** (`goal.json` + `converge.py` — this is their measure made readable), **D215**
+(the `Stop`-hook shape, the belt-and-braces block, the give-up counter), **D202** (`drive.py`'s fingerprint,
+reused rather than re-invented), **D214** (an ask needs an actuator, not a rule).
+→ `11` (asks #11/#12 — `13a` closed, `13b`'s turn-end half closed), `05` + `shared/schemas-runtime.md`
+(`turn-gate.json`), `loop.md`/`loop-detail.md`, `status/SKILL.md`, `MANIFEST.json`, `templates/settings.json`.

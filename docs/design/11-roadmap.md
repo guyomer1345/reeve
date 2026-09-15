@@ -1140,8 +1140,8 @@ update every repo i use this plugin on."*
 
 | # | The ask, in his words (condensed) | Discharged by | State |
 |---|---|---|---|
-| 11 | **a standard report format** — four fields, goal-relative; and **names, not `D92`/`Ref X`**, which mean nothing to him; and it must stop being long and jumbled | `13a` | ⬜ open |
-| 12 | **stop pausing for nothing** — minor decisions must resolve in the orchestrator; and *"says okay now doing X and never dispatches X"*; **it needs monitoring**, possibly through the tmux supervisor | `13b` | ⬜ open |
+| 11 | **a standard report format** — four fields, goal-relative; and **names, not `D92`/`Ref X`**, which mean nothing to him; and it must stop being long and jumbled | `13a` · `D224` — the report is GENERATED, so the format is a fact rather than an intention | ✅ |
+| 12 | **stop pausing for nothing** — minor decisions must resolve in the orchestrator; and *"says okay now doing X and never dispatches X"*; **it needs monitoring**, possibly through the tmux supervisor | `13b` — turn-end half BUILT (`D224`); the park floor and the monitor are the open remainder | ⬜ open |
 
 **Both are checked against the `D214` rule: name the actuator, or say plainly that none is possible and why.**
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
@@ -1243,8 +1243,11 @@ never registered, and `install closed` stays green throughout), and the drive's 
 the tail of Phase 13 — `D220` keys the receipt on the package digest, and `13a`/`13b` will change it, so running
 greenfield now buys an attestation the next edit throws away.
 
-#### ▶ NEXT — `13a` the standard report: four fields, named references, hard budget, and a renderer instead of a rule. `[ask #11]`
-**Start the next session here.** The complaint is three complaints and they need three different answers.
+#### `13a` — the standard report. ✅ **CLOSED 2026-09-15 — `D224`.** `[ask #11]`
+**`D224` owns the calls.** Kept below because the three-complaints-in-one reading is what shaped the build, and
+because the four changes to his format are arguments he is owed rather than decisions already taken. Built:
+`scripts/status_report.py` (the renderer + the name resolver + the `--check` lint), the marker digest, and
+rung 2 of `scripts/turn_check.py`. The complaint was three complaints and they needed three different answers.
 - **"a bunch of references to `D92`, `Ref X` … they mean nothing to me."** An internal id is a *pointer*, and a
   pointer rendered to a human who cannot dereference it is noise that looks like rigour. **Rule: an id may appear
   only alongside the name it points at** — `D92 (the Postgres-over-SQLite decision)`. Not a style note: a
@@ -1271,8 +1274,16 @@ greenfield now buys an attestation the next edit throws away.
   block, checked by re-rendering rather than by trusting a marker. Same shape as `D215`'s handoff gate, for the
   same reason — the rule alone would be the prose the ask already had.
 
-#### `13b` — stop pausing for nothing, and MONITOR the drive. `[ask #12]`
-Three defects wearing one complaint, and they separate cleanly.
+#### ▶ NEXT — `13b` — stop pausing for nothing, and MONITOR the drive. **Turn-end half BUILT (`D224`); two pieces left.** `[ask #12]`
+**Start the next session here.** Three defects wearing one complaint; the third is built, the other two are not.
+- ✅ **BUILT — the turn may not end for nothing** (`D224`, rung 1 of `turn_check.py`): an unattended turn ends
+  only for a reason from a closed mechanical set, and the block names which shape the failure is.
+- ⬜ **The park floor.** A gate at turn end can only refuse the stop, which traps a session with a ticket it
+  cannot un-park, so a park is judged **where the evidence is** — at `bus.py park`. The decidable rule: a
+  `steer` park requires `converge.py` to actually say met-or-stalled. It is the one kind a session can mint for
+  itself out of a feeling; the other six are inherently a person's.
+- ⬜ **The monitor.** `supervise.sh` grows a heartbeat, for the case NO `Stop` ever fires — a session that idles
+  or sits in a dialog, which `D217` found the hard way. Everything below stands.
 - **"minor decisions that have no reason to stop and wait for my intervention."** The route already exists —
   `decision-engineer` is the authority of last resort for exactly this — and nothing enforces it. **The floor:
   a turn may not end by asking the human a question unless something is PARKED**, i.e. the question is one of
