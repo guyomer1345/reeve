@@ -195,14 +195,10 @@ def name_ids_in_prose(text, known):
     # scanner may not match inside (an id already carrying its gloss). Folding them into one
     # variable silently deleted everything before an already-glossed id — the statement lost its
     # first sentence while the lint went green, which is the worst possible pair of outcomes.
-    out, last, skip_to = [], 0, 0
+    spans = gloss_spans(text)
+    out, last = [], 0
     for m in ID_RE.finditer(text):
-        if m.start() < skip_to:
-            continue
-        after = text[m.end():m.end() + 4].lstrip(" `")
-        if after.startswith("("):
-            close = text.find(")", m.end())
-            skip_to = (close + 1) if close != -1 else len(text)
+        if _in_span(m.start(), spans) or _labels_span(m.end(), text, spans):
             continue
         title = known.get(m.group(1))
         if not title:
@@ -250,6 +246,71 @@ def gloss(ident, known, drop_if_unresolvable=False):
     return "%s (UNRESOLVABLE — nothing names this id)" % ident
 
 
+LABEL_TOKEN = re.compile(r"[\w.-]+$")
+
+
+def gloss_spans(line):
+    """-> [(start, end)] for every `label (…)` gloss on one line.
+
+    TWO THINGS THIS FIXES, both found by a real drive on a report that was correct.
+
+    It does not require the LABEL to be id-shaped. A parked checkpoint renders as
+    `SPEC-aea09395eebc (A spec change … (item I-001). …)`, and `SPEC-aea09395eebc` is not an
+    `ID_RE` id — hex, not digits. So no gloss was recognised at all and `I-001`, sitting inside
+    the ticket's own summary, was reported bare. The convention this file enforces is `X (name)`
+    for every X the report prints; what X happens to look like is not the question.
+
+    And it matches parentheses in BALANCE. Taking the first `)` ended the span at `(item I-001)`
+    and left the rest of the summary exposed — nested parentheses are ordinary in an authored
+    summary, and a scanner that cannot count them reports the inside of a name as a bare pointer.
+    An unclosed span runs to end of line, which is correct: the gloss was truncated, and what was
+    cut off is still part of it.
+    """
+    spans = []
+    i, n = 0, len(line)
+    while i < n:
+        if line[i] != "(":
+            i += 1
+            continue
+        # The label must look like an IDENTIFIER, not like an English word: a hyphen and a digit
+        # somewhere in it. Anything ending in a word character was the first rule, and it made
+        # "the work stalled (blocked by I-009)" a gloss — so a bare id could hide inside any
+        # aside. `I-001`, `A-1`, `TCK-1`, `SPEC-aea09395eebc` all qualify; `stalled` does not.
+        token = LABEL_TOKEN.search(line[:i].rstrip(" ").rstrip("`"))
+        if not token or "-" not in token.group(0) or not any(c.isdigit() for c in token.group(0)):
+            i += 1
+            continue                      # a parenthesis opening a clause, not glossing a label
+        depth, j = 0, i
+        while j < n:
+            if line[j] == "(":
+                depth += 1
+            elif line[j] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        end = j + 1 if depth == 0 else n
+        spans.append((i, end))
+        i = end
+    return spans
+
+
+def _in_span(pos, spans):
+    return any(a <= pos < b for a, b in spans)
+
+
+def _labels_span(end, text, spans):
+    """Is the id ending at `end` the LABEL of the gloss that follows it?
+
+    The label lives OUTSIDE its own span — the span starts at the `(` — so "inside a gloss" does
+    not cover it, and dropping this check reported every correctly-named id as bare. Whitespace
+    and a closing backtick may sit between (`` `I-001` (name) ``)."""
+    i = end
+    while i < len(text) and text[i] in " `":
+        i += 1
+    return any(a == i for a, _ in spans)
+
+
 def bare_ids(text, known=None):
     """-> [(id, line number)] for every id rendered WITHOUT a name beside it.
 
@@ -274,14 +335,9 @@ def bare_ids(text, known=None):
             continue
         if fenced:
             continue
-        skip_to = 0
+        spans = gloss_spans(line)
         for m in ID_RE.finditer(line):
-            if m.start() < skip_to:
-                continue
-            after = line[m.end():m.end() + 4].lstrip(" `")
-            if after.startswith("("):
-                close = line.find(")", m.end())
-                skip_to = (close + 1) if close != -1 else len(line)
+            if _in_span(m.start(), spans) or _labels_span(m.end(), line, spans):
                 continue
             out.append((m.group(1), n))
     return out

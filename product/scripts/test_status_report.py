@@ -291,3 +291,53 @@ def test_an_UNRESOLVABLE_id_in_prose_is_left_exactly_as_written(tmp_path):
 
 def test_prose_with_no_ids_is_returned_unchanged(tmp_path):
     assert sr.name_ids_in_prose("nothing to see", {"I-1": "x"}) == "nothing to see"
+
+
+# ============================================================ what counts as "already named"
+# Three defects in one scanner, all found by drives on reports that were correct.
+
+def test_a_gloss_whose_LABEL_is_not_id_shaped_still_shields_its_contents():
+    """A parked checkpoint renders as `SPEC-<hex> (…)`, and `SPEC-aea09395eebc` is not an ID_RE
+    id — hex, not digits. So no gloss was recognised and `I-001`, inside the ticket's own
+    summary, was reported bare. The convention is `X (name)` for every X the report prints;
+    what X looks like is not the question."""
+    line = "  - SPEC-aea09395eebc (A spec change needs approval (item I-001).) — spec checkpoint"
+    assert sr.bare_ids(line) == []
+
+
+def test_parentheses_are_matched_in_BALANCE():
+    """Taking the first `)` ended the span at `(item I-001)` and left the rest exposed. Nested
+    parentheses are ordinary in an authored summary."""
+    line = "  - TCK-1 (outer (inner I-001) still inside I-002) done"
+    assert sr.bare_ids(line) == []
+
+
+def test_a_TRUNCATED_gloss_still_shields_what_survived():
+    """Bullets are cut to a width, so a gloss can lose its closing paren. What was cut off is
+    still part of the name."""
+    line = "  - A-1 (criterion text) — by I-001 (Plan — I-001 · Implement `don"
+    assert sr.bare_ids(line) == []
+
+
+def test_the_LABEL_of_a_gloss_is_named_by_it():
+    """The label lives OUTSIDE its own span — the span starts at the `(` — so "inside a gloss"
+    does not cover it. Dropping this reported every correctly-named id as bare."""
+    assert sr.bare_ids("I-001 (the name) and `I-002` (another)") == []
+
+
+def test_a_GENUINELY_bare_id_after_a_gloss_is_still_caught():
+    """The negative control. Widening what counts as named must not blind the lint."""
+    line = "  - A-1 (criterion text) — blocked by I-009, see it"
+    assert [i for i, _ in sr.bare_ids(line)] == ["I-009"]
+
+
+def test_a_bare_id_BEFORE_any_gloss_is_still_caught():
+    line = "  - I-009 is blocked by A-1 (criterion text)"
+    assert [i for i, _ in sr.bare_ids(line)] == ["I-009"]
+
+
+def test_a_parenthesis_that_opens_a_CLAUSE_shields_nothing():
+    """`(` after a space is punctuation, not a gloss. Treating every parenthesis as a name would
+    let a bare id hide inside any aside."""
+    line = "  - the work stalled (blocked by I-009) this week"
+    assert [i for i, _ in sr.bare_ids(line)] == ["I-009"]
