@@ -119,6 +119,37 @@ def last_assistant_text(transcript, limit=LOOKBACK):
     return "\n".join(out)
 
 
+def workers_this_session(transcript):
+    """-> how many subagents this session has run, or None if it cannot be told.
+
+    The same place `worker_budget.py` locates a worker's own transcript:
+    `<project>/<session-id>/subagents/agent-*.jsonl`, written by the harness beside the session
+    transcript whose path arrives on the payload. `None` is CANNOT TELL and the rung it feeds
+    stays silent on it -- an unreadable directory must never read as "no worker ran".
+    """
+    try:
+        base = os.path.dirname(os.path.abspath(transcript))
+    except (TypeError, ValueError):
+        return None
+    # THE SESSION TRANSCRIPT IS THE PROOF WE ARE LOOKING IN THE RIGHT PLACE, and that distinction
+    # is the whole function. `subagents/` is created when a subagent first runs, so its ABSENCE
+    # is the zero this rung needs -- not ignorance. Treating a missing directory as "cannot tell"
+    # made the rung silent on precisely the runs it was built for: measured against the two real
+    # trees where the breach happened, both answered "cannot tell" while the two healthy ones
+    # answered 3. If the transcript itself is not there, we are somewhere else entirely and the
+    # honest answer is None.
+    if not os.path.isfile(transcript):
+        return None
+    d = os.path.join(base, os.path.splitext(os.path.basename(transcript))[0], "subagents")
+    if not os.path.isdir(d):
+        return 0
+    try:
+        return len([n for n in os.listdir(d)
+                    if n.startswith("agent-") and n.endswith(".jsonl")])
+    except OSError:
+        return None
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -150,16 +181,24 @@ def main():
         pass
 
     latch = _latch(workflow)
+    transcript = payload.get("transcript_path")
     try:
         res = turn_check.check(workflow,
-                               last_text=last_assistant_text(payload.get("transcript_path")),
+                               last_text=last_assistant_text(transcript),
                                prev_fingerprint=latch.get("fingerprint"),
-                               satisfied_digest=latch.get("satisfied"))
+                               satisfied_digest=latch.get("satisfied"),
+                               prev_promoted=latch.get("promoted"),
+                               workers_seen=workers_this_session(transcript))
     except Exception:
         return 0
 
+    # `promoted` rides the latch for the same reason `fingerprint` does: "what is NEW since the
+    # last stop" is not answerable from one observation. It is written on EVERY stop, including
+    # the ones that block, so the dispatch rung fires once per item rather than on every turn
+    # after it -- the breach has already happened and repeating it would only wedge the session.
     rec = {"fingerprint": res.get("fingerprint"), "satisfied": latch.get("satisfied"),
-           "demands": latch.get("demands") or 0, "rung": latch.get("rung")}
+           "demands": latch.get("demands") or 0, "rung": latch.get("rung"),
+           "promoted": res.get("promoted") or latch.get("promoted") or []}
     if not res["demand"]:
         rec.update(satisfied=res.get("digest") or latch.get("satisfied"), demands=0, rung=None)
         _write_latch(workflow, rec)

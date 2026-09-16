@@ -32,7 +32,16 @@ once obeys neither.
      that caught it is in `smoke_drive.py` and nothing inside the package was looking. This rung
      fires ONLY when the file exists and the field does not: a project that has written no
      anchor at all is `handoff_gate.py`'s business, under the band, and is not touched here.
-  3. IS THE REPORT CURRENT? A turn that may legitimately end must leave the four-field,
+  3. WAS THE WORK DISPATCHED? `planner`, `execute` and `document` are dispatch-only -- "you
+     never do a node's work yourself", "a property of the node, not a judgement call". A real
+     drive took an item all the way round -- built, verified, documented, committed -- with no
+     worker anywhere, twice, on both modes, and the item looked perfect: that is what makes this
+     worth a rung. The cost is invisible and compounding: the router's context holds what a
+     worker would have held, the worker token cap has nothing to cap, a wave has nothing to run
+     in parallel, and `execute`'s refusal to guess is replaced by the router simply deciding.
+     It fires ONCE per item, on the turn the item is promoted, and it does NOT ask for a
+     rebuild -- the correction it wants is the next item, dispatched.
+  4. IS THE REPORT CURRENT? A turn that may legitimately end must leave the four-field,
      goal-relative report behind it (`status_report.py`), because the human's next contact with
      this project is reading it.
 
@@ -156,6 +165,44 @@ REPORT = (
 )
 
 
+def promoted_items(workflow):
+    """-> sorted ids carrying `promoted.json` — the package's own finished marker.
+
+    Not a notion invented here: `check_wave_independence.py` treats it as "dependency finished",
+    `retention.py` keys pruning on it, and `forecast.py` prunes a forecast against it. Written by
+    `document`, so it also means the item reached the tail of the loop rather than dying earlier.
+    """
+    idir = os.path.join(workflow, "items")
+    out = []
+    for name in sorted(os.listdir(idir)) if os.path.isdir(idir) else []:
+        rec = _json_file(os.path.join(idir, name, "promoted.json"))
+        if isinstance(rec, dict) and rec.get("promoted"):
+            out.append(name)
+    return out
+
+
+DISPATCH = (
+    "TURN GATE — %s\n\n"
+    "`planner`, `execute` and `document` are DISPATCHED, not performed here. The brief puts it "
+    "as plainly as it can: *you never do a node's work yourself*, and the mechanism is *a "
+    "property of the node, not a judgement call*. This turn finished an item with no worker "
+    "behind it anywhere, which means the router did the work.\n\n"
+    "What it costs, so this reads as a reason and not a rule: your own context holds everything "
+    "a worker would have held and handed back as a pointer, so the window runs out sooner and "
+    "every reset loses more; the worker token budget has nothing to cap; a wave cannot run two "
+    "items at once because there is nothing to run in parallel; and `execute`'s refusal to guess "
+    "is gone — it stops and returns a blocker on an undecided question, and you simply decided.\n"
+    "\n"
+    "The item that is built is built; do not rebuild it. Before this turn ends:\n"
+    "1. Say plainly, in your reply, which item was built without dispatch and that it was.\n"
+    "2. File it with `python3 .claude/scripts/bus.py` or into `.workflow/backlog.md` if its "
+    "quality is now in doubt — an item nothing reviewed is not the same as an item `verify` "
+    "passed on a worker's changelog.\n"
+    "3. Take the NEXT item through `reeve:planner` and `reeve:execute` as dispatches. That is "
+    "the correction this gate is actually asking for."
+)
+
+
 ANCHOR = (
     "TURN GATE — %s\n\n"
     "`.workflow/handoff.md` exists but is not a resume anchor: it names no `base_sha`, so a "
@@ -171,14 +218,23 @@ ANCHOR = (
 )
 
 
-def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None):
+def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None,
+          prev_promoted=None, workers_seen=None):
     """-> {demand: None|'continue'|'anchor'|'report', why, instruction, fingerprint, digest}.
 
     `last_text` is the session's final assistant message; the report rung looks for the
     renderer's marker in it. `satisfied_digest` is the digest this session last satisfied, which
     is what stops an unchanged loop being asked for the same report twice.
+
+    `prev_promoted` and `workers_seen` are the dispatch rung's two inputs, PASSED IN rather than
+    read here: the first is the promoted set at the previous stop (the caller's latch owns it,
+    and that is what makes "newly promoted" answerable at all), the second is how many workers
+    this SESSION has run (only the caller knows which session this is). Both `None` mean cannot
+    tell, and the rung stays silent -- a gate that fires when it does not know is a gate that
+    gets switched off.
     """
-    out = {"demand": None, "why": "", "instruction": "", "fingerprint": None, "digest": None}
+    out = {"demand": None, "why": "", "instruction": "", "fingerprint": None, "digest": None,
+           "promoted": promoted_items(workflow)}
     ok, why = may_end(workflow)
     changed, fp = moved(workflow, prev_fingerprint)
     out["fingerprint"] = fp
@@ -209,6 +265,24 @@ def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None):
             why = ("the resume anchor names no `base_sha`, so nothing can tell what moved "
                    "while this session held the project")
             out.update(demand="anchor", why=why, instruction=ANCHOR % why)
+            return out
+
+    # RUNG 3 -- an item finished with no worker behind it. Placed AFTER the anchor because
+    # losing the loop's place breaks the next session outright, while this breach has already
+    # happened and the correction it asks for is the NEXT item. Placed before the report because
+    # a report that says an item shipped, without saying nothing reviewed it, is the more
+    # misleading of the two.
+    # `changed is not False` guards the one inherited case: a session that promoted an item and
+    # died before its Stop hook ran never got the item into the latch, so the NEXT session sees
+    # it as fresh with none of its own workers and would be blamed for a predecessor's work. A
+    # session that moved nothing durable this turn cannot have built anything. Cannot-tell still
+    # fires -- the rung's job is the breach, and silence on unknown would cover the common case.
+    if prev_promoted is not None and workers_seen is not None and changed is not False:
+        fresh = [i for i in out["promoted"] if i not in set(prev_promoted)]
+        if fresh and not workers_seen:
+            why = ("%s finished this turn with no worker dispatched anywhere — the router did "
+                   "the work itself" % ", ".join(fresh))
+            out.update(demand="dispatch", why=why, instruction=DISPATCH % why)
             return out
 
     try:

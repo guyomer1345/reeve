@@ -220,3 +220,80 @@ def test_the_anchor_rung_does_not_outrank_a_turn_that_may_not_END(tmp_path):
     with open(os.path.join(wf, "handoff.md"), "w") as fh:
         fh.write("# Handoff\n\nno base here\n")
     assert tc.check(wf)["demand"] == "continue"
+
+
+# ============================================================ rung 3 — was the work dispatched
+# `planner`, `execute` and `document` are dispatch-only: "you never do a node's work yourself",
+# "a property of the node, not a judgement call". Two real drives took an item ALL THE WAY ROUND
+# — built, verified, documented, committed — with no worker anywhere, once on greenfield and
+# once on brownfield, and both items looked perfect. That is what makes it worth a rung: the cost
+# is invisible and compounding. The router's context holds what a worker would have handed back
+# as a pointer, the worker token cap has nothing to cap, a wave has nothing to run in parallel,
+# and `execute`'s refusal to guess is replaced by the router simply deciding.
+
+def _with_items(tmp_path, promoted=(), status="idle"):
+    wf = project(tmp_path, status=status)
+    with open(os.path.join(wf, "handoff.md"), "w") as fh:
+        fh.write("base_sha: abc1234\n")          # past rung 2
+    for ident in promoted:
+        d = os.path.join(wf, "items", ident)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "promoted.json"), "w") as fh:
+            json.dump({"promoted": True}, fh)
+    return wf
+
+
+def test_an_item_finished_with_NO_worker_blocks_the_turn(tmp_path):
+    wf = _with_items(tmp_path, promoted=["I-1"])
+    res = tc.check(wf, prev_promoted=[], workers_seen=0)
+    assert res["demand"] == "dispatch", res
+    assert "I-1" in res["why"]
+    assert "reeve:execute" in res["instruction"], "it must name the correction"
+    assert "do not rebuild" in res["instruction"], "the built item stands; the NEXT one is the fix"
+
+
+def test_a_dispatched_item_falls_through(tmp_path):
+    wf = _with_items(tmp_path, promoted=["I-1"])
+    assert tc.check(wf, prev_promoted=[], workers_seen=3)["demand"] != "dispatch"
+
+
+def test_it_fires_ONCE_per_item_not_every_turn_after(tmp_path):
+    """The breach has already happened; repeating the demand would only wedge the session."""
+    wf = _with_items(tmp_path, promoted=["I-1"])
+    assert tc.check(wf, prev_promoted=["I-1"], workers_seen=0)["demand"] != "dispatch"
+
+
+def test_CANNOT_TELL_either_input_stays_silent(tmp_path):
+    """A gate that fires when it does not know is a gate that gets switched off."""
+    wf = _with_items(tmp_path, promoted=["I-1"])
+    assert tc.check(wf, prev_promoted=None, workers_seen=0)["demand"] != "dispatch"
+    assert tc.check(wf, prev_promoted=[], workers_seen=None)["demand"] != "dispatch"
+
+
+def test_a_session_that_moved_NOTHING_is_not_blamed_for_an_inherited_item(tmp_path):
+    """A session that promoted an item and died before its Stop hook ran never got it into the
+    latch, so the next session sees it as fresh with none of its own workers."""
+    wf = _with_items(tmp_path, promoted=["I-1"])
+    _, fp = tc.moved(wf, None)
+    res = tc.check(wf, prev_fingerprint=fp, prev_promoted=[], workers_seen=0)
+    assert res["demand"] != "dispatch", "nothing moved this turn, so nothing was built this turn"
+
+
+def test_the_promoted_set_is_reported_so_the_caller_can_latch_it(tmp_path):
+    wf = _with_items(tmp_path, promoted=["I-1", "I-2"])
+    assert tc.check(wf, prev_promoted=[], workers_seen=3)["promoted"] == ["I-1", "I-2"]
+
+
+def test_a_turn_that_MAY_NOT_END_still_outranks_the_dispatch_rung(tmp_path):
+    """Ladder order asserted, not assumed: abandoning work in flight is the worse failure."""
+    wf = _with_items(tmp_path, promoted=["I-1"], status="building")
+    assert tc.check(wf, prev_promoted=[], workers_seen=0)["demand"] == "continue"
+
+
+def test_a_BROKEN_ANCHOR_outranks_the_dispatch_rung(tmp_path):
+    """Losing the loop's place breaks the next session outright; this breach has already
+    happened and its correction is the next item."""
+    wf = _with_items(tmp_path, promoted=["I-1"])
+    with open(os.path.join(wf, "handoff.md"), "w") as fh:
+        fh.write("no base here\n")
+    assert tc.check(wf, prev_promoted=[], workers_seen=0)["demand"] == "anchor"

@@ -266,3 +266,48 @@ def test_an_unreadable_transcript_is_still_empty_not_an_exception(tmp_path):
     tg = _load_hook()
     assert tg.last_assistant_text(str(tmp_path / "nope.jsonl")) == ""
     assert tg.last_assistant_text(None) == ""
+
+
+# ============================================================ counting this session's workers
+# The dispatch rung's second input. `subagents/` is created when a subagent first runs, so its
+# ABSENCE is a zero — not ignorance. Treating a missing directory as "cannot tell" made the rung
+# silent on precisely the two real trees where the breach happened: both answered "cannot tell"
+# while the two healthy ones answered 3. The session transcript existing is what proves we are
+# looking in the right place at all.
+
+def _session(tmp_path, agents=0):
+    t = tmp_path / "sess.jsonl"
+    t.write_text("{}\n")
+    if agents:
+        sub = tmp_path / "sess" / "subagents"
+        sub.mkdir(parents=True)
+        for i in range(agents):
+            (sub / ("agent-%d.jsonl" % i)).write_text("{}\n")
+    return str(t)
+
+
+def test_it_counts_the_subagents_beside_the_session_transcript(tmp_path):
+    tg = _load_hook()
+    assert tg.workers_this_session(_session(tmp_path, agents=3)) == 3
+
+
+def test_NO_subagents_directory_is_ZERO_not_unknown(tmp_path):
+    """The measured bug: this returning None made the rung silent on every real breach."""
+    tg = _load_hook()
+    assert tg.workers_this_session(_session(tmp_path, agents=0)) == 0
+
+
+def test_a_transcript_that_is_not_THERE_is_unknown(tmp_path):
+    """Then we are somewhere else entirely and the honest answer is None."""
+    tg = _load_hook()
+    assert tg.workers_this_session(str(tmp_path / "nope.jsonl")) is None
+    assert tg.workers_this_session(None) is None
+
+
+def test_unrelated_files_beside_the_agents_are_not_counted(tmp_path):
+    tg = _load_hook()
+    t = _session(tmp_path, agents=2)
+    sub = tmp_path / "sess" / "subagents"
+    (sub / "agent-0.meta.json").write_text("{}")
+    (sub / "notes.txt").write_text("x")
+    assert tg.workers_this_session(t) == 2
