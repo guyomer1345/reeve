@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13 is OPEN — two asks, filed the moment they were made. The next thing to build is `#### ▶ NEXT — `13a` the standard report`; the greenfield smoke attestation is deliberately LAST, because the receipt is keyed on the package digest and 13a/13b will change it**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13 is OPEN — two asks, filed the moment they were made. The next thing to build is `#### ▶ NEXT — close the two named residuals in SMALL BATCHES, then ONE full run`. Both asks are discharged and validated as far as eight real runs could take them (`D227`–`D229`); what is left is two design slices `07` owns. The full smoke run stays LAST, because the receipt is keyed on the package digest and any edit to `product/` throws it away**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1307,13 +1307,28 @@ Three defects wearing one complaint; all three closed. **`D224` and `D225` own t
   themselves to achieve a goal not for just planning etc."* A gate that fires while he is sitting there planning
   would be the same nuisance in the opposite direction.
 
-#### ▶ NEXT — the smoke drive on BOTH modes, RE-RUN. **The first run went red; `D226` fixed what it found.** `[validation for `D222` + `13a` + `13b`]`
+#### ~~the smoke drive on BOTH modes, RE-RUN~~ — ✅ **RUN 2026-09-15/16, eight times — `D227` · `D228` · `D229`.** `[validation for `D222` + `13a` + `13b`]`
+**Outcome, because the entry below replaces it and the reasoning should not be lost.** It took eight runs.
+**Twelve defects, and five of the first six were in the harness rather than the package** (`D227`) — a gate
+whose own instruments are wrong fails as a confident wrong answer, not loudly. Four shipped defects followed
+once the instrument could be trusted (`D228`), the sharpest being an approval gate that could not read the
+spec it was gating and blocked an entire greenfield backlog with its escape unreachable. And the campaign
+found the architecture's core invariant sitting on prose (`D229`): the orchestrator doing leaf work itself,
+on both modes, invisibly. **Run 8 finished 21 of 22 seams green.** The prerequisites below were followed and
+they held; the staleness refusal fired three times, twice as a FALSE positive, which is its own finding.
+*The original step list is kept below because the re-run procedure is unchanged.*
+
 **Start the next session here, and the FIRST command is not the drive.** The run of 2026-09-15 came back with
 three red seams and four session findings; `D226` owns them and every fix is landed. **Before re-running:**
 1. **`bash scripts/dev-reinstall.sh`** (or `claude plugin marketplace update reeve && claude plugin update
    reeve`), **then restart the session.** The drive now REFUSES while the installed plugin is not this repo's
    `HEAD` — the first run drove a plugin five commits old and would have attested a mixture. If the refusal
-   fires, that is the gate working; do not reach for `--allow-stale`.
+   fires, that is the gate working; do not reach for `--allow-stale`. **CORRECTED by `D227`, and this line is
+   why the correction is recorded rather than the line deleted:** the refusal fired three times in the campaign
+   and **twice it was a FALSE positive** — once on the gate's own leaked `/tmp` registrations, once on a
+   meta-only commit that changed no shipped byte. "Do not reach for `--allow-stale`" was right and the advice
+   was still a trap, because the prescribed remedy could not clear either refusal. Both are fixed; the point
+   that survives is that a refusal whose remedy does not work leaves only the override.
 2. **`python3 scripts/smoke_drive.py --self-test`** — free, and it proves the seams can still go red.
 3. **`python3 scripts/smoke_drive.py --mode both --keep`** — about an hour per mode, real model calls.
 **Read a greenfield timeout carefully:** it now says whether the session was *still writing* (window too
@@ -1323,13 +1338,56 @@ short) or *stopped* (the `ask #12` failure, which is what happened last time —
 one still holds the un-committed `docs/spec.md` and the parked `SPEC-…` ticket that `07`'s first-spec
 question needs.
 Then both modes green on the FINAL package digest, so `build-release.py --out` is unblocked and the maintainer can do what he said he would after this batch: *"ill update every repo i use this
-plugin on."* Last, not first: the receipt is keyed on the shipped file set, so every earlier run is thrown away
+plugin on."* **Where that rollout gate actually stands (`D227`–`D229`):** run 8 reached **21 of 22 seams
+green**, the one red being the missing goal that `07` now owns. Twelve defects were fixed on the way, three of
+them shipped and one of them — `spec_approval.py` unable to read the spec it gates — would have blocked the
+first greenfield backlog in **every** repo he rolled this out to, unrepairable from inside the loop. The
+rollout is not blocked on the attestation alone; it is blocked on the two design slices above. Last, not first: the receipt is keyed on the shipped file set, so every earlier run is thrown away
 by the next edit — and this batch changed `settings.json`, four scripts and a hook.
 **What has never run as an installed whole, and is exactly the between-component class `D219` proved unit tests
 cannot see:** a `Stop` hook that blocks a real turn and is then satisfied by a pasted block; a park refused by
 the steer floor inside `bus.py`; the heartbeat against a real orchestrator that actually went quiet (it has only
 ever met a recording stand-in). The `worker budget observed a real worker` seam covers the greenfield path for
 the first time here too.
+
+
+#### ▶ NEXT — close the two named residuals in SMALL BATCHES, then ONE full run. `[validation for `D222` + `13a` + `13b`; residuals of `D229`]`
+**Start here, and the instruction that shapes this entry is the maintainer's, after watching eight runs go
+by: *test in SMALL BATCHES — not two hours each time — and only when confident, verify everything with a
+full run.*** The campaign that produced `D227`–`D229` spent roughly twelve hours of real model calls to find
+twelve defects, and **the cheapest finds were the ones that never needed a drive**: the currency-gate deadlock
+surfaced from `stale_plugin()` at a prompt, the dispatch rung's near-silent failure from replaying four kept
+trees, and the id-lint's last hole from a negative control. Reach for the hour-long run to CONFIRM, not to
+discover.
+
+**The cheap instruments, in the order they cost nothing:**
+1. `python3 -m pytest product/scripts scripts -q` — the suite (~8 min).
+2. `bash .git/hooks/pre-commit` — the eight meta-gates (seconds).
+3. `python3 scripts/smoke_drive.py --self-test` — the negative controls, free.
+4. **`--assert-only <kept tree>`** — re-run every seam against a tree already on disk, seconds not hours. The
+   kept trees under `/tmp/reeve-smoke-*` include two that carry the dispatch breach and two that do not, which
+   is a positive and negative control for anything touching workers or the turn ladder.
+5. A direct replay in a kept tree — copy the changed script into its `.claude/scripts/` and run it. This is
+   what caught the glosser silently eating a sentence while the lint went green, and the currency gate's
+   false refusal. **Read the OUTPUT, not the exit code**; that distinction was wrong twice in one session.
+
+**Two residuals, both named in `D229` rather than carried quietly, both design slices:**
+- **The skipped node.** `D229`'s rung catches the orchestrator doing a node's work itself; it structurally
+  cannot catch a node that never runs. Greenfield skipped `planner:decompose` twice and minted no goal, and a
+  missing goal makes `converge.py` unmeasurable — which sends the turn ladder's first rung permissive and
+  strips the drive of its stop condition. **The question is the general form** (a path check against
+  `loop.md`, which `dispatch_guard.py` already reads) **versus a rung per skippable node**, and `07` owns it.
+- **The first-spec floor.** Reproduced, mechanism known: `parse_diff` discards `--- /dev/null`, so the floor
+  cannot tell creation from edit and reports `acceptance criterion edited` about a file that never existed.
+  On the critical path of **every** new project, greenfield and brownfield alike. `07` owns the call between
+  CLEAR-with-an-admission and ROUTE-under-an-honest-reason.
+
+**Then, last, the full run** — `python3 scripts/smoke_drive.py --mode both --keep`, after
+`bash scripts/dev-reinstall.sh`. It stays last for the reason `D220` gave and `D227` had to restate: the
+receipt is keyed on the shipped file set, so **every earlier run is thrown away by the next edit to
+`product/`**. Run 8 reached 21 of 22 seams green on digest `3d46d934c942`; the only red was the missing goal
+above. Note that a green `worker budget observed a real worker` is now MEANINGFUL rather than lucky — before
+`D229` it passed or failed on whether the model happened to comply.
 
 #### Then — the standing queue. `[no ask — post-Phase-12]`
 With Phase 12 closed this is what the work order points at, and it is the first entry here that traces to no

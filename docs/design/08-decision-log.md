@@ -8314,3 +8314,220 @@ regions as edited (which parked `SPEC-54bd0d975588` and blocked the very first s
 own trustworthiness has been the finding), **D221** (the correction this repeats one level up), **D225**
 (the monitor, whose premise the stall independently confirms).
 → `11` (§ `▶ NEXT` — the re-run and its prerequisites), `07` (two unverified findings).
+
+## D227 — eight runs to get two modes green, and the first five defects were in the INSTRUMENT **[DECIDED + BUILT 2026-09-15/16, from the runs themselves. 1,596 tests + 29 subtests, 8 meta-gates, 35 self-test steps]**
+`D226` fixed what the first Phase-13 drive found and the roadmap said: reinstall, self-test, re-run. **The
+first command after the reinstall refused**, and the seven runs that followed spent more of their findings on
+this harness than on the package. That ratio is the entry: **a gate whose own instruments are wrong does not
+fail loudly, it fails as a confident wrong answer**, and four of the six below were exactly that.
+
+**THE CURRENCY GATE DEADLOCKED ON ITS OWN EXHAUST.** Every drive leaves a permanent `scope: local` plugin
+registration for its throwaway `/tmp` tree, pinned at whatever was installed that day, and nothing removes it
+when the tree dies; **seven had piled up.** `D226`'s gate compared the WHOLE record against `HEAD`, so from
+the second run onwards no reinstall could satisfy it: the operator does exactly what the refusal instructs, is
+refused again, and the only door left is `--allow-stale` — the mixture the gate exists to refuse. **A control
+whose only reachable outcome is its own override reads as a control and is not one.** Fixed by SCOPING, not
+filtering: the governing set is every non-local entry plus the local entry for the tree actually being driven,
+which exists only on `--resume`. That keeps the true positive the old gate produced by accident — a kept tree
+really is bound to the plugin that produced it. `dev-reinstall.sh` now also sweeps registrations whose
+`projectPath` is gone, because those pin their cache dir into its `live` set and defeat the keep-2 prune it
+was written to perform (`D164`).
+
+**AND THEN IT REFUSED A CORRECT INSTALL A SECOND TIME, BY KEYING ON `HEAD`.** A resume was refused over a
+commit that touched only `scripts/smoke_drive.py`; both installs digested to the same `2fb64f8d2fee`.
+**`D220` had already rejected this exact mistake one layer down** — the receipt is keyed on the shipped file
+set precisely because a commit that cannot change behaviour must not invalidate an attestation about
+behaviour — and the gate GUARDING that receipt reintroduced it. Worse here, because on a `--resume` the
+prescribed remedy cannot work: `dev-reinstall.sh` updates the user-scope install and cannot reach a kept
+tree's own local registration. `package_digest()` now takes a `root`, so **one implementation answers "what is
+this package" for both the tree and the install** — two answers to that is the drift this repo's own law
+forbids, and comparing them is only meaningful if both are measured the same way.
+
+**TWO SEAMS DIAGNOSED DEFECTS THAT DID NOT EXIST.** `worker budget observed a real worker` reported *"a real
+worker ran and the hook never saw one, so the mechanism is a permanent no-op"* on a tree with **zero subagent
+transcripts**. `no-agent-id` is the hook's NORMAL exit on the orchestrator's own tool calls — brownfield's own
+`no-agent-id.json` sits beside its `located.json` — and the seam had stated its precondition in its docstring
+(*"a real item went through a real `reeve:execute`, so workers certainly ran"*) and **never checked it**. It
+condemned a mechanism the other mode proved working on the same package digest an hour later. **A false
+diagnosis in the fail direction is not the safe kind**: it costs the next session a hunt for a bug that is not
+there and discredits the seam that was right. It was propped up by its neighbour: `one item went round`
+PASSED while nothing went round, because `drive()` returns the process status and `claude -p` exits 0 on the
+turn where the model explains, correctly and at length, that it is blocked. **Two loose labels reinforcing
+each other into a confident wrong conclusion.** Both now check what they say — the seam counts the CLI's own
+subagent transcripts, the step requires `promoted.json`, the package's own finished marker.
+
+**A THIRD MISREAD CAME FROM THE HOOK BEHAVING AS DOCUMENTED.** With the gate live the latch reached
+`demands: 4`; past `MAX_DEMANDS` the hook deliberately gives up, because one that blocks forever wedges the
+session it protects. The seam called that *"installed and inert"* — **a red seam accusing a hook of doing
+nothing, on the evidence of it doing exactly what it says it does.** The probe now sets the latch aside and
+restores it byte for byte, because the tree is evidence.
+
+**THE SHIPPED STOP HOOK WAS DORMANT IN EVERY SMOKE RUN.** `turn_gate.py` is scoped to an unattended drive and
+detects one from `REEVE_DRIVE`, which `loop.sh` exports and this harness did not — so the seam that checks the
+gate had to invoke it synthetically to see anything, and **the harness was grading a configuration no
+unattended user runs.** A smoke run IS an unattended drive; it now says so. That single change is what made
+`D228`'s two turn-gate defects reachable at all. **Bootstrap is excluded, and that is not a convenience:**
+the gate's first rung asks whether a turn may end AT ALL and the reasons are closed, so after `/start` the
+loop is `building` with a full backlog and the bootstrap turn can never end — measured, a greenfield `/start`
+burned a full 3600s having already committed the stack decision and a feature. `/start` is a human-initiated
+setup step that hands back; the drive is what happens after.
+
+**The windows are per mode and both moved, each on measurement rather than preference.** Greenfield 1800 →
+3600: killed at exactly 1800s *inside* `document`, with verify already passed on 18 tests, taking two innocent
+seams down with it (`document` owns the code-map rebuild; the resume anchor is written at turn end). Brownfield
+1800 → 2700, and only after the gate went live: it finished its item — goal MET, committed, every seam green —
+and was killed winding the session down. It stays the tighter of the two, because **the window is also how fast
+a genuinely STOPPED session is reported**, which is why this is two numbers and not one large one.
+
+**Rejected:** one window for both modes (buys nothing, and doubles the time a stalled brownfield takes to say
+so) · dropping local registrations wholesale rather than scoping (would have gone quiet on a `--resume` into a
+tree genuinely bound to an old plugin) · `--allow-stale` as the working answer to either refusal (it is the
+mixture, and reaching for it is the failure the gate exists to prevent).
+
+**Evidence:** runs 2–8 of 2026-09-15/16, kept trees under `/tmp/reeve-smoke-*`; four installs on the disk
+digesting to three distinct packages, two of them identical across two commits.
+**Builds on:** **D226** (whose gate this repairs twice), **D220** (the key-on-the-package rule this restores),
+**D164** (the cache prune the registry leak defeated), **D219** (the between-component class, now including
+the harness itself).
+→ `11` (§ the ordered build sequence), **D228** (what the instrument then found), **D229** (the rung).
+
+## D228 — what the drive found in the PACKAGE once its instruments could be trusted: one gate that blocked everything, and three that accused the operator **[DECIDED + BUILT 2026-09-15/16. 1,596 tests + 29 subtests, 8 meta-gates]**
+`D227` is the instrument; this is the reading. Four shipped defects, none of which the 1,514-test suite could
+see, and **three of them fail by telling the human something untrue** — which is the shape this package keeps
+producing and keeps having to be taught out of.
+
+**THE APPROVAL GATE COULD NOT FIND THE SPEC IT WAS GATING, AND BLOCKED AN ENTIRE BACKLOG.**
+`check_autonomy_floor.py` resolves `project_root`/`docs_root` out of `config.json` and reads
+`project/docs/spec.md` correctly. `spec_approval.py` hardcoded `docs/spec.md` and **never opened the config**.
+On the layout `/start` actually scaffolds, the floor fires, the gate cannot read the staged spec, and
+`check()` dies on that **before it consults any receipt** — so the receipt the file exists to honour was
+unreachable. Six backlog items blocked, no call-site workaround (`--project-root .` cannot read the spec;
+`./project` reads it but writes the receipt where the check never looks; and both are moot because `check()`
+dies first), and **it could not be repaired from inside the loop** — the harness classes the file as
+sensitive. That is `spec_approval.py`'s own header failure — *"a gate with no escape gets switched off"* —
+arrived at from the other direction. The floor's resolver is now **imported, not copied**: two resolvers that
+must agree forever is the silent disagreement `spec_digest`'s docstring refuses to risk for the digest, and it
+is no better for the path the digest is taken over. `git show :<rel>` uses a **git-toplevel-relative** path —
+deriving it from `project_root` is what pinned the old code to the one layout where the two spellings
+coincide, which is also the only layout the suite tested.
+
+**THE RESUME ANCHOR'S ONE LOAD-BEARING FIELD WAS ASKED FOR EVERYWHERE AND CHECKED NOWHERE.** `base_sha` is
+what a resumed session reads `git log <base_sha>..HEAD` against. `/dispatch` asks for it and says *"This one
+is CHECKED"*; `handoff_gate.py` asks for it — and it is verified **only under context pressure**. The ordinary
+path, a session rewriting the anchor at the end of an item with plenty of context left, could leave a handoff
+that is prose with no resume in it, and greenfield did exactly that twice. Now rung 2 of the turn ladder,
+firing only when the file EXISTS and the field does not, so a project that has written no anchor stays
+`handoff_gate.py`'s business under the band and the two never demand different things on one turn.
+`anchor_names_base` is imported from `context_band.py` — one owner for "does this name a base commit".
+**It fired twice on a real turn and the session repaired the file**, which is the first end-to-end proof in
+this package that a turn-ladder rung changes a live session's behaviour.
+
+**THE REPORT RUNG DEMANDED A REPORT THE SESSION HAD JUST GIVEN.** Transcript line 226: the session pastes the
+report. Line 227, the very next: the gate blocking with *"no goal report was given this turn"*. A `Stop` hook
+**races the flush of the message that triggered it**, and with a window of one the block itself pushes the
+paste out of last position — the session answers the block, that answer becomes the last message, and the
+report is never seen again. The run went demand, paste, demand, paste, **GAVE UP**: a session that complied
+twice, recorded durably as *"a stop for no reason"*. `D224` built this rung to make the report a fact; as
+shipped **its only terminal state was a false accusation**, and a gate that always ends by accusing the
+operator's loop is a gate the operator switches off. A bounded lookback window fixes it on the argument that
+matters: **unseen once is recoverable, unseen forever is not** — a paste the hook could not see at stop N is
+certainly on disk by stop N+1, so the race can delay credit by a turn and can no longer deny it. It is not a
+tolerance for staleness; the digest still decides currency.
+
+**THE ID LINT FAILED REPORTS THAT WERE CORRECT, FOUR WAYS.** (1) `bare_ids` flagged the id **inside its own
+gloss** — `ITEM-001 (ITEM-001 — topwords…)` — and printed a suggested fix character-for-character identical to
+the line it rejected. (2) A gloss whose LABEL is not id-shaped shielded nothing, so `I-001` inside a parked
+ticket's summary `SPEC-<hex> (…)` read as bare. (3) Parentheses were not matched in balance, so a nested
+`(item I-001)` ended the span early. (4) Truncation — bullets are cut to a width — routinely removes a gloss's
+closing paren. Repairing those introduced a fifth: the label of a gloss lives **outside** its own span, so
+"inside a gloss" did not cover it and every correctly-named id read as bare. And the label rule needed a
+second pass, because "ends in a word character" made *"the work stalled (blocked by I-009)"* a gloss —
+**widening what counts as named must not blind the lint**; a label now has to look like an identifier.
+Alongside: `names()` gained `backlog.md` as an owner (an id only reaches `items/` once something has PLANNED
+it, so every filed-but-unplanned item — which is exactly what the LEFT field is made of — resolved to
+nothing), the gloss stopped repeating the id it is glossing, and authored prose the report reprints has its
+known ids named, because **a generator that emits prose it will then reject has turned a fact back into an
+intention**. An unresolvable id is still left exactly as written: inventing a name hides the missing index row
+that is the real defect.
+
+**Rejected:** re-deriving the spec path in `spec_approval.py` rather than importing the floor's (two
+resolvers that must agree forever) · loosening the id lint instead of fixing the gloss redundancy that
+triggered it · treating the report-rung race as acceptable noise (its terminal state is a durable false
+accusation, which is how a gate gets switched off).
+
+**Evidence:** greenfield tree of 2026-09-15 (blocked backlog, reproduced and repaired in place: blocked →
+approved → committable, edit-after-approval still blocked) · transcript lines 226/227 of the run-5 greenfield
+session · four kept trees, all linting clean after the fix.
+**Builds on:** **D224** (the turn ladder and the generated report, both of which this repairs), **D225**
+(the park floor), **D222** (the config-aware resolution this extends to the gate's other half), **D214**
+(the pattern: the rule shipped, the actuator covered one of two paths).
+→ `11` (§ the ordered build sequence), `07` (the skipped-node question), **D229**.
+
+## D229 — the orchestrator was doing the leaf work itself, and the rule against it was prose **[DECIDED + BUILT 2026-09-16, the maintainer choosing between two actuators. 1,596 tests + 29 subtests, 8 meta-gates]**
+**THE FINDING.** A drive took an item ALL THE WAY ROUND — planned, executed, verified, documented, committed
+— with **zero subagent transcripts anywhere**. Once on greenfield (run 6), once on brownfield (run 7), the
+mode that had been green on that seam every previous run. It is not mode variance; it lands wherever it
+lands. And **the item looked perfect**: commits in, changelog written, verify passed. Nothing in the output
+would ever have told the operator.
+
+`orchestrator-CLAUDE.md` forbids it in as many words — *"You are a router, not a doer"*, *"You never do a
+node's work yourself"*, and `planner`/`execute`/`document` are named as dispatch-only with *"the mechanism is
+a property of the node, not a judgement call"*. **Nothing enforced it.** `dispatch_guard.py` governs HOW a
+dispatch is made (never to a general worker) and refuses a lone wait — **both fire ON a dispatch**, so an
+orchestrator that never dispatches sails past both. That is `D214`'s pattern on the single most load-bearing
+rule in the architecture: everything downstream assumes dispatch happened. The router's context stays thin
+only because the worker holds the deep context; the worker token cap of ask #3 has nothing to cap; a wave has
+nothing to run in parallel; and `execute`'s refusal to guess — it stops and returns a blocker on an undecided
+question — is replaced by the router simply deciding. **Run 6's missing goal was the same breach**: no
+`planner` dispatch, no `decompose`, no `goal.json`.
+
+**THE CALL — TURN-END, NOT WRITE-TIME.** Two actuators were put to the maintainer with their costs. A
+`PreToolUse` refusal on the orchestrator's Write/Edit into project source while the loop sits in a
+dispatch-only node **prevents the bad state entirely**, and was rejected: it is the most intrusive thing in
+the package, its scoping is genuinely open (which nodes · which paths on a nested `project_root` · `discuss`
+legitimately writes `docs/spec.md`), and **the failure mode of a hard block on a rule whose boundaries nobody
+has tested is that the operator switches it off** — the one outcome worse than the breach, and the failure
+`spec_approval.py`'s own header names. It also leans on `state.json.node` being honest, which a shortcutting
+router is the last thing to guarantee. The turn-end rung **never refuses an edit, only a stop**, and reuses
+machinery proven live this session (`D228`'s anchor rung fired twice and was obeyed).
+
+**THE COST OF THE CHOICE IS STATED, NOT HIDDEN:** the inline item is already built when the rung fires, so
+this cannot prevent the first one. It does not ask for a rebuild — **the correction it asks for is the NEXT
+item, dispatched** — and the instruction says what the breach costs so it reads as a reason rather than a
+rule.
+
+**FOUR SILENCES, because a gate that cries wolf is a gate that gets disabled.** Once per item — the promoted
+set rides the latch, the way `fingerprint` already does. Silent when either input is unknown. Silent when this
+session moved nothing durable, which is the inherited case: a session that promoted an item and died before
+its `Stop` hook ran never got it into the latch, and the next session would otherwise be blamed for a
+predecessor's work. And it sits **below `continue` and `anchor`** — abandoning work in flight and losing the
+loop's place are both worse — with that order pinned by tests rather than assumed.
+
+**IT NEARLY SHIPPED SILENT, and the check that caught it is the method.** Run against the four real kept trees
+before committing, **both breach trees answered "cannot tell" rather than "zero workers"** — the rung would
+have said nothing on exactly the runs it exists for. `subagents/` is created when a subagent first runs, so
+its **ABSENCE is a zero, not ignorance**; the session transcript existing is what proves the right directory
+is being read. Re-measured after the fix: both breach sessions report 0 and fire, both healthy report 3 and
+fall through. **Run 8 then came back with the breach absent from both modes** — greenfield a real worker at
+39.8% (155 observations), brownfield 23.8% (80).
+
+**THE RESIDUAL, NAMED RATHER THAN QUIETLY CARRIED.** Run 8's greenfield minted no goal — second occurrence.
+The routing graph puts `planner:decompose` on the inception path and that node derives the goal from the
+roadmap it emits; the run went from spec straight to a backlog without it. **A sibling, not a repeat**: not
+the node's work done inline, but the node skipped entirely, which this rung structurally cannot see because
+workers WERE dispatched — just never for `decompose`. And the absence is load-bearing: with no `goal.json`,
+`converge.py` has nothing to measure, so the turn gate's first rung answers *"convergence could not be
+measured — permissive by design"* and lets turns end. **A missing goal silently relaxes every gate built on
+it.** Open in `07`; deliberately not built in the same breath as this one.
+
+**Rejected:** the `PreToolUse` hard block (above — kept as the escalation if the rung proves insufficient) ·
+record-only with no block (the sensor-without-actuator pattern this repo wrote a ledger to name) ·
+both at once (largest surface area, most ways to get in the operator's way, on a rule whose boundaries are
+still untested).
+
+**Evidence:** run 6 greenfield (`ITEM-002` promoted, 0 subagents) · run 7 brownfield (`I-001` promoted, 0
+subagents) · four kept trees used as the rung's own negative and positive controls · run 8, both modes clean.
+**Builds on:** **D214** (name the actuator or say none is possible), **D224**/**D225** (the ladder this
+extends), **D228** (the anchor rung, whose live behaviour is the evidence this shape works), **D216**
+(`dispatch_guard`'s second gate, whose blind spot this is).
+→ `11` (§ the ordered build sequence), `07` (the skipped-node question this leaves open).

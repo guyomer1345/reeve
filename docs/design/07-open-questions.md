@@ -957,22 +957,55 @@ sub-questions deferred to the build, in the order the slices need them.
   means a second receipt — which is real design, not a wiring line. The receipt shape from the non-item commit
   work is the strongest candidate (a routed-and-approved spec change carries its checkpoint verdict as evidence),
   and that is a slice, not a follow-up. Until then this is a consultation and must be described as one.
-- **Does an item that introduces a NEW DIRECTORY always run alone? `[real, UNVERIFIED — reported by the
-  brownfield smoke session, 2026-09-15, D226]`** `check_wave_independence.py`'s `resolve_scope` `new` branch
+- **What catches a graph node the orchestrator simply DOES NOT RUN? `[real, MEASURED twice — opened by building
+  `D229`, which covers the neighbouring case and structurally cannot cover this one]`**
+  `D229` closed *the orchestrator did the node's work itself*: an item finished with no worker behind it now
+  blocks the turn. **The sibling is a node that never happens at all**, and the rung cannot see it — run 8's
+  greenfield dispatched workers perfectly well, just never for `planner:decompose`, so no goal was minted. The
+  routing graph puts `decompose` on the inception path and that node is what derives the goal from the roadmap
+  it emits. Second occurrence (runs 6 and 8), so it is not a one-off.
+  **Why it is worse than one missing artifact:** with no `goal.json`, `converge.py` has nothing to measure, and
+  every gate built on convergence goes permissive by design — the turn ladder's first rung answers
+  *"convergence could not be measured"* and lets turns end, and the drive loses its stop condition (ask #8).
+  **A missing goal silently relaxes the gates that depend on it**, which is the same shape as a control whose
+  failure mode is quiet.
+  **The general form is the real question, and it is why this is not just "mint a goal":** the routing graph is
+  the single owner of what the nodes are, and nothing compares the path a session actually walked against it.
+  A per-node actuator (one rung per skippable node) does not scale and would be N chances to get a fail
+  direction wrong. A path check against the graph is the principled version and is a design slice. Deciding
+  between them is the open question; `dispatch_guard.py` already reads `loop.md` as that owner, so the
+  machinery to compare against it exists.
+- **Does an item that introduces a NEW DIRECTORY always run alone? `[real, REPRODUCED 2026-09-15 — D227's
+  campaign; still UNDECIDED]`** `check_wave_independence.py`'s `resolve_scope` `new` branch
   requires `os.path.isdir(os.path.dirname(cand))`, so a plan declaring `tests/test_load.py` before `tests/`
   exists is unresolvable scope and the item is held serial. Conservative and correct as a rule; the question
   is whether the *consequence* is acceptable — **any item creating a directory can never join a wave**, which
   is most first items of most projects, and it is invisible because holding serial is the safe direction.
-  Not reproduced here: the report is a session's, and the fix (treat a to-be-created path as owned by the
-  item declaring it, if no other candidate declares a prefix of it) is a real change to the independence
-  rule, not a wiring line.
-- **Does the autonomy floor have a FIRST-SPEC case? `[real, UNVERIFIED — reported by the brownfield smoke
-  session, 2026-09-15, D226]`** It read three **newly created** `acceptance_criteria` regions as *edited*,
+  **Reproduced directly**: `resolve_scope` returns `unresolved` for `tests/test_load.py` and `src/sub/deep.py`
+  while `src/new_mod.py` resolves as prospective, and line 358 states outright that any unresolved entry holds
+  the item serial. The report is now a measurement. What is still open is the FIX — treat a to-be-created path
+  as owned by the item declaring it, if no other candidate declares a prefix of it — which is a real change to
+  the independence rule, not a wiring line. Note the guard it would loosen is already weak: the `new` branch
+  accepts a file that does not exist, so "its parent must exist" is a typo heuristic, not a safety property.
+- **Does the autonomy floor have a FIRST-SPEC case? `[real, REPRODUCED 2026-09-15 — D227's campaign, and the
+  MECHANISM is now known; still UNDECIDED]`** It read three **newly created** `acceptance_criteria` regions as *edited*,
   parked `SPEC-54bd0d975588`, and blocked the repo's very first spec commit. If it holds, every brownfield
   project stops at its first spec for a human — which may be correct by design (that is exactly `D221`'s
   correction about inception needing a person) or may be the floor mistaking creation for change. **The two
-  readings want opposite fixes**, and deciding between them needs the diff the floor actually saw, which the
-  kept tree still has.
+  readings want opposite fixes** — but the mechanism is no longer in doubt, and it narrows them. Replaying the
+  kept tree's spec reproduces all three findings verbatim, and the cause is that `parse_diff` reads `--- `
+  lines and `continue`s past them: **`--- /dev/null`, the only evidence that a file is NEW, is thrown away.**
+  The floor cannot distinguish creation from edit at all. That bears on the reading, because rule 3's own
+  rationale is about ALTERING an existing demand — *"there is no version of 'reworded the criterion' that
+  leaves the demand untouched"* — and a criterion that did not exist has no demand to alter; the rule as
+  REASONED does not cover creation, and fires there as a parser artifact. Against "correct by design": the
+  first spec always arrives through a capability that ALREADY has a human gate (`discuss`'s requirements
+  conversation, `ingest`'s `reconcile` checkpoint), so the floor stops the human for a decision they just
+  made, under a message — `acceptance criterion edited` — that is false as stated. It is also not
+  brownfield-specific: the greenfield drive hit it independently, on the critical path of every new project.
+  The open call is whether creation reads CLEAR (with what the floor cannot prove named in the file) or ROUTES
+  under an honest first-spec reason. What is settled is that three findings saying `edited` about a file that
+  never existed is wrong either way.
 - **~~Does `worker_budget.py` ever actually FIRE?~~ `[ANSWERED 2026-09-15 — D222, and the answer is worse than
   the question assumed]`** It ran, and it was **reading the wrong file**. The locator accepted the payload's
   `transcript_path` on the sole evidence that it was a file — which makes it the *session* transcript — so a
