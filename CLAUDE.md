@@ -29,8 +29,11 @@ spaces — orchestrator · agents · website · checkpoints · shared-state · k
 - **`docs/design/11-roadmap.md`** — the complete by-space map of what's left + the phased build sequence
   (canonical status). Its **`### The ordered build sequence`** is the live work order — read that first; it is
   the single owner of *what to build next, and why in that order*. It is marked **▶ START HERE**, and the
-  **first subsection under it is the next thing to build** — everything below that is closed work kept for its
-  reasoning. **Read the `ACCEPTANCE LEDGER` sections immediately above it first** (one per request — Phase 12's, then
+  next thing to build is the subsection marked **`▶ NEXT`** — its parent heading names that subsection's title
+  too, so the two must agree. **It is NOT the first subsection**, and saying so here was wrong for nine closed
+  entries: the sequence runs in BUILD order, so closed work sits above the live entry, not below it. A session
+  that trusted the old wording landed on a slice closed days earlier. Everything that is not `▶ NEXT` or
+  `Then —` is closed work kept for its reasoning. **Read the `ACCEPTANCE LEDGER` sections immediately above it first** (one per request — Phase 12's, then
   Phase 13's; ask numbers are GLOBAL across them, because the asks are the maintainer's, not a phase's): they own
   what the maintainer actually ASKED FOR, and every queue entry cites an ask number. It exists because five of ten
   asks were delivered as closed while unmet — a request with no durable owner goes missing silently (D214).
