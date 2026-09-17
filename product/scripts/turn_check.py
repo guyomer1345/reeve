@@ -23,6 +23,14 @@ once obeys neither.
      block says WHICH of the two shapes it is, because they send the reader to different places:
      a turn that moved no anchor said it would do something and did not; a turn that moved
      anchors and stopped anyway finished a piece and quit instead of picking up the next.
+     WITH NO GOAL AT ALL, `met` and `stalled` are not false -- they are UNREACHABLE, so the
+     rung says that instead of reporting "neither met nor stalled", which is a claim about a
+     goal that does not exist. A goal is genuinely optional (`drive.py` drives item-at-a-time
+     without one), so its absence is only a DEMAND once the loop has PROMOTED work: inception
+     is what mints it (`planner:decompose` greenfield, the `reconcile` checkpoint brownfield),
+     and a loop that promoted an item without one skipped that node. Measured twice, and the
+     sibling of the dispatch rung below -- that one catches the orchestrator doing a node's
+     work itself, and structurally cannot catch a node that never ran at all.
   2. IS THE ANCHOR AN ANCHOR? `handoff.md` carries one load-bearing field -- `base_sha`, the
      commit a resumed session reads `git log <base_sha>..HEAD` against. It was ASKED FOR in
      `/dispatch` and in `handoff_gate.py`'s instruction, and CHECKED nowhere except under
@@ -114,6 +122,19 @@ def may_end(workflow):
         return True, "the goal is met"
     if m.get("stalled"):
         return True, "the goal is stalled — %s promotions with no new acceptance" % m.get("streak")
+    if m.get("goal") is None:
+        # NOT permissive, and not the same sentence with a word changed: with no goal there is
+        # no `met` and no `stalled` to reach, so saying "neither met nor stalled" asserts
+        # something about a goal that does not exist. Which of the two stops this drive has
+        # left -- an empty backlog, or the no-progress guard -- is `drive.py`'s, and neither
+        # of them is DONE. The two ways to have no goal are kept apart here for the same reason
+        # the rung below keeps them apart: one is a node that never ran, the other is a file to
+        # repair, and they send the session to different places.
+        return False, ("the loop is building, nothing is parked, the operator has not paused, "
+                       "and %s — so `met` and `stalled` are both unreachable and this drive "
+                       "has no stop-when-done condition at all"
+                       % ("NO GOAL IS SET" if _goal_missing(workflow) else
+                          "the goal file is present but could not be read as a goal"))
     return False, ("the loop is building, nothing is parked, the goal is neither met nor stalled "
                    "and the operator has not paused — there is no reason for this turn to end")
 
@@ -165,6 +186,20 @@ REPORT = (
 )
 
 
+def _goal_missing(workflow):
+    """True only when the goal file is CONFIRMED ABSENT — which is not the same question as
+    `converge.read_goal() is None`, and the difference is the whole rung: that returns None for
+    a goal that exists and will not parse too. This demand says *you skipped the node that
+    mints it*, and sending a session to re-mint a goal already sitting on disk is a worse turn
+    than the one it replaced."""
+    try:
+        import converge
+        name = converge.GOAL_FILE
+    except Exception:
+        return False                    # cannot even name the file -> say nothing
+    return not os.path.exists(os.path.join(workflow, name))
+
+
 def promoted_items(workflow):
     """-> sorted ids carrying `promoted.json` — the package's own finished marker.
 
@@ -203,6 +238,27 @@ DISPATCH = (
 )
 
 
+GOAL = (
+    "TURN GATE — %s\n\n"
+    "This loop has PROMOTED work and has no `.workflow/goal.json`, which means the node that "
+    "mints one never ran: `planner:decompose` on the greenfield path, the `reconcile` "
+    "checkpoint on the brownfield one. Nothing failed loudly — the gates that read convergence "
+    "simply have nothing to read, so the drive cannot stop on DONE, no plan criterion carries "
+    "a `goal_ref`, and `status_report.py` has no goal to be relative to.\n\n"
+    "One of these, and not a third:\n"
+    "1. **Mint it.** Greenfield: dispatch `reeve:planner` in decompose mode over the spec and "
+    "let it write `goal.json` from the roadmap it emits. Brownfield: the reconcile checkpoint "
+    "writes it from the acceptance the human confirmed — if that checkpoint has already "
+    "passed, write the goal from the spec's acceptance and say in your reply that you did.\n"
+    "2. **Say it is deliberate**, if this project really is meant to run item-at-a-time with "
+    "no goal: park a `steer` checkpoint (`python3 .claude/scripts/bus.py park`) asking for "
+    "exactly that, and the human's answer settles it. A drive with no goal has no DONE, and "
+    "that is a decision for a person, not a state to arrive in by omission.\n"
+    "Do not simply continue: the items being built are not bound to anything that can be "
+    "measured, and the loop cannot tell you when it is finished."
+)
+
+
 ANCHOR = (
     "TURN GATE — %s\n\n"
     "`.workflow/handoff.md` exists but is not a resume anchor: it names no `base_sha`, so a "
@@ -238,6 +294,13 @@ def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None,
     ok, why = may_end(workflow)
     changed, fp = moved(workflow, prev_fingerprint)
     out["fingerprint"] = fp
+    if not ok and out["promoted"] and _goal_missing(workflow):
+        # Rung 1, with the one reason that is actionable rather than generic. Gated on
+        # PROMOTED work so that a session still inside inception -- where the goal has not
+        # been minted yet because the node that mints it has not run yet -- is not told it
+        # skipped anything. Once an item has been promoted, inception is behind this loop.
+        out.update(demand="goal", why=why, instruction=GOAL % why)
+        return out
     if not ok:
         shape = {
             True: " This turn DID move the loop and then stopped anyway — finish the next node "

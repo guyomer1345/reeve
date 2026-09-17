@@ -139,8 +139,12 @@ def decide(workflow_dir, prev_fp, streak, max_noprogress=MAX_NOPROGRESS):
                 "fingerprint": prev_fp, "streak": streak}
 
     # A goal is optional; with none, the driver still drives (item-at-a-time) and only the
-    # no-progress guard can stop it.
+    # no-progress guard can stop it. That is a real mode, but it is indistinguishable from the
+    # measured failure -- inception skipping the node that mints the goal -- so every verdict
+    # SAYS which of the two the driver is in rather than leaving the quieter one to be assumed.
     goal = os.path.exists(os.path.join(workflow_dir, "goal.json"))
+    goalless = "" if goal else (" [no goal.json — this drive has no stop-when-done; it stops "
+                                "only on an empty backlog or the no-progress guard]")
     if goal:
         rc, ok = _converge(workflow_dir, "met")
         if not ok:
@@ -160,16 +164,18 @@ def decide(workflow_dir, prev_fp, streak, max_noprogress=MAX_NOPROGRESS):
     # Progress is measured against the PREVIOUS fingerprint, so the first tick (no previous)
     # never scores no-progress -- there has been no session to have made any.
     if prev_fp is None:
-        return {"cont": True, "reason": "first session", "fingerprint": fp, "streak": 0}
+        return {"cont": True, "reason": "first session" + goalless, "fingerprint": fp,
+                "streak": 0, "goalless": not goal}
     if fp == prev_fp:
         streak += 1
         if streak >= max_noprogress:
-            return {"cont": False, "streak": streak, "fingerprint": fp,
+            return {"cont": False, "streak": streak, "fingerprint": fp, "goalless": not goal,
                     "reason": "NO PROGRESS in %d consecutive sessions — stopping rather than "
-                              "burning windows; a human must look" % streak}
-        return {"cont": True, "streak": streak, "fingerprint": fp,
-                "reason": "no progress (%d/%d)" % (streak, max_noprogress)}
-    return {"cont": True, "streak": 0, "fingerprint": fp, "reason": "progress"}
+                              "burning windows; a human must look" % streak + goalless}
+        return {"cont": True, "streak": streak, "fingerprint": fp, "goalless": not goal,
+                "reason": "no progress (%d/%d)" % (streak, max_noprogress) + goalless}
+    return {"cont": True, "streak": 0, "fingerprint": fp, "goalless": not goal,
+            "reason": "progress" + goalless}
 
 
 def park_steer(workflow_dir, verdict):

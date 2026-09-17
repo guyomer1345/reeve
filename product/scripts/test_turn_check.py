@@ -297,3 +297,66 @@ def test_a_BROKEN_ANCHOR_outranks_the_dispatch_rung(tmp_path):
     with open(os.path.join(wf, "handoff.md"), "w") as fh:
         fh.write("no base here\n")
     assert tc.check(wf, prev_promoted=[], workers_seen=0)["demand"] == "anchor"
+
+
+# ============================================================ rung 1 — the goal that was never minted
+# MEASURED, twice (runs 6 and 8 of the D227 campaign): greenfield dispatched workers correctly
+# and simply never ran `planner:decompose`, so no goal was minted. The item-level rung above
+# cannot see this — every item had a worker behind it; the node that never happened has no
+# item. What made it expensive is that nothing said so: `converge.py` has nothing to measure,
+# every gate built on convergence has nothing to read, and the drive loses its stop-when-done.
+
+def _goalless(tmp_path, promoted=(), status="building"):
+    wf = _with_items(tmp_path, promoted=promoted, status=status)
+    os.remove(os.path.join(wf, "goal.json"))
+    return wf
+
+
+def test_a_building_loop_with_no_goal_is_not_told_it_is_NEITHER_MET_NOR_STALLED(tmp_path):
+    """The sentence that was there before asserted something about a goal that does not exist —
+    and `met`/`stalled` are not merely false here, they are unreachable."""
+    wf = _goalless(tmp_path)
+    ok, why = tc.may_end(wf)
+    assert not ok
+    assert "NO GOAL IS SET" in why and "stop-when-done" in why
+    assert "neither met nor stalled" not in why
+
+
+def test_promoted_work_with_no_goal_demands_the_node_that_mints_one(tmp_path):
+    """The rung: inception is behind a loop that has promoted an item, so a missing goal is a
+    node that did not run — and the demand names both paths that mint one."""
+    wf = _goalless(tmp_path, promoted=["I-1"])
+    res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
+    assert res["demand"] == "goal", res
+    assert "decompose" in res["instruction"] and "reconcile" in res["instruction"]
+    assert "steer" in res["instruction"], \
+        "a project that really means to run goal-less needs a way to say so"
+
+
+def test_a_loop_still_INSIDE_inception_is_not_accused_of_skipping_it(tmp_path):
+    """Nothing promoted yet: the goal is missing because the node that mints it has not run
+    YET, which is every project's first few turns and is not a breach."""
+    wf = _goalless(tmp_path)
+    res = tc.check(wf, prev_promoted=[], workers_seen=1)
+    assert res["demand"] == "continue", res
+
+
+def test_the_goal_rung_does_not_fire_when_the_turn_MAY_end(tmp_path):
+    """It is a better reason for rung 1's verdict, not a fifth rung: a parked ticket is still a
+    legitimate reason to stop, goal or no goal."""
+    wf = _goalless(tmp_path, promoted=["I-1"])
+    with open(os.path.join(wf, "parked", "TCK-9.json"), "w") as fh:
+        json.dump({"ticket_id": "TCK-9", "checkpoint": {"kind": "steer"}}, fh)
+    res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
+    assert res["demand"] != "goal", res
+
+
+def test_an_UNREADABLE_goal_is_not_a_skipped_node(tmp_path):
+    """`_goal_missing` answers only on confirmed absence. A goal that exists and will not parse
+    is a different fault, and telling that session it skipped decompose sends it to rewrite a
+    file that is already there."""
+    wf = _with_items(tmp_path, promoted=["I-1"], status="building")
+    with open(os.path.join(wf, "goal.json"), "w") as fh:
+        fh.write("{not json")
+    res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
+    assert res["demand"] != "goal", res

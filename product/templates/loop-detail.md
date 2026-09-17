@@ -280,7 +280,18 @@ The four ways out are in the block itself — continue the loop · resolve it (`
 decision, `refine` for a false plan assumption) · **park** it if it genuinely belongs to a person · or stop
 properly, which means `state.json` says `idle` or `converge.py` says met.
 
-**Rung 2 — is the report current?** A turn that may legitimately end leaves the four-field, goal-relative block
+**Rung 2 — is the anchor an anchor?** `handoff.md` exists but names no `base_sha`, so a session picking this
+project up cannot run `git log <base_sha>..HEAD`. Fix the field; do not rewrite the file.
+
+**Rung 3 — was the work dispatched, and is there a goal to dispatch it at?** Two shapes of the same silence.
+An item finished with **no worker behind it anywhere** means the router did the node's work itself — it fires
+once, on the turn the item is promoted, and asks for the *next* item dispatched, never a rebuild. And a loop
+that has **promoted work with no `goal.json`** never ran the node that mints one (`planner:decompose`
+greenfield · the `reconcile` checkpoint brownfield): nothing fails loudly, the gates that read convergence
+simply have nothing to read, and the drive has no DONE to stop on. Mint it, or park a `steer` saying this
+project means to run goal-less — that is a person's call, not a state to arrive in by omission.
+
+**Rung 4 — is the report current?** A turn that may legitimately end leaves the four-field, goal-relative block
 behind it. Paste it **whole**, including the `[reeve-report state:…]` line: the gate re-renders and compares
 digests, so a retyped or summarised block is simply asked for again. The digest covers what the report *says*,
 never when it was said, and an unchanged loop is never asked for the same block twice.

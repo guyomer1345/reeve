@@ -45,8 +45,9 @@ acceptance -- and nothing that moves on its own. A digest that changed every sec
 every report stale on arrival and the gate that reads it a nuisance to be disabled.
 
 FAIL DIRECTION: report what is there, name what is not. A missing `goal.json` is a real and
-common state (the loop runs item-at-a-time without one) and renders as such. Nothing here raises,
-nothing here writes, and -- like `project_state.py` -- **nothing here is ever stored**: a
+common state (the loop runs item-at-a-time without one) and renders as such -- WITH its
+consequence, because the state arrived at by omission and the state chosen on purpose look
+identical here and only one of them is fine. Nothing here raises, nothing here writes, and -- like `project_state.py` -- **nothing here is ever stored**: a
 synthesized status doc is stale the moment the next commit lands, and a stale one is worse than
 none because it is believed.
 
@@ -246,6 +247,39 @@ def gloss(ident, known, drop_if_unresolvable=False):
     return "%s (UNRESOLVABLE — nothing names this id)" % ident
 
 
+# THE ID SHAPE IS NOT SELF-IDENTIFYING, and `UTF-8` is the proof: `[A-Z]{2,4}-\d{1,5}` matches it,
+# and it matches `SHA-256`, `ISO-8601`, `AES-256` and `RFC-7231` too. A real drive wrote a goal
+# statement saying *"a UTF-8 text file"*, the report printed that statement verbatim as it is
+# meant to, and the lint failed the report for an id that is not one -- with a suggested fix that
+# read `UTF-8 (UNRESOLVABLE — nothing names this id)`. Under the turn gate that is not cosmetic:
+# the session pastes a CORRECT report, the gate refuses it, and it gives up after two demands.
+#
+# So an id-shaped token is an ID when it belongs to a NAMESPACE THIS PROJECT MINTS -- `D-` / `ga-`
+# / `I-`, which the package owns outright, or a prefix some id in the index already uses. No
+# denylist of acronyms: that list has no end, and the day it misses one it fails a correct report
+# again. The cost is a bare id in a namespace this project has never used going unflagged, which
+# is the mild version of the original complaint; crying wolf is the version that gets a gate
+# switched off.
+PACKAGE_ID_PREFIXES = frozenset(("D", "ga", "I"))
+NAMESPACE_RE = re.compile(r"^([A-Za-z]{1,4})-?\d")
+
+
+def _namespace(ident):
+    m = NAMESPACE_RE.match(ident)
+    return m.group(1) if m else ""
+
+
+def project_mints(ident, known):
+    """Does THIS project mint ids in that token's namespace? `known is None` -> cannot tell, so
+    lint as before: a caller with no index is not evidence that nothing is an id."""
+    if known is None:
+        return True
+    ns = _namespace(ident)
+    if ns in PACKAGE_ID_PREFIXES or ident in known:
+        return True
+    return any(_namespace(k) == ns for k in known)
+
+
 LABEL_TOKEN = re.compile(r"[\w.-]+$")
 
 
@@ -319,7 +353,8 @@ def bare_ids(text, known=None):
     that guesses is a lint that gets argued with.
 
     Fenced code blocks are skipped whole: a command line or a JSON body quoting an id is machine
-    text that a human is not being asked to dereference.
+    text that a human is not being asked to dereference. So is a token whose NAMESPACE this
+    project does not mint -- see `project_mints`, and the `UTF-8` that failed a correct report.
 
     AND SO IS THE GLOSS ITSELF, which this lint learned the hard way by failing a report that was
     correct. An item titled `ITEM-001 — topwords` renders as `ITEM-001 (ITEM-001 — topwords)`,
@@ -338,6 +373,8 @@ def bare_ids(text, known=None):
         spans = gloss_spans(line)
         for m in ID_RE.finditer(line):
             if _in_span(m.start(), spans) or _labels_span(m.end(), line, spans):
+                continue
+            if not project_mints(m.group(1), known):
                 continue
             out.append((m.group(1), n))
     return out
@@ -497,7 +534,13 @@ def render(report, limit=MAX_LINES):
     g = report["goal"]
     lines = []
     if not g.get("id"):
+        # The CONSEQUENCE, not just the absence. This line is where a human meets the state,
+        # and "none set" alone reads as a neutral configuration rather than as the loop having
+        # no DONE to reach -- which is what it is.
         lines.append("GOAL — none set. %s" % (g.get("reason") or "nothing to converge on"))
+        lines.append("       No goal means no stop-when-done: this loop runs item-at-a-time "
+                     "until the backlog empties. If that is not deliberate, the node that "
+                     "mints the goal (decompose / reconcile) did not run.")
     else:
         moving = "MET" if g["met"] else ("STALLED — %s promotions with no new acceptance"
                                          % g.get("streak") if g["stalled"] else "moving")

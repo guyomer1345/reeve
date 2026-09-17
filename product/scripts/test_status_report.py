@@ -131,6 +131,23 @@ def test_no_goal_is_a_STATE_not_an_error(tmp_path):
     assert sr.render(sr.build(wf)).startswith("GOAL — none set.")
 
 
+def test_no_goal_also_states_the_CONSEQUENCE(tmp_path):
+    """Measured: a drive ran with no goal because inception skipped the node that mints one,
+    and every surface reported the absence as an unremarkable configuration. The state arrived
+    at by omission and the state chosen on purpose look identical here — so the line that a
+    human actually reads names what it costs, and where the goal was supposed to come from."""
+    wf = project(tmp_path)
+    os.remove(os.path.join(wf, "goal.json"))
+    block = sr.render(sr.build(wf))
+    assert "no stop-when-done" in block
+    assert "decompose" in block and "reconcile" in block
+
+
+def test_the_no_goal_consequence_is_absent_when_there_IS_one(tmp_path):
+    """A line that appears under a healthy goal teaches the eye to skip it."""
+    assert "no stop-when-done" not in sr.render(sr.build(project(tmp_path)))
+
+
 def test_an_item_binding_no_acceptance_is_called_out(tmp_path):
     wf = project(tmp_path)
     (Path(wf) / "items" / "I-100" / "promises.json").write_text(json.dumps({"criteria": []}))
@@ -341,3 +358,41 @@ def test_a_parenthesis_that_opens_a_CLAUSE_shields_nothing():
     let a bare id hide inside any aside."""
     line = "  - the work stalled (blocked by I-009) this week"
     assert [i for i, _ in sr.bare_ids(line)] == ["I-009"]
+
+
+# --- the id lint must not fire on prose that merely LOOKS like an id ---------
+# Found by replaying a kept smoke tree: a goal statement saying "a UTF-8 text file" made the
+# report fail its own lint, under a turn gate that then refuses the correct report twice and
+# gives up. The same shape covers SHA-256, ISO-8601, AES-256 and RFC-7231.
+
+def test_a_standards_acronym_in_the_goal_statement_does_not_fail_the_lint(tmp_path):
+    wf = project(tmp_path)
+    known = sr.names(wf, sr.roots(wf)[1])
+    text = "GOAL — read a UTF-8 file, hash it with SHA-256, stamp it ISO-8601."
+    assert sr.bare_ids(text, known) == []
+
+
+def test_a_REAL_bare_id_is_still_caught(tmp_path):
+    """The fix may not become a blanket exemption: the package's own namespaces always count,
+    whether or not this project happens to have minted one yet."""
+    wf = project(tmp_path)
+    known = sr.names(wf, sr.roots(wf)[1])
+    assert [i for i, _ in sr.bare_ids("as decided in D-001, see ga-2 and I-004", known)] == \
+        ["D-001", "ga-2", "I-004"]
+
+
+def test_a_namespace_THIS_project_mints_is_caught_too(tmp_path):
+    """A ticket/item prefix the package does not own is an id once the project uses it — which
+    is what keeps this rule from being a hole a project can fall into."""
+    wf = project(tmp_path)
+    known = dict(sr.names(wf, sr.roots(wf)[1]))
+    known["TCK-1"] = "a parked checkpoint"
+    assert [i for i, _ in sr.bare_ids("compare TCK-1 with TCK-7", known)] == ["TCK-1", "TCK-7"]
+    assert sr.bare_ids("compare TCK-1 with TCK-7", {}) == [], \
+        "with nothing minted in that namespace the same tokens are prose"
+
+
+def test_with_NO_index_at_all_the_lint_is_unchanged(tmp_path):
+    """`known is None` means the caller could not build an index — which is not evidence that
+    nothing is an id, so the old behaviour stands."""
+    assert [i for i, _ in sr.bare_ids("a UTF-8 file")] == ["UTF-8"]

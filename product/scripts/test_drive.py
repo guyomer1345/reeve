@@ -311,3 +311,30 @@ def test_tick_exit_code_is_the_spawn_decision(repo):
     stop = subprocess.run([sys.executable, d, "--workflow-dir", wf(repo), "tick"],
                           capture_output=True, text=True)
     assert stop.returncode == 1
+
+
+# --- a drive with no goal says so ------------------------------------------------------
+# `decide` treats a goal as optional, which is a real mode and also exactly what a skipped
+# `planner:decompose` produces. The verdict names which one it is rather than leaving the
+# quieter reading to be assumed: with no goal there is no MET and no STALLED, so the only
+# stops left are an empty backlog and the no-progress guard.
+
+def test_a_goalless_drive_is_flagged_and_says_it_has_no_done(repo):
+    v = drive.decide(wf(repo), None, 0)
+    assert v["cont"] is True
+    assert v["goalless"] is True
+    assert "no stop-when-done" in v["reason"]
+
+
+def test_a_drive_WITH_a_goal_carries_no_such_note(repo):
+    _goal(repo)
+    v = drive.decide(wf(repo), None, 0)
+    assert v["goalless"] is False
+    assert "no stop-when-done" not in v["reason"]
+
+
+def test_the_note_survives_into_the_shell_form(repo):
+    """`loop.sh` reads DRIVE_REASON and nothing else — a note the shell form drops is a note
+    the operator never sees."""
+    line = drive._shell(drive.decide(wf(repo), None, 0))
+    assert "no stop-when-done" in line
