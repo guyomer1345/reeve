@@ -576,3 +576,151 @@ def test_a_genuine_wrapped_mixed_marker_still_widens(tmp_path):
     assert res["status"] == "route"
     detail = [f for f in res["findings"] if f["rule"] == af.RULE_LOCKED_BLOCK][0]["detail"]
     assert "MIXED" in detail and "`provisional`" in detail
+
+
+# ---------------------------------------------------------------- creation is not an edit
+
+ACCEPTANCE = """# Spec
+
+## Acceptance criteria
+<!-- acceptance:begin -->
+- The CLI prints a greeting. — commitment: `locked`
+- Exit code 0 on success. — commitment: `locked`
+<!-- acceptance:end -->
+"""
+
+
+def _bare_repo(tmp_path, project_root="."):
+    """An initialised git project with NO spec yet — the state every project starts in."""
+    root = str(tmp_path)
+    _write(root, ".workflow/config.json", json.dumps({"project_root": project_root}))
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.email", "t@t")
+    _git(root, "config", "user.name", "t")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "base")
+    return root
+
+
+def test_a_created_spec_is_clear_and_says_the_floor_was_vacuous(tmp_path):
+    """The measured defect, as a test: a brand-new spec full of locked acceptance criteria
+    read as three criteria EDITED, and blocked the first spec commit of every new project.
+    The rules are about altering an existing demand; a criterion that did not exist has none.
+    It must also SAY that, because a bare clear reads as `the floor was computed and passed`.
+    """
+    root = _bare_repo(tmp_path)
+    _write(root, "docs/spec.md", ACCEPTANCE)
+    _git(root, "add", "-A")
+    res = _run(root)
+    assert res["status"] == "clear", res["findings"]
+    assert res["created"] is True
+    assert res["findings"] == []
+    assert res["hunks"], "the hunks are still counted — the diff was read, not skipped"
+    rendered = af.render(res)
+    assert "CREATES" in rendered and "VACUOUS" in rendered
+    assert "discuss" in rendered and "reconcile" in rendered, \
+        "the admission must name where the human gate on a first spec actually is"
+
+
+def test_a_created_spec_that_also_cannot_be_computed_still_routes(tmp_path):
+    """Creation clears the three RULES; it does not clear a failure to compute. A first spec
+    written to a path config does not point at is exactly the drift the stray check exists
+    for, and `created` must not become a way past it."""
+    root = _bare_repo(tmp_path, project_root="./project")
+    _write(root, "project/docs/spec.md", ACCEPTANCE)
+    _write(root, "other/docs/spec.md", ACCEPTANCE)       # a second spec, where config does not point
+    _git(root, "add", "-A")
+    res = _run(root)
+    assert res["status"] == "route"
+    assert res["created"] is True
+    assert any("which one owns the goal" in u for u in res["undetermined"])
+    assert "SPEC CREATED" in af.render(res), \
+        "a route on a created spec must still say the spec is new"
+
+
+def test_editing_a_created_specs_criterion_later_still_routes(tmp_path):
+    """The other half of the pair, and the one that keeps the fix honest: once the spec
+    exists, the very same criterion is an edit again."""
+    root = _bare_repo(tmp_path)
+    _write(root, "docs/spec.md", ACCEPTANCE)
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "first spec")
+    _edit(root, "prints a greeting", "prints a greeting in French")
+    res = _run(root)
+    assert res["status"] == "route"
+    assert res["created"] is False
+    assert af.RULE_ACCEPTANCE in _rules(res)
+
+
+def test_a_deletion_elsewhere_in_the_diff_is_not_the_specs(tmp_path):
+    """`--stdin` is routinely handed a whole-commit diff, and `/dev/null` belongs to a FILE,
+    not to a change. Searching the whole text for `+++ /dev/null` made any deleted file in
+    the commit read as `this change DELETES the spec`."""
+    root = _project(tmp_path, ACCEPTANCE)
+    diff = (
+        "diff --git a/notes.txt b/notes.txt\n"
+        "deleted file mode 100644\n"
+        "--- a/notes.txt\n"
+        "+++ /dev/null\n"
+        "@@ -1,2 +0,0 @@\n"
+        "-gone\n"
+        "-away\n"
+        "diff --git a/docs/spec.md b/docs/spec.md\n"
+        "--- a/docs/spec.md\n"
+        "+++ b/docs/spec.md\n"
+        "@@ -3,5 +3,5 @@\n"
+        " ## Acceptance criteria\n"
+        " <!-- acceptance:begin -->\n"
+        "-- The CLI prints a greeting. — commitment: `locked`\n"
+        "+- The CLI prints a greeting in French. — commitment: `locked`\n"
+        " - Exit code 0 on success. — commitment: `locked`\n"
+        " <!-- acceptance:end -->\n")
+    res = af.run(root, mode="stdin", diff_text=diff)
+    assert not any("DELETES the spec" in u for u in res["undetermined"]), \
+        "the deleted file was notes.txt; the spec was merely edited"
+    assert res["created"] is False
+    assert af.RULE_ACCEPTANCE in _rules(res)
+
+
+def test_a_creation_elsewhere_in_the_diff_is_not_the_specs(tmp_path):
+    """The mirror, and the one that would silently UNDER-route: a commit that adds any new
+    file while editing the spec must not read as `the spec is new, so nothing to alter`."""
+    root = _project(tmp_path, ACCEPTANCE)
+    diff = (
+        "diff --git a/src/new.py b/src/new.py\n"
+        "new file mode 100644\n"
+        "--- /dev/null\n"
+        "+++ b/src/new.py\n"
+        "@@ -0,0 +1 @@\n"
+        "+print(1)\n"
+        "diff --git a/docs/spec.md b/docs/spec.md\n"
+        "--- a/docs/spec.md\n"
+        "+++ b/docs/spec.md\n"
+        "@@ -3,5 +3,5 @@\n"
+        " ## Acceptance criteria\n"
+        " <!-- acceptance:begin -->\n"
+        "-- The CLI prints a greeting. — commitment: `locked`\n"
+        "+- The CLI prints a greeting in French. — commitment: `locked`\n"
+        " - Exit code 0 on success. — commitment: `locked`\n"
+        " <!-- acceptance:end -->\n")
+    res = af.run(root, mode="stdin", diff_text=diff)
+    assert res["created"] is False, "src/new.py is new; the spec is not"
+    assert res["status"] == "route"
+    assert af.RULE_ACCEPTANCE in _rules(res)
+
+
+def test_file_sides_reads_a_plain_diff_with_no_git_headers(tmp_path):
+    """Not every diff arriving on stdin comes from `git diff` — a plain unified diff has no
+    `diff --git` line at all, so `---` is what starts a section."""
+    plain = ("--- /dev/null\n"
+             "+++ b/docs/spec.md\n"
+             "@@ -0,0 +1 @@\n"
+             "+- A criterion. — commitment: `locked`\n"
+             "--- a/README.md\n"
+             "+++ b/README.md\n"
+             "@@ -1 +1 @@\n"
+             "-old\n"
+             "+new\n")
+    sides = af.file_sides(plain)
+    assert sides["docs/spec.md"] == {"created": True, "deleted": False}
+    assert sides["README.md"] == {"created": False, "deleted": False}

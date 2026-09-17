@@ -364,13 +364,24 @@ def test_the_cli_accepts_park_on_either_side_of_the_subcommand(proj):
 # throughout, because every test here used the one layout where the two spellings coincide.
 
 def _nested(tmp_path, spec_text):
-    """A project whose spec is NOT at `<root>/docs/spec.md` — the layout `/start` scaffolds."""
+    """A project whose spec is NOT at `<root>/docs/spec.md` — the layout `/start` scaffolds.
+
+    The spec is COMMITTED and then EDITED, not merely staged: a spec this change creates does
+    not cross the floor at all (its rules ask what a change does to an existing demand), so a
+    fixture that only stages one would leave every test below asserting against a gate that
+    never fires — for a reason that has nothing to do with the layout they are about.
+    """
     root = tmp_path / "repo"
     (root / ".workflow").mkdir(parents=True)
     (root / "project" / "docs").mkdir(parents=True)
     (root / ".workflow" / "config.json").write_text(json.dumps({"project_root": "./project"}))
-    (root / "project" / "docs" / "spec.md").write_text(spec_text)
+    spec = root / "project" / "docs" / "spec.md"
+    spec.write_text(spec_text)
     subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "project/docs/spec.md"], check=True)
+    subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", "the spec exists"], check=True)
+    spec.write_text(spec_text.replace("users can sign in", "users can sign in with a passkey"))
     subprocess.run(["git", "-C", str(root), "add", "project/docs/spec.md"], check=True)
     return root
 

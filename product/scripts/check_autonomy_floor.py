@@ -30,6 +30,17 @@ the alignment pass and the conformance check's job in verify, and it is exactly 
 judgement is expected to escalate on. Nothing here licenses "the floor was clear, so it was
 not goal-affecting". The floor is a MINIMUM that judgement rises above, never a cap.
 
+CREATION IS NOT AN EDIT, and the three rules do not reach it. Every one of them asks what
+a change does to an EXISTING demand — rule 3's own rationale is *there is no version of
+"reworded the criterion" that leaves the demand untouched* — and a criterion that did not
+exist a second ago has no demand to alter. So a change that CREATES the spec is clear here,
+with the admission printed rather than implied: the floor is vacuous on it, not passed. The
+human gate on a first spec is the capability that authored it (`discuss`'s requirements
+conversation, `ingest`'s `reconcile` checkpoint), and re-asking a person the question they
+have just answered is how an operator learns to wave a gate through. The fail-closed cases
+are unaffected: a created spec that ALSO trips path drift or an unreadable config still
+routes, because those are failures to compute and this is not one.
+
 OVER-ROUTING IS THE CORRECT FAILURE DIRECTION; UNDER-ROUTING IS NOT. Every ambiguity in
 this file is resolved toward ROUTE, and the deliberate ones are:
   * A MIXED marker (`` — commitment: `locked` (existence) / `provisional` (layout) ``)
@@ -261,6 +272,59 @@ def parse_diff(text, path_filter=None):
             # A context line that is genuinely empty loses its leading space in some tools.
             hunks[-1].lines.append((" ", ""))
     return [h for h in hunks if h is not None]
+
+
+def file_sides(text, path_filter=None):
+    """-> {path: {"created": bool, "deleted": bool}}, per FILE SECTION of a unified diff.
+
+    `--- /dev/null` is the only evidence a diff carries that a file is NEW, and `parse_diff`
+    reaches that line and `continue`s past it — which is how three findings came to say
+    `acceptance criterion edited` about a spec that had not existed a second earlier.
+
+    Read per section rather than with a regex over the whole text, because the two markers
+    belong to a FILE and not to a change: a whole-commit diff arriving on `--stdin` carries
+    every other file's markers too, so a bare search for `+++ /dev/null` announced that the
+    spec had been deleted whenever anything else in the commit was.
+    """
+    out, cur = {}, None
+
+    def flush():
+        if cur and cur["path"] is not None:
+            rec = out.setdefault(cur["path"], {"created": False, "deleted": False})
+            rec["created"] |= cur["created"]
+            rec["deleted"] |= cur["deleted"]
+
+    for raw in text.splitlines():
+        if raw.startswith("diff --git "):
+            flush()
+            parts = raw.split(" b/", 1)
+            cur = {"path": parts[1].strip() if len(parts) == 2 else None,
+                   "created": False, "deleted": False, "plus": False}
+            continue
+        if raw.startswith("--- "):
+            # A plain (non-git) diff has no `diff --git` header, so `---` is what starts a
+            # section; after a `+++` has been seen, it starts the NEXT one.
+            if cur is None or cur["plus"]:
+                flush()
+                cur = {"path": None, "created": False, "deleted": False, "plus": False}
+            name = raw[4:].strip()
+            if name == "/dev/null":
+                cur["created"] = True
+            elif cur["path"] is None:
+                cur["path"] = name[2:] if name.startswith("a/") else name
+            continue
+        if raw.startswith("+++ "):
+            if cur is None:
+                cur = {"path": None, "created": False, "deleted": False, "plus": False}
+            cur["plus"] = True
+            name = raw[4:].strip()
+            if name == "/dev/null":
+                cur["deleted"] = True
+            elif cur["path"] is None:
+                cur["path"] = name[2:] if name.startswith("b/") else name
+            continue
+    flush()
+    return {k: v for k, v in out.items() if path_filter is None or path_filter(k)}
 
 
 def significant(text):
@@ -788,7 +852,7 @@ def run(project_root, mode="staged", ref=None, diff_text=None):
     shown = os.path.relpath(spec_path, root).replace(os.sep, "/")
     result = {"status": "route", "spec": shown,
               "source": ref if mode == "ref" else mode,
-              "findings": [], "undetermined": undetermined, "hunks": 0}
+              "findings": [], "undetermined": undetermined, "hunks": 0, "created": False}
 
     top = git_toplevel(root)
     rel = git_relpath(top, spec_path) if top else None
@@ -829,11 +893,16 @@ def run(project_root, mode="staged", ref=None, diff_text=None):
             "the goal is not something this gate may guess"
             % (", ".join(sorted(strays)), rel or spec_path))
 
+    # WHICH SIDE OF THIS DIFF EVEN EXISTS. Both answers change what the rules may say, and
+    # both are read from one per-file pass so that neither can be attributed to a file the
+    # diff merely mentions (see `file_sides`).
+    sides = file_sides(text or "", path_filter=(lambda p: bool(SPEC_PATH_RE.search(p)))
+                       if mode == "stdin" else None)
     # A DELETED SPEC IS NOT AN ORDINARY HUNK. The three rules all ask what a block says, and
     # a spec that no longer exists says nothing — so the rules would report on the old side
     # and fall silent about the fact that the document defining the goal is gone. That is the
     # fail-closed case, stated as one: the floor cannot be computed against an absent spec.
-    if re.search(r"(?m)^\+\+\+ /dev/null$", text or ""):
+    if any(v["deleted"] for v in sides.values()):
         undetermined.append(
             "this change DELETES the spec, so there is no goal definition left to compute a "
             "floor against")
@@ -842,6 +911,15 @@ def run(project_root, mode="staged", ref=None, diff_text=None):
                        if mode == "stdin" else None)
     result["hunks"] = len(hunks)
     if not hunks:
+        return _finish(result)
+
+    # A CREATED SPEC HAS NO OLD SIDE, so there is nothing for the three rules to be about.
+    # Reported as its own state rather than as a silent clear: `created` is in the JSON and
+    # the admission is in the rendered text, because "the floor did not fire" and "the floor
+    # had nothing to fire on" are different facts to the human reading the result. Anything
+    # already `undetermined` — path drift, an unreadable config — still routes below.
+    if any(v["created"] for v in sides.values()):
+        result["created"] = True
         return _finish(result)
 
     if mode == "stdin":
@@ -876,9 +954,21 @@ LIMIT = (
     "clear result is not a finding that the change is goal-preserving.")
 
 
+CREATED = (
+    "This change CREATES %s. The floor is VACUOUS here, not passed: its rules ask what a "
+    "change does to an existing demand, and a spec that did not exist has none. What it "
+    "therefore cannot tell you is whether the goal this spec states is the goal you want — "
+    "that is the requirements conversation's question (`discuss`) or the reconcile "
+    "checkpoint's (`ingest`), and both are human gates already.")
+
+
 def render(result):
     lines = []
     if result["status"] == "clear":
+        if result.get("created"):
+            lines.append("CLEAR: %s" % (CREATED % result["spec"]))
+            lines.append("       %s" % LIMIT)
+            return "\n".join(lines)
         lines.append("CLEAR: the autonomy floor is not crossed — %s"
                      % ("%s is unchanged" % result["spec"] if not result["hunks"]
                         else "%d changed hunk(s) in %s, none in a locked element or an "
@@ -888,6 +978,8 @@ def render(result):
 
     lines.append("ROUTE REQUIRED: this change crosses the goal-preserving autonomy floor.")
     lines.append("")
+    if result.get("created"):
+        lines.append("  %-31s %s" % ("SPEC CREATED", CREATED % result["spec"]))
     for f in result["findings"]:
         lines.append("  %-31s %s:%d (%s side)"
                      % (RULE_TITLES[f["rule"]], result["spec"], f["line"], f["side"]))
@@ -927,7 +1019,7 @@ def main(argv=None):
         result = run(args.project_root, mode=mode, ref=args.ref, diff_text=diff_text)
     except Exception as exc:  # fail CLOSED: an exception is an unanswered question
         result = _finish({"status": "route", "spec": "", "source": mode, "findings": [],
-                          "hunks": 0,
+                          "hunks": 0, "created": False,
                           "undetermined": ["the floor could not be computed (%s: %s)"
                                            % (type(exc).__name__, exc)]})
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else render(result))

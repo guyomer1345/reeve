@@ -276,6 +276,11 @@ above it and never below it. The floor is computed from the **spec diff**:
 - a hunk that removes or weakens a `locked` marker;
 - a changed hunk inside an `acceptance_criteria` region — editing a criterion's text *is* altering what it demands.
 Either condition ⇒ **auto-route to the human, regardless of the model's read.**
+**A spec the change CREATES is clear, and says so** (`created: true`): every rule asks what the change does to
+an *existing* demand, and a criterion that did not exist has none. The first spec always arrives through a
+capability that already gates on a human — `discuss`'s requirements conversation, `ingest`'s `reconcile`
+checkpoint — so routing it stops the human for a decision they just made. Failures to *compute* are untouched
+by this: a created spec that also trips path drift still routes.
 
 **Its limit is stated rather than implied, because a floor that is really a judgment in a gate's clothes is worse
 than no floor.** This is a *spec-diff* floor: it catches a change that rewrites the goal **in the spec**. A code
