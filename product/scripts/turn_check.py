@@ -213,6 +213,28 @@ def _goal_missing(workflow):
     return not os.path.exists(os.path.join(workflow, name))
 
 
+def _anchor_state(workflow):
+    """-> (ok, why, instruction) for rung 2, answerable at any point in the ladder.
+
+    `ok` is True when there is no handoff at all: a project that has written no anchor is
+    `handoff_gate.py`'s business, under the context band, and is not this rung's. Unreadable
+    -> permissive, like every other path here.
+    """
+    handoff = os.path.join(workflow, "handoff.md")
+    if not os.path.exists(handoff):
+        return True, "", ""
+    try:
+        import context_band as cb
+        named = cb.anchor_names_base(handoff)
+    except Exception:
+        return True, "", ""             # cannot tell -> permissive
+    if named:
+        return True, "", ""
+    why = ("the resume anchor names no `base_sha`, so nothing can tell what moved "
+           "while this session held the project")
+    return False, why, ANCHOR % why
+
+
 def _handing_back(workflow):
     """True when the loop is `idle` -- backlog empty, awaiting steering -- AND owes the human
     nothing else. The one way rung 1 can pass that still wants the goal demand: see the
@@ -329,7 +351,18 @@ def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None,
     gets switched off.
     """
     out = {"demand": None, "why": "", "instruction": "", "fingerprint": None, "digest": None,
-           "promoted": promoted_items(workflow)}
+           "promoted": promoted_items(workflow), "anchor_ok": True, "anchor_why": "",
+           "anchor_instruction": ""}
+    # Computed HERE rather than at rung 2, because the caller needs it on a path rung 2 never
+    # reaches. The ladder returns its FIRST demand, so a turn still owing rung 1 never hears
+    # about the anchor -- and `turn_gate.py` gives up after two demands, which is precisely the
+    # moment the session ends anyway, with the successor's only resume point unwritten. MEASURED:
+    # both modes of one full run ended that way, one killed mid-work and one ending owed
+    # `continue`, and both left prose where the sha goes (`base_sha: (the tech-stack commit)`).
+    # The rung's own predicate is unchanged and still owns the answer; this only makes it
+    # readable before the ladder has decided which rung speaks.
+    a_ok, a_why, a_instr = _anchor_state(workflow)
+    out.update(anchor_ok=a_ok, anchor_why=a_why, anchor_instruction=a_instr)
     ok, why = may_end(workflow)
     changed, fp = moved(workflow, prev_fingerprint)
     out["fingerprint"] = fp
@@ -375,18 +408,10 @@ def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None,
     # announced work and abandoned it. `anchor_names_base` is `context_band`'s, not a second
     # matcher -- one owner for "does this name a base commit", which is the whole point of
     # reusing it rather than re-deriving the regex here.
-    handoff = os.path.join(workflow, "handoff.md")
-    if os.path.exists(handoff):
-        try:
-            import context_band as cb
-            named = cb.anchor_names_base(handoff)
-        except Exception:
-            named = True                # cannot tell -> permissive, like every other path here
-        if not named:
-            why = ("the resume anchor names no `base_sha`, so nothing can tell what moved "
-                   "while this session held the project")
-            out.update(demand="anchor", why=why, instruction=ANCHOR % why)
-            return out
+    if not out["anchor_ok"]:
+        out.update(demand="anchor", why=out["anchor_why"],
+                   instruction=out["anchor_instruction"])
+        return out
 
     # RUNG 3 -- an item finished with no worker behind it. Placed AFTER the anchor because
     # losing the loop's place breaks the next session outright, while this breach has already

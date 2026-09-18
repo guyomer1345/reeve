@@ -1236,7 +1236,13 @@ def bootstrapped(repo):
 # MET, committed, every seam green — and was killed while still winding the session down. The
 # window is still the tighter of the two, because it is also how fast a genuinely STOPPED session
 # is reported, and brownfield still starts from a backlog `ingest` already reconstructed.
-MODE_TIMEOUT = {"greenfield": 3600, "brownfield": 2700}
+# Raised from 3600/2700 when `review` joined the item tail. MEASURED on the run that forced
+# it: a gating review finding sends the item back through refine -> planner -> execute ->
+# verify -> review, and that round cost 23 MINUTES on top of an item that had already been
+# built once. Greenfield promoted its item and was killed mid-sentence on the next one. The
+# budget is a property of the loop's shape, so it moves when the shape does — the alternative
+# is a harness that reports a red on every drive unlucky enough to find a real defect.
+MODE_TIMEOUT = {"greenfield": 5400, "brownfield": 4200}
 DEFAULT_TIMEOUT = 1800
 
 
@@ -1273,11 +1279,20 @@ def run_mode(mode, timeout, keep, resume=None):
                 print("  tree kept at %s" % repo)
                 return False
 
-        ok2, detail2 = drive(repo, ITEM_PROMPT, timeout)
-        # A clean exit is necessary and nowhere near sufficient — see the helper.
-        if ok2:
-            ok2, detail2 = an_item_actually_completed(repo, detail2)
+        exited_clean, detail2 = drive(repo, ITEM_PROMPT, timeout)
+        # PROMOTION IS THE AUTHORITY, AND THE EXIT STATUS IS NOT EVEN NECESSARY. A clean exit
+        # was the precondition here, and it hid a real pass: a greenfield drive promoted its
+        # item and was then KILLED at the timeout while writing the next thing, so the seam
+        # reported "nothing went round" about an item carrying `promoted.json`. A kill does not
+        # un-promote. The exit status is still reported — a timeout is a fact about the WINDOW
+        # and the reader needs it — but it no longer answers a question about the ITEM.
+        # `an_item_actually_completed` already folds the session's own detail into its message,
+        # so a timeout reads as "<id> promoted / timed out after Ns — still writing when it was
+        # killed": the pass and the caveat in one line, neither hidden.
+        ok2, detail2 = an_item_actually_completed(repo, detail2)
         check("%s: one item went round" % mode, ok2, detail2)
+        if ok2 and not exited_clean:
+            print("    (the item landed; the SESSION did not exit cleanly — window, not loop)")
         good = assert_seams(repo, mode)
         if keep or not good:
             print("  tree kept at %s" % repo)

@@ -1468,6 +1468,18 @@ real slice.**
   nothing has driven it. Re-shaping a seam twice before either change meets a drive is guessing twice. `D237`
   names the trigger. **One residual opened, not folded in:** `commit`'s ~20k is a full `checks.sh` transcript
   read into the constrained window on every item; `07` owns it.
+**Then the first full run on this package, and what it cost. ✅ CLOSED 2026-09-18 — `D238`.** 26 steps, 4
+failures, resolving to three causes — **none a regression**, two pre-existing and one created by `D236`. All
+three fixed: the stack formatter reaching `docs/knowledge/graph.json` (`D180`'s filter was scoped to the loop's
+*runtime* when the hazard is the loop's *artifacts* — **found by the cold-context reviewer on its first drive**
+and reproduced from scratch); the resume anchor never demanded on the path where a session ends unclean (the
+give-up now converts to it once — and the first version of that fix **wedged**, which its own control caught);
+and the harness calling a promoted item a failure because a timeout short-circuited the promotion check, plus
+the per-mode window raised 3600/2700 → 5400/4200 now that a gating review round measures **23 minutes**.
+**What the run proved:** `D236` ran end to end first time — gating → refine → re-plan → re-execute → pass →
+clean re-review → promoted, converging in one round; `D233`'s seam went green on brownfield; and the brownfield
+session refused, unprompted, both to stamp `locked` on an unconfirmed spec and to forge a `decompose` receipt.
+
 Then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage · project-map
 tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the code-map observed
 layer. **Org mode stays parked at the maintainer's word.** Open questions and their current state live in `07`,

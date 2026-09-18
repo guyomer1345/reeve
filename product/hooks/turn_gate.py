@@ -198,7 +198,10 @@ def main():
     # after it -- the breach has already happened and repeating it would only wedge the session.
     rec = {"fingerprint": res.get("fingerprint"), "satisfied": latch.get("satisfied"),
            "demands": latch.get("demands") or 0, "rung": latch.get("rung"),
-           "promoted": res.get("promoted") or latch.get("promoted") or []}
+           "promoted": res.get("promoted") or latch.get("promoted") or [],
+           # Spent once and kept until the anchor is actually fixed -- see the give-up path.
+           "anchor_demanded": bool(latch.get("anchor_demanded"))
+                              and not res.get("anchor_ok", True)}
     if not res["demand"]:
         rec.update(satisfied=res.get("digest") or latch.get("satisfied"), demands=0, rung=None)
         _write_latch(workflow, rec)
@@ -209,6 +212,32 @@ def main():
     rec.update(demands=demands, rung=res["demand"])
     _write_latch(workflow, rec)
     if demands > MAX_DEMANDS:
+        # GIVING UP IS THE MOMENT THE ANCHOR MATTERS MOST, and it was the one moment nothing
+        # asked for it. The ladder returns its FIRST demand, so a turn owing rung 1 never hears
+        # about rung 2 -- and here the session is about to end regardless, leaving a successor
+        # with no `base_sha` to run `git log <base_sha>..HEAD` against. MEASURED: both modes of
+        # one full run ended exactly this way and both wrote prose where the sha goes.
+        # So the give-up converts to the anchor demand ONCE rather than releasing silently.
+        #
+        # ONE-SHOT, VIA ITS OWN LATCH FLAG, and the first version of this was wrong in a way
+        # the wedge test caught: setting `rung = "anchor"` did not work, because the LADDER
+        # still returns `continue` on the next stop (rung 1 is unsatisfied — that is why we are
+        # here). The rung then alternates continue -> anchor -> continue, `same_rung` is never
+        # true, the counter restarts every time and the session is blocked forever. A flag is
+        # the honest record: this conversion has been spent, so the next give-up releases.
+        # Cleared as soon as the anchor is good, so a later bad one can demand again.
+        if not res.get("anchor_ok", True) and not latch.get("anchor_demanded"):
+            rec.update(anchor_demanded=True)
+            _write_latch(workflow, rec)
+            reason = res["anchor_instruction"]
+            print(json.dumps({
+                "decision": "block",
+                "reason": reason,
+                "hookSpecificOutput": {"hookEventName": "Stop", "decision": "block",
+                                       "reason": reason},
+            }))
+            print(reason, file=sys.stderr)
+            return 2
         print(json.dumps({"systemMessage": GAVE_UP % (MAX_DEMANDS, res["why"])}))
         return 0
 

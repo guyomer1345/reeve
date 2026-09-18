@@ -159,6 +159,60 @@ def test_it_GIVES_UP_after_two_demands(tmp_path):
     assert "Letting the turn end" in res.stdout
 
 
+def test_giving_up_DEMANDS_THE_ANCHOR_rather_than_releasing_a_session_with_none(tmp_path):
+    """The measured gap: the ladder returns its FIRST demand, so a turn owing rung 1 never hears
+    about rung 2 — and the give-up is precisely when the session ends anyway, leaving a successor
+    no `base_sha` to resume from. Both modes of one full smoke run ended exactly this way, and
+    both wrote prose where the sha goes."""
+    p = project(tmp_path)
+    (p / ".workflow" / "handoff.md").write_text("# handoff\n- base_sha: (the tech-stack commit)\n")
+    assert blocked(run(p))                       # demand 1, rung `continue`
+    assert blocked(run(p))                       # demand 2, rung `continue`
+    res = run(p)                                 # would have given up
+    assert blocked(res), "gave up and let a bad anchor through"
+    assert "base_sha" in (res.stdout + res.stderr)
+    latch = json.loads((p / ".workflow" / "turn-gate.json").read_text())
+    assert latch["anchor_demanded"] is True
+
+
+def test_the_anchor_conversion_IS_ONE_SHOT_and_cannot_wedge(tmp_path):
+    """A flag, not a rung, and the distinction is what the first version of this got wrong:
+    the LADDER still returns `continue` on the next stop (rung 1 is why we are here at all), so
+    setting `rung = "anchor"` made it alternate, `same_rung` was never true, the counter
+    restarted every time and the session was blocked forever."""
+    p = project(tmp_path)
+    (p / ".workflow" / "handoff.md").write_text("# handoff\n- base_sha: (the tech-stack commit)\n")
+    run(p), run(p)                               # spend `continue`
+    assert blocked(run(p))                       # the one anchor demand
+    res = run(p)
+    assert not blocked(res), "the conversion is spent — this must release"
+    assert "Letting the turn end" in res.stdout
+
+
+def test_fixing_the_anchor_re_arms_the_conversion(tmp_path):
+    """Spent-until-fixed, not spent-forever: a later bad anchor gets its own demand."""
+    p = project(tmp_path)
+    h = p / ".workflow" / "handoff.md"
+    h.write_text("# handoff\n- base_sha: (the tech-stack commit)\n")
+    run(p), run(p), run(p)                       # conversion spent
+    h.write_text("# handoff\n- base_sha: 1fbd17ece00c\n")
+    run(p)                                       # anchor good -> flag clears
+    assert json.loads((p / ".workflow" / "turn-gate.json").read_text())["anchor_demanded"] is False
+    h.write_text("# handoff\n- base_sha: none yet\n")
+    assert blocked(run(p))
+    assert json.loads((p / ".workflow" / "turn-gate.json").read_text())["anchor_demanded"] is True
+
+
+def test_a_GOOD_anchor_leaves_the_give_up_alone(tmp_path):
+    """The conversion is for a bad anchor only — an ordinary give-up must still release."""
+    p = project(tmp_path)
+    (p / ".workflow" / "handoff.md").write_text("# handoff\n- base_sha: 1fbd17ece00c\n")
+    run(p), run(p)
+    res = run(p)
+    assert not blocked(res)
+    assert "Letting the turn end" in res.stdout
+
+
 def test_moving_to_a_DIFFERENT_rung_resets_the_count(tmp_path):
     """Satisfying "continue the loop" should not inherit the report rung's spent patience — they
     are different demands and the session did the first one."""
