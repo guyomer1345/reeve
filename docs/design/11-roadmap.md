@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13 is OPEN — two asks, filed the moment they were made. The next thing to build is `#### ▶ NEXT — close the two named residuals in SMALL BATCHES, then ONE full run`. Both asks are discharged and validated as far as eight real runs could take them (`D227`–`D229`); what is left is two design slices `07` owns. The full smoke run stays LAST, because the receipt is keyed on the package digest and any edit to `product/` throws it away**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the standing queue`, whose first entry is the cold-context reviewer. Nothing in the queue is blocked on a decision from the maintainer**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1351,8 +1351,25 @@ ever met a recording stand-in). The `worker budget observed a real worker` seam 
 the first time here too.
 
 
-#### ▶ NEXT — close the two named residuals in SMALL BATCHES, then ONE full run. `[validation for `D222` + `13a` + `13b`; residuals of `D229`]`
-**Start here, and the instruction that shapes this entry is the maintainer's, after watching eight runs go
+#### The two named residuals, then ONE full run — ✅ CLOSED 2026-09-18 (`D230` · `D231` · `D232`). `[validation for `D222` + `13a` + `13b`; residuals of `D229`]`
+**How it actually went, because the method is the transferable part.** Both residuals were closed from the
+cheap instruments alone — reproduced on a throwaway repo and on the KEPT TREES that produced them, never by
+driving again. The first-spec floor (`D230`) was one dropped line in `parse_diff` and carried a sibling defect
+with it; the skipped node (`D231`) rejected both shapes the question offered and found that `07` had recorded
+the mechanism wrong. A third defect (`D232`) fell out of a two-second `--assert-only` replay: the id lint was
+failing a CORRECT report over the word `UTF-8`.
+**The full run then earned its place by disproving a design decision no instrument could have.** Run 9:
+brownfield 13/13, greenfield 9/12 — and the goal rung, keyed on *promoted* work, sat silent through a whole
+session that promoted nothing. Re-keyed on *planned* work; run 10 came back **26/26, both modes, one digest**,
+with the gate firing its demand twice and the loop minting `GOAL-001` in response. `goal minted` had been red
+in runs 6, 8 and 9.
+**Two live residuals, named rather than carried quietly:** the skip is DETECTED and repaired, not prevented —
+the router still mints the roadmap item itself instead of dispatching `decompose`; and a goal minted mid-drive
+by the gate has **no commit edge**, so run 10 left `goal.json` staged for the next item-tail commit. Neither
+blocks the queue below.
+
+**The entry as it was written, kept for its reasoning — the method it describes is the one that worked:**
+**The instruction that shapes this entry is the maintainer's, after watching eight runs go
 by: *test in SMALL BATCHES — not two hours each time — and only when confident, verify everything with a
 full run.*** The campaign that produced `D227`–`D229` spent roughly twelve hours of real model calls to find
 twelve defects, and **the cheapest finds were the ones that never needed a drive**: the currency-gate deadlock
@@ -1389,7 +1406,7 @@ receipt is keyed on the shipped file set, so **every earlier run is thrown away 
 above. Note that a green `worker budget observed a real worker` is now MEANINGFUL rather than lucky — before
 `D229` it passed or failed on whether the model happened to comply.
 
-#### Then — the standing queue. `[no ask — post-Phase-12]`
+#### ▶ NEXT — the standing queue. `[no ask — post-Phase-12]`
 With Phase 12 closed this is what the work order points at, and it is the first entry here that traces to no
 numbered ask, because the request it came from is discharged. **Two named candidates, neither blocked on a
 decision from the maintainer:**

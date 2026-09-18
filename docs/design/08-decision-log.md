@@ -8531,3 +8531,109 @@ subagents) · four kept trees used as the rung's own negative and positive contr
 extends), **D228** (the anchor rung, whose live behaviour is the evidence this shape works), **D216**
 (`dispatch_guard`'s second gate, whose blind spot this is).
 → `11` (§ the ordered build sequence), `07` (the skipped-node question this leaves open).
+
+## D230 — a spec the change CREATES is not a spec it edits **[DECIDED + BUILT 2026-09-17, the maintainer choosing between two readings. 1,617 tests, 8 meta-gates, and a green full smoke run on both modes]**
+**The call:** the autonomy floor reports **CLEAR on a created spec, with the admission printed** — `created:
+true` in the JSON, and a rendered line saying the floor is *vacuous here, not passed*. The three rules all ask
+what a change does to an **existing demand** (rule 3's own rationale: *there is no version of "reworded the
+criterion" that leaves the demand untouched*), and a criterion that did not exist has none.
+
+**Why, and this is the half that decides it:** the first spec always arrives through a capability that ALREADY
+gates on a human — `discuss`'s requirements conversation, `ingest`'s `reconcile` checkpoint. Routing it stops
+the person for a decision they just made, under a message (`acceptance criterion edited`) that is **false as
+stated about a file that did not exist**. This file's own reasoning names that failure mode twice: a gate that
+always fires is a gate a human learns to skip.
+
+**The mechanism was one dropped line.** `parse_diff` reaches `--- ` and `continue`s past it, so `--- /dev/null`
+— the only evidence a unified diff carries that a file is NEW — was discarded, and the floor could not tell
+creation from edit **at all**. Reproduced on the kept tree that hit it (`brownfield-aoqahr31`), whose
+`docs/spec.md` is still uncommitted *because this is what stopped it*: old code → three findings and
+`spec_approval.check` refusing the commit with no receipt reachable; new code → clear, gate passes.
+
+**A SIBLING OF THE SAME DEFECT, found while fixing it and fixed with it:** the deletion check was
+`re.search(r"^\+\+\+ /dev/null")` over the **whole diff text**, so in `--stdin` mode — routinely handed a
+whole-commit diff — *any* deleted file in the commit made the floor announce that the spec had been deleted.
+Confirmed against the old code rather than reasoned about. Both markers are now read per **file section**
+(`file_sides`), because `/dev/null` belongs to a file and not to a change.
+
+**What creation does NOT clear:** failures to *compute*. Path drift, an unreadable config, an unparseable side
+— all still route, and a routed result on a created spec says `SPEC CREATED` beside the reason. The fail-closed
+discipline is untouched; what changed is a rule that was firing as a parser artifact.
+
+**Rejected:** ROUTE under an honest `first spec created` reason (truthful, but double-gates every new project at
+its first commit — `D221`'s *inception needs a person* is satisfied by the capability that authored the spec, not
+by a second gate on the same decision) · CLEAR only when a `discuss`/`reconcile` receipt is on disk (strictly the
+most correct, and real design rather than a wiring line: it needs a receipt shape the package does not have, the
+same one `07` already carries as a slice for the commit-time floor).
+
+**Evidence:** the reproduction above · `test_spec_approval.py::_nested` had staged a spec that was never
+committed, so its whole block was asserting against a floor that now correctly does not fire — the fixture was
+wrong, not the change · run 9 greenfield committed its first spec (`docs: spec for wordtally`) with no park.
+**Builds on:** **D189** (the floor), **D209** (enforced at commit time), **D221** (inception needs a person).
+→ `07` (the first-spec question this answers), `11` (§ the ordered build sequence).
+
+## D231 — what catches a graph node that never runs: not a path check, and not promotion either **[DECIDED + BUILT 2026-09-17, RE-AIMED 2026-09-18 by the run that disproved the first trigger. 1,617 tests, 8 meta-gates, run 10 green 26/26]**
+**The call, in two parts.** (1) The general form — *compare the path a session walked against `loop.md`* — is
+**REJECTED**, and the reason is recorded so it is not re-proposed: the graph's edges are conditional **prose**
+(`gate not triggered`, `no per-item demo`), so *which branch a session was required to walk* is not decidable
+from the owner, and making it decidable means machine-readable edges in a doc whose always-loaded set has ~13
+tokens of headroom. A rung per skippable node is N chances to get a fail direction wrong. (2) What IS decidable
+is the distinction between **"I cannot tell"** and **"a thing that should exist does not exist"** — the first is
+permissive, the second is a demand. Built as one rung on the existing ladder plus honest reporting everywhere the
+absence was previously silent.
+
+**`07` HAD THE MECHANISM WRONG, and replaying it is what found that out.** It recorded that a missing goal makes
+the turn ladder's first rung answer *"convergence could not be measured — permissive by design"* and let turns
+end. It does not: `converge.measure` returns cleanly with `met: false, stalled: false`, so the rung **blocks**,
+telling the session *"the goal is neither met nor stalled"* — a claim about a goal that does not exist. The
+silence was real; its location was not. Recorded here because a wrong mechanism in an open question is a fix
+aimed at the wrong file.
+
+**So:** `may_end` names the state (with no goal, `met` and `stalled` are **unreachable**, and the drive has no
+stop-when-done at all), keeping *absent* and *unparseable* apart because one is a node that never ran and the
+other is a file to repair; `status_report.py` prints the consequence beside `GOAL — none set`; `drive.py` carries
+`goalless` in every verdict and in `DRIVE_REASON`, which is all `loop.sh` reads.
+
+**THE TRIGGER WAS WRONG THE FIRST TIME, and the full run is what proved it.** Built keyed on **promoted** work.
+Run 9's greenfield then dispatched exactly two workers in a whole session — `research`, then `planner` in
+plan-one mode on a roadmap item `ROAD-1` **the router had minted itself** — and promoted nothing at all. The rung
+watched the entire hour in silence, which is the failure mode it exists to end. Re-keyed on **PLANNED** work:
+`planner` mkdirs the item dir when it plans, so the directory is the evidence, and it survives `retention.py`
+pruning `plan.md` at promote time. Both graph paths mint the goal *before* anything is planned (greenfield
+`decompose` → `prioritize` → `plan-one`; brownfield `reconcile` → `prioritize` → `plan-one`), so an item dir with
+no goal is inception **skipped**, not inception in progress — while a session still inside inception, with no
+items at all, is accused of nothing.
+
+**The escape is a person, not a bypass:** mint it, or park a `steer` saying this project means to run
+goal-less. A drive with no DONE is a decision for a human and not a state to arrive in by omission; `turn_gate.py`
+gives up after two demands, so the rung cannot wedge a session.
+
+**Evidence, live:** run 10 greenfield — the gate fired the `goal` demand **twice**, the loop minted `GOAL-001`
+with 8 acceptance entries, and `goal minted` went green for the first time in four runs (red in runs 6, 8, 9).
+Both modes 13/13, 26 seams, 0 failures, one package digest. **The limit, stated:** this *detects* the skip and
+repairs it; the router still mints the roadmap item itself rather than dispatching `decompose`, and
+`worker budget observed a real worker` passes throughout — so the behaviour is caught, not prevented.
+**Rejected:** path conformance (above) · a rung per skippable node · visibility with no demand (the skip would
+end as a line in a report nobody is required to act on).
+**Builds on:** **D199** (the goal + `converge.py`), **D229** (the sibling rung, whose blind spot this is),
+**D224**/**D225** (the ladder), **D214** (name the actuator).
+→ `07` (the skipped-node question this answers), `11` (§ the ordered build sequence).
+
+## D232 — `UTF-8` is not an id: the report lint is scoped to namespaces the project actually mints **[BUILT 2026-09-17, found by replaying a kept tree]**
+**The call:** an id-shaped token is treated as an id only when its **namespace is one this project mints** —
+`D-` / `ga-` / `I-`, which the package owns outright, or a prefix some id in the index already uses. `ID_RE`'s
+`[A-Z]{2,4}-\d{1,5}` matches `UTF-8`, and equally `SHA-256`, `ISO-8601`, `AES-256`, `RFC-7231`.
+
+**Why it is not cosmetic.** A real drive wrote a goal statement saying *"a UTF-8 text file"*; the report printed
+that statement **verbatim, as it is designed to**; and the lint failed the report, suggesting a fix that read
+`UTF-8 (UNRESOLVABLE — nothing names this id)`. Under the turn gate that is a session pasting a **correct**
+report, being refused, pasting it again, and the gate giving up after two demands — the same shape as the four
+defects in `D228`, which were also a scanner failing a report that was right.
+
+**Rejected:** a denylist of standards acronyms — that list has no end, and the day it misses one it fails a
+correct report again. **The cost is stated:** a bare id in a namespace this project has never used goes
+unflagged, which is the mild version of the original complaint; crying wolf is the version that gets a gate
+switched off.
+**Evidence:** `--assert-only` on `greenfield-8bn9f2f6` · run 10, both modes: *the report renders — every id
+named*. **Builds on:** **D224** (the generated report), **D228** (the same scanner, the same lesson).
+→ `11` (§ the ordered build sequence).

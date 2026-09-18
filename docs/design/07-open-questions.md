@@ -957,7 +957,20 @@ sub-questions deferred to the build, in the order the slices need them.
   means a second receipt — which is real design, not a wiring line. The receipt shape from the non-item commit
   work is the strongest candidate (a routed-and-approved spec change carries its checkpoint verdict as evidence),
   and that is a slice, not a follow-up. Until then this is a consultation and must be described as one.
-- **What catches a graph node the orchestrator simply DOES NOT RUN? `[real, MEASURED twice — opened by building
+- **~~What catches a graph node the orchestrator simply DOES NOT RUN?~~ `[ANSWERED 2026-09-17 — D231, and the
+  mechanism recorded below was WRONG]`** Neither of the two shapes this question offered: a path check against
+  `loop.md` is not computable from a graph whose edges are conditional prose, and a rung per node does not
+  scale. What is decidable is *"I cannot tell"* versus *"a thing that should exist does not"* — one rung, keyed
+  on **planned** work (`planner` mkdirs the item dir; both paths mint the goal before anything is planned),
+  plus the absence being said out loud in `may_end`, `status_report.py` and `drive.py`. **The correction this
+  question needed:** it claimed a missing goal makes rung 1 answer *"convergence could not be measured"* and
+  let turns end. It does not — `converge.measure` returns cleanly, so the rung BLOCKS and asserts *"the goal is
+  neither met nor stalled"* about a goal that does not exist. The silence was real; its location was not.
+  **Re-aimed once by a live run**: keyed on *promoted* work it sat silent through a whole greenfield session
+  that promoted nothing (run 9). Run 10: the demand fired twice, the loop minted `GOAL-001`, seam green.
+  **What it does NOT do, and is the live residual:** it detects and repairs the skip; the router still mints the
+  roadmap item itself instead of dispatching `decompose`. *(Original text kept below for its reasoning.)*
+- **[answered as `D231`] What catches a graph node the orchestrator simply DOES NOT RUN? `[real, MEASURED twice — opened by building
   `D229`, which covers the neighbouring case and structurally cannot cover this one]`**
   `D229` closed *the orchestrator did the node's work itself*: an item finished with no worker behind it now
   blocks the turn. **The sibling is a node that never happens at all**, and the rung cannot see it — run 8's
@@ -987,7 +1000,12 @@ sub-questions deferred to the build, in the order the slices need them.
   as owned by the item declaring it, if no other candidate declares a prefix of it — which is a real change to
   the independence rule, not a wiring line. Note the guard it would loosen is already weak: the `new` branch
   accepts a file that does not exist, so "its parent must exist" is a typo heuristic, not a safety property.
-- **Does the autonomy floor have a FIRST-SPEC case? `[real, REPRODUCED 2026-09-15 — D227's campaign, and the
+- **~~Does the autonomy floor have a FIRST-SPEC case?~~ `[ANSWERED 2026-09-17 — D230: CLEAR, with the admission
+  printed]`** Creation is detected per file section and the three rules are skipped as vacuous — they ask what a
+  change does to an existing demand, and a created criterion has none. Failures to COMPUTE still route. A sibling
+  defect went with it: the deletion check searched the whole diff text, so any deleted file in a `--stdin`
+  whole-commit diff read as *the spec was deleted*. *(Original text kept below for its reasoning.)*
+- **[answered as `D230`] Does the autonomy floor have a FIRST-SPEC case? `[real, REPRODUCED 2026-09-15 — D227's campaign, and the
   MECHANISM is now known; still UNDECIDED]`** It read three **newly created** `acceptance_criteria` regions as *edited*,
   parked `SPEC-54bd0d975588`, and blocked the repo's very first spec commit. If it holds, every brownfield
   project stops at its first spec for a human — which may be correct by design (that is exactly `D221`'s
