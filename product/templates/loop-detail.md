@@ -286,7 +286,7 @@ project up cannot run `git log <base_sha>..HEAD`. Fix the field; do not rewrite 
 **Rung 3 — was the work dispatched, and is there a goal to dispatch it at?** Two shapes of the same silence.
 An item finished with **no worker behind it anywhere** means the router did the node's work itself — it fires
 once, on the turn the item is promoted, and asks for the *next* item dispatched, never a rebuild. And a loop
-that has **promoted work with no `goal.json`** never ran the node that mints one (`planner:decompose`
+that has **planned work with no `goal.json`** never ran the node that mints one (`planner:decompose`
 greenfield · the `reconcile` checkpoint brownfield): nothing fails loudly, the gates that read convergence
 simply have nothing to read, and the drive has no DONE to stop on. Mint it, or park a `steer` saying this
 project means to run goal-less — that is a person's call, not a state to arrive in by omission.

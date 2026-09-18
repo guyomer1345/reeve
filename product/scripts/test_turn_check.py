@@ -322,8 +322,8 @@ def test_a_building_loop_with_no_goal_is_not_told_it_is_NEITHER_MET_NOR_STALLED(
     assert "neither met nor stalled" not in why
 
 
-def test_promoted_work_with_no_goal_demands_the_node_that_mints_one(tmp_path):
-    """The rung: inception is behind a loop that has promoted an item, so a missing goal is a
+def test_planned_work_with_no_goal_demands_the_node_that_mints_one(tmp_path):
+    """The rung: inception is behind a loop that has planned an item, so a missing goal is a
     node that did not run — and the demand names both paths that mint one."""
     wf = _goalless(tmp_path, promoted=["I-1"])
     res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
@@ -333,8 +333,23 @@ def test_promoted_work_with_no_goal_demands_the_node_that_mints_one(tmp_path):
         "a project that really means to run goal-less needs a way to say so"
 
 
+def test_a_PLANNED_item_is_enough_long_before_anything_is_promoted(tmp_path):
+    """MEASURED, and it is why this rung is not keyed on promotion: the third occurrence
+    dispatched `research` and then `planner` in plan-one mode on a roadmap item the router had
+    minted itself, and promoted NOTHING in the whole session. A promotion-keyed rung watched an
+    hour of that go by in silence. `planner` mkdirs the item dir when it plans, and both graph
+    paths mint the goal before anything is planned."""
+    wf = _goalless(tmp_path)
+    os.makedirs(os.path.join(wf, "items", "ROAD-1"))
+    with open(os.path.join(wf, "items", "ROAD-1", "plan.md"), "w") as fh:
+        fh.write("# ROAD-1 — slugify\n")
+    res = tc.check(wf, prev_promoted=[], workers_seen=1)
+    assert res["demand"] == "goal", res
+    assert res["promoted"] == [], "nothing was promoted — that is the whole point"
+
+
 def test_a_loop_still_INSIDE_inception_is_not_accused_of_skipping_it(tmp_path):
-    """Nothing promoted yet: the goal is missing because the node that mints it has not run
+    """Nothing PLANNED yet: the goal is missing because the node that mints it has not run
     YET, which is every project's first few turns and is not a breach."""
     wf = _goalless(tmp_path)
     res = tc.check(wf, prev_promoted=[], workers_seen=1)

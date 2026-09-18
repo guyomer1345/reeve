@@ -26,11 +26,17 @@ once obeys neither.
      WITH NO GOAL AT ALL, `met` and `stalled` are not false -- they are UNREACHABLE, so the
      rung says that instead of reporting "neither met nor stalled", which is a claim about a
      goal that does not exist. A goal is genuinely optional (`drive.py` drives item-at-a-time
-     without one), so its absence is only a DEMAND once the loop has PROMOTED work: inception
+     without one), so its absence is only a DEMAND once the loop has PLANNED work: inception
      is what mints it (`planner:decompose` greenfield, the `reconcile` checkpoint brownfield),
-     and a loop that promoted an item without one skipped that node. Measured twice, and the
-     sibling of the dispatch rung below -- that one catches the orchestrator doing a node's
-     work itself, and structurally cannot catch a node that never ran at all.
+     and BOTH paths mint it before anything is planned, so an item with a plan and no goal is
+     inception skipped rather than inception in progress. Measured three times, and the sibling
+     of the dispatch rung below -- that one catches the orchestrator doing a node's work itself,
+     and structurally cannot catch a node that never ran at all.
+     PLANNED, NOT PROMOTED, and the difference is a whole drive: the third occurrence dispatched
+     exactly two workers -- `research`, then `planner` in plan-one mode on a roadmap item the
+     router had minted ITSELF -- and never promoted anything at all. A rung keyed on promotion
+     sat silent for the entire session. Planning is the earliest point at which the goal is
+     unambiguously late, so it is where this fires.
   2. IS THE ANCHOR AN ANCHOR? `handoff.md` carries one load-bearing field -- `base_sha`, the
      commit a resumed session reads `git log <base_sha>..HEAD` against. It was ASKED FOR in
      `/dispatch` and in `handoff_gate.py`'s instruction, and CHECKED nowhere except under
@@ -200,6 +206,18 @@ def _goal_missing(workflow):
     return not os.path.exists(os.path.join(workflow, name))
 
 
+def _planned_items(workflow):
+    """-> item ids that exist at all. `planner` mkdirs the item dir when it plans, so the
+    directory IS the evidence that planning happened -- and it survives `retention.py` pruning
+    `plan.md` away at promote time, which is why this asks about the dir rather than the file."""
+    idir = os.path.join(workflow, "items")
+    try:
+        return sorted(n for n in os.listdir(idir)
+                      if os.path.isdir(os.path.join(idir, n)))
+    except OSError:
+        return []
+
+
 def promoted_items(workflow):
     """-> sorted ids carrying `promoted.json` — the package's own finished marker.
 
@@ -240,7 +258,7 @@ DISPATCH = (
 
 GOAL = (
     "TURN GATE — %s\n\n"
-    "This loop has PROMOTED work and has no `.workflow/goal.json`, which means the node that "
+    "This loop has PLANNED work and has no `.workflow/goal.json`, which means the node that "
     "mints one never ran: `planner:decompose` on the greenfield path, the `reconcile` "
     "checkpoint on the brownfield one. Nothing failed loudly — the gates that read convergence "
     "simply have nothing to read, so the drive cannot stop on DONE, no plan criterion carries "
@@ -294,11 +312,12 @@ def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None,
     ok, why = may_end(workflow)
     changed, fp = moved(workflow, prev_fingerprint)
     out["fingerprint"] = fp
-    if not ok and out["promoted"] and _goal_missing(workflow):
-        # Rung 1, with the one reason that is actionable rather than generic. Gated on
-        # PROMOTED work so that a session still inside inception -- where the goal has not
-        # been minted yet because the node that mints it has not run yet -- is not told it
-        # skipped anything. Once an item has been promoted, inception is behind this loop.
+    if not ok and _planned_items(workflow) and _goal_missing(workflow):
+        # Rung 1, with the one reason that is actionable rather than generic. Gated on PLANNED
+        # work so that a session still inside inception -- where the goal is not minted yet
+        # because the node that mints it has not run yet -- is not told it skipped anything.
+        # Once an item has a directory, `planner` has run on it, and both graph paths mint the
+        # goal before that happens.
         out.update(demand="goal", why=why, instruction=GOAL % why)
         return out
     if not ok:
