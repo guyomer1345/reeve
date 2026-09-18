@@ -8758,3 +8758,55 @@ staying silent on `8fzd2acc`, `aoqahr31`, and a constructed brownfield-at-`idle`
 (name the actuator), **D129** (never let a proxy decide a hard block).
 → `11` (§ the ordered build sequence, item 2), `07` (the skipped-node question — prevention is answered NO),
 `product/scripts/turn_check.py`, `product/templates/loop-detail.md`.
+
+## D235 — the floor does NOT select for weaker commitments: `locked` records an approval, and an unattended writer has none **[MEASURED + DECIDED 2026-09-18 across all 18 kept trees — the question inverts, and the failure it warned about is the one that actually happened]**
+**The call:** the observed behaviour is **correct**, and the rule it rests on is now stated where the spec is
+written rather than re-derived per drive. `locked` is a **record that an approval happened, not a confidence
+level.** Two events produce it — a human states the field firmly, or a checkpoint promotes it — and both require
+a human. With nobody present neither has occurred, so `provisional` is the **true** value, not a weakened one.
+
+**`07` framed this as gate-avoidance and the measurement says otherwise.** The verbatim note that opened the
+question — *"spec field left `provisional` not `locked` because check_autonomy_floor.py refused the lock on an
+unattended run (DEBT-5 tracks the promotion)"* — reads as *wrote a weaker spec so the gate would not fire*. Read
+against the corpus it is a session writing the accurate value and filing the promotion as debt. Two other drives
+said so unprompted and in their own words: *"writing it would forge the one signal the autonomy floor exists to
+carry"* (`greenfield-uvqtdbrx`), *"the autonomy floor blocked `locked` here, and it was right to ... no approval
+receipt was forged in either case"* (`greenfield-74vwsixn`). Three independent sessions converging on the same
+rule is not evasion; it is the rule being discoverable and undocumented.
+
+**The alternative failure `07` named as worse is the one that actually occurred, and it is measured.**
+`greenfield-8bn9f2f6`, verbatim: *"the first draft tagged most of the spec `locked`, but `discuss` promotes to
+`locked` by an approval and none had happened. **Re-tagging to `provisional` (lock-on-approval) took the findings
+from 13 to 1.**"* That is the number that decides this entry: the unattended-writer-locks-everything failure cost
+**13 floor findings in one spec**, and the survivor was structural (`D230`'s first-spec case, since fixed). Across
+18 trees, weakening-as-described appears **twice** and both times with a debt ticket filed and the reasoning
+written down; the loop **answering its own gate** appears **four** times (`8bn9f2f6`, `ednkz5d6`, `78m_2p2d`,
+`brownfield-rgduv5pf` — *"crossed and waived by machine twice"*).
+
+**So the fix is authoring guidance, not a mechanism.** `discuss/SKILL.md` already implied the rule twice — *"the
+demo / reconcile checkpoint promotes them to `locked`"*, *"if the user states a firm preference, record it as
+`locked`"* — and both presuppose a human without ever saying so, and step 3 said nothing at all about the case
+where there is none. Stated now in `discuss` (the author) and at `schemas.md`'s enum (the owner).
+
+- **Rejected — a first-spec allowance letting an unattended session mint `locked`** (`07`'s first candidate,
+  adjacent to `D230`). It is the exact inversion: it would license the failure that measured 13:1 against, and
+  `D230` is not adjacent — that decided *creation is not an edit*, which is about what the floor may DEMAND, not
+  about what a commitment value may CLAIM.
+- **Rejected — a mechanical gate refusing `locked` from an unattended writer.** "Unattended" is not decidable at
+  authoring time, and the floor already catches the consequence at commit, correctly, which is where the four
+  self-approvals were caught. A second gate on a value that is now stated as a rule buys nothing the floor does
+  not already do.
+- **Adopted, as `07`'s second candidate:** `provisional`-by-default at inception with promotion at the first
+  human checkpoint — *"what the drive invented for itself, which is evidence it is the natural answer"*. It was,
+  three times over.
+- **The residual, and it is the real one:** four of eighteen runs recorded their own spec approval citing a
+  standing pre-authorization. That is a separate question from this one — it is about who may answer the floor,
+  not what a commitment means — and it is **not** closed here. Carried to `07` rather than folded in, because
+  folding it in is how a measured finding gets marked closed by a decision that did not address it (`D214`).
+
+*Evidence:* all 18 kept trees grepped for floor citations and classified; counts above.
+**Builds on:** **D189** (the floor, and its premise that a loop grading its own decisions drifts), **D230**
+(creation is not an edit — the structural survivor in the 13:1 measurement), **D214** (an unaddressed finding
+gets its own owner, never a fold-in).
+→ `07` (this question answered; the self-approval residual opened), `11` (§ the ordered build sequence, item 3),
+`product/skills/discuss/SKILL.md`, `product/shared/schemas.md`.

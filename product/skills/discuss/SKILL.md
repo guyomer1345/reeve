@@ -25,6 +25,13 @@ The user's intent (conversation) + any existing `spec` to extend.
    detail and styling to *provisional* (expected to change). Flow and scope are *provisional* too, but flag them
    the **lock-on-approval** set — the demo / reconcile checkpoint promotes them to `locked` (a later deviation is
    then a bug), while detail/styling stay provisional. Never emit a value outside the enum.
+   **`locked` is a RECORD THAT AN APPROVAL HAPPENED, not a confidence level** — how sure you are has no bearing
+   on it. It comes from one of exactly two events: a human stated this firmly in the conversation (step 4), or a
+   checkpoint promoted it. **With no human present, neither has occurred, so nothing is `locked`** — and writing
+   it anyway forges the one signal `check_autonomy_floor.py` exists to carry. `provisional` there is not a
+   weaker claim to slip past the gate; it is the true one, and the promotion is the first human checkpoint's to
+   make. Measured: an unattended inception that tagged most of its spec `locked` raised **13** floor findings,
+   and re-tagging to `provisional` (lock-on-approval) took it to 1.
 4. For any genuine engineering decision (stack, library, architecture), **do not decide** — record
    `TBD → decision-engineer` as a pointer. If the user states a firm preference, record it as `locked`.
 5. **Track provisional debt on the no-demo path:** at spec-completion, if the sandbox gate will not fire (no

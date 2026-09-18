@@ -51,7 +51,11 @@ The product definition `discuss` produces and the whole build runs against.
 - `data_model`
 - `integrations[]` — `{ name, kind: auth|payments|…, → triggers a setup checkpoint }`
 - `tech_stack` — value | `"TBD → decision-engineer"`
-- `commitment` ∈ `{ locked, provisional, unspecified }` — tagged per element
+- `commitment` ∈ `{ locked, provisional, unspecified }` — tagged per element. **`locked` records that an
+  APPROVAL HAPPENED — it is not a confidence level**, so an unattended writer cannot reach it: the two events
+  that produce it (a human stating the field firmly, a checkpoint promoting it) both require a human. Writing
+  `locked` with nobody present forges the one signal `check_autonomy_floor.py` carries; `provisional` there is
+  the accurate value, not a weakened one, and the first human checkpoint owns the promotion.
 
 ## knowledge-node  · seeded by `ingest`, authored/refreshed by `document` · *one `.md` per source file at `<project_root>/docs/knowledge/<source-path>.md` (mirror the source tree); STABLE frontmatter + APPEND-ONLY `# Sessions`*
 The prose layer over `graph.json`: the structural fields are **copied from `graph.json`** (regenerated, never hand-edited); the `Purpose`/edge-`why`/`# Sessions` are the durable layer. Write each node **exactly** this shape so `retention.py`/`document` can parse it — no hunting the format:

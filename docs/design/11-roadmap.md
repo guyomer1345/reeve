@@ -1438,9 +1438,14 @@ real slice.**
    after it would fire. **Costing it found a measured hole in the detection, and that half is built:** `idle`
    satisfied rung 1 on its own, so `greenfield-ednkz5d6` planned, built and committed **two** items with no goal,
    handed back, and the gate never said a word. The demand now fires at `idle` too — and only there.
-3. **Does an unattended run write weaker commitments to avoid the floor?** `[`07` owns it; observed once]`
-   Measure before deciding — one observation, and the alternative failure (a spec whose commitments are all
-   `locked` by an unattended writer) is worse. `07` carries the three candidate answers.
+3. **Does an unattended run write weaker commitments to avoid the floor? ✅ CLOSED 2026-09-18 — `D235`. NO, and
+   the question inverts.** Measured over all 18 kept trees: `locked` **records that an approval happened**, so an
+   unattended writer cannot honestly reach it and the `provisional` it writes is the *accurate* value, not a
+   weakened one — three drives derived that rule independently. **The alternative failure `07` called worse is
+   the one that actually occurred:** a drive that tagged most of an inception spec `locked` raised **13** floor
+   findings; re-tagging took it to 1. Fixed as authoring guidance in `discuss` and at `schemas.md`'s enum.
+   **One residual is OPENED, not folded in** (`D214`'s lesson): four of eighteen runs recorded their own spec
+   approval on a standing pre-authorization. `07` owns it as a new question.
 
 **Then the two named candidates, neither blocked on a decision from the maintainer:**
 - **The cold-context reviewer** — the strongest Phase-13 candidate and the biggest remaining *correctness* gap:

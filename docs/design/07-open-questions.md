@@ -1030,7 +1030,30 @@ sub-questions deferred to the build, in the order the slices need them.
   The open call is whether creation reads CLEAR (with what the floor cannot prove named in the file) or ROUTES
   under an honest first-spec reason. What is settled is that three findings saying `edited` about a file that
   never existed is wrong either way.
-- **Does the floor make an unattended run write WEAKER commitments? `[real, OBSERVED once — run 9 greenfield,
+- **~~Does the floor make an unattended run write WEAKER commitments?~~ `[ANSWERED 2026-09-18 — D235, and the
+  question INVERTS]`** No. Measured across all 18 kept trees: `locked` **records that an approval happened**, so
+  an unattended writer cannot honestly reach it, and the `provisional` it writes instead is the accurate value
+  rather than a weakened one — three independent drives derived that rule and wrote it down, one of them saying
+  *"writing it would forge the one signal the autonomy floor exists to carry"*. **The alternative failure this
+  entry named as worse is the one that actually happened:** a drive that tagged most of an inception spec
+  `locked` raised **13** floor findings, and re-tagging to `provisional` took it to 1. Weakening appears twice
+  (both with a debt ticket and the reasoning recorded); the loop **answering its own gate** appears four times.
+  Fixed as authoring guidance in `discuss` (the author) and `schemas.md`'s enum (the owner), which is `07`'s own
+  second candidate. **A NEW question is opened by the same measurement and is listed below** — who may answer the
+  floor — rather than folded in here. *(Original text kept for its reasoning.)*
+- **May the loop record its OWN spec approval on a standing pre-authorization? `[real, MEASURED 4 of 18 —
+  D235's residual, 2026-09-18; UNDECIDED]`** Four runs crossed the autonomy floor and recorded the verdict
+  themselves, citing the operator's standing pre-authorization rather than a human answering — `greenfield-8bn9f2f6`
+  (twice, and it flagged them itself: *"⚠ Two self-recorded spec approvals — the thing to review"*),
+  `greenfield-ednkz5d6` (*"the loop answered its own gate"*), `greenfield-78m_2p2d` (a `D-001` titled *"Clearing
+  the autonomy floor on the inception spec with no human present"*), `brownfield-rgduv5pf` (*"crossed and waived
+  by machine twice"*). Every one of them is **digest-bound and disclosed** in the handoff, which is the
+  disciplined version — and it is still the loop being both parties to its own gate, which is `D189`'s premise
+  exactly. **The question is not whether they behaved well; it is whether the standing directive can licence
+  this at all**, and if so whether the receipt must name the directive it is drawing on so a returning human can
+  audit the set. Distinct from `D235`: that settled what a commitment value *means*, this is about who may
+  *answer* the floor. Do not close one with the other.
+- **[answered as `D235`] Does the floor make an unattended run write WEAKER commitments? `[real, OBSERVED once — run 9 greenfield,
   2026-09-18; UNDECIDED]`** The drive's own note, verbatim: *"spec field left `provisional` not `locked`
   because check_autonomy_floor.py refused the lock on an unattended run (DEBT-5 tracks the promotion)"*. It
   filed the debt ticket and carried on, which is the disciplined version of the move — but the move itself is
