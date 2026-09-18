@@ -1217,7 +1217,28 @@ written in the same session, recorded next to the gate rather than left for whoe
   `execute_max` (read by the gate) and `refresh_max` (read by the classifier). That is legitimate — ordering has
   always been `prioritize`'s judgement — but it means the one wave knob with no mechanical reader is the one
   governing spend. Worth a look if wave cost surprises anyone.
-- **D180's fan-out-controller question is now HALF answered, and the remaining half is a different shape.**
+- **~~D180's fan-out-controller question is now HALF answered~~ `[RE-MEASURED + ANSWERED 2026-09-18 — D237]`**
+  `D196`'s half is now measured rather than argued: `planner` went from a median **32.4k** of the router's
+  window inline to **5.1k** dispatched. The open half is answered against the candidate it named — a fan-out
+  **threshold** for `verify` cannot work, because `verify`'s inline cost does **not vary with item size**
+  (20.1k / 20.2k / 22.2k, the flattest series measured), so it is a fixed input-reading cost and a threshold has
+  nothing to key on. **And the claim that `verify` fans out for real is false in practice:** across four current
+  drives it fanned out **zero** times, which is exactly where `planner` stood before `D196`. The move that IS
+  supported is therefore the same one — `verify` to a leaf agent — and it is scheduled behind a drive rather
+  than built blind, because `D236` has just put `review` into the same seam. Trigger named in `D237`.
+  *(Original text kept below for its reasoning.)*
+- **`commit` costs the router as much as `verify` does, and nothing has ever asked why. `[real, MEASURED 4
+  drives — D237's residual, 2026-09-18; UNDECIDED]`** Medians: `verify` 20.2k, **`commit` 19.9k**,
+  `create-issue` 12.9k, `prioritize` 9.8k. `commit` is inline because it *is* the router's own act, and
+  essentially all of its cost is `checks.sh --check` output landing in the constrained window — a full gate run
+  (format · lint · typecheck · tests · coverage gates · code map · autonomy floor · doc budget · directives)
+  read into the hub on every item. **The question is whether the router needs the output or only the verdict.**
+  A failing gate's output is what a human or a `refine` acts on; a *passing* one is ~20k of "OK:" lines the
+  router will never refer to again. Candidates: tail-on-pass / full-on-fail, or the runner writing its transcript
+  to `scratch/` and returning the verdict plus a path. Not folded into the `verify` question — it is a different
+  node with a different cause, and folding it in is how a measured finding gets closed by a decision that never
+  addressed it (`D214`).
+- **[answered as `D237`] D180's fan-out-controller question is now HALF answered, and the remaining half is a different shape.**
   `D196` moved `planner` out of the router's window by finding its spawn avoidable. `verify` and `debug` fan out
   for real — they dispatch adjudication views — so the same trick does not apply, and they stay inline as the
   router's remaining expensive nodes. Whether that is acceptable or whether adjudication itself should be

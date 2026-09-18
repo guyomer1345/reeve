@@ -8888,3 +8888,67 @@ demonstration and the fail direction permissive), **D235** (why it is not a comm
 `product/agents/review.md`, `product/templates/loop.md`, `product/templates/loop-detail.md`,
 `product/shared/schemas.md`, `product/shared/schemas-loopstate.md`, `product/shared/schemas-config.md`,
 `product/skills/{verify,refine}/SKILL.md`, `product/scripts/forecast.py`, `scripts/check_enum_coherence.py`.
+
+## D237 — the inline-node topology question, RE-MEASURED: the premise is dead, the candidate fix is aimed at the wrong variable, and `D196` is vindicated with a number **[MEASURED 2026-09-18 on four current-topology drives. No product change — this entry is the measurement and what it rejects]**
+The queue entry carried its own warning — *"Untested, not undecided — and RE-MEASURE BEFORE BUILDING: `D196`
+moved `planner` to a leaf agent afterwards, so the one measurement this item rests on describes a topology the
+package no longer has."* Re-measured with `measure-dispatch.py --writer-scope` over the four smoke drives that
+ran on the **current** package (`greenfield-wn_lx882`, `greenfield-zbyd6lq8`, `brownfield-j9coxm7n`,
+`brownfield-hiya6v_r`). Three findings, and none of them is the one the item was scheduled to act on.
+
+**1. The premise is dead, and `D196` gets the number it was decided without.** `D180` measured `planner` as the
+most expensive **inline** node at **+26.6k / +16.0k / +49.2k / +38.1k** — median **32.4k** of the router's
+window. Dispatched, it now costs the router **+9.7k / +7.2k / +2.2k / +3.0k**, median **5.1k**. That is a ~6×
+reduction on the single most expensive thing in the constrained window, and `D196` argued it a priori (*"N
+inline planning passes would have spent the router's window on the very work fan-out removes from it"*). It is
+now measured. The router is still **49%** of a drive's fed-in tokens, so the axis has not moved — only this node
+has come off it.
+
+**2. `verify` is the most expensive inline node now, and it is NOT uniquely so.** Medians over the same drives:
+`verify` **20.2k** (20.1 / 20.2 / 22.2) · `commit` **19.9k** (13.4 / 19.9 / 24.3) · `create-issue` **12.9k** ·
+`prioritize` **9.8k** · `decision-engineer` **1.4k**. `verify` and `commit` are the same size, and `commit` has
+never been part of this question — it is inline because it *is* the router's own act, and roughly all of its
+cost is `checks.sh --check` output landing in the router's window. **A finding with no owner, stated rather than
+left in a table:** the tail's two most expensive inline nodes are `verify` and `commit`, and only one of them
+has ever been looked at.
+
+**3. The named candidate fix is aimed at the wrong variable, and the measurement says so directly.** The
+candidate was *`D84`'s authoring-thinness, with a fan-out threshold that `verify/SKILL.md` licenses but does not
+quantify*. A threshold keyed on item size can only help if the cost varies with item size. **`verify`'s does
+not** — 20.1k, 20.2k, 22.2k across items of visibly different scope is the flattest series in the whole table.
+That is the signature of a **fixed** cost: `verify` reads `plan.md`, `changelog.md`, the diff and the spec, and
+on items this size the loop's own artifacts dominate the diff. Quantifying a threshold would buy nothing.
+**Rejected on data, not on preference.**
+
+**What the measurement DOES support, and it is a different move.** In all four drives `verify` **fanned out
+zero times** — no worker anywhere is attributable to it. The reason it is inline (it fans out, and a leaf cannot
+spawn — `D84`) is therefore **true in the design and false in practice**, which is exactly the position
+`planner` was in before `D196`. Making `verify` a leaf agent would move ~20k per item off the constrained axis,
+on the same argument and the same precedent, now with the number `D196` lacked.
+
+**NOT BUILT IN THIS SESSION, and the reason is sequencing rather than doubt.** `D236` has just put a new
+dispatched node — `review` — into this exact seam, immediately after `verify`, and nothing has driven it yet.
+Re-shaping the same seam twice before either change has met a real drive is guessing twice and calling the
+result a measurement. The full smoke run is **last and once** (`D220`/`D227`), so it cannot validate both. The
+honest order is: drive `review`, then move `verify` with the drive's own numbers in hand.
+**The trigger is named so this does not become a note nobody acts on:** after the next full smoke run, re-run
+`measure-dispatch.py --writer-scope` and compare `verify`'s inline cost against `review`'s dispatched cost on
+the same drive — if `verify` is still ~20k inline while `review` lands near `planner`'s 5k dispatched, the move
+is argued by its own sibling.
+
+- **Rejected — a fan-out threshold for `verify`** (above): the cost it would key on does not vary.
+- **Rejected — moving `verify` out in this slice**: sequencing, above. Not a doubt about the direction.
+- **Rejected — treating `commit`'s 19.9k as this question's business.** It is a real cost and a real surprise,
+  and folding it into a question about `verify` is how a finding gets marked closed by a decision that never
+  addressed it (`D214`). It is carried to `07` as its own question.
+- **An instrument caveat, stated rather than silently dropped:** the router trace attributes *"context gained
+  from this node starting to the next one starting"*, so the **last** node in a session has no successor and its
+  figure runs to end-of-session. `wn_lx882`'s trailing `planner +28.5k` is that artefact and is excluded from
+  the median above; a reader re-running this should exclude the last row too.
+
+*Evidence:* `measure-dispatch.py --writer-scope` over four `~/.claude/projects/-tmp-reeve-smoke-*` transcript
+sets; per-node router costs quoted verbatim above.
+**Builds on:** **D180** (the measurement this replaces, and the axis it established), **D196** (the move this
+vindicates), **D187** (re-measure, do not re-reason — the instrument's own moral), **D84** (a leaf cannot spawn,
+which is the whole reason `verify` is inline), **D214** (a finding with no owner gets one).
+→ `07` (the inline-`verify` tension — answered; `commit`'s cost opened), `11` (§ the ordered build sequence).

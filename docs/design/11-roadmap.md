@@ -1457,11 +1457,17 @@ real slice.**
   ninth meta-gate:** the forecast ANCHOR TABLE claimed to be read by `forecast.py` and a doc-only edit left the
   code behind — that owner↔consumer pair had never been adopted by `check_enum_coherence.py` and now is, both
   ways and on the artifact name.
-- **The inline-node topology question** — `D180` measured it (`planner` is the expensive inline node, above
-  `verify`) and named the cheapest candidate fix (`D84`'s authoring-thinness, with a fan-out threshold that
-  `verify/SKILL.md` licenses but does not quantify). **Untested, not undecided — and RE-MEASURE BEFORE
-  BUILDING:** `D196` moved `planner` to a leaf agent afterwards, so the one measurement this item rests on
-  describes a topology the package no longer has. Treat the premise as unverified, which is what it is.
+- **The inline-node topology question. ✅ RE-MEASURED + ANSWERED 2026-09-18 — `D237`. No product change.** The
+  warning was right: the premise was dead. `planner` is dispatched now and costs the router a median **5.1k**
+  against `D180`'s **32.4k** inline — `D196` vindicated with the number it was decided without. `verify` is the
+  most expensive inline node now (**20.2k**) but **not uniquely** — `commit` is 19.9k and has never been looked
+  at. **The named candidate fix is rejected on data:** a fan-out threshold needs a cost that varies with item
+  size, and `verify`'s is the flattest series measured (20.1 / 20.2 / 22.2), i.e. fixed input-reading. What the
+  data *does* support is the `D196` move again — `verify` to a leaf agent, since it fanned out **zero** times in
+  four drives — and that is **deliberately not built here**: `D236` just put `review` into the same seam and
+  nothing has driven it. Re-shaping a seam twice before either change meets a drive is guessing twice. `D237`
+  names the trigger. **One residual opened, not folded in:** `commit`'s ~20k is a full `checks.sh` transcript
+  read into the constrained window on every item; `07` owns it.
 Then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage · project-map
 tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the code-map observed
 layer. **Org mode stays parked at the maintainer's word.** Open questions and their current state live in `07`,
