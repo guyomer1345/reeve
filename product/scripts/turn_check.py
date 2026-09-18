@@ -37,6 +37,13 @@ once obeys neither.
      router had minted ITSELF -- and never promoted anything at all. A rung keyed on promotion
      sat silent for the entire session. Planning is the earliest point at which the goal is
      unambiguously late, so it is where this fires.
+     AND IT FIRES ON THE WAY OUT AT `idle`, which was a measured hole rather than a refinement:
+     `idle` satisfies this rung on its own, so a greenfield drive that planned, built and
+     committed TWO items without ever minting a goal ran its backlog to the end and was never
+     told. `idle` alone, never the other three exits -- `parked` is the measured false positive
+     (brownfield mints from acceptance a human confirms at `reconcile`, so an unattended drive
+     with that open is CORRECTLY goal-less), `paused` is the operator's own latch, and
+     `met`/`stalled` presuppose the goal in question.
   2. IS THE ANCHOR AN ANCHOR? `handoff.md` carries one load-bearing field -- `base_sha`, the
      commit a resumed session reads `git log <base_sha>..HEAD` against. It was ASKED FOR in
      `/dispatch` and in `handoff_gate.py`'s instruction, and CHECKED nowhere except under
@@ -206,6 +213,20 @@ def _goal_missing(workflow):
     return not os.path.exists(os.path.join(workflow, name))
 
 
+def _handing_back(workflow):
+    """True when the loop is `idle` -- backlog empty, awaiting steering -- AND owes the human
+    nothing else. The one way rung 1 can pass that still wants the goal demand: see the
+    dispatcher. Read narrowly off `status`, never inferred from an empty backlog, because `idle`
+    is a thing the loop PUBLISHES.
+
+    The parked exclusion is not belt-and-braces. Brownfield reaching `idle` with its `reconcile`
+    checkpoint still parked is goal-less for a reason that is already on a human's desk, and the
+    demand's own escape is "park a `steer`" -- so firing there asks for a SECOND parked ticket
+    about the ticket that is already parked."""
+    state = _json_file(os.path.join(workflow, "state.json"))
+    return bool(state) and state.get("status") == "idle" and not _parked(workflow)
+
+
 def _planned_items(workflow):
     """-> item ids that exist at all. `planner` mkdirs the item dir when it plans, so the
     directory IS the evidence that planning happened -- and it survives `retention.py` pruning
@@ -312,12 +333,30 @@ def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None,
     ok, why = may_end(workflow)
     changed, fp = moved(workflow, prev_fingerprint)
     out["fingerprint"] = fp
-    if not ok and _planned_items(workflow) and _goal_missing(workflow):
+    handback = _handing_back(workflow)
+    if (not ok or handback) and _planned_items(workflow) and _goal_missing(workflow):
         # Rung 1, with the one reason that is actionable rather than generic. Gated on PLANNED
         # work so that a session still inside inception -- where the goal is not minted yet
         # because the node that mints it has not run yet -- is not told it skipped anything.
         # Once an item has a directory, `planner` has run on it, and both graph paths mint the
         # goal before that happens.
+        #
+        # ALSO ON THE WAY OUT AT `idle`, and that half was a measured hole rather than a
+        # refinement: `idle` satisfies rung 1 on its own, so a greenfield drive that planned,
+        # built and committed TWO items without ever minting a goal ran to the end of its
+        # backlog and was never told (`greenfield-ednkz5d6`). Arriving goal-less at the one node
+        # that means "a human must act next" is precisely the state-by-omission this demand
+        # exists to refuse, and it is the moment saying so is worth most, not least.
+        #
+        # ONLY `idle`, never the other three ways rung 1 passes. `parked` is the measured false
+        # positive: brownfield mints its goal from acceptance a human confirms at reconcile, so
+        # an unattended drive with that checkpoint parked is CORRECTLY goal-less and demanding
+        # one asks it to manufacture a confirmation nobody gave (two of nine brownfield trees).
+        # `paused` is the operator's own latch and is honoured rather than argued with, and
+        # `met`/`stalled` both presuppose the goal this rung is about.
+        if handback and ok:
+            why = ("this drive is handing back at `idle` -- backlog empty, a human to act next --"
+                   " with planned work and NO GOAL, so it never had a stop-when-done to reach")
         out.update(demand="goal", why=why, instruction=GOAL % why)
         return out
     if not ok:

@@ -1430,15 +1430,14 @@ real slice.**
    `D231` made the goal compulsory every unattended greenfield drive reaches it. The seam that should have
    caught it asked only whether the file was on disk; it now asks whether it is in `HEAD`. The slice paid its
    own rent out of a stale second copy in `loop.md` (3190 → **3187**), per `D184`.
-2. **The skip is DETECTED, not PREVENTED.** `[found by runs 6/8/9/10]` Four consecutive greenfield drives
-   went from spec straight to planning: the router mints the roadmap item itself instead of dispatching
-   `planner:decompose`. `D231` catches the consequence one turn later and repairs it; nothing stops it.
-   **The open question is whether prevention is even available** — `dispatch_guard.py` blocks a node
-   dispatched to the wrong worker and structurally cannot force a dispatch that never happens. The one
-   candidate worth costing: the predicate `D231` already computes (item dir exists, no goal) evaluated
-   **earlier**, as a `PreToolUse` refusal of a plan-one dispatch before inception has minted anything. Weigh
-   it honestly — blocking planning is heavier than blocking a turn end, and the detect-and-repair path is
-   already proven green. **Deciding not to build it is a legitimate outcome if the reasoning is recorded.**
+2. **The skip is DETECTED, not PREVENTED. ✅ CLOSED 2026-09-18 — `D234`, as a DON'T-BUILD plus one real fix.**
+   Prevention is **not available**, and the reasoning is recorded so it is not re-proposed: the predicate is not
+   yet true at the only moment a `PreToolUse` could act (`planner` mkdirs the item dir *during* the dispatch),
+   the weaker predicate it would need deadlocks the 2-of-9 brownfield trees that are **correctly** goal-less
+   before reconcile, and a pre-dispatch hook cannot compose with the escapes — park, pause, steer — that arrive
+   after it would fire. **Costing it found a measured hole in the detection, and that half is built:** `idle`
+   satisfied rung 1 on its own, so `greenfield-ednkz5d6` planned, built and committed **two** items with no goal,
+   handed back, and the gate never said a word. The demand now fires at `idle` too — and only there.
 3. **Does an unattended run write weaker commitments to avoid the floor?** `[`07` owns it; observed once]`
    Measure before deciding — one observation, and the alternative failure (a spec whose commitments are all
    `locked` by an unattended writer) is worse. `07` carries the three candidate answers.

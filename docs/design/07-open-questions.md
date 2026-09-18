@@ -968,8 +968,14 @@ sub-questions deferred to the build, in the order the slices need them.
   neither met nor stalled"* about a goal that does not exist. The silence was real; its location was not.
   **Re-aimed once by a live run**: keyed on *promoted* work it sat silent through a whole greenfield session
   that promoted nothing (run 9). Run 10: the demand fired twice, the loop minted `GOAL-001`, seam green.
-  **What it does NOT do, and is the live residual:** it detects and repairs the skip; the router still mints the
-  roadmap item itself instead of dispatching `decompose`. *(Original text kept below for its reasoning.)*
+  **The residual this carried — "it detects, it does not prevent" — is now CLOSED as a decision, `D234`:
+  prevention is NOT available.** The predicate is not yet true at the only moment a `PreToolUse` could act
+  (`planner` mkdirs the item dir *during* the dispatch), the weaker predicate it would need deadlocks 2 of 9
+  brownfield trees that are correctly goal-less, and a pre-dispatch hook cannot compose with escapes — a park, a
+  pause, a steer — that arrive after it fires. Detect-and-repair stands. **Costing it found a real hole and that
+  half was built:** `idle` satisfied rung 1 on its own, so a greenfield drive that planned, built and committed
+  two items goal-less handed back and was never told; the demand now fires at `idle` too (and only there).
+  *(Original text kept below for its reasoning.)*
 - **[answered as `D231`] What catches a graph node the orchestrator simply DOES NOT RUN? `[real, MEASURED twice — opened by building
   `D229`, which covers the neighbouring case and structurally cannot cover this one]`**
   `D229` closed *the orchestrator did the node's work itself*: an item finished with no worker behind it now

@@ -298,7 +298,10 @@ once, on the turn the item is promoted, and asks for the *next* item dispatched,
 that has **planned work with no `goal.json`** never ran the node that mints one (`planner:decompose`
 greenfield · the `reconcile` checkpoint brownfield): nothing fails loudly, the gates that read convergence
 simply have nothing to read, and the drive has no DONE to stop on. Mint it, or park a `steer` saying this
-project means to run goal-less — that is a person's call, not a state to arrive in by omission.
+project means to run goal-less — that is a person's call, not a state to arrive in by omission. **It also fires
+on the way out at `idle`**, where the rung is otherwise satisfied: a drive that runs its whole backlog goal-less
+and hands back is the omission at the exact moment a human returns to steer. Not while a checkpoint is parked
+(brownfield's goal comes from the `reconcile` a human has not answered yet) and not under an operator pause.
 
 **Rung 4 — is the report current?** A turn that may legitimately end leaves the four-field, goal-relative block
 behind it. Paste it **whole**, including the `[reeve-report state:…]` line: the gate re-renders and compares

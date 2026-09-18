@@ -8699,3 +8699,62 @@ budget · directives — green, and `goal.json` carrying its own commit for the 
 second copy that paid it), **D199** (the goal record this makes durable).
 → `11` (§ the ordered build sequence, item 1), `product/hooks/verify_check.py`, `product/shared/schemas.md`,
 `product/templates/loop.md`, `product/templates/loop-detail.md`, `scripts/smoke_drive.py`.
+
+## D234 — prevention of the skipped node is NOT available, and looking for it found a hole in the detection **[DECIDED (don't build) + BUILT (the hole) 2026-09-18 — 1,627 tests, 8 meta-gates, measured across all 18 kept trees]**
+**The call, in two parts.** (1) The one prevention candidate the queue named — `D231`'s predicate evaluated
+earlier, as a `PreToolUse` refusal of a plan-one dispatch before inception has minted anything — is **REJECTED**,
+and this entry exists so it is not re-proposed. (2) Costing it surfaced a **measured hole in the detection**,
+which IS built: the demand now also fires when the loop hands back at `idle`.
+
+**Why prevention is not available, in the order the evidence arrived.**
+1. **The predicate is not yet true at the moment prevention would have to act.** `D231` computes *item dir
+   exists ∧ no goal*. `planner` mkdirs the item dir **during** the plan-one dispatch, so at `PreToolUse` on that
+   dispatch there is no item dir. Prevention cannot reuse the predicate; it needs a strictly weaker one —
+   *plan-one dispatch ∧ no goal*.
+2. **That weaker predicate has a measured false-positive rate of 2 in 9 on brownfield.** `brownfield-8fzd2acc`
+   and `brownfield-aoqahr31` each planned, built and committed an item with `reconcile` explicitly open
+   (*"needs a human. Cannot be resolved by the loop"*) and no goal — and both were **right** to. The brownfield
+   goal is written from acceptance a human confirms at that checkpoint; a session that minted one unattended
+   would manufacture a confirmation nobody gave, which is `seam_goal_minted`'s own finding. A refusal keyed on
+   "no goal" would have stopped both from planning **anything**, with no escape the loop can take itself, since
+   nothing the loop does mints a brownfield goal. That is a deadlock, not a heavy gate.
+3. **A turn-end gate composes with the escapes; a dispatch-time gate cannot.** Checked rather than argued: in
+   both trees the goal demand correctly stayed silent, because rung 1 is satisfied *first* by the park or the
+   pause. That evidence — a park, a pause, a steer — arrives **after** the dispatch a `PreToolUse` hook would
+   refuse. The ladder is permissive on late-arriving evidence by construction; a pre-dispatch hook is not.
+4. **It is aimed at the wrong actuator** (`D214`). The defect is a dispatch that never happened. A `PreToolUse`
+   hook only ever sees a call that *is* being made and cannot cause one: refusing plan-one does not run
+   `decompose`, it stalls the loop and hopes the reader infers the missing node from a refusal.
+5. **Goal-less operation is sanctioned** — `drive.py` drives item-at-a-time without one, and `D231` gave it a
+   steer escape. A hard block on planning makes an optional mode mandatory.
+
+**What costing it found, and this half is built.** `idle` satisfies rung 1 on its own, so the goal demand could
+never fire there — and `greenfield-ednkz5d6` is that case in full: **two items planned, built, verified and
+committed with no goal ever minted**, loop published `idle`, gate silent. A whole drive with no DONE, reported
+to nobody. Arriving goal-less at the one node that means *a human must act next* is precisely the
+state-by-omission the demand exists to refuse, and handback is when saying so is worth **most** — the human is
+about to be asked what to steer toward. So the demand now fires at `idle` too.
+
+**`idle` alone, never the other three exits**, and each exclusion is the same evidence read forwards: `parked`
+is the false positive from (2) — and doubly so, since the demand's own escape is *park a `steer`*, so firing
+beside an open `reconcile` asks for a second parked ticket about the ticket already parked. `paused` is the
+operator's latch, and they are at the keyboard by definition. `met`/`stalled` presuppose the goal in question.
+
+- **Rejected — scoping prevention to greenfield.** There is no durable package-level mode marker in
+  `.workflow/`; `smoke_drive.py`'s is the harness's own. The nearest proxy is `config.project_root`, which is a
+  path with other reasons to be what it is, and keying a hard block on a proxy is `D129` exactly.
+- **Rejected — a rung per skippable node.** Already rejected in `D231`; nothing here changes it.
+- **Rejected — firing at `idle` as a REPORT rather than a demand.** `D231` settled that: visibility with no
+  demand ends as a line in a report nobody is required to act on.
+- **The residual, stated:** there is still no durable *"this project means to run goal-less"* marker, so a
+  project that has answered the steer once will meet the demand again at the next handback. That is `D231`'s
+  accepted shape — the escape is a person — and `turn_gate.py` giving up after two demands is what keeps it
+  from wedging a session. Widening the surface widens that exposure; noted rather than discovered later.
+
+*Evidence:* all 18 kept trees cross-tabulated (goal present × items planned) — 4 greenfield and 2 brownfield
+goal-less, and the two brownfield ones correct; the demand reproduced firing on `ednkz5d6` after the change and
+staying silent on `8fzd2acc`, `aoqahr31`, and a constructed brownfield-at-`idle`-with-`reconcile`-parked tree.
+**Builds on:** **D231** (the rung, and the skip it detects), **D229** (its sibling and its blind spot), **D214**
+(name the actuator), **D129** (never let a proxy decide a hard block).
+→ `11` (§ the ordered build sequence, item 2), `07` (the skipped-node question — prevention is answered NO),
+`product/scripts/turn_check.py`, `product/templates/loop-detail.md`.

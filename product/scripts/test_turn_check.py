@@ -375,3 +375,58 @@ def test_an_UNREADABLE_goal_is_not_a_skipped_node(tmp_path):
         fh.write("{not json")
     res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
     assert res["demand"] != "goal", res
+
+
+# --- the handback half: `idle` satisfies rung 1 on its own, so a whole goal-less drive was silent ---
+
+def test_a_drive_that_reaches_IDLE_goal_less_is_told_on_the_way_out(tmp_path):
+    """MEASURED on `greenfield-ednkz5d6`: two items planned, built, verified and committed, no
+    goal ever minted, loop published `idle` — and the gate said nothing, because `idle` satisfies
+    rung 1 by itself. Arriving goal-less at the one node that means "a human must act next" is
+    exactly the state-by-omission this demand exists to refuse, and handback is when saying so is
+    worth most: the human is about to be asked what to steer toward."""
+    wf = _goalless(tmp_path, promoted=["I-1"], status="idle")
+    ok, _ = tc.may_end(wf)
+    assert ok, "idle is still a legitimate reason to end — this is not a fifth rung"
+    res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
+    assert res["demand"] == "goal", res
+    assert "idle" in res["why"] and "NO GOAL" in res["why"], res["why"]
+
+
+def test_handback_still_needs_PLANNED_work(tmp_path):
+    """A project that reached `idle` having planned nothing has skipped nothing — it was steered
+    to a stop before inception finished, which is a human's business and not a breach."""
+    wf = _goalless(tmp_path, status="idle")
+    res = tc.check(wf, prev_promoted=[], workers_seen=1)
+    assert res["demand"] != "goal", res
+
+
+def test_handback_is_SILENT_while_a_checkpoint_is_parked(tmp_path):
+    """The measured false positive, and the reason the widening is `idle` alone rather than all
+    four of rung 1's exits. Brownfield mints its goal from acceptance a human confirms at
+    `reconcile`; two of nine brownfield trees ran unattended with that open and were CORRECTLY
+    goal-less — a session that minted one anyway would have manufactured a confirmation nobody
+    gave. And the demand's own escape is "park a `steer`", so firing here asks for a second
+    parked ticket about the ticket already parked."""
+    wf = _goalless(tmp_path, promoted=["I-1"], status="idle")
+    with open(os.path.join(wf, "parked", "RECON-1.json"), "w") as fh:
+        json.dump({"ticket_id": "RECON-1", "checkpoint": {"kind": "reconcile"}}, fh)
+    res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
+    assert res["demand"] != "goal", res
+
+
+def test_handback_does_not_argue_with_the_operators_own_pause(tmp_path):
+    """`paused` is the operator's latch. They are at the keyboard by definition, so a demand
+    there is a gate talking over the person it would be talking to."""
+    wf = _goalless(tmp_path, promoted=["I-1"])
+    with open(os.path.join(wf, "control.json"), "w") as fh:
+        json.dump({"paused": True}, fh)
+    res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
+    assert res["demand"] != "goal", res
+
+
+def test_an_idle_loop_WITH_a_goal_is_left_alone(tmp_path):
+    """The rung is about a goal that was never minted, not about idling."""
+    wf = _with_items(tmp_path, promoted=["I-1"], status="idle")
+    res = tc.check(wf, prev_promoted=["I-1"], workers_seen=2)
+    assert res["demand"] != "goal", res
