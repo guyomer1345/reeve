@@ -1024,6 +1024,20 @@ sub-questions deferred to the build, in the order the slices need them.
   The open call is whether creation reads CLEAR (with what the floor cannot prove named in the file) or ROUTES
   under an honest first-spec reason. What is settled is that three findings saying `edited` about a file that
   never existed is wrong either way.
+- **Does the floor make an unattended run write WEAKER commitments? `[real, OBSERVED once — run 9 greenfield,
+  2026-09-18; UNDECIDED]`** The drive's own note, verbatim: *"spec field left `provisional` not `locked`
+  because check_autonomy_floor.py refused the lock on an unattended run (DEBT-5 tracks the promotion)"*. It
+  filed the debt ticket and carried on, which is the disciplined version of the move — but the move itself is
+  the failure the floor exists to prevent, **arriving through a different door**: `D189`'s premise is that a
+  loop grading its own decisions drifts toward *not fundamental*, and here the loop did not grade anything, it
+  **wrote a weaker spec so the gate would not fire**. A gate that is expensive to satisfy selects for content
+  that avoids it. Not a defect with a known fix: the floor was right to route, and the model was right not to
+  park an unattended run. **What is open is whether an unattended session may mint `locked` at all** — the
+  candidates are a first-spec allowance (adjacent to `D230`, which already says creation has no prior demand to
+  alter), an explicit `provisional`-by-default-at-inception rule with promotion at the first human checkpoint
+  (what the drive invented for itself, which is evidence it is the natural answer), or leaving it and treating
+  the debt ticket as the mechanism. **Measure before deciding:** one observation, and the alternative is a
+  spec whose commitments are all `locked` by an unattended writer, which is worse.
 - **~~Does `worker_budget.py` ever actually FIRE?~~ `[ANSWERED 2026-09-15 — D222, and the answer is worse than
   the question assumed]`** It ran, and it was **reading the wrong file**. The locator accepted the payload's
   `transcript_path` on the sole evidence that it was a file — which makes it the *session* transcript — so a

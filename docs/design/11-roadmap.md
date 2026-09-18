@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the standing queue`, whose first entry is the cold-context reviewer. Nothing in the queue is blocked on a decision from the maintainer**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the standing queue`, which now opens with three small items the last two runs found and then the cold-context reviewer, the real slice. It carries STANDING ORDERS for an unattended stretch — read them first. Nothing in the queue is blocked on a decision from the maintainer**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1363,10 +1363,10 @@ brownfield 13/13, greenfield 9/12 — and the goal rung, keyed on *promoted* wor
 session that promoted nothing. Re-keyed on *planned* work; run 10 came back **26/26, both modes, one digest**,
 with the gate firing its demand twice and the loop minting `GOAL-001` in response. `goal minted` had been red
 in runs 6, 8 and 9.
-**Two live residuals, named rather than carried quietly:** the skip is DETECTED and repaired, not prevented —
-the router still mints the roadmap item itself instead of dispatching `decompose`; and a goal minted mid-drive
-by the gate has **no commit edge**, so run 10 left `goal.json` staged for the next item-tail commit. Neither
-blocks the queue below.
+**Three things the runs found that are WORK, not findings, and they are listed as items in `▶ NEXT` below
+rather than narrated here** — a residual described in a closed entry is a residual nobody is going to build.
+In one line each: the skip is detected but not *prevented*; a goal minted mid-drive has no commit edge; and the
+unattended drive wrote a **weaker commitment** to avoid the floor (`07` owns that last one as a question).
 
 **The entry as it was written, kept for its reasoning — the method it describes is the one that worked:**
 **The instruction that shapes this entry is the maintainer's, after watching eight runs go
@@ -1408,8 +1408,41 @@ above. Note that a green `worker budget observed a real worker` is now MEANINGFU
 
 #### ▶ NEXT — the standing queue. `[no ask — post-Phase-12]`
 With Phase 12 closed this is what the work order points at, and it is the first entry here that traces to no
-numbered ask, because the request it came from is discharged. **Two named candidates, neither blocked on a
-decision from the maintainer:**
+numbered ask, because the request it came from is discharged.
+
+> **STANDING ORDERS for the session that resumes this (set 2026-09-18, by the maintainer, for this stretch of
+> work — not a permanent rule).** *"Next chat drives them end to end, no stops for user QA. Stop when finished,
+> or at 600k context."* So: **do not stop to ask between items.** Take every decision that does not change what
+> the package IS; for one that does, use the standing delegation — recommendation + pros/cons — and keep
+> building on your own recommendation rather than blocking. **Say what you rejected**, in the decision log,
+> every time you decide instead of asking. Capture as you close each item (the maintainer's "never capture
+> unprompted" is suspended for this stretch and only for work in this queue). **The full smoke run is LAST**
+> and only once — every edit to `product/` throws its receipt away (`D220`/`D227`). Cheap instruments first, in
+> the order above: suite · meta-gates · `--self-test` · `--assert-only` on a kept tree · a direct replay.
+
+**Build in this order. The first three are small and close what the last two runs opened; the fourth is the
+real slice.**
+1. **`goal.json` minted mid-drive has no commit edge.** `[found by run 10]` The gate now makes an unattended
+   loop mint a goal (`D231`) — and run 10 then left `goal.json`, `backlog.md` and `handoff.md` **staged**,
+   because `planner:decompose` has no commit edge in `loop.md` and the guard correctly refused a no-item,
+   no-receipt commit. Mechanical, and the shape of the answer is probably already decided: `D183` ruled that
+   `building` with no current item is legal at a boundary and generalized the receipt to *every* non-item
+   commit motion, so this is likely a receipt kind or an edge — **not a new gate**. Verify that claim before
+   building on it.
+2. **The skip is DETECTED, not PREVENTED.** `[found by runs 6/8/9/10]` Four consecutive greenfield drives
+   went from spec straight to planning: the router mints the roadmap item itself instead of dispatching
+   `planner:decompose`. `D231` catches the consequence one turn later and repairs it; nothing stops it.
+   **The open question is whether prevention is even available** — `dispatch_guard.py` blocks a node
+   dispatched to the wrong worker and structurally cannot force a dispatch that never happens. The one
+   candidate worth costing: the predicate `D231` already computes (item dir exists, no goal) evaluated
+   **earlier**, as a `PreToolUse` refusal of a plan-one dispatch before inception has minted anything. Weigh
+   it honestly — blocking planning is heavier than blocking a turn end, and the detect-and-repair path is
+   already proven green. **Deciding not to build it is a legitimate outcome if the reasoning is recorded.**
+3. **Does an unattended run write weaker commitments to avoid the floor?** `[`07` owns it; observed once]`
+   Measure before deciding — one observation, and the alternative failure (a spec whose commitments are all
+   `locked` by an unattended writer) is worse. `07` carries the three candidate answers.
+
+**Then the two named candidates, neither blocked on a decision from the maintainer:**
 - **The cold-context reviewer** — the strongest Phase-13 candidate and the biggest remaining *correctness* gap:
   `verify` is artifact conformance by design, `debug` is on-fail only, `align` is periodic, so a change that is
   logically wrong but passes its own tests and matches its own changelog goes straight to `commit`. Read-only, so
@@ -1417,7 +1450,9 @@ decision from the maintainer:**
   condition it was held back for. **Promotable now** — what is open is whether to build it, not what it is.
 - **The inline-node topology question** — `D180` measured it (`planner` is the expensive inline node, above
   `verify`) and named the cheapest candidate fix (`D84`'s authoring-thinness, with a fan-out threshold that
-  `verify/SKILL.md` licenses but does not quantify). **Untested, not undecided.**
+  `verify/SKILL.md` licenses but does not quantify). **Untested, not undecided — and RE-MEASURE BEFORE
+  BUILDING:** `D196` moved `planner` to a leaf agent afterwards, so the one measurement this item rests on
+  describes a topology the package no longer has. Treat the premise as unverified, which is what it is.
 Then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage · project-map
 tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the code-map observed
 layer. **Org mode stays parked at the maintainer's word.** Open questions and their current state live in `07`,
