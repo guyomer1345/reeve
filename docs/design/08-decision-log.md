@@ -8637,3 +8637,65 @@ switched off.
 **Evidence:** `--assert-only` on `greenfield-8bn9f2f6` · run 10, both modes: *the report renders — every id
 named*. **Builds on:** **D224** (the generated report), **D228** (the same scanner, the same lesson).
 → `11` (§ the ordered build sequence).
+
+## D233 — inception is a non-item commit motion, so it takes a receipt like every other one **[BUILT 2026-09-18 — the first of the standing queue. 1,623 tests, 8 meta-gates, the seam turned red on the tree that found it and green on the same tree repaired]**
+**The call:** `planner:decompose` joins `RECEIPT_KINDS` as its fifth member and routes `→ commit`. The roadmap
+entry guessed this would be "a receipt kind or an edge — not a new gate" and told the next session to verify that
+before building on it. **Verified, and it is both**, not either: the kind makes the commit legal, the edge is what
+makes it happen. A kind with no edge is a mechanism nobody reaches.
+
+**Why it is not the bootstrap escape.** `phase: bootstrap` ends when the spec lands; decompose runs *after* it,
+and `D231` proved it can run very much later — run 10's greenfield minted `GOAL-001` mid-drive, on demand from
+the turn gate, with an item already promoted. The bootstrap escape is safe *because* it fires once and disappears
+forever (`D183`); widening it to cover a motion that can recur would re-arm it for the life of the project, which
+is the exact fail-open shape the receipt was invented to avoid.
+
+**The harm was not one run, it was every run.** Across the eight kept greenfield trees `goal.json` has **never**
+had a commit of its own: three times it rode an unrelated `feat(...)`/`build(...)` commit, twice it sat
+uncommitted (staged in run 10, untracked in `uvqtdbrx`), and three times it was never minted at all. Since `D231`
+the turn gate *demands* a goal, so every unattended greenfield drive now reaches this. An uncommitted `goal.json`
+is the drive's own stop condition sitting outside git — `converge.py` reads it every turn and a fresh clone does
+not have it.
+
+**Run 10's session behaved correctly and that is the point.** It refused to forge a maintenance kind, wrote the
+reason into `state.json`'s note in so many words (*"Do NOT forge a maintenance receipt for this"*), and left the
+files staged. The gate was right, the session was right, and there was still no legal commit — which is a missing
+sanctioned motion, not a discipline failure. `D183`'s own message anticipated the shape: *"If it is neither, it
+is not a motion this gate sanctions: stop and ask."* This is the asking, answered.
+
+**The slice paid its own rent, as the standing rule requires** (`D184`: relocate, never raise a cap). `loop.md`
+had 10 tokens of headroom and the new row cost 7. The rent came from `§ Item-complete tail`, whose first line was
+a verbatim second copy of five routing-table rows — **and had already drifted from its owner**, omitting
+`converge?`. That is `D80` demonstrating itself on the file that can least afford it; deleting a stale restatement
+is relocation, not a trim. `loop.md` ends at **3187**, below the 3190 it started at. The maintenance section
+became `§ Non-item commits — the receipt`, because the receipt now covers two motions and a section named after
+one of them is where the next reader concludes the other has no path.
+
+- **Rejected — no edge; let the goal ride the next item's commit** (the status quo, and what three runs did). It
+  is durable-ish and it is wrong twice: the goal is lost to a crash or a clean before that commit lands, and once
+  it lands the goal's mint is attributed to a code change, so the per-file history has the project's acceptance
+  appearing inside `feat(wordfreq)`.
+- **Rejected — extending `_bootstrapping` to cover inception.** Above: it converts a fire-once escape into a
+  standing one, and `D231` already proved decompose is not confined to the bootstrap window.
+- **Rejected — a receipt id of the bare goal id.** `decompose-<goal-id>` says which motion ran; `GOAL-001` alone
+  reads as an item id in a directory whose other entries are item ids.
+- **Not built — a brownfield equivalent.** There the goal is minted at `ingest`, inside `phase: bootstrap`, and
+  rides that commit legally today. Adding a second path for a case that already works is mechanism for symmetry's
+  sake.
+
+**The seam that should have caught this, and the phrasing that would not have.** `seam_goal_minted` only ever
+asked whether the file was *on disk*, so it was green through every run above. It now asks whether the goal is in
+**HEAD** — written first as `git log -- <path>`, which **passed the very tree it was written to fail**, because
+`git log` still answers for a file committed and later removed. The negative control caught it in one run, which
+is the whole argument for `--self-test` being free and in the routine suite. Controls on real trees: red on
+`greenfield-wn_lx882` untouched, green on that same tree with the fix walked through the shipped `pre-commit.sh`,
+green on brownfield and on a tree where the goal rode a feature commit.
+
+*Evidence:* the defect reproduced verbatim from the old hook on run 10's tree, then the full shipped commit path
+— secret-scan · verify gate · `checks.sh --check` · coverage gates · code-map freshness · autonomy floor · doc
+budget · directives — green, and `goal.json` carrying its own commit for the first time in eight runs.
+**Builds on:** **D183** (the receipt generalized to every non-item motion, and the allowlist it made a feature),
+**D231** (which made the goal compulsory and proved decompose runs late), **D184**/**D80** (the rent, and the
+second copy that paid it), **D199** (the goal record this makes durable).
+→ `11` (§ the ordered build sequence, item 1), `product/hooks/verify_check.py`, `product/shared/schemas.md`,
+`product/templates/loop.md`, `product/templates/loop-detail.md`, `scripts/smoke_drive.py`.

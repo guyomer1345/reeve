@@ -190,15 +190,22 @@ line 1.
 - `mismatches[]` — `{ expected, actual }`
 - `confidence`
 
-## commit-receipt  · produced by the non-item motion itself (`align` / `document:audit` / `doc-budget` / `update`) · *on disk at `.workflow/maintenance/<item-id>.json`; COMMITTED (it must ride the commit it describes), and self-collecting — each pass deletes any earlier receipt as it writes its own, so the directory holds one file and the history lives in its git log*
+## commit-receipt  · produced by the non-item motion itself (`align` / `document:audit` / `doc-budget` / `update` / `planner:decompose`) · *on disk at `.workflow/maintenance/<item-id>.json`; COMMITTED (it must ride the commit it describes), and self-collecting — each pass deletes any earlier receipt as it writes its own, so the directory holds one file and the history lives in its git log*
 **The verify-free counterpart of `verify-verdict`, and the same kind of load-bearing on-disk contract.** Some
 motions reach `commit` with no `planner`/`execute`/`verify` behind them — the three maintenance nodes, which run
 their own pass and flow straight to `commit` (`loop.md` § Maintenance items), and the `/update` package refresh,
-which is a bounded command motion rather than a loop node. None of them has a verdict, and the commit gate
+which is a bounded command motion rather than a loop node, and **greenfield inception** — `planner:decompose`
+mints `.workflow/goal.json` and the backlog before any item exists. None of them has a verdict, and the commit gate
 cannot otherwise tell a legitimately verify-free commit from one whose verify was skipped. The receipt is how
 the motion *says which one it is*.
-- `item` — the motion's item id; **must equal the filename stem** · `kind: align|document:audit|doc-budget|update`
+- `item` — the motion's item id; **must equal the filename stem** · `kind: align|document:audit|doc-budget|update|planner:decompose`
   — the motion that ran · `summary` — one line, human-readable.
+- **Inception is in the set because it is NOT bootstrap.** `phase: bootstrap` ends when the spec lands; decompose
+  runs after it, and may run much later still (a drive that skipped the node and had it demanded back). The
+  escape that fires once and disappears cannot cover a motion that can recur, so inception takes a receipt like
+  every other non-item motion. The **orchestrator** stages it, not `planner`: the agent returns a roadmap, the
+  router is what materialises `backlog.md` and reaches `commit`. Use an id naming the motion, e.g.
+  `decompose-<goal-id>`. **Brownfield needs none** — there the goal is minted at `ingest`, inside bootstrap.
 - **`status: building` with no current item is a LEGAL state and never needs correcting.** The three statuses
   describe the loop's MODE, not item occupancy: at a scheduler boundary the loop is driving and has not yet
   picked, so `building` with a null item is the only honest pair — `idle` means *backlog empty, awaiting

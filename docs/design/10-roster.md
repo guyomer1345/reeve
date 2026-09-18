@@ -136,9 +136,11 @@ research                  (service, callable from anywhere)
 - `verify` → `debug` → `refine` → `planner` → `execute`
 - `debug` → `research`
 - any → `create-issue` · any → `research`
-- item-complete tail: `verify`(pass) → `document` → `commit` → `close-issue`
-- maintenance items (injected by `prioritize`): `document:audit` → `commit`; `align` → `create-issue` (per
-  semantic finding) → `prioritize`, mechanical fixes ride `commit` (D71/D81)
+- item-complete tail: owned by `loop.md`'s routing table, not restated here — the copy that stood on this line
+  had drifted from it (no `checkpoint:qa?`, no `converge?`), the same way `loop.md`'s own copy had (D233)
+- non-item commits (`document:audit`/`align`/`doc-budget`, injected by `prioritize`; `planner:decompose` at
+  inception) reach `commit` with no verdict and stage a receipt to do it (D183/D233); `align`'s semantic
+  findings leave as `create-issue` tickets and only its mechanical fixes ride that commit (D71/D81)
 
 ## Build status
 - **The full roster is written** (`skills/`, `agents/`) + `shared/schemas.md` — the table above is the source

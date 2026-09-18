@@ -249,7 +249,19 @@ def seam_goal_minted(repo):
         return False, "goal.json is unreadable: %s" % exc
     if not goal.get("id"):
         return False, "goal.json carries no id, so convergence has nothing to measure against"
-    return True, "goal %s" % goal["id"]
+    # A goal that exists and is not COMMITTED is not a stop condition -- it is a file a `git clean`
+    # or a fresh clone loses, and the drive it was minted for reads convergence off it every turn.
+    # Run 10 left it staged (no commit edge for `planner:decompose`), and three earlier greenfield
+    # runs let it ride an unrelated `feat(...)` commit; this seam saw neither, because it only ever
+    # asked whether the file was on disk. Brownfield mints it inside the ingest commit, so the
+    # check is the same question on both paths.
+    # Asked as `is it in HEAD`, not `does it have a git log`: `git log -- <path>` still answers for a
+    # file that was committed and later removed, so the obvious phrasing passes the very tree it is
+    # meant to fail. The negative control below is what caught that.
+    if git(repo, "cat-file", "-e", "HEAD:.workflow/goal.json").returncode != 0:
+        return False, ("goal %s exists in the worktree and is NOT in HEAD -- the drive's stop "
+                       "condition is sitting outside git" % goal["id"])
+    return True, "goal %s, in HEAD" % goal["id"]
 
 
 def seam_viability_was_recorded(repo):
@@ -688,6 +700,19 @@ def _break_goal(repo):
     os.remove(os.path.join(repo, ".workflow", "goal.json"))
 
 
+def _break_goal_by_never_committing_it(repo):
+    """The half the old seam let through: the goal EXISTS and is not in git. This is run 10's tree
+    exactly -- `planner:decompose` minted it, the router staged it, and no commit edge ever took it.
+    Rewrite the history so the file survives in the worktree with no commit behind it."""
+    path = os.path.join(repo, ".workflow", "goal.json")
+    with open(path, encoding="utf-8") as fh:
+        body = fh.read()
+    git(repo, "rm", "-q", "--cached", ".workflow/goal.json")
+    git(repo, "commit", "-q", "--no-verify", "-m", "drop the goal from history")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(body)
+
+
 def _break_viability(repo):
     os.remove(os.path.join(repo, ".workflow", "wave-decision.json"))
 
@@ -786,6 +811,7 @@ BREAKS = [
     ("spec-approval receipt accepted", _break_approval),
     ("code map sees only product files", _break_code_map),
     ("goal minted", _break_goal),
+    ("goal minted", _break_goal_by_never_committing_it),
     ("viability recorded at the boundary", _break_viability),
     ("resume anchor written", _break_anchor),
     ("resume anchor written", _break_anchor_by_naming_no_commit),

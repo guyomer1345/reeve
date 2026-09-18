@@ -20,7 +20,7 @@ from each section below — read it when that situation arises.
 | `create-forecast` | gate not triggered | `create-demo?` (sandbox gate) |
 | `create-demo` | demo approved (checkpoint pass) | `planner:decompose` |
 | `create-demo` | gate not triggered | `planner:decompose` |
-| `planner:decompose` | roadmap → backlog | `prioritize` |
+| `planner:decompose` | roadmap → backlog + goal (receipt staged) | `commit` |
 | `prioritize` | plan batch emitted | `planner:plan-one` (per item in the batch) |
 | `prioritize` | maintenance due (retention, drift, or doc-size threshold) | `document:audit` / `align` / `doc-budget` |
 | `prioritize` | backlog empty | `idle` (await steering) |
@@ -126,17 +126,16 @@ cannot silently disarm the gate: `checks.sh --check` fails the commit closed whi
 
 → **The steps, and the `STACK_GATE_NONE` exemption: `loop-detail.md § stack-wiring at tech_stack lock`.**
 
-## Maintenance items
+## Non-item commits — the receipt
 `prioritize` injects a maintenance item on a threshold: retention/size → `document:audit`, drift → `align`,
-doc-size advisory → `doc-budget`. It is **self-contained** — no `planner`/`execute`/`verify` — and flows
-straight to `commit`, then `close-issue?` (skip) → `prioritize`. Because there is no verdict, the pass
-**stages a receipt** (`.workflow/maintenance/<item-id>.json`); without it there is no legal commit. Never fake
-a `pass: true` verdict instead.
+doc-size advisory → `doc-budget`. It is **self-contained** — no `planner`/`execute`/`verify`, so no verdict;
+nor has `planner:decompose`. **Every commit with no item behind it stages a receipt**
+(`.workflow/maintenance/<item-id>.json`, `kind` = the motion); without one there is no legal commit. Never
+fake a `pass: true` verdict instead.
 
-→ **The receipt contract and why the three thresholds are decoupled:
+→ **The contract, who stages inception's, and why the thresholds are decoupled:
 `loop-detail.md § maintenance items`.**
 
 ## Item-complete tail
-`verify`(pass) → `checkpoint:qa?` → `document` → `commit` → `close-issue?` → `prioritize`.
-The item's backlog done-flip and the `handoff.md` rewrite happen **before** `commit` (it captures them);
-`close-issue` is the only post-commit step.
+The tail is the table's and is not restated. Not in it: the backlog done-flip and the `handoff.md` rewrite
+happen **before** `commit` (it captures them); `close-issue` is the only post-commit step.

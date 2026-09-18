@@ -254,6 +254,15 @@ ordinary `create-issue` tickets (the side-door) and ride the normal queue; only 
 new scan anchor ride this commit. The three thresholds are **decoupled** — memory pressure ≠ drift risk ≠ doc
 size, and one shared threshold would make each of them fire for another's reason.
 
+**Inception is the one non-maintenance node that lands here.** `planner:decompose` mints `.workflow/goal.json`
+and the backlog before any item exists, so it has no verdict either and routes `→ commit` on the same contract.
+Two things differ. **The orchestrator stages the receipt, not `planner`** — the agent is a leaf that returns a
+roadmap; the router is what materialises `backlog.md` and reaches `commit`. And the **id names the motion**, not
+an injected item: use `decompose-<goal-id>` (e.g. `decompose-GOAL-001`), `kind: planner:decompose`, summary one
+line. Commit `goal.json`, `backlog.md` and the `handoff.md` rewrite together — that commit is what makes the
+drive's stop condition durable, and it must not be left to ride a later feature commit. **Brownfield needs no
+receipt here:** there the goal is minted at `ingest`, inside `phase: bootstrap`, which is already exempt.
+
 **No verify means no verdict — and from outside, a verify-free item and a *skipped* verify look identical.** So
 the pass **stages a receipt in its own commit**: `.workflow/maintenance/<item-id>.json`
 (`{ item, kind, summary }`, `kind` = the maintenance node that ran). That receipt is what the commit gate

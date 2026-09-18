@@ -1422,13 +1422,14 @@ numbered ask, because the request it came from is discharged.
 
 **Build in this order. The first three are small and close what the last two runs opened; the fourth is the
 real slice.**
-1. **`goal.json` minted mid-drive has no commit edge.** `[found by run 10]` The gate now makes an unattended
-   loop mint a goal (`D231`) — and run 10 then left `goal.json`, `backlog.md` and `handoff.md` **staged**,
-   because `planner:decompose` has no commit edge in `loop.md` and the guard correctly refused a no-item,
-   no-receipt commit. Mechanical, and the shape of the answer is probably already decided: `D183` ruled that
-   `building` with no current item is legal at a boundary and generalized the receipt to *every* non-item
-   commit motion, so this is likely a receipt kind or an edge — **not a new gate**. Verify that claim before
-   building on it.
+1. **`goal.json` minted mid-drive has no commit edge. ✅ CLOSED 2026-09-18 — `D233`.** The guessed shape was
+   right and incomplete: it is a receipt kind **and** an edge, since a kind with no edge is a mechanism nobody
+   reaches. `planner:decompose` is `RECEIPT_KINDS`' fifth member and routes `→ commit`. **The scope was worse
+   than the entry knew** — across the eight kept greenfield trees `goal.json` has *never* had a commit of its
+   own (three times riding an unrelated feature commit, twice uncommitted, three times never minted), and since
+   `D231` made the goal compulsory every unattended greenfield drive reaches it. The seam that should have
+   caught it asked only whether the file was on disk; it now asks whether it is in `HEAD`. The slice paid its
+   own rent out of a stale second copy in `loop.md` (3190 → **3187**), per `D184`.
 2. **The skip is DETECTED, not PREVENTED.** `[found by runs 6/8/9/10]` Four consecutive greenfield drives
    went from spec straight to planning: the router mints the roadmap item itself instead of dispatching
    `planner:decompose`. `D231` catches the consequence one turn later and repairs it; nothing stops it.

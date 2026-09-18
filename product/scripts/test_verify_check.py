@@ -380,3 +380,51 @@ def test_every_receipt_kind_is_accepted(tmp_path):
         _receipt(root, "R-1", kind=kind)
         subprocess.run(["git", "add", "-A"], cwd=root, check=True)
         assert _run(root).returncode == 0, "kind %r was refused" % kind
+
+
+def test_the_inception_commit_is_legal_with_a_decompose_receipt(tmp_path):
+    """Run 10's greenfield tree, exactly: `planner:decompose` minted `goal.json` late, the router
+    staged it with `backlog.md` and `handoff.md`, and the gate correctly refused — `status: building`,
+    `current_item: null`, no item dir, no receipt. The session did the right thing (it refused to forge
+    a maintenance kind) and the goal stayed uncommitted, which is the drive's own stop condition sitting
+    outside git. `planner:decompose` joining the kinds is what gives that motion a legal commit.
+    """
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "current_item": None, "node": "prioritize"})
+    (root / ".workflow" / "goal.json").write_text('{"id": "GOAL-001", "status": "active"}')
+    (root / ".workflow" / "backlog.md").write_text("- ISS-008\n")
+    (root / ".workflow" / "handoff.md").write_text("base_sha: abc\n")
+    _receipt(root, "decompose-GOAL-001", kind="planner:decompose")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 0, r.stdout
+
+
+def test_the_inception_commit_without_its_receipt_still_blocks(tmp_path):
+    """The reproduction of the defect itself — and it must KEEP blocking without the receipt, or the
+    new kind would have bought the exemption by weakening the gate rather than by declaring the motion.
+    """
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "current_item": None, "node": "prioritize"})
+    (root / ".workflow" / "goal.json").write_text('{"id": "GOAL-001", "status": "active"}')
+    (root / ".workflow" / "backlog.md").write_text("- ISS-008\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    r = _run(root)
+    assert r.returncode == 1
+    assert "no item and no receipt" in r.stdout
+    # the block must NAME the new kind, so the reader reaches for it instead of forging one
+    assert "planner:decompose" in r.stdout
+
+
+def test_a_decompose_receipt_does_not_excuse_a_staged_item_dir(tmp_path):
+    """Decompose can run LATE, mid-drive, alongside real item work (run 10 is that case). Its receipt
+    exempts the inception motion, never an item that was built in the same commit.
+    """
+    root = _repo(tmp_path)
+    _state(root, {"status": "building", "current_item": None, "node": "prioritize"})
+    (root / ".workflow" / "goal.json").write_text('{"id": "GOAL-001", "status": "active"}')
+    _receipt(root, "decompose-GOAL-001", kind="planner:decompose")
+    _stage(root)                      # ITEM-1 built in the same commit, no verdict
+    r = _run(root)
+    assert r.returncode == 1
+    assert "ITEM-1" in r.stdout
