@@ -194,6 +194,26 @@ line 1.
 - `mismatches[]` — `{ expected, actual }`
 - `confidence`
 
+## review-report  · produced by `review` · *on disk at `.workflow/items/<id>/review-report.md`; item-scoped ephemeral; the node's forecast ANCHOR*
+**The correctness pass `verify` is not.** `verify`'s three checks are all *correspondence* — plan against
+changelog against diff, criteria against their discharge signals, promises against criteria — and a change can
+satisfy every one of them and still be logically wrong. `debug` is on-fail only and `align` is periodic, so
+without this the wrong-but-green change reaches `commit` unread.
+- **First line is exactly `gating: true` or `gating: false`** (lowercase, one space) — the token the caller
+  routes on, in the same shape and for the same reason as `verify-verdict`'s `pass:`.
+- `findings[]` — each `{ severity, class: gating|advisory, file, line, demonstration, consequence }`.
+- `examined[]` — what was read and found sound. **Negative evidence is required**, because a report with no
+  findings is otherwise indistinguishable from a review that returned early.
+- **`gating` requires a DEMONSTRATION, never a suspicion:** a file and line, plus the concrete input or state
+  that produces the wrong result, stated precisely enough to write the failing test from. Anything short of
+  that is `advisory` and routes nowhere. The fail direction is **permissive on purpose** — a reviewer that
+  gates on suspicion is one whose findings get skimmed and then switched off, and this package has twice paid
+  for a scanner that failed a report that was right.
+- **Not read by any commit gate**, unlike `verify-verdict`. Deliberate while the node is young: a hard commit
+  gate on an unproven reviewer makes the expensive thing compulsory, which is the shape that selects for
+  avoidance. The anchor makes the node *visible* to the forecast and divergence machinery; making it
+  *compulsory* is a separate decision with its own evidence.
+
 ## commit-receipt  · produced by the non-item motion itself (`align` / `document:audit` / `doc-budget` / `update` / `planner:decompose`) · *on disk at `.workflow/maintenance/<item-id>.json`; COMMITTED (it must ride the commit it describes), and self-collecting — each pass deletes any earlier receipt as it writes its own, so the directory holds one file and the history lives in its git log*
 **The verify-free counterpart of `verify-verdict`, and the same kind of load-bearing on-disk contract.** Some
 motions reach `commit` with no `planner`/`execute`/`verify` behind them — the three maintenance nodes, which run

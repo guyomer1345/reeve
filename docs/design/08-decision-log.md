@@ -8810,3 +8810,81 @@ where there is none. Stated now in `discuss` (the author) and at `schemas.md`'s 
 gets its own owner, never a fold-in).
 → `07` (this question answered; the self-approval residual opened), `11` (§ the ordered build sequence, item 3),
 `product/skills/discuss/SKILL.md`, `product/shared/schemas.md`.
+
+## D236 — the cold-context reviewer: BUILT as a leaf agent, gating only on what it can demonstrate **[BUILT 2026-09-18 — 1,631 tests, 9 meta-gates (one NEW), `loop.md` 3190 → 3188 with a node added]**
+**The call:** `review` ships as a **leaf agent**, dispatched after `verify` passes and before `checkpoint:qa?`,
+on any item whose diff changed code. Read-only. A finding it can **demonstrate** routes to `refine`; anything it
+can only suspect is advisory and routes nowhere. `07` said what was open was *whether* to build it, not what it
+is — so this entry is mostly the six calls the build had to take, each with what it rejected.
+
+**The gap, stated once so the node has a subject.** Every `verify` check is a **correspondence** check — plan↔
+changelog↔diff, criteria↔discharge signal, promises↔criteria. A change can satisfy all three and be logically
+wrong; `debug` is on-fail only and `align` is periodic, so it reaches `commit` unread. The example in the agent
+is this repo's own: a goal note in `greenfield-wn_lx882` records that *"an ASCII-only character class passes all
+seven [criteria] while mangling every non-ASCII word."* Correspondence perfect, logic wrong, everything green.
+
+**1. Agent, not skill — the coldness IS the mechanism.** A skill runs in the orchestrator's window, and the
+orchestrator watched the plan get written and the worker carry it out: it reads the diff through the author's
+intent and cannot see what a stranger sees. `D170` already proved this method in the other half of the package —
+*"the grading session must not be the answering session ... the grader cannot tell a recalled fact from a
+retrieved one"* — and bought its cold context by running the shipped argv verbatim. A dispatch is the same buy,
+cheaper. **Rejected: a skill**, which would have been the warm reader we are paying to escape.
+
+**2. It must not read `changelog.md` or `verify-verdict.md`, and this is the sharpest call in the slice.** The
+changelog is the author's own account, written to say the work was done; the verdict is a `pass` already
+recorded. Either one re-warms the context the dispatch cooled. `verify` already went halfway — it treats the
+changelog as *a claim, never the change* — and `review` goes the rest. **Rejected: feed it the changelog for
+context.** The objection is real (the reviewer may flag something the author already explained) and the trade is
+deliberate: that costs one round, while a reviewer that reads the explanation is *systematically* biased toward
+accepting it. Prefer the cheap false positive to the structural false negative — and the demonstration bar keeps
+the false positive from gating anyway.
+
+**3. Demonstrable gates; suspected is advisory.** A finding routes only with a file, a line, and the concrete
+input that produces the wrong result, stated precisely enough to write the failing test from. This is `verify`'s
+own rule in the same shape, and the fail direction is **permissive on purpose**: a reviewer that gates on
+suspicion is one whose findings get skimmed and then switched off. This package has twice paid for a scanner
+that failed a report that was *right* (`D228`, `D232`), and both times the cost exceeded the defects caught.
+**Rejected: severity-based gating**, which grades the reviewer's confidence rather than its evidence.
+**Rejected: taste as a finding** — if the project has a rule it is in `rules/**` and mechanically enforced.
+
+**4. A gating finding routes to `refine`, NOT `debug`.** `debug` exists to find a cause from a symptom; a
+finding that cleared the demonstration bar already *names* its cause, so `debug` would re-derive what the
+reviewer handed over. `refine` is explicitly the router for *"a verify failure, a debug finding, or a
+newly-arisen need"*, and a review finding is a debug finding in shape. The asymmetry with `verify`-fail (which
+does go via `debug`) is recorded in `refine/SKILL.md` so it does not read as an oversight.
+
+**5. Capped at `config.review.max_rounds` = 2, then a `checkpoint`.** The cycle review→refine→planner→execute→
+verify→review needs a bound; `create-demo`'s `max_refine_rounds` is the precedent. **Lower than demo's 3 on
+purpose:** a demo round regenerates a sandbox, a review round re-runs plan→execute→verify on real code. At the
+cap it escalates to a human carrying every round's report — never auto-proceeds, because a change that cannot be
+got right in N rounds is a design question.
+
+**6. NO commit gate reads the report, and that is deliberate rather than unfinished.** `verify-verdict.md` is
+read by both commit gates; `review-report.md` is not. Making an unproven reviewer compulsory is exactly the
+shape `D235` had just finished examining — a gate expensive to satisfy selects for content that avoids it. The
+**anchor** makes the node visible to the forecast and divergence machinery; making it *compulsory* is a separate
+decision, and its trigger is stated: a measured false-positive rate first.
+
+**The slice paid its own rent twice over** (`D184`: relocate, never raise). Two more second copies funded the new
+rows — `loop.md`'s stack-wiring reassurance, which `loop-detail.md:237-239` already owns verbatim, and the
+maintenance-threshold mapping, which is a restatement of the `prioritize` routing row three lines above it.
+`loop.md` ends at **3188**, below the 3190 this session started from, *with a node added*.
+
+**A NINTH META-GATE, and it exists because this slice tripped the hole by hand.** The forecast ANCHOR TABLE's
+own header says it is *"read by `forecast.py reality`"* — and adding `review` to the doc left `forecast.py`'s
+`ANCHOR_TABLE` dict behind, so the row was **documentation claiming to be a mechanism**. Nothing would have
+caught it; it was found by reading the code to check the doc's claim. `check_enum_coherence.py` exists for
+precisely this owner↔consumer shape and this pair had simply never been adopted. Now checked **both ways and on
+the artifact name** — a row whose file disagrees with the dict probes something never written, which reports
+`pending` forever, and a node-set-only check would call that clean. Six negative controls, all firing.
+
+*Evidence:* 1,631 tests (1,625→1,631), 9 meta-gates green, the contracts gate accepting the new node and its
+routing, `--self-test` 37/0.
+**Builds on:** **D170** (the cold-grader method, and the reason it is an agent), **D178** (single writer — the
+reviewer is read-only, so it does not touch it), **D179**/**D180** (`11e` green was the condition this was held
+back for), **D184**/**D80** (the rent, and the second copies that paid it), **D228**/**D232** (why the bar is
+demonstration and the fail direction permissive), **D235** (why it is not a commit gate).
+→ `07` (the reviewer question — answered by building it), `11` (§ the ordered build sequence),
+`product/agents/review.md`, `product/templates/loop.md`, `product/templates/loop-detail.md`,
+`product/shared/schemas.md`, `product/shared/schemas-loopstate.md`, `product/shared/schemas-config.md`,
+`product/skills/{verify,refine}/SKILL.md`, `product/scripts/forecast.py`, `scripts/check_enum_coherence.py`.

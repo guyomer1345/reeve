@@ -273,6 +273,77 @@ def check_gitignore_consumer(rows, start_text):
             for p in sorted({_norm(p) for p, c in rows if "RUNTIME" in c}) if p not in clause]
 
 
+# --- the forecast ANCHOR TABLE ------------------------------------------------
+# Owner: the markdown table in `schemas-loopstate.md`. Consumer: `forecast.py`'s ANCHOR_TABLE
+# dict, which is what `reality()` actually probes.
+#
+# ADOPTED because it failed exactly once, silently, and by hand. The doc's own header says the
+# table is "read by `forecast.py reality`" -- and a node added to the doc left the dict behind,
+# so the row was documentation claiming to be a mechanism. Every other owner/consumer pair in
+# this file is here for the same reason; this one had simply never been declared.
+#
+# Checked BOTH ways and on the artifact name, not just the node set: a row whose artifact
+# disagrees with the dict resolves the wrong file, which reads as `pending` forever -- a node
+# that never fires is the failure mode the table exists to make visible.
+ANCHOR_OWNER = "product/shared/schemas-loopstate.md"
+ANCHOR_CONSUMER = "product/scripts/forecast.py"
+# `| `node` | `items/<id>/artifact` | proves |` -- only the item_file rows carry a comparable
+# artifact; the rest (`demos/`, `frozen_at`, a `parked/` record) are prose descriptions of
+# non-file probes and are compared on the NODE alone.
+_ANCHOR_ROW = re.compile(r"^\|\s*`([a-z-]+)(?::<kind>)?`\s*\|\s*(.+?)\s*\|", re.M)
+_ITEM_FILE = re.compile(r"`?items/<id>/([\w.-]+)`?")
+
+
+def parse_anchor_doc(text):
+    """-> {node: artifact-or-None} from the ANCHOR TABLE, or None if the table moved."""
+    m = re.search(r"### the forecast ANCHOR TABLE.*?\n\|---.*?\n(.*?)\n\n", text, re.S)
+    if m is None:
+        return None
+    out = {}
+    for node, anchor in _ANCHOR_ROW.findall(m.group(1)):
+        f = _ITEM_FILE.search(anchor)
+        out[node] = f.group(1) if f else None
+    return out or None
+
+
+def parse_anchor_code(text):
+    """-> {node: artifact-or-None} from forecast.py's ANCHOR_TABLE dict."""
+    m = re.search(r"ANCHOR_TABLE\s*=\s*\{(.*?)\n\}", text, re.S)
+    if m is None:
+        return None
+    out = {}
+    for node, probe, arg in re.findall(
+            r'"([a-z-]+)":\s*\("(\w+)",\s*(?:"([^"]*)"|None)\)', m.group(1)):
+        out[node] = arg if probe == "item_file" else None
+    return out or None
+
+
+def check_anchor_table(read=_default_read):
+    doc = parse_anchor_doc(read_with_splits("product/shared/schemas.md", read)
+                           + "\n" + read(ANCHOR_OWNER))
+    code = parse_anchor_code(read(ANCHOR_CONSUMER))
+    if doc is None:
+        return [f"anchor-table: the ANCHOR TABLE was not found in {ANCHOR_OWNER} "
+                f"(the gate's own anchor moved — update check_enum_coherence.py)"]
+    if code is None:
+        return [f"anchor-table: ANCHOR_TABLE was not found in {ANCHOR_CONSUMER} "
+                f"(the gate's own anchor moved — update check_enum_coherence.py)"]
+    errs = []
+    for node in sorted(set(doc) - set(code)):
+        errs.append(f"anchor-table: {ANCHOR_OWNER} declares an anchor for `{node}`, but "
+                    f"{ANCHOR_CONSUMER}'s ANCHOR_TABLE has no such key — the row is documentation, "
+                    f"not a probe, and the node resolves `unknown` forever")
+    for node in sorted(set(code) - set(doc)):
+        errs.append(f"anchor-table: {ANCHOR_CONSUMER} probes `{node}`, but {ANCHOR_OWNER}'s table "
+                    f"does not declare it — the table says it is exhaustive")
+    for node in sorted(set(doc) & set(code)):
+        if doc[node] != code[node]:
+            errs.append(f"anchor-table: `{node}` resolves {code[node]!r} in {ANCHOR_CONSUMER} and "
+                        f"{doc[node]!r} in {ANCHOR_OWNER} — one of them probes a file that is "
+                        f"never written, which reads as `pending` forever")
+    return errs
+
+
 def check_layout(read=_default_read):
     rows = parse_workflow_tree(read(LAYOUT_OWNER))
     if rows is None:
@@ -386,14 +457,15 @@ def check_counts(read=_default_read):
 
 
 def main(read=_default_read):
-    errs = check_enums(read) + check_counts(read) + check_layout(read)
+    errs = (check_enums(read) + check_counts(read) + check_layout(read)
+            + check_anchor_table(read))
     if errs:
         print("enum-coherence: DRIFT")
         for e in errs:
             print(f"  - {e}")
         return 1
-    print(f"OK: enum + registry + layout coherence "
-          f"({len(ENUMS)} enum, {len(COUNTS)} registry, 3 layout)")
+    print(f"OK: enum + registry + layout + anchor coherence "
+          f"({len(ENUMS)} enum, {len(COUNTS)} registry, 3 layout, 1 anchor table)")
     return 0
 
 

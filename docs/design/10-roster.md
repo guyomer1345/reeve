@@ -95,6 +95,7 @@ overlap into one adjudicator.
 | research | agent | gather info (Investigation worker) | `agents/research` |
 | execute | agent *(D178)* | run a plan, decide nothing → `changelog`; the loop's single writer | `agents/execute` |
 | verify | skill | artifact conformance (adjudicate) | `skills/verify` |
+| review | agent *(D236)* | cold-context correctness: read the change as code, demonstrate or stay advisory | `agents/review.md` |
 | debug | skill | root-cause behaviour ≠ intended (adjudicate) | `skills/debug` |
 | refine | skill | route corrections back through planner→execute | `skills/refine` |
 | checkpoint | skill | pause for a human verdict (demo / qa / setup / reconcile / forecast / steer / spec) | `skills/checkpoint` |
@@ -133,6 +134,7 @@ research                  (service, callable from anywhere)
 - `decision-engineer` → `research` *(the orchestrator runs `decision-engineer` on a blocker returned by `planner`/`execute`; neither leaf calls it)*
 - `create-demo` → `checkpoint`
 - `checkpoint`(setup) → `setup-guide`  *(leaf: does its own research)*
+- `verify`(pass) → `review` → `refine` *(gating finding only; advisory routes nowhere)*
 - `verify` → `debug` → `refine` → `planner` → `execute`
 - `debug` → `research`
 - any → `create-issue` · any → `research`

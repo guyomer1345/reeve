@@ -412,5 +412,76 @@ class SplitAwareRead(unittest.TestCase):
         self.assertIn("head", got)   # degrades to the survivor; the invariants then fail closed
 
 
+class AnchorTable(unittest.TestCase):
+    """The forecast ANCHOR TABLE: the doc is the owner, `forecast.py`'s dict is the probe.
+
+    Adopted after it failed once, silently: the doc's header says the table is read by
+    `forecast.py reality`, and a node added to the table left the dict behind — so the row was
+    documentation claiming to be a mechanism, and only a hand read caught it.
+    """
+
+    DOC = """\
+### the forecast ANCHOR TABLE  · read by `forecast.py reality`, written by nobody
+| node | anchor | proves |
+|---|---|---|
+| `planner` | `items/<id>/plan.md` | the item was planned |
+| `review` | `items/<id>/review-report.md` | the code was read cold |
+| `create-demo` | `demos/<id>/` | a sandbox was built |
+| `checkpoint:<kind>` | a `parked/` record of that kind | the human was asked |
+
+- prose after the table
+"""
+    CODE = """\
+ANCHOR_TABLE = {
+    "planner":         ("item_file", "plan.md"),
+    "review":          ("item_file", "review-report.md"),
+    "create-demo":     ("workflow_path", "demos"),
+    "checkpoint":      ("parked", None),
+}
+"""
+
+    def _run(self, doc=None, code=None):
+        files = {"product/shared/schemas-loopstate.md": doc or self.DOC,
+                 "product/scripts/forecast.py": code or self.CODE,
+                 "product/shared/schemas.md": ""}
+        return e.check_anchor_table(reader(files))
+
+    def test_the_matched_pair_is_clean(self):
+        self.assertEqual(self._run(), [])
+
+    def test_a_row_the_code_never_probes_is_documentation_not_a_mechanism(self):
+        """The direction that actually happened."""
+        errs = self._run(code=self.CODE.replace(
+            '    "review":          ("item_file", "review-report.md"),\n', ""))
+        self.assertEqual(len(errs), 1)
+        self.assertIn("`review`", errs[0])
+        self.assertIn("unknown", errs[0])
+
+    def test_a_probe_the_table_never_declares_breaks_its_exhaustiveness_claim(self):
+        errs = self._run(doc=self.DOC.replace(
+            "| `review` | `items/<id>/review-report.md` | the code was read cold |\n", ""))
+        self.assertEqual(len(errs), 1)
+        self.assertIn("exhaustive", errs[0])
+
+    def test_disagreeing_on_the_ARTIFACT_is_caught_not_just_the_node_set(self):
+        """Same node both sides, different file — the probe reads something never written, so
+        the node reports `pending` forever. A node-set-only check would call this clean."""
+        errs = self._run(code=self.CODE.replace("review-report.md", "review.md"))
+        self.assertEqual(len(errs), 1)
+        self.assertIn("pending", errs[0])
+
+    def test_non_item_file_probes_compare_on_the_NODE_alone(self):
+        """`demos/`, `frozen_at` and a `parked/` record are prose descriptions of non-file
+        probes; holding them to a filename match would fail every one of them forever."""
+        self.assertEqual(self._run(), [])
+
+    def test_the_gate_says_so_when_its_OWN_anchor_moves(self):
+        for doc, code, want in (("no table here\n", None, "was not found"),
+                                (None, "nothing = 1\n", "was not found")):
+            errs = self._run(doc=doc, code=code)
+            self.assertEqual(len(errs), 1)
+            self.assertIn(want, errs[0])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

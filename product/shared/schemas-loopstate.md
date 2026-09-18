@@ -123,6 +123,7 @@ Reality is **derived**, never recorded — there is no second ledger to keep in 
 | `planner` | `items/<id>/plan.md` | the item was planned |
 | `execute` | `items/<id>/changelog.md` | the plan was carried out |
 | `verify` | `items/<id>/verify-verdict.md` | the artifacts were checked |
+| `review` | `items/<id>/review-report.md` | the code was read cold for correctness |
 | `debug` | `items/<id>/debug-report.md` | something failed and was diagnosed |
 | `refine` | `items/<id>/plan-delta.md` | a correction was routed |
 | `document` | `items/<id>/promoted.json` | the essence was folded into knowledge |

@@ -35,8 +35,10 @@ from each section below — read it when that situation arises.
 | `execute` | structural divergence (the plan is wrong) | `planner:plan-one` (re-plan) |
 | *any worker* | `status: continue` | **re-dispatch the SAME node** with the scratch path it named |
 | *any worker* | `status: question` / `blocked` | `decision-engineer` / `refine` (`debug` if behaviour ≠ intent) |
-| `verify` | **pass** | `checkpoint:qa?` |
+| `verify` | **pass** | `review?` |
 | `verify` | **fail** | `debug` |
+| `review` | nothing demonstrable (or no code changed → skip) | `checkpoint:qa?` |
+| `review` | a demonstrable defect · cap hit | `refine` · escalate → `checkpoint` |
 | `debug` | root cause | `refine` |
 | `debug` | confidence stays < threshold after retries (no clear cause) | escalate → `checkpoint` (human) |
 | `refine` | correction plan | `planner:plan-one` → `execute` |
@@ -72,9 +74,9 @@ of your own read.** Judgment may escalate **above** that floor, never below it; 
 → **Why, and what the floor cannot see: `shared/schemas.md § the autonomy floor`** (the standing directive lives
 in `.workflow/directives.md`).
 
-**The gated rows (`create-demo?`) are the router's call, before any dispatch** — default **no demo**, decided
-per work-item. Its three conditions live once in the `create-demo` capability's *sandbox gate*
-section; read them there.
+**The gated rows (`create-demo?` · `review?`) are the router's call, before any dispatch** — default **no
+demo**, decided per work-item; **`review?` runs whenever the item's diff changed code**. Each gate's conditions
+live once in its own capability; read them there.
 
 ## Dispatch boundary — form the batch, and never wait alone
 Concurrency exists only for work dispatched **together**, so the batch is the speed lever. Before any
@@ -120,16 +122,15 @@ starting work — boundary only, never mid-item: `loop-detail.md § forecast div
 ## Stack-wiring at tech_stack lock
 A greenfield project starts with no stack, so `/start` writes a coverage-only `checks.env`. The **one-time**
 transition when `decision-engineer` flips `tech_stack` to `locked` — fill the gate commands, specialize the
-`rules/` tags, wire the enforcers — is the orchestrator's to run, before the next `execute`. Skipping it
-cannot silently disarm the gate: `checks.sh --check` fails the commit closed while source exists under
-`project_root` with no stack gate wired.
+`rules/` tags, wire the enforcers — is the orchestrator's to run, before the next `execute`.
 
-→ **The steps, and the `STACK_GATE_NONE` exemption: `loop-detail.md § stack-wiring at tech_stack lock`.**
+→ **The steps, why skipping cannot silently disarm the gate, and the `STACK_GATE_NONE` exemption:
+`loop-detail.md § stack-wiring at tech_stack lock`.**
 
 ## Non-item commits — the receipt
-`prioritize` injects a maintenance item on a threshold: retention/size → `document:audit`, drift → `align`,
-doc-size advisory → `doc-budget`. It is **self-contained** — no `planner`/`execute`/`verify`, so no verdict;
-nor has `planner:decompose`. **Every commit with no item behind it stages a receipt**
+A maintenance item (injected by `prioritize`, per the table) is **self-contained** — no
+`planner`/`execute`/`verify`, so no verdict; nor has `planner:decompose`.
+**Every commit with no item behind it stages a receipt**
 (`.workflow/maintenance/<item-id>.json`, `kind` = the motion); without one there is no legal commit. Never
 fake a `pass: true` verdict instead.
 

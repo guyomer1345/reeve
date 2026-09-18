@@ -1448,11 +1448,15 @@ real slice.**
    approval on a standing pre-authorization. `07` owns it as a new question.
 
 **Then the two named candidates, neither blocked on a decision from the maintainer:**
-- **The cold-context reviewer** — the strongest Phase-13 candidate and the biggest remaining *correctness* gap:
-  `verify` is artifact conformance by design, `debug` is on-fail only, `align` is periodic, so a change that is
-  logically wrong but passes its own tests and matches its own changelog goes straight to `commit`. Read-only, so
-  it does not touch the single-writer rule `D178` upheld; it fits as a leaf agent, and `11e` being green is the
-  condition it was held back for. **Promotable now** — what is open is whether to build it, not what it is.
+- **The cold-context reviewer. ✅ BUILT 2026-09-18 — `D236`.** A read-only leaf agent after `verify` passes, on
+  any item whose diff changed code. Six calls the build had to take, all in `D236` with what each rejected; the
+  two that matter most: it is an **agent** because the coldness is the mechanism, not a filing choice, and it is
+  told **not to read the changelog or the verdict** — the author's own account and a `pass` already recorded both
+  re-warm the context the dispatch paid to cool. It gates only on what it can **demonstrate**; suspicion is
+  advisory. **Not a commit gate** while it is young, and the trigger for revisiting is named. **It also cost a
+  ninth meta-gate:** the forecast ANCHOR TABLE claimed to be read by `forecast.py` and a doc-only edit left the
+  code behind — that owner↔consumer pair had never been adopted by `check_enum_coherence.py` and now is, both
+  ways and on the artifact name.
 - **The inline-node topology question** — `D180` measured it (`planner` is the expensive inline node, above
   `verify`) and named the cheapest candidate fix (`D84`'s authoring-thinness, with a fan-out threshold that
   `verify/SKILL.md` licenses but does not quantify). **Untested, not undecided — and RE-MEASURE BEFORE

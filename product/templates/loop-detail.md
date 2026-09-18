@@ -271,6 +271,37 @@ and **deletes any earlier one**, so the directory holds only the current commit'
 past maintenance is that directory's git log. Never fake a trivial `pass: true` verdict instead — the console
 reads that first line as "verify passed" (`shared/schemas.md § commit-receipt`).
 
+## the review gate — when the cold reader runs, and what its verdict means
+`verify` passes, and then one question is still unasked: **is the code right?** Every `verify` check is a
+*correspondence* check (plan↔changelog↔diff, criteria↔discharge, promises↔criteria), so a change can satisfy
+all of them and be logically wrong — `debug` is on-fail only and `align` is periodic, so that change reaches
+`commit` unread. `review` is the leaf agent that reads it cold.
+
+**The gate is decidable, and it is the diff.** Dispatch `review` when the item's diff changed **code under
+`project_root`**. Skip it when the item changed only documentation, the spec, or records — there is no logic to
+be wrong. A maintenance item never reaches this tail at all. It runs **before** `checkpoint:qa?`: nobody should
+be asked to exercise a build a machine reader would have rejected.
+
+**It is an AGENT and not a skill, and that is the mechanism rather than a filing choice.** The orchestrator
+watched the plan get written and the worker carry it out, so it reads the diff through the author's intent and
+cannot see what a stranger sees. A dispatch is the only cheap way to buy a reader who never watched. For the
+same reason `review` is told **not** to read `changelog.md` (the author's own account, written to say the work
+was done) or `verify-verdict.md` (a `pass` already recorded) — either one re-warms the context the dispatch was
+paid to cool.
+
+**Route on the report's first line** (`gating: true|false`, `shared/schemas.md § review-report`). `false` →
+`checkpoint:qa?` → `document`; advisory findings ride the report and gate nothing, and a recurring one belongs
+in `create-issue`. `true` → `refine` **directly**, not via `debug`: the demonstration bar means the finding
+already names its cause, so `debug` would re-derive it. A corrected item re-enters `review` after `verify`
+passes, **capped at `config.review.max_rounds`** (default 2, lower than `demo`'s 3 because a review round
+re-runs plan→execute→verify on real code while a demo round regenerates a sandbox). At the cap, escalate to a
+`checkpoint` carrying every round's report — never auto-proceed.
+
+**No commit gate reads the report**, unlike `verify-verdict`, and that is deliberate while the node is young: a
+hard gate on an unproven reviewer makes the expensive thing compulsory, which selects for avoidance. The
+anchor makes the node visible to the forecast and divergence machinery; making it compulsory is a separate
+decision that wants its own evidence — a measured false-positive rate first.
+
 ## the turn gate
 **The two complaints this answers happen at the same instant, which is why one gate answers both:** the loop
 *"pauses a lot for no reason ... sometimes its really minor decisions that have no reason to stop and wait for

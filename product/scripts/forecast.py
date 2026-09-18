@@ -198,6 +198,7 @@ ANCHOR_TABLE = {
     "planner":         ("item_file", "plan.md"),
     "execute":         ("item_file", "changelog.md"),
     "verify":          ("item_file", "verify-verdict.md"),
+    "review":          ("item_file", "review-report.md"),
     "debug":           ("item_file", "debug-report.md"),
     "refine":          ("item_file", "plan-delta.md"),
     "document":        ("item_file", "promoted.json"),

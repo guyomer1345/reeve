@@ -85,8 +85,12 @@ closed**: a missing file, a `.json` instead of `.md`, or a reworded token blocks
 or omit this line; the mismatches and confidence follow as prose beneath it.
 
 ## Route
-- **pass** → `document` / `commit`. If the `plan` declared any `human-qa` acceptance criteria, the
-  orchestrator inserts a `checkpoint` (kind=qa) first; otherwise straight through — no blanket human QA.
+- **pass** → `review?` → `document` / `commit`. If the `plan` declared any `human-qa` acceptance criteria, the
+  orchestrator inserts a `checkpoint` (kind=qa) after `review`; otherwise straight through — no blanket human QA.
+  **`review` is where the question you do not ask gets asked.** Every check above is a *correspondence* check,
+  so your `pass` means *what was built matches what was asked* and never *the code is right* — a change can
+  satisfy all three and still be logically wrong. That is `review`'s subject, read cold; it is not a second
+  opinion on yours, and it never re-runs your checks.
 - **fail** → `debug`. A failed check is a valid debug trigger even with no live error.
 - **irreconcilable** (asked vs done can't be settled from the artifacts) → escalate → `checkpoint` (human) — the
   `adjudicate` escalate branch, not a silent pass or an endless re-gather.

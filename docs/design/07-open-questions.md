@@ -765,7 +765,16 @@ fan-out-controller question, and only the reviewer is still simply open.
   saves. The `~300k` figure this entry used to quote was an instrument artifact (2.8–3.5x over-count + one
   cache-TTL stall); the real number is 119.1k of billing over a 60.5k context. **What the measurement relocated,
   rather than resolved, is the first bullet above: the router, not the writer.**
-- **The loop has no cold-context correctness reviewer `[real, promotion-gated]`.** `verify` is artifact conformance
+- **~~The loop has no cold-context correctness reviewer~~ `[ANSWERED 2026-09-18 — D236, BUILT]`** Shipped as a
+  read-only **leaf agent** dispatched after `verify` passes, on any item whose diff changed code. An agent
+  rather than a skill because the coldness *is* the mechanism (`D170`'s method: the grading session must not be
+  the answering session), and it is told not to read `changelog.md` or `verify-verdict.md` for the same reason —
+  either re-warms the context the dispatch cooled. It gates only on a finding it can **demonstrate** (file, line,
+  the input that breaks it); suspicion is advisory and routes nowhere, because a reviewer that gates on suspicion
+  gets switched off. Gating → `refine` directly, not `debug` (a demonstrated finding already names its cause);
+  capped at `config.review.max_rounds`, then a human. **Deliberately NOT a commit gate** while it is young, with
+  the trigger for revisiting stated: a measured false-positive rate first. *(Original text kept below.)*
+- **[answered as `D236`] The loop has no cold-context correctness reviewer `[real, promotion-gated]`.** `verify` is artifact conformance
   by design, `debug` is on-fail only, `align` is periodic and not per-item — so a change that is logically wrong
   but passes its own tests and matches its own changelog goes straight to `commit`. Cognition's Code-Review-Loop is
   the measured counter-pattern (~2 bugs/PR, ~58% severe) and is **read-only**, so it does not touch the

@@ -114,6 +114,11 @@ anchor, and the parts are one schema.*
 - `demo` — the demo-sandbox knob read by `create-demo`: `max_refine_rounds` (the cap on demo regenerations
   before the refine loop stops auto-proceeding and **escalates to a live `discuss`**). Absent → shipped default
   (`max_refine_rounds` 3).
+- `review` — the cold-context reviewer's knob, read by the orchestrator at `review`'s route: `max_rounds` (how
+  many times one item may come back gating before the loop stops routing to `refine` and **escalates to a
+  `checkpoint`** — a change that cannot be got right in N rounds is a design question, not a defect). Absent →
+  shipped default (`max_rounds` 2). Lower than `demo`'s 3 on purpose: a demo round is cheap and regenerates a
+  sandbox, a review round re-runs plan→execute→verify on real code.
 - `thread` — the conversation-thread knobs read by the `answer` skill (`schemas.md § conversation-thread`):
   `rotate_at_tokens` (the estimated context past which the thread hands off and starts a fresh session) and
   `max_turns_rendered` (how many turns the console panel shows; the rest stay on disk until rotation). Absent →
