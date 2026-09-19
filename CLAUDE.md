@@ -72,9 +72,11 @@ sequence_).** This section carries **no copy of the phase list and no phase coun
 a four-phase order while the roadmap had grown to seven, which is the drift D80 exists to stop. *Where* we are, and
 *how many* phases there are, live in `docs/design/11-roadmap.md` alone.
 
-**A session resuming after 2026-09-18 has STANDING ORDERS, and they live in the work order, not here** —
+**A session resuming after 2026-09-19 has STANDING ORDERS, and they live in the work order, not here** —
 `11`'s `### The ordered build sequence` § `▶ NEXT`, in the blockquote at the top of that entry. They are the
 maintainer's, dated, and scoped to that queue: drive it end to end, do not stop to ask between items, capture
 as each one closes. **They expire when the queue does** — and this pointer goes with them, because a standing
 order left in `CLAUDE.md` after its stretch is over is an instruction with no owner. Read them before starting;
-they suspend the "never capture unprompted" rule above for that queue and nothing else.
+they suspend the "never capture unprompted" rule above for that queue and nothing else. **The queue they govern
+now is the unattended-drive bundle, and its item 0 is BLOCKING: an overnight run's artifacts are read before
+anything is built, because they may reorder the rest.**

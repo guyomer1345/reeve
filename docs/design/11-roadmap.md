@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the standing queue`, which now opens with three small items the last two runs found and then the cold-context reviewer, the real slice. It carries STANDING ORDERS for an unattended stretch — read them first. Nothing in the queue is blocked on a decision from the maintainer**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, five items that two real unattended drives exposed on 2026-09-19 and that `D239`/`D240` did NOT close. **Its item 0 is BLOCKING and is not work:** a third overnight run was left going, so read its artifacts before building — they may reorder the rest. Items 1–4 are builds, item 5 is a design question. The standing queue below it is CLOSED**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1363,8 +1363,8 @@ brownfield 13/13, greenfield 9/12 — and the goal rung, keyed on *promoted* wor
 session that promoted nothing. Re-keyed on *planned* work; run 10 came back **26/26, both modes, one digest**,
 with the gate firing its demand twice and the loop minting `GOAL-001` in response. `goal minted` had been red
 in runs 6, 8 and 9.
-**Three things the runs found that are WORK, not findings, and they are listed as items in `▶ NEXT` below
-rather than narrated here** — a residual described in a closed entry is a residual nobody is going to build.
+**Three things the runs found that are WORK, not findings, and they were listed as items in the standing
+queue below rather than narrated here (all three are now closed)** — a residual described in a closed entry is a residual nobody is going to build.
 In one line each: the skip is detected but not *prevented*; a goal minted mid-drive has no commit edge; and the
 unattended drive wrote a **weaker commitment** to avoid the floor (`07` owns that last one as a question).
 
@@ -1406,7 +1406,7 @@ receipt is keyed on the shipped file set, so **every earlier run is thrown away 
 above. Note that a green `worker budget observed a real worker` is now MEANINGFUL rather than lucky — before
 `D229` it passed or failed on whether the model happened to comply.
 
-#### ▶ NEXT — the standing queue. `[no ask — post-Phase-12]`
+#### The standing queue — CLOSED 2026-09-18, kept for its reasoning. `[no ask — post-Phase-12]`
 With Phase 12 closed this is what the work order points at, and it is the first entry here that traces to no
 numbered ask, because the request it came from is discharged.
 
@@ -1508,6 +1508,92 @@ including the two things it leaves open: `research.md` reaching for `curl` when 
 defect and is **not fixed** (it is now a tool-choice issue, not a drive-stopper), and the general form — **an
 `ask` in an unattended drive is a STOP, not a tripwire** — wants an outbox deferral, which is recorded and
 not built.
+
+#### ▶ NEXT — the unattended-drive bundle. `[no ask — found by RUNNING it, 2026-09-19]`
+Two supervised drives (`consumer`, `agentic cyber`) were left unattended for two hours and neither got far.
+`D239` and `D240` came out of that and are closed. **What follows is what those two hours exposed and did not
+fix.** Every item traces to an observation, not to a reading, and the order is dependency order.
+
+> **STANDING ORDERS for the session that picks this up (set 2026-09-19, by the maintainer, for this queue —
+> not a permanent rule).** *"Decide what to fix, make a proper list and reasoning, and then clear and take
+> care of them next chat."* So this list IS the authorization: **build items 1–4 without stopping to ask**,
+> take every decision that does not change what the package IS, and for one that does use the standing
+> delegation — recommendation + pros/cons, then keep building on your own recommendation rather than
+> blocking. **Say what you rejected**, in the decision log, every time you decide instead of asking. Capture
+> as each item closes ("never capture unprompted" is suspended for this queue and nothing else). **Item 5 is
+> excluded** — it is a design question and wants a conversation. **They expire when this queue does.**
+>
+> **Evidence first.** A third overnight run was left going on 2026-09-19
+> with the instruction *"either way tomorrow we will have our results"* — so **evidence arrives before you
+> start.** Read it first (§ 0 below); it may reorder items 1–4 and it may add items. Do not re-derive what a
+> night of real running is about to tell you. The maintainer's standing preference applies: cheap instruments
+> first, and **the full smoke run is LAST and only once** — every edit to `product/` throws its receipt away
+> (`D220`/`D227`).
+
+**0. Harvest the overnight run BEFORE building anything.** `[blocking — evidence, not work]`
+Two drives, two questions each. For both projects: `.workflow/parked/` (what stopped it, and was the kind
+legitimate), `.workflow/supervise.log` (did `D239`'s idle condition hold — one `sent /clear then continue` per
+cycle, never two in a row, never a `GIVING UP`), `.workflow/turn-gate.json` (`demands` and `rung` — if
+`demands` is again in the tens, item 1 is confirmed from a second run), `git log` (did it actually build
+anything), and the session transcripts under `~/.claude/projects/`. **The `agentic cyber` question that
+was asked and should not have been is STILL UNDIAGNOSED** — it was reported on 2026-09-19 and never read.
+That is the one finding here with no artifact behind it yet.
+
+**1. Nothing in the package knows a WORKER IS IN FLIGHT, and the harness now backgrounds them.** `[HIGH]`
+Observed live: `reeve:planner` running 3m34s / 71.9k tokens as a **backgrounded** agent, the parent turn
+ended, and the `Stop` hook printed *"Turn gate: asked 2 times … there is no reason for this turn to end …
+this is being recorded as a stop for no reason."* `turn-gate.json` read `{"demands": 35, "rung": "continue"}`
+against `MAX_DEMANDS = 2`. **One missing fact, three symptoms:**
+- `turn_check.py`'s ladder has no rung for *a dispatched worker has not returned*, so the ordinary
+  background dispatch reads as a stop for nothing. Every one of those 35 demands was a FALSE POSITIVE.
+- Because they were false, the gate spent `MAX_DEMANDS` on them and **stood down for the real case** — for
+  the rest of that session the only backstop left was `monitor.py`'s 10-minute fuse (`nudges_total: 1` says
+  it had already been needed once).
+- `idle_prompt` **fires while a background agent runs** — the parent genuinely is at the prompt. So `D239`'s
+  brand-new idle condition is necessary and NOT sufficient: at `handoff-now`, with the anchor written,
+  nothing parked and no dialog, `clear_safe` goes true and the supervisor would `/clear` **mid-dispatch**.
+  Reachable path, and the exposure was introduced by `D239` itself the same day.
+**The fix is one condition with two consumers** (`turn_check.py`: no demand · `gate()`: no reset), and the
+counter symptom dissolves for free — `turn_gate.py` already resets `demands` on the path where a turn may
+legitimately end, so once a background dispatch stops being demanded at, every dispatch re-arms the gate.
+**Unverified precondition, and check it FIRST:** that in-flight is derivable from what already ships
+(`worker_budget.py`'s per-worker breadcrumbs, `hooks/dispatch_return.py` on `SubagentStop`). If dispatch
+START is recorded nowhere, this needs a new hook and the cost changes.
+**Record the premise change, not just the bug.** The turn gate was designed when a dispatch BLOCKED the
+parent. The harness auto-backgrounds now (`Allowed by auto mode classifier`), which is a change underneath a
+shipped control rather than a coding error — so item 5 asks where else the package assumes a synchronous
+dispatch.
+
+**2. `research` reaches for `curl` while holding `WebFetch` and `WebSearch`.** `[MED — D240 left it open]`
+Both web tools are granted in its frontmatter AND broad-allow in `settings.json`; its body says nothing about
+which to prefer, and it used the one that prompted. `D240` took `curl` off the ask list, so this is now a
+tool-choice quality defect rather than a drive-stopper — **but it is still the fix that removes prompts
+without trading any safety, which is why it was the recommendation `D240` did not take.** Sweep all seven
+agents for the same shape: a granted tool that prompts where a granted tool that does not would serve.
+
+**3. The supervisor's give-up is a LOG LINE.** `[MED — named residual of `D239`]`
+`MAX_RESETS` stops the send loop and says what a human can do, into `supervise.log`. Nothing parks, nothing
+alerts. An operator who does not read that file learns about it when the drive stops moving — which is the
+failure mode the away channel exists to abolish. **This is a decision before it is a build:** park a `steer`
+(consistent with `monitor.py`'s escalation, which already owns that route), fire an away alert, or leave it
+and say so in the docs. `D239` deliberately did not decide it.
+
+**4. `run.drive.gate_turns` has no owner in `schemas-config.md`.** `[LOW — cheap, and it is the repo's own law]`
+A shipped config key documented only in `turn_gate.py`'s docstring and `loop-detail.md:343`. `schemas-config.md`
+owns the config keys; this one is not in it. Exactly the single-owner violation `D80` and
+`check_owner_sweep.py` exist to catch, in a shape the sweep cannot see. Found in conversation 2026-09-19.
+
+**5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
+The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
+it, where a prompt costs a second; left running overnight the same rule halts the loop until somebody
+returns. **The shape of the answer already exists in the package** — `push` and `issue` do not prompt, they
+queue to `outbox/` and wait for a console `release`. Letting an `ask` defer the same way turns every entry on
+that list from a halt into a deferral the operator clears from a phone. Recorded in `trust-model.md` §
+Honest limits and in `D240`; **not built, and not to be built without settling what happens when the loop
+needs the result of the deferred action to continue** — which is the hard half and the reason this is a
+question rather than an item.
+**Its sibling, from item 1:** where ELSE does the package assume a dispatch blocks the parent? That is an
+audit, and it may generate its own items.
 
 Then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage · project-map
 tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the code-map observed
@@ -1817,5 +1903,6 @@ sub-linearly, and the constrained window turns out to be the **router's** (43–
 98–179k per item) — where an inline node costs 9–29k against a dispatched node's 0.3–2.6k, and `planner` outweighs
 `verify`. That question is logged in `07`, not scheduled here.
 **`### Phase 12` is COMPLETE (D185 → D221, 2026-09-13 → 2026-09-14); the live pointer is now
-`### The ordered build sequence` § `▶ NEXT — the standing queue`, which is the only open entry left in it.
+`### The ordered build sequence` § `▶ NEXT — the unattended-drive bundle` (the standing queue that followed
+Phase 12 is itself closed).
 What Phase 12 was, kept because the way it opened is the part worth reusing — standing intent.** It is the third kind of phase-opening this repo has had: not a stale-claim sweep (Phase 10) and not an instrument reading (Phase 11), but **lived use** — the maintainer noticing which instructions he re-types every session. Five of them, one root cause: the package has no owner for a standing operator directive about how the *loop* behaves, so each one decays at the next `/clear`. The channel is built first and everything else registers in it; then return contracts, the wave coordinator D91's predicate has been waiting on since it was decided, an acceptance-derived convergence measure, and last — because it multiplies every defect above it — a `loop.sh` that drives session after session toward a goal on its own. **Where to start reading if you know nothing else: `### The ordered build sequence` (D186)** — it places Phase 12 against the two decided-but-unbuilt entries that come first (D184's remainder, then D183), and it is the only copy of that order.
