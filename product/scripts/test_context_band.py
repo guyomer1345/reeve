@@ -263,14 +263,48 @@ def test_an_unwritten_anchor_is_never_clear_safe(tmp_path):
     assert any("no handoff has been written" in b for b in g["blocked_by"])
 
 
-def test_clear_safe_once_the_anchor_is_fresh_and_nobody_is_waiting(tmp_path):
+def test_clear_safe_once_the_anchor_is_fresh_and_nobody_is_waiting_AND_IDLE(tmp_path):
     wf = _wf(tmp_path, 0.5)
     _handoff(wf)
     cb.demand(wf)
     _handoff(wf, FRESH, bump=10)
+    # The first three conditions are now all true — and that is precisely the state a real
+    # drive reset a RUNNING session in, because the anchor is written during a turn.
+    assert cb.gate(wf)["clear_safe"] is False
+    cb.mark_idle(wf, {"kind": "idle_prompt"})
     g = cb.gate(wf)
     assert g["parked_open"] == 0
     assert g["clear_safe"] is True, g["blocked_by"]
+
+
+def test_a_RUNNING_TURN_blocks_the_reset_however_good_everything_else_looks(tmp_path):
+    """The fourth condition, and the only one stated in the positive. Absent reads as not idle:
+    the cost of holding is a reset that waits a poll, the cost of firing is a prompt box full of
+    unsubmitted text that only Esc clears — and Esc then runs the `/clear` with no `continue`."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf)
+    cb.demand(wf)
+    _handoff(wf, FRESH, bump=10)
+    cb.mark_idle(wf)
+    assert cb.gate(wf)["clear_safe"] is True
+    cb.clear_idle(wf)                                   # a prompt was submitted; the turn runs
+    g = cb.gate(wf)
+    assert g["clear_safe"] is False
+    assert g["session_idle"] is None
+    assert any("not known to be idle" in b for b in g["blocked_by"]), g["blocked_by"]
+
+
+def test_an_unreadable_idle_flag_still_counts_as_idle(tmp_path):
+    """Its PRESENCE is the fact — one hook writes it, another removes it, and the body is only
+    for humans. Refusing to read a torn scratch file as idle would disable the supervisor over
+    bookkeeping, which is the opposite of how the dialog flag fails and deliberately so."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf)
+    cb.demand(wf)
+    _handoff(wf, FRESH, bump=10)
+    with open(os.path.join(wf, cb.IDLE_FILE), "w") as fh:
+        fh.write("{torn")
+    assert cb.gate(wf)["clear_safe"] is True
 
 
 def test_a_parked_checkpoint_blocks_the_reset(tmp_path):
@@ -330,6 +364,7 @@ def test_gate_cli_exit_code_is_may_i_reset(tmp_path, capsys):
     out = json.loads(capsys.readouterr().out)
     assert out["needs_handoff"] is True
     _handoff(wf, FRESH, bump=10)
+    cb.mark_idle(wf)
     assert cb.main(["--workflow-dir", wf, "--gate"]) == 0        # reset is safe
     assert json.loads(capsys.readouterr().out)["clear_safe"] is True
 

@@ -1,9 +1,13 @@
-"""Tests for hooks/awaiting_input.py — "a dialog is open", the third gate on a reset.
+"""Tests for hooks/awaiting_input.py and hooks/prompt_submit.py — the two flags a reset reads.
 
-The exclusion is the load-bearing half and gets its own test: `idle_prompt` must NOT set the
-flag. It means the session is sitting idle waiting for a prompt, which is precisely the state a
-supervisor exists to act on — treating it as "a human is busy here" would disable the supervisor
-exactly when it should fire, and nothing else in the system would say why.
+One hook, two facts, opposite polarities. `awaiting-input.json` says a DIALOG is open (hold);
+`session-idle.json` says the session is sitting at an idle prompt (the only state in which keys
+may be sent at all). The exclusion between them is the load-bearing half and gets its own test:
+`idle_prompt` must NOT raise the dialog flag, because treating an idle session as "a human is
+busy here" would disable the supervisor exactly when it should fire.
+
+`prompt_submit.py` is tested here rather than beside itself because it is meaningless alone —
+its whole contract is closing the bracket this file's hook opens.
 """
 import json
 import os
@@ -17,6 +21,7 @@ import context_band as cb
 HERE = Path(__file__).resolve().parent
 HOOK = HERE.parent / "hooks" / "awaiting_input.py"
 STOP_HOOK = HERE.parent / "hooks" / "handoff_gate.py"
+SUBMIT_HOOK = HERE.parent / "hooks" / "prompt_submit.py"
 M = cb.PER_NODE_TOKENS
 
 
@@ -40,6 +45,18 @@ def _flag(cwd):
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def _idle_flag(cwd):
+    path = Path(cwd) / ".workflow" / "session-idle.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def _submit(cwd, **extra):
+    payload = {"hook_event_name": "UserPromptSubmit", "cwd": str(cwd), "prompt": "continue"}
+    payload.update(extra)
+    return subprocess.run(["python3", str(SUBMIT_HOOK)], input=json.dumps(payload),
+                          capture_output=True, text=True)
+
+
 def test_a_permission_prompt_raises_the_flag(tmp_path):
     p = _project(tmp_path)
     assert _notify(p, "permission_prompt").returncode == 0
@@ -60,6 +77,66 @@ def test_IDLE_PROMPT_MUST_NOT_raise_it(tmp_path):
     p = _project(tmp_path)
     _notify(p, "idle_prompt")
     assert _flag(p) is None
+
+
+# --- the other polarity: idleness, which the gate requires to be PRESENT ------------------
+
+def test_IDLE_PROMPT_raises_the_idle_flag(tmp_path):
+    """The same notification the dialog flag must ignore is the one the reset cannot proceed
+    without. Both facts come from the same hook because they come from the same event stream,
+    and a session cannot be idle at the prompt and sitting in a dialog at once."""
+    p = _project(tmp_path)
+    assert _notify(p, "idle_prompt").returncode == 0
+    assert _idle_flag(p)["kind"] == "idle_prompt"
+    assert _flag(p) is None                       # and never both
+
+
+def test_a_dialog_does_not_raise_the_idle_flag(tmp_path):
+    p = _project(tmp_path)
+    _notify(p, "permission_prompt")
+    assert _idle_flag(p) is None and _flag(p) is not None
+
+
+def test_a_subagent_going_idle_is_not_this_sessions_screen(tmp_path):
+    p = _project(tmp_path)
+    _notify(p, "idle_prompt", agent_id="ag_1")
+    assert _idle_flag(p) is None
+
+
+def test_a_SUBMITTED_PROMPT_retires_the_idle_flag(tmp_path):
+    """The bracket closes. Without this the flag would outlive the idleness it describes, and a
+    stale permission to reset is the failure the whole condition exists to prevent."""
+    p = _project(tmp_path)
+    _notify(p, "idle_prompt")
+    assert _idle_flag(p) is not None
+    assert _submit(p).returncode == 0
+    assert _idle_flag(p) is None
+
+
+def test_retiring_a_flag_that_is_already_gone_is_the_ordinary_case(tmp_path):
+    p = _project(tmp_path)
+    assert _submit(p).returncode == 0
+    assert _submit(tmp_path / "nowhere").returncode == 0     # no project there at all
+
+
+def test_a_SUBAGENTS_prompt_does_not_retire_it(tmp_path):
+    """A worker's prompt says nothing about whether the orchestrator's screen is idle."""
+    p = _project(tmp_path)
+    _notify(p, "idle_prompt")
+    _submit(p, agent_type="reeve:execute")
+    assert _idle_flag(p) is not None
+
+
+def test_the_submit_hook_NEVER_blocks_a_prompt(tmp_path):
+    """`UserPromptSubmit` can veto. This hook has no opinion about prompts and must never
+    acquire one — a supervisor bug that swallowed the human's typing would be unforgivable."""
+    p = _project(tmp_path)
+    for payload in ('{"hook_event_name":"UserPromptSubmit","cwd":"%s"}' % str(p).replace("\\", "/"),
+                    "not json at all", ""):
+        r = subprocess.run(["python3", str(SUBMIT_HOOK)], input=payload,
+                           cwd=str(p), capture_output=True, text=True)
+        assert r.returncode == 0, (payload, r.stderr)
+        assert r.stdout.strip() == "", r.stdout
 
 
 def test_other_notifications_are_ignored(tmp_path):
@@ -117,6 +194,7 @@ def test_an_open_dialog_blocks_clear_safe(tmp_path):
     # here would be testing the wrong blocker.
     path.write_text("# fresh\n\nbase_sha: 9f8e7d6\n")
     os.utime(path, (os.path.getatime(path), os.path.getmtime(path) + 10))
+    cb.mark_idle(wf)                                    # the fourth condition
     assert cb.gate(wf)["clear_safe"] is True            # the control
 
     _notify(p, "permission_prompt")

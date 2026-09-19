@@ -1480,6 +1480,23 @@ the per-mode window raised 3600/2700 → 5400/4200 now that a gating review roun
 clean re-review → promoted, converging in one round; `D233`'s seam went green on brownfield; and the brownfield
 session refused, unprompted, both to stamp `locked` on an unconfirmed spec and to forge a `decompose` receipt.
 
+**Then the first defect found by USE rather than by a run. ✅ CLOSED 2026-09-19 — `D239`.** `[no ask — reported
+from a live drive]` The maintainer ran a supervised drive on a real project and got *"a bunch of clear continue
+clear continue commands in the queue and nothing worked"* — and, after Esc, a cleared session with no
+`continue` behind it, which is the one outcome the supervisor exists to prevent. **Three defects, one root:
+`clear_safe` had no IDLE condition, and `handoff.md` is written DURING a turn** — so all three conditions it
+did have went true while the model was still working, and every reset the supervisor had ever sent went into a
+running turn. `D217`'s transport probe had established the idle case; `supervise.sh`'s header generalised it
+past what was measured. The signal to fix it was already arriving and being discarded: `idle_prompt`, which
+`awaiting_input.py` correctly refuses to treat as a *blocker* and is the missing *precondition*. Also closed
+with it: **the only actuator in the package with no attempt cap** (a `send-keys` that exits 0 proves tmux took
+the keystroke, not that the TUI submitted it — so a failed send re-fired every poll, forever), and the
+heartbeat's `nudge`, a second sender into the same pane carrying the same bug. **`D239` owns the calls**,
+including what was rejected and the one residual left open: the cap's give-up is a log line, not a parked
+`steer`, and whether it should park is **not** decided there.
+**Worth carrying forward: the three pre-existing fixtures that turned red ARE the finding.** Every one of them
+described a session mid-turn and asserted it was safe to reset. A green suite had been encoding the defect.
+
 Then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage · project-map
 tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the code-map observed
 layer. **Org mode stays parked at the maintainer's word.** Open questions and their current state live in `07`,

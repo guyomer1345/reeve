@@ -342,6 +342,44 @@ looking at the prompt.
 **Present, unreadable, or torn ⇒ still open.** A file nobody can read is not evidence that nobody is waiting.
 **A hook and not a screen-scrape.** The alternative was matching dialog chrome out of `tmux capture-pane` — a
 gate whose correctness depended on the wording of a UI this package does not control.
+**Its twin is `session-idle.json`, below, written by the same hook from the same event stream and read with the
+opposite polarity.** Never both at once: a session cannot be idle at the prompt and sitting in a dialog.
+
+## session-idle.json  · written by `hooks/awaiting_input.py` (`Notification`, `idle_prompt`), removed by `hooks/prompt_submit.py` (`UserPromptSubmit`) and `hooks/session_start.py`, read through `context_band.py` · *`.workflow/session-idle.json`; RUNTIME, gitignored, atomic write; repo mount, beside the rest of the gate*
+- `{ kind, session_id }` — the body is for humans. **PRESENCE is the fact**, which is why an unreadable file
+  still counts as idle: one hook writes it, another removes it, and refusing to read a torn scratch file as idle
+  would disable the supervisor over bookkeeping. (The dialog flag fails the other way for the same reason —
+  each fails towards *do not type into this pane*.)
+**The FOURTH `clear_safe` condition, and the only one stated in the positive** — the other three are reasons to
+hold, this one is a permission. Absent ⇒ not idle ⇒ no reset.
+**It exists because the first three were all true at the instant they were most wrong.** `handoff.md` is written
+*during* a turn, so the moment the anchor lands the band says `handoff-now`, the anchor is fresh, nothing is
+parked and no dialog is open — while the model is still working. Every reset the supervisor had ever sent went
+into a running turn. The design absorbed that with the transport probe's claim that keys sent mid-turn queue in
+the pty and are read intact at the end of the turn. **They do not.** They land in the prompt box as literal text,
+never submitted, and the next poll adds more — OBSERVED 2026-09-19 on a real drive as a stack of
+`/clear continue /clear continue` that only Esc could flush, and Esc then ran the `/clear` with no `continue`
+behind it.
+**A bracket, not a timer.** The harness says when idleness begins (`idle_prompt`, after
+`messageIdleNotifThresholdMs`, default 60s) and a submitted prompt is the only thing that ends it; between them
+the session is idle by definition. A TTL would guess at model latency and fail unrecoverably. `PreToolUse` was
+rejected as the closer because it proves busy-ness too late — the gap is exactly where the second send lands.
+**MEASURED:** the harness dispatches the `Notification` hook *before* it branches on `preferredNotifChannel`, so
+OS notifications being off still produces this flag. If that stops being true the supervisor stops resetting; it
+does not start resetting wrongly. **Cleared on `SessionStart` too** — a flag from the previous session describes
+a window that no longer exists.
+
+## supervise-latch.json  · written and read by `scripts/supervise.sh` · *`.workflow/supervise-latch.json`; RUNTIME, gitignored, atomic write*
+- `{ attempts, used }` — consecutive resets sent, and the context reading at the first of them.
+**The attempt cap every other actuator here already had.** `send-keys` exiting 0 means tmux accepted the
+keystroke, never that the TUI submitted it, so a send that does not land changes nothing the gate can see and
+the gate — still true — fires again every poll forever. Three (`REEVE_SUPERVISE_MAX_RESETS`) that leave the
+reading where it was and the supervisor stops and says what a human can do. Cf. `RUNNER_MAX_ATTEMPTS`,
+`MAX_DEMANDS`, `STALL_LIMIT`.
+**Graded on a DERIVED effect:** a `/clear` that lands collapses the context reading. Same law as the forecast
+anchor table — reality read off the durable trace, never off the actuator's own report. **Retired on every
+tick**, not only when the gate is true, or three *successful* resets would trip a cap meant for three failed
+ones. A file rather than a variable because `--once` is a whole process; unreadable ⇒ zero.
 
 ## spec-approval.json  · written by `checkpoint` on an approve that crosses the autonomy floor, read by `checks.sh --check` · *`.workflow/spec-approval.json`; **COMMITTED** — it must ride the commit it authorises, the same law as `commit-receipt`; atomic write; rewrite-in-place (one live approval, history in git)*
 - `{ spec_sha256, ticket_id, spec_path }` — the digest of `docs/spec.md` **as approved**.

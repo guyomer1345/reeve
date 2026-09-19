@@ -70,12 +70,17 @@ consumed-set to ids above it**, which is what keeps `handoff.md` bounded — a c
 - **`needs_handoff`** — the band says `handoff-now` and `handoff.md` has not moved since it started saying so.
   This is **yours**: rewrite the anchor, then say plainly that a `/clear` is safe and that the cleared session
   needs a bare `continue` — it does not start on its own.
-- **`clear_safe`** — the anchor is written **and** nothing is waiting on a human: no parked checkpoint
-  (`parked_open == 0`) **and no open dialog** (`awaiting_input` is null — a permission prompt is waiting on a
-  person just as much as a checkpoint is, and a live probe found a session sitting in one). This is not for you;
-  it is what the supervisor reads before resetting the session, and `blocked_by` says why not.
+- **`clear_safe`** — the anchor is written, nothing is waiting on a human, **and the session is idle**: no
+  parked checkpoint (`parked_open == 0`), **no open dialog** (`awaiting_input` is null — a permission prompt is
+  waiting on a person just as much as a checkpoint is, and a live probe found a session sitting in one), and
+  **`session_idle` is non-null**. That fourth condition is the one the other three were wrong about: the anchor
+  is written *during* a turn, so all three went true while the model was still working, and every reset was
+  sent into a running turn. Keys sent then are not queued into it — they land in the prompt box as text and are
+  never submitted. This is not for you; it is what the supervisor reads before resetting the session, and
+  `blocked_by` says why not.
   **The supervisor** is `loop.sh --supervise` (inside tmux): it polls this gate and sends `/clear` then
-  `continue` — two sends, because a cleared session does not start on its own. It never writes the anchor.
+  `continue` — two sends, because a cleared session does not start on its own. It never writes the anchor, and
+  after three sends that leave the context reading untouched it stops rather than filling the prompt box.
 
 **Why both, when the old rule was one flag.** Writing an anchor is always safe, so nothing may veto it — not an
 open checkpoint, not an unreachable runtime root, which is exactly when the anchor matters most. *Resetting* a

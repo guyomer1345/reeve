@@ -122,6 +122,16 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/prompt_submit.py"
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

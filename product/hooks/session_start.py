@@ -440,6 +440,15 @@ def main():
         payload = {}
     cwd = payload.get("cwd") or "."
 
+    # A session that has only just begun has not been observed idle, and the flag the one
+    # before it left behind describes a window that no longer exists. Leaving it would let the
+    # supervisor reset a session that is mid-turn on its very first turn — the exact failure
+    # the flag was added to prevent. Best-effort and silent: already-gone is the normal case.
+    try:
+        os.remove(os.path.join(cwd, ".workflow", "session-idle.json"))
+    except OSError:
+        pass
+
     parts = []
     note = assert_pre_commit(cwd)
     if note:

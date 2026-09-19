@@ -92,6 +92,24 @@ def test_rehydrate_is_clear_only(tmp_path):
 
 
 # --- re-asserting the git pre-commit backstop --------------------------------
+def test_a_new_session_is_never_INHERITED_as_idle(tmp_path):
+    """`session-idle.json` is the supervisor's permission to type into this pane. A flag the
+    previous session left behind describes a window that no longer exists — and a session that
+    has only just started is, by definition, not one the harness has announced idle. Leaving it
+    would let the very first turn be reset out from under itself."""
+    (tmp_path / ".workflow").mkdir(parents=True, exist_ok=True)
+    flag = tmp_path / ".workflow" / "session-idle.json"
+    flag.write_text(json.dumps({"kind": "idle_prompt"}))
+    for source in ("clear", "startup", "resume"):
+        flag.write_text(json.dumps({"kind": "idle_prompt"}))
+        assert _run(tmp_path, source=source).returncode == 0
+        assert not flag.exists(), source
+
+
+def test_a_missing_workflow_dir_is_not_an_error_for_the_idle_flag(tmp_path):
+    assert _run(tmp_path, source="startup").returncode == 0
+
+
 HOOK_BODY = "#!/usr/bin/env bash\necho package-backstop\n"
 
 

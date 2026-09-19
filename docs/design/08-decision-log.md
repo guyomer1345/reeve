@@ -9019,3 +9019,75 @@ defect 1, and the cost that moved the window), **D234** (the same suppressed-dem
 keyed on the shipped file set, hence why these were held until the run finished).
 → `product/templates/checks.sh`, `product/hooks/turn_gate.py`, `product/scripts/turn_check.py`,
 `scripts/smoke_drive.py`, `11` (§ the ordered build sequence).
+
+## D239 — the supervisor typed into running turns, and had no give-up: `clear_safe` gains a FOURTH condition (idle), and the one actuator in the package with no attempt cap gets one **[BUILT 2026-09-19 — 1,463 tests in the touched files' suites + 6 meta-gates green. Found by USE, reported by the maintainer from a real agentic drive; none of it was reachable by reading, and the shipped code asserted the opposite]**
+**The report.** An unattended drive on a real project came back with *"a bunch of clear continue clear continue
+commands in the queue and nothing worked. When I pressed esc on all of them the chat cleared and I had to
+rewrite continue."* That is three defects in one sentence, and the third is the one the whole mechanism exists
+to prevent: a cleared session sitting idle with no `continue` behind it.
+
+**1. The gate was true at exactly the wrong instant, every single time.** `clear_safe` asked three things —
+the band says `handoff-now`, an anchor has been written since it started saying so, nothing is waiting on a
+human. **`handoff.md` is written DURING a turn.** So the moment the session writes its anchor all three go
+true while the model is still working, and **every reset the supervisor had ever sent went into a running
+turn.** This is not a rare race; it is the ordinary path.
+The design absorbed that with a claim from `D217`'s transport probe, stated in `supervise.sh`'s own header:
+*"Keys sent mid-turn queue: the pty buffers them while the TUI is not reading and hands them over intact, in
+order, on the next read."* **The probe established the idle case and the claim was generalised past it.** Keys
+sent mid-turn land in the prompt box as literal TEXT and are never submitted.
+**The fix was already arriving and was being thrown away.** `awaiting_input.py` receives `idle_prompt` from the
+`Notification` hook and drops it, with sound reasoning — as a *blocker* it would disable the supervisor exactly
+when it should fire. It is the missing *precondition*. Same signal, opposite polarity: the same hook now writes
+`session-idle.json`, `hooks/prompt_submit.py` (`UserPromptSubmit`, new) removes it the instant a turn starts,
+and `SessionStart` clears what a dead session left behind. **A bracket, not a timer** — the harness says when
+idleness begins and a submitted prompt is the only thing that ends it, so nothing guesses at model latency.
+**MEASURED before building on it, per `D217`'s own lesson.** The harness emits
+`{notification_type: "idle_prompt"}` after `messageIdleNotifThresholdMs` (default 60 000) and dispatches the
+**hook** *before* branching on `preferredNotifChannel` — so a user with OS notifications off still produces the
+flag. Absent reads as NOT idle: if that ever changes the supervisor stops resetting, it does not start
+resetting wrongly.
+
+**2. No latch, no cap, unbounded re-send — and this file was the only actuator in the package without one.**
+`reset_session` returned success on `send-keys` exiting 0, which means **tmux accepted the keystroke**, never
+that the TUI submitted it. A send that does not land changes nothing the gate can see, so the gate stays true
+and the next poll sends again. Forever. The relaunch-runner has `RUNNER_MAX_ATTEMPTS` with doubling backoff,
+`turn_gate.py` has `MAX_DEMANDS`, `converge.py` has `STALL_LIMIT`, `drive.py` has its no-progress streak; the
+one process holding the keyboard had nothing. `supervise-latch.json` now counts sends and stops at three,
+**graded on a DERIVED effect rather than on its own report** — a `/clear` that lands collapses the context
+reading — which is the forecast anchor table's law and `drive.py`'s, applied where it was missing.
+**Retired on EVERY tick, not only on the firing branch:** a landed reset leaves the gate false for a long
+while, so a ledger inspected only when the gate is true still holds the previous cycle's count when the window
+next fills, and three *successful* resets would trip a cap built for three failed ones. (Caught by writing the
+test, not by writing the code.)
+
+**3. Two senders, one pane, neither aware of the other.** `heartbeat`'s `nudge` sends `continue` on the *held*
+branch with no coordination — the same keystroke injection carrying the same defect. It now takes the same idle
+precondition, which costs nothing real: a session that never ends a turn *because it is working* is not one a
+`continue` would help, and one that quietly stopped IS idle and still gets nudged. A session in a dialog is
+neither, and needs a human.
+
+*Rejected:* **a TTL on the idle flag** (a guess about model latency that fails in the unrecoverable direction —
+a flag outliving its idleness is a reset into a running turn) · **`PreToolUse` as the closer** (proves busy-ness
+too late: a turn that opens with text has submitted a prompt and called no tool, and that gap is exactly where
+the second send lands) · **reading the screen with `tmux capture-pane`** (rejected once already for the dialog
+flag, and for the same reason — correctness hostage to the wording of a UI this package does not control) ·
+**importing `context_band` from the two hooks** (a `Notification` hook that can fail because an unrelated
+module did not parse; the duplication is two string literals, and `awaiting_input.py` already had the
+precedent) · **making the supervisor write the handoff so it could verify its own reset** (it still does not
+know what a complete anchor says — `12h`'s call stands).
+*Residual, named rather than papered over:* the cap's give-up is a LOG LINE. `monitor.py` still owns escalation
+to a `steer`, and a supervisor that has given up is not itself a parked checkpoint — so an operator who never
+reads `supervise.log` learns about it only when the drive stops moving. Whether the give-up should park is a
+real question and is **not** decided here.
+*Evidence:* the maintainer's report of a live run; the harness binary read directly for the notification
+contract (payload shape, threshold, and the hook-before-channel dispatch order); 18 `test_supervise.py` (+4),
+`test_awaiting_input.py` (+7, incl. `prompt_submit.py`'s whole contract), `test_context_band.py` (+2),
+`test_session_start.py` (+2); the three pre-existing fixtures that turned RED are the finding itself — every one
+of them described a session that was mid-turn and called it safe to reset.
+**Builds on:** **D217** (the probe, the transport, and the claim this corrects), **D218** (the supervisor),
+**D225** (the heartbeat whose nudge shared the defect), **D206** (`context.json`, the derived effect the cap is
+graded on), **D221** (the `base_sha` anchor rule, which is what makes the third condition land mid-turn).
+→ `product/hooks/{awaiting_input.py,prompt_submit.py,session_start.py}`, `product/scripts/{context_band.py,supervise.sh}`,
+`product/templates/{settings.json,loop-detail.md}`, `product/commands/{dispatch.md,start.md}`,
+`product/MANIFEST.json`, `product/shared/schemas-runtime.md`, `05` (§ the `.workflow/` inventory),
+`11` (§ the ordered build sequence).

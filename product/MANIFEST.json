@@ -184,6 +184,10 @@
     {
       "src": "hooks/awaiting_input.py",
       "dest": ".claude/hooks/awaiting_input.py"
+    },
+    {
+      "src": "hooks/prompt_submit.py",
+      "dest": ".claude/hooks/prompt_submit.py"
     }
   ]
 }

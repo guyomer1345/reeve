@@ -68,15 +68,28 @@ the substance:
                     and `anchor_names_base` are reported separately, because "nothing was
                     written" and "something was, and it cannot be resumed from" are different
                     things to go and fix.
-    clear_safe      The band says `handoff-now`, the anchor IS written, and nothing is waiting
-                    on a human. Its consumer is the supervisor, whose whole job is the reset
-                    (`/clear` then `continue`) and which must never reset a session that a
-                    person is mid-conversation with. "Waiting on a human" is TWO things and the
-                    second was found by probing, not by reasoning: a parked checkpoint, and an
-                    OPEN DIALOG (a permission prompt, an elicitation). A live probe drove a real
-                    session into a permission prompt and it sat there -- invisible to `parked/`,
-                    and a supervisor reading the two-part gate would have cleared the screen
-                    somebody was looking at.
+    clear_safe      The band says `handoff-now`, the anchor IS written, nothing is waiting on a
+                    human, and THE SESSION IS IDLE. Its consumer is the supervisor, whose whole
+                    job is the reset (`/clear` then `continue`) and which must never reset a
+                    session that a person is mid-conversation with -- nor one the MODEL is
+                    mid-turn in. "Waiting on a human" is TWO things and the second was found by
+                    probing, not by reasoning: a parked checkpoint, and an OPEN DIALOG (a
+                    permission prompt, an elicitation). A live probe drove a real session into a
+                    permission prompt and it sat there -- invisible to `parked/`, and a
+                    supervisor reading the two-part gate would have cleared the screen somebody
+                    was looking at.
+                      The FOURTH condition -- idle -- was found the same way the second was, by
+                    a drive rather than by reading, and it is the one the other three were
+                    silently wrong about. `handoff.md` is written DURING a turn, so the instant
+                    the session writes its anchor the first three all hold while the model is
+                    still working. Every reset fired mid-turn. The design assumed keys sent then
+                    would queue in the pty and be read intact at the end of the turn; they do
+                    not. They land in the prompt box as literal TEXT, never submitted, and the
+                    next poll adds more -- `/clear continue /clear continue` stacked until a
+                    human pressed Esc, which flushed the buffer and ran the `/clear` with no
+                    `continue` behind it (OBSERVED 2026-09-19). So idle is a PRECONDITION, not a
+                    courtesy, and it is the only one of the four stated in the positive:
+                    `session_idle` must be non-null, and absent reads as "not idle".
 
 FRESHNESS NEEDS A MOMENT TO BE FRESH RELATIVE TO, and that moment is when the band ENTERED
 `handoff-now` -- not "recently", not a TTL. So `gate()`/`demand()` latch it: the first call that
@@ -117,6 +130,12 @@ GATE_FILE = "handoff-gate.json"
 # removed by `hooks/handoff_gate.py` when a turn ends (a dialog blocks the turn, so a `Stop` is
 # proof the dialog is gone). Present ⇒ somebody is being waited on, and no reset may happen.
 AWAITING_FILE = "awaiting-input.json"
+
+# The session is sitting at an idle prompt — the FOURTH thing that must be true before a reset
+# may be sent, and the only one stated in the positive. `awaiting_input.py` writes it on the
+# harness's own `idle_prompt` notification; `prompt_submit.py` removes it the instant a prompt is
+# submitted, so the pair brackets idleness exactly rather than guessing at it.
+IDLE_FILE = "session-idle.json"
 
 
 # WHAT MAKES AN ANCHOR AN ANCHOR, and why mtime alone was not enough. A resume reads
@@ -372,6 +391,58 @@ def clear_awaiting(workflow_dir):
         return False
 
 
+def session_idle(workflow_dir):
+    """The idle-prompt record, or None when this session is not KNOWN to be idle.
+
+    Absent reads as "not idle", and that asymmetry is the whole point. Every other `clear_safe`
+    condition is a reason to hold stated in the negative; this one is a permission stated in the
+    positive, because the failure it prevents cannot be undone. Keys sent into a running turn do
+    not queue into it -- they land in the prompt box as literal text and are never submitted, so
+    a single mistimed reset corrupts the input buffer and every retry makes it worse (OBSERVED,
+    2026-09-19, on a real agentic drive: a stack of `/clear continue /clear continue` that only
+    Esc could clear, and Esc then ran the `/clear` with no `continue` behind it).
+
+    WHY THE RACE IS REAL AND NOT RARE. `handoff.md` is written DURING a turn, so the moment the
+    session writes its anchor the other three conditions all hold while the model is still
+    talking. The gate was true at exactly the wrong instant, every single time.
+
+    A file that exists but will not parse still counts as idle: it was written by the idle hook
+    and removed by the submit hook, so its PRESENCE is the fact and its body is only for humans.
+    """
+    path = os.path.join(workflow_dir, IDLE_FILE)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            val = json.load(fh)
+    except (OSError, ValueError):
+        return {"since": "unknown"}
+    return val if isinstance(val, dict) else {"since": "unknown"}
+
+
+def mark_idle(workflow_dir, record=None):
+    """Called from the `Notification` hook on `idle_prompt`. Best-effort, like every writer here."""
+    try:
+        tmp = os.path.join(workflow_dir, "." + IDLE_FILE + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(record or {}, fh, sort_keys=True)
+        os.replace(tmp, os.path.join(workflow_dir, IDLE_FILE))
+        return True
+    except OSError:
+        return False
+
+
+def clear_idle(workflow_dir):
+    """Called from `UserPromptSubmit` (a turn is starting) and from `SessionStart` (a session
+    that has only just begun has not been observed idle, and a flag left by the one before it
+    describes a window that no longer exists)."""
+    try:
+        os.remove(os.path.join(workflow_dir, IDLE_FILE))
+        return True
+    except OSError:
+        return False
+
+
 def _parked_open(workflow_dir):
     """How many checkpoints are waiting on a human — or None when that cannot be established.
 
@@ -416,6 +487,15 @@ def gate(workflow_dir, project_dir=None, now=None, arm=True):
     if dialog:
         blocked.append("a %s dialog is open — somebody is being asked something right now"
                        % (dialog.get("kind") or "unknown"))
+    idle = session_idle(workflow_dir)
+    out["session_idle"] = idle
+    # `is None`, not falsiness: the record's BODY is for humans and an empty one is a legitimate
+    # write. Presence is the fact.
+    if idle is None:
+        blocked.append("the session is not known to be idle — the harness announces an idle "
+                       "prompt and nothing has since been submitted, and neither is true right "
+                       "now. Keys sent into a running turn land in the prompt box as text and "
+                       "are never submitted")
     n = _parked_open(workflow_dir)
     out["parked_open"] = n
     if n is None:

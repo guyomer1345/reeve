@@ -24,15 +24,32 @@
 # and it was false; a supervisor built on that claim would send `/clear` and wait forever.
 #
 # THE GATE IS ONE CALL AND IT IS NOT THIS FILE'S JUDGEMENT. `context_band.py --gate` answers
-# `clear_safe`, which is three things at once: the band says hand off now, an anchor has been
-# written since it started saying so, and nothing is waiting on a human — neither a parked
-# checkpoint nor an OPEN DIALOG. That last one is not theoretical: a live probe drove a real
-# session into a permission prompt, where it sat, invisible to every other signal.
+# `clear_safe`, which is FOUR things at once: the band says hand off now, an anchor has been
+# written since it started saying so, nothing is waiting on a human — neither a parked checkpoint
+# nor an OPEN DIALOG — and the session is IDLE. Neither of the last two is theoretical; both were
+# found by driving rather than by reading. A live probe drove a real session into a permission
+# prompt, where it sat, invisible to every other signal. And a real drive, 2026-09-19, found the
+# fourth: every reset this file had ever sent went into a RUNNING TURN.
 #
-# TRANSPORT: `tmux send-keys`, probed rather than assumed. A real interactive session was driven
-# end to end this way — a prompt ran, `/clear` cleared the transcript, a bare `continue` started
-# a turn in the cleared session. Keys sent mid-turn queue: the pty buffers them while the TUI is
-# not reading and hands them over intact, in order, on the next read.
+# TRANSPORT: `tmux send-keys`, probed rather than assumed — and the probe's conclusion was too
+# strong. A real interactive session was driven end to end this way: a prompt ran, `/clear`
+# cleared the transcript, a bare `continue` started a turn in the cleared session. What that did
+# NOT establish is the mid-turn case, which this file then assumed: keys sent while the TUI is
+# mid-turn do **not** queue into the turn and get read at the end of it. They land in the prompt
+# box as literal text and are never submitted. The observed result was a stack of
+# `/clear continue /clear continue` that only Esc could flush — and Esc then ran the `/clear`
+# with no `continue` behind it, which is the one outcome this whole file exists to prevent.
+# Hence the idle precondition in the gate, and hence the attempt cap below.
+#
+# THE ATTEMPT CAP, which every other actuator in this package already had and this one did not.
+# `send-keys` exiting 0 means tmux accepted the keystroke, never that the TUI submitted it, so a
+# send that does not land changes nothing the gate can see — and the gate, still true, fires
+# again on the next poll, forever. The relaunch-runner has `RUNNER_MAX_ATTEMPTS`, `turn_gate.py`
+# has `MAX_DEMANDS`, `converge.py` has `STALL_LIMIT`, `drive.py` has its no-progress streak.
+# This file now has `MAX_RESETS`, and it is checked against a DERIVED effect rather than its own
+# report of success: a `/clear` that lands collapses the context reading, and one that does not
+# leaves it where it was. A supervisor that gives up costs a session that stops where it would
+# have stopped anyway; one that retries into a corrupted prompt box costs the conversation.
 #
 # FAIL DIRECTION, THROUGHOUT: do nothing. Every unreadable file, missing tool, absent pane and
 # unexpected exit code leaves the session alone. A supervisor that fails by not resetting costs
@@ -46,6 +63,15 @@ PANE=""
 PROJECT="."
 ONESHOT=0
 SETTLE="${REEVE_SUPERVISE_SETTLE:-8}"   # seconds between `/clear` and `continue`
+# Consecutive sends that left the context reading where it was before giving up. Three, not one:
+# a single send can fail to land for a reason that clears on its own (the TUI repainting, a
+# window resize), and a supervisor that surrenders to the first of those is a supervisor nobody
+# keeps switched on. Three that all fail to move a number that a landed `/clear` collapses is not
+# a transient.
+MAX_RESETS="${REEVE_SUPERVISE_MAX_RESETS:-3}"
+# How far the reading must fall to count as "the reset landed". One node's worth — a real clear
+# drops an order of magnitude more, and anything smaller is ordinary turn-to-turn noise.
+DROP_TOKENS=12000
 
 usage() {
   cat <<'USAGE'
@@ -94,6 +120,9 @@ log() { printf '%s supervise: %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 MONITOR="$PROJECT/.claude/scripts/monitor.py"
 
 heartbeat() {
+  # `local`, because `tick` holds its own `why` (the gate's `blocked_by`) across this call and
+  # a bare assignment here would print the monitor's reason under the gate's label.
+  local action why
   [ -f "$MONITOR" ] || return 0
   action="$(python3 "$MONITOR" tick --workflow-dir "$PROJECT/$WORKFLOW" \
               --project-root "$PROJECT" --json 2>/dev/null \
@@ -104,6 +133,15 @@ except Exception: print("none\t")' )"
   why="${action#*$'\t'}"; action="${action%%$'\t'*}"
   case "$action" in
     nudge)
+      # The nudge is the same keystroke injection the reset is, so it carries the same
+      # precondition: a `continue` sent into a running turn lands in the prompt box as text.
+      # This costs nothing real — a session that "never ends a turn" because it is working is
+      # not one a `continue` would help, and one that quietly stopped IS idle and does get
+      # nudged. A session sitting in a dialog is neither, and needs a human, not a keystroke.
+      if [ "$1" != "idle" ]; then
+        log "no motion — $why; NOT nudging: the session is not known idle"
+        return 0
+      fi
       log "no motion — $why; nudging $PANE"
       tmux has-session -t "$PANE" >/dev/null 2>&1 || { log "pane $PANE is gone"; return 0; }
       tmux send-keys -t "$PANE" "continue" Enter || log "nudge failed; holding"
@@ -121,17 +159,65 @@ paused() {
     >/dev/null 2>&1
 }
 
-# One question, one owner. Exit 0 means every condition holds.
-clear_safe() {
-  python3 "$GATE" --workflow-dir "$PROJECT/$WORKFLOW" --project-root "$PROJECT" --gate \
-    >/dev/null 2>&1
-}
-
-why_held() {
+# One question, one owner, and ONE CALL. The gate arms its own freshness latch, so asking it
+# twice per tick — once for the verdict and once for the reason — made the poll a writer as well
+# as a reader. Emitted as tab-separated fields rather than JSON for the reason `drive.py` gives:
+# a supervisor that needs `jq` has a new way to fail at 3am.
+#   field 1  safe   `1` when every condition holds
+#   field 2  used   the context reading, the derived effect a landed `/clear` collapses
+#   field 3  idle   `idle` when the session is known idle (the heartbeat needs it too)
+#   field 4  why    `blocked_by`, joined, for the log
+ask_gate() {
   python3 "$GATE" --workflow-dir "$PROJECT/$WORKFLOW" --project-root "$PROJECT" --gate 2>/dev/null \
     | python3 -c 'import json,sys
-try: print("; ".join(json.load(sys.stdin).get("blocked_by") or []) or "no reason given")
-except Exception: print("the gate did not answer")'
+try:
+    g = json.load(sys.stdin)
+except Exception:
+    print("0\x1f\x1f\x1fthe gate did not answer"); raise SystemExit
+print("%s\x1f%s\x1f%s\x1f%s" % (
+    "1" if g.get("clear_safe") else "0",
+    (g.get("used") if isinstance(g.get("used"), int) else ""),
+    "idle" if g.get("session_idle") is not None else "",
+    "; ".join(g.get("blocked_by") or []) or "no reason given"))'
+}
+
+# The attempt ledger. Deliberately a file rather than a shell variable: `--once` is a whole
+# process, and a cron-style driver calling it every minute must carry the same memory a
+# long-running poller does, or the cap it is protected by does not exist.
+LATCH="$PROJECT/$WORKFLOW/supervise-latch.json"
+
+# Attempts so far whose effect never showed up, given the reading NOW. A reading that has fallen
+# by a node or more means the last `/clear` landed after all, so the ledger is retired and the
+# count starts over. An absent or unreadable ledger is zero — it can only ever cost one extra
+# send, and the alternative (refusing to send because a scratch file will not parse) is a
+# supervisor disabled by its own bookkeeping.
+attempts_so_far() {
+  [ -f "$LATCH" ] || { echo 0; return 0; }
+  python3 -c '
+import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        rec = json.load(fh)
+    was, now, drop = int(rec.get("used") or 0), sys.argv[2], int(sys.argv[3])
+    if now.isdigit() and was and int(now) < was - drop:
+        print(-1)                      # the reset landed; retire the ledger
+    else:
+        print(int(rec.get("attempts") or 0))
+except Exception:
+    print(0)' "$LATCH" "${1:-}" "$DROP_TOKENS" 2>/dev/null || echo 0
+}
+
+remember_attempt() {
+  python3 -c '
+import json, os, sys
+path, used, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
+tmp = path + ".tmp"
+try:
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump({"attempts": n, "used": int(used) if used.isdigit() else 0}, fh, sort_keys=True)
+    os.replace(tmp, path)
+except OSError:
+    pass' "$LATCH" "${1:-}" "${2:-1}" 2>/dev/null || true
 }
 
 reset_session() {
@@ -148,12 +234,41 @@ reset_session() {
 
 tick() {
   if paused; then log "loop is paused; holding"; return 1; fi
-  if clear_safe; then reset_session; else
+
+  IFS=$'\x1f' read -r safe used idle why <<<"$(ask_gate)"
+
+  # Retire the ledger FIRST, on every tick, whatever the gate says. A landed reset collapses
+  # the reading and then the gate is false for a long while — so a ledger only inspected on the
+  # true branch would still be holding the previous cycle's count when the window next fills,
+  # and three SUCCESSFUL resets in a row would trip a cap meant for three failed ones.
+  n="$(attempts_so_far "$used")"
+  if [ "$n" = "-1" ]; then rm -f "$LATCH"; n=0; fi
+
+  if [ "$safe" != "1" ]; then
     # The reset gate held. That is the normal state, and it is also what a dead session looks
     # like — so this is exactly where the heartbeat belongs, rather than beside it.
-    heartbeat
-    log "holding — $(why_held)"; return 1
+    heartbeat "$idle"
+    log "holding — ${why:-no reason given}"; return 1
   fi
+
+  if [ "$n" -ge "$MAX_RESETS" ] 2>/dev/null; then
+    # Everything the gate can see says reset; the one thing it cannot see — whether the keys
+    # were ever submitted — says the last $MAX_RESETS did nothing. Sending again is how a
+    # prompt box fills with `/clear continue /clear continue`. Stop, and keep saying so: the
+    # heartbeat still runs, and `monitor.py` still owns the escalation to a `steer`.
+    heartbeat "$idle"
+    log "GIVING UP on resetting $PANE — $n sends left the context reading at ${used:-unknown}."
+    log "  The keys are reaching tmux and not reaching the session. Look at the pane: if the"
+    log "  prompt box holds unsubmitted text, clear it (Esc), then send \`continue\` yourself."
+    log "  Delete $LATCH to let the supervisor try again."
+    return 1
+  fi
+
+  if reset_session; then
+    remember_attempt "$used" "$((n + 1))"
+    return 0
+  fi
+  return 1
 }
 
 if [ "$ONESHOT" -eq 1 ]; then tick; exit $?; fi
