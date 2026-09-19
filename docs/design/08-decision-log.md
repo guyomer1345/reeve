@@ -9091,3 +9091,54 @@ graded on), **D221** (the `base_sha` anchor rule, which is what makes the third 
 `product/templates/{settings.json,loop-detail.md}`, `product/commands/{dispatch.md,start.md}`,
 `product/MANIFEST.json`, `product/shared/schemas-runtime.md`, `05` (§ the `.workflow/` inventory),
 `11` (§ the ordered build sequence).
+
+## D240 — `curl`/`wget` come OFF the ask list: the rule did not match its own principle, and it was never a boundary **[DECIDED 2026-09-19 by the maintainer, against my recommendation, which was to fix `research.md` first and leave the rule alone. Prompted by a live unattended drive that stopped on `Bash(curl:*)` from `reeve:research`]**
+**What was observed.** An unattended drive halted at *"Ask rule `Bash(curl:*)` overrides auto mode"*,
+raised by `reeve:research` fetching two documentation URLs. The drive sat there until a human returned.
+
+**Why the rule went.** `trust-model.md` justified the ask list as *"anything that leaves the machine —
+outward actions are the ones you cannot take back."* Three things are wrong with applying that to `curl`:
+- **A GET takes nothing back.** `curl -sL <url>` is a read. It was swept into the outward list because it
+  is *spelled* like a network command, not because it matches the principle. The line worth drawing is
+  **read-only fetching vs arbitrary egress carrying a body** — and `WebFetch`/`WebSearch` are broad-allow
+  and both reach the internet, so network-vs-no-network was never the boundary anyway.
+- **That line cannot be drawn at the permission layer.** `curl` spans GET, POST-with-file-body, `-o` to
+  disk and `| bash` in one binary, and Claude Code documents prefix-matched argument patterns as fragile
+  (the same finding that put fine-grained scoping in `guard.sh` rather than in config — `schemas-config.md`
+  § `guard`). It is all-or-nothing.
+- **It bought nothing, and this is the decisive one.** `Bash` is broad-allow, so
+  `python3 -c "import urllib.request…"`, `nc`, `/usr/bin/wget` and `cd /tmp && curl …` were unprompted the
+  entire time. The rule stopped the model that spelled its intent plainly and missed every other route.
+  **`trust-model.md` already condemns exactly this shape** — *"an allowlist that looks precise while being
+  trivially bypassed is worse than an honest broad one, because it invites trust it has not earned."* The
+  argument was written about the ALLOW list and applies to the ASK list with equal force.
+
+**So the honest statement replaces the rule:** the ask list is a statement of intent about *irreversible
+change*, **not an egress boundary — there is no egress boundary**, and one would have to live below the
+permission layer (a `PreToolUse` hook, a sandbox, a network policy). `trust-model.md` now says so in the
+table, in the precedence paragraph (which claimed "leaving the machine always stops and asks you", now
+false), and under Honest limits.
+
+*What I recommended instead, and why it was not taken:* fix `research.md` — it is granted `WebSearch` and
+`WebFetch`, both broad-allow, and reached for the one tool that prompts, with nothing in its body saying
+which to prefer. That removes the dominant source of these prompts without touching any boundary. The
+maintainer's call was to take the rule out for **everyone**, on the reasoning above. **The `research.md`
+defect is real regardless and is NOT fixed here** — it is now a tool-choice quality issue rather than a
+drive-stopping one, and it needs its own slice.
+
+*Rejected:* **a per-project `settings.local.json` allow** (right for one security-flavoured project, wrong
+as the general answer — it leaves the package shipping a rule its own doc argues against) · **splitting
+`curl` by argument** (fragile by documentation, and `cd x && curl` defeats it) · **moving the gate into
+`guard.sh`** (a real option and the only one that could draw the read/write line, but it is a new hard
+floor on an action class nobody has yet shown needs one — not decided here) · **`ssh`/`scp`/`rsync`
+following it off the list** (they *push data to a machine you do not own*; the principle fits them).
+
+*Residual, named:* **an `ask` in an unattended drive is a STOP, not a tripwire** — the list was calibrated
+for a session with a human in front of it. The general fix is to let an ask **defer to the outbox** the way
+`push` and `issue` already do, so the drive queues and keeps working. Recorded in `trust-model.md` §
+Honest limits and **not built**.
+*Evidence:* the maintainer's pasted prompt; the shipped `ask` list read directly (46 → 44 rules);
+`research.md` frontmatter (`WebSearch, WebFetch, … Bash`) against its body (no guidance on which to use).
+**Builds on:** **D239** (the same drive), **the away-release trade** in `schemas-config.md § outward`
+(which already made the floor, not the prompt, the last line).
+→ `product/templates/settings.json`, `product/shared/trust-model.md`, `11` (§ the ordered build sequence).

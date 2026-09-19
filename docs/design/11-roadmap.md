@@ -1497,6 +1497,18 @@ including what was rejected and the one residual left open: the cap's give-up is
 **Worth carrying forward: the three pre-existing fixtures that turned red ARE the finding.** Every one of them
 described a session mid-turn and asserted it was safe to reset. A green suite had been encoding the defect.
 
+**And the first policy change the drive forced. ✅ CLOSED 2026-09-19 — `D240`.** `[no ask — decided from a
+live drive]` The same run stopped on `Bash(curl:*)` from `reeve:research`. `curl`/`wget` are **off the ask
+list for everyone**, at the maintainer's call and against my recommendation (which was to fix `research.md`
+and leave the rule). The reasoning that carried it is the one `trust-model.md` already made about the ALLOW
+list, turned on the ASK list: `Bash` is broad-allow, so `python3 -c "import urllib.request…"`, `nc` and
+`cd /tmp && curl` were never prompted — **the rule stopped the model that spelled its intent plainly and
+missed every other route.** There is no egress boundary and the doc now says so. **`D240` owns the calls**,
+including the two things it leaves open: `research.md` reaching for `curl` when it holds `WebFetch` is a real
+defect and is **not fixed** (it is now a tool-choice issue, not a drive-stopper), and the general form — **an
+`ask` in an unattended drive is a STOP, not a tripwire** — wants an outbox deferral, which is recorded and
+not built.
+
 Then the standing deferred menu, each already carrying its own trigger — proportional-rigor triage · project-map
 tab · model/effort routing · symbol-level knowledge paths · automated testing/device-QA · the code-map observed
 layer. **Org mode stays parked at the maintainer's word.** Open questions and their current state live in `07`,

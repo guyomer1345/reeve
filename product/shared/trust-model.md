@@ -12,15 +12,30 @@ stays gated, and what is enforced even when you turn the gates off.
 | | what | why |
 |---|---|---|
 | **allow** | local work — `Bash`, `Read`/`Write`/`Edit`, `Task`, web lookups | the loop edits, runs tests and reads constantly; prompting on each one is fatigue, and fatigue is what makes people approve things unread |
-| **ask** | anything that leaves the machine — `git push`, `gh`, publish/deploy/cloud CLIs, `ssh`/`scp`/`rsync`, `curl`/`wget` | outward actions are the ones you cannot take back |
+| **ask** | anything that **changes something you do not own** — `git push`, `gh`, publish/deploy/cloud CLIs, `ssh`/`scp`/`rsync` | outward actions are the ones you cannot take back |
 
 Precedence is **deny > ask > allow**, so the outward list always wins over the broad local allow.
-Local work runs silently; leaving the machine always stops and asks you.
+Local work runs silently; an action that **changes** something beyond this machine stops and asks you.
+Merely *reading* from the network does not — see `curl`/`wget` below, and read that before assuming
+the ask list is an egress boundary. It is not one.
 
 **Broad-allow is deliberate, not laziness.** An enumerated per-tool safelist was rejected because it
 cannot anticipate every project's toolchain, and because `cd x && cmd` chaining defeats prefix-matched
 allows anyway — an allowlist that looks precise while being trivially bypassed is worse than an honest
 broad one, because it invites trust it has not earned.
+
+**`curl` and `wget` are NOT on the ask list, and the reasoning is the same one.** They were, and the
+principle above does not fit them: `curl -sL <url>` is a **read**, and a read takes nothing back. The
+line worth drawing is not network / no-network — `WebFetch` and `WebSearch` are broad-allow and both
+reach the internet — it is **read-only** fetching versus **arbitrary egress carrying a body**. That
+line cannot be drawn here: `curl` spans the whole range in one binary, and prefix-matched argument
+patterns are fragile by Claude Code's own documentation, so it is all-or-nothing.
+And gating it bought nothing, because **`Bash` is broad-allow**: `python3 -c "import urllib.request…"`,
+`nc`, `/usr/bin/wget` and `cd /tmp && curl …` all ran unprompted the whole time. The rule stopped the
+model that spelled its intent plainly and missed every other route — precisely the "trust it has not
+earned" this package refuses elsewhere. **Read the ask list as a statement of intent about
+irreversible change, not as an egress boundary. There is no egress boundary. If you need one, it has
+to live below the permission layer** — a `PreToolUse` hook, a sandbox, or a network policy.
 
 ## You do not need `--dangerously-skip-permissions`
 
@@ -74,3 +89,9 @@ than permits. Silence is only ever allowed to be *more* conservative.
   test/build scripts. That is the point, and it is why the adopted-stack gate refuses to execute a
   tree's own commands until you have declared them, and refuses outright in org mode.
 - **Trust is per-root and per-machine.** A synced or copied project does not carry it.
+- **An `ask` in an unattended drive is a STOP, not a tripwire.** The ask list was calibrated for a
+  session with a human in front of it, where a prompt costs a second. Left running overnight, the same
+  rule halts the loop until somebody comes back — a cost nobody chose, inherited from the attended
+  design. Until an ask can defer to the outbox the way `push` and `issue` already do, treat every entry
+  on that list as a scheduled interruption of an unattended run, and keep the list to things that
+  genuinely warrant one.
