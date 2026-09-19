@@ -9142,3 +9142,59 @@ Honest limits and **not built**.
 **Builds on:** **D239** (the same drive), **the away-release trade** in `schemas-config.md § outward`
 (which already made the floor, not the prompt, the last line).
 → `product/templates/settings.json`, `product/shared/trust-model.md`, `11` (§ the ordered build sequence).
+
+## D241 — nothing in the package knew a WORKER WAS IN FLIGHT, and the harness had quietly changed the premise both gates rested on **[BUILT 2026-09-19 — 1,472 tests + 9 meta-gates. Observed twice on a live drive before a line was written; the signal turned out to be already wired and simply unread]**
+**The premise, and it is not a coding error.** `turn_check.may_end` and `context_band.gate` were both designed
+when a dispatch **blocked** the parent: a turn that ended meant a session that had stopped. Claude Code now
+auto-backgrounds agents (`Allowed by auto mode classifier`), so the parent's turn ends and the worker runs on.
+Both gates read that as a stop. **A shipped control can be invalidated by a harness change without anything in
+the repo changing**, which is the part worth carrying forward.
+
+**What it cost, measured rather than reasoned.** On the `consumer` drive, `turn-gate.json` read
+`{"demands": 35, "rung": "continue"}` against `MAX_DEMANDS = 2`, and the `Stop` hook printed *"there is no
+reason for this turn to end … this is being recorded as a stop for no reason"* — twice, from two different
+nodes (`reeve:planner`, then `reeve:review`), each while that agent was visibly running in the background.
+- **Every one of those 35 demands was a FALSE POSITIVE**, and each cost a filler turn: the gate blocks, the
+  session must produce another turn, and it produces commentary. Context burned to say nothing.
+- **Worse, they were spent.** `MAX_DEMANDS` is a budget; burning it on false alarms **stood the gate down for
+  the case it exists to catch**, leaving `monitor.py`'s 10-minute fuse as the only backstop for the rest of the
+  session (`nudges_total: 1` says it had already been needed).
+- **`clear_safe` was the sharper half, and `D239` introduced the exposure that morning.** `idle_prompt` fires
+  while a backgrounded worker runs — the parent genuinely IS at the prompt, and the harness is not wrong, it
+  simply cannot tell the two apart. So with the band at `handoff-now`, an anchor written, nothing parked and no
+  dialog, all of `D239`'s conditions held and the supervisor would `/clear` **mid-dispatch**, discarding the
+  worker. `D239`'s idle condition is necessary and was never sufficient.
+
+**The signal was already wired and nothing read it.** `PreToolUse` on `Agent|Task` → `dispatch_guard.py`;
+`PostToolUse` on `Agent|Task` → `dispatch_return.py`; and the harness carries `tool_use_id` on **both**
+(read out of the binary rather than assumed). So dispatch start and end were observable the whole time.
+`.workflow/in-flight/<tool_use_id>.json` now exists between them, and **one condition feeds two consumers** —
+`may_end` (a legitimate end) and `gate()` (a reason to hold).
+**The counter symptom needed no separate fix.** `turn_gate.py` already resets `demands` on the path where a
+turn may legitimately end, so a background dispatch that is no longer demanded at **re-arms the gate** every
+time. One fix, three symptoms.
+
+**Two ordering rules, both chosen against the obvious reading.** `dispatch_guard` marks **before** its own
+gates can block: a blocked dispatch never reaches `PostToolUse` and orphans its entry — but an orphan costs a
+held reset and ages out, where the opposite costs the worker. `dispatch_return` retires the mark **before** its
+own early returns: it skips a general dispatch, while `dispatch_guard` marks every dispatch, because the gates
+care whether the PARENT IS WAITING, not whose worker it is.
+
+*Rejected:* **a counter rather than one file per `tool_use_id`** (racy across concurrent dispatches, and a wave
+dispatches several at once — the whole point of the batch) · **a TTL as the primary mechanism** (it is a
+backstop only: 1h ≈ 4× the longest dispatch observed, 16m02s, so it cannot fire on a working worker;
+`SessionStart` clearing the directory is what makes it rare) · **importing `context_band` from the two hooks**
+(a `PreToolUse` gate must not be able to fail because an unrelated module did not parse — same call as
+`D239`'s) · **marking only this package's own agents** (a general dispatch backgrounds identically).
+*Residual:* `product/shared/schemas-runtime.md` is now **370 tokens over its 15k advisory cap** and wants the
+split-and-pointer treatment rather than more shaving. Queued, not paid here — `D184`'s rent rule is satisfied
+by a slice paying its own way, and this one cannot without cutting content that is load-bearing.
+*Evidence:* two independent live observations before any code; `turn-gate.json` at `demands: 35`; the harness
+binary read for both payload schemas; 1,472 tests (1,455 at `23b1bda`, +17 across `test_context_band`,
+`test_turn_check`, `test_dispatch_guard`, `test_dispatch_return`, `test_session_start`).
+**Builds on:** **D239** (the idle condition this completes, and whose exposure it closes), **D225**
+(`monitor.py`, the fuse that was carrying the whole load), **D216** (`dispatch_guard`, wired for a different
+reason and reused here), **D178** (`dispatch_return`, likewise).
+→ `product/hooks/{dispatch_guard.py,dispatch_return.py,session_start.py}`,
+`product/scripts/{context_band.py,turn_check.py}`, `product/shared/schemas-runtime.md`,
+`product/templates/loop-detail.md`, `product/commands/start.md`, `05`, `11`.

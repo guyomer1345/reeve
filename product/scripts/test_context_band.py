@@ -294,6 +294,67 @@ def test_a_RUNNING_TURN_blocks_the_reset_however_good_everything_else_looks(tmp_
     assert any("not known to be idle" in b for b in g["blocked_by"]), g["blocked_by"]
 
 
+def _ready(tmp_path):
+    """Every `clear_safe` condition true — the state a reset may actually happen in."""
+    wf = _wf(tmp_path, 0.5)
+    _handoff(wf)
+    cb.demand(wf)
+    _handoff(wf, FRESH, bump=10)
+    cb.mark_idle(wf)
+    assert cb.gate(wf)["clear_safe"] is True
+    return wf
+
+
+def _dispatch(wf, tid="toolu_1", agent="reeve:planner"):
+    d = os.path.join(wf, cb.IN_FLIGHT_DIR)
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, tid + ".json"), "w") as fh:
+        json.dump({"agent": agent}, fh)
+    return os.path.join(d, tid + ".json")
+
+
+def test_a_BACKGROUNDED_WORKER_blocks_the_reset(tmp_path):
+    """The parent is idle BECAUSE it is waiting. `idle_prompt` fires either way — the harness is
+    not wrong, it just cannot tell the two apart — so idle alone would have cleared a session
+    mid-dispatch and thrown the worker away."""
+    wf = _ready(tmp_path)
+    _dispatch(wf)
+    g = cb.gate(wf)
+    assert g["clear_safe"] is False
+    assert any("have not returned" in b for b in g["blocked_by"]), g["blocked_by"]
+    assert [r["agent"] for r in g["workers_in_flight"]] == ["reeve:planner"]
+
+
+def test_the_reset_resumes_the_moment_the_worker_RETURNS(tmp_path):
+    wf = _ready(tmp_path)
+    path = _dispatch(wf)
+    assert cb.gate(wf)["clear_safe"] is False
+    os.remove(path)                                  # PostToolUse retires the mark
+    assert cb.gate(wf)["clear_safe"] is True
+
+
+def test_a_worker_that_NEVER_RETURNS_ages_out_rather_than_wedging(tmp_path):
+    """The backstop, and the only reason a TTL exists here at all. SessionStart clears the
+    directory across sessions; this covers a worker that vanishes inside a session that keeps
+    running, where an entry that never expired would hold the reset gate forever."""
+    wf = _ready(tmp_path)
+    path = _dispatch(wf)
+    old = time.time() - cb.IN_FLIGHT_STALE_SECONDS - 60
+    os.utime(path, (old, old))
+    assert cb.workers_in_flight(wf) == []
+    assert cb.gate(wf)["clear_safe"] is True
+
+
+def test_an_unreadable_in_flight_entry_still_counts_as_a_worker(tmp_path):
+    """Presence is the fact. Reading a torn scratch file as "nothing is running" is how the
+    worker gets thrown away."""
+    wf = _ready(tmp_path)
+    path = _dispatch(wf)
+    with open(path, "w") as fh:
+        fh.write("{torn")
+    assert cb.gate(wf)["clear_safe"] is False
+
+
 def test_an_unreadable_idle_flag_still_counts_as_idle(tmp_path):
     """Its PRESENCE is the fact — one hook writes it, another removes it, and the body is only
     for humans. Refusing to read a torn scratch file as idle would disable the supervisor over

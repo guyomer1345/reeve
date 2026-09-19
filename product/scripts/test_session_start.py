@@ -106,6 +106,20 @@ def test_a_new_session_is_never_INHERITED_as_idle(tmp_path):
         assert not flag.exists(), source
 
 
+def test_a_new_session_inherits_no_DISPATCHED_WORKERS(tmp_path):
+    """A session that died mid-dispatch leaves entries whose PostToolUse will never arrive. Left
+    behind they read as "a worker is running" and hold the reset gate until they age out — and
+    the age-out is an hour, deliberately generous because it must never fire on a live worker.
+    This is the across-session cleanup that keeps that backstop rare."""
+    d = tmp_path / ".workflow" / "in-flight"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "toolu_dead.json").write_text(json.dumps({"agent": "reeve:execute"}))
+    (d / "notes.txt").write_text("not a mark")
+    assert _run(tmp_path, source="startup").returncode == 0
+    assert not (d / "toolu_dead.json").exists()
+    assert (d / "notes.txt").exists()          # only the marks, not the directory
+
+
 def test_a_missing_workflow_dir_is_not_an_error_for_the_idle_flag(tmp_path):
     assert _run(tmp_path, source="startup").returncode == 0
 

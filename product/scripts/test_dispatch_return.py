@@ -33,17 +33,23 @@ SMALL = ("status: done\nsummary: wrote 3 files; changelog at "
          ".workflow/items/S2a/changelog.md; no divergences")
 
 
-def _run(subagent_type="reeve:execute", response=None, tool="Agent"):
+def _run(subagent_type="reeve:execute", response=None, tool="Agent", cwd=None,
+         tool_use_id="toolu_01TEST"):
     payload = {
         "hook_event_name": "PostToolUse",
         "tool_name": tool,
         "tool_input": {"subagent_type": subagent_type, "description": "", "prompt": ""},
         "tool_response": response,
-        "tool_use_id": "toolu_01TEST",
+        "tool_use_id": tool_use_id,
     }
+    env = dict(os.environ)
+    env.pop("CLAUDE_PROJECT_DIR", None)
+    if cwd is not None:
+        payload["cwd"] = str(cwd)
+        env["CLAUDE_PROJECT_DIR"] = str(cwd)
     return subprocess.run(
         ["python3", str(HOOK)],
-        input=json.dumps(payload), capture_output=True, text=True, env=dict(os.environ),
+        input=json.dumps(payload), capture_output=True, text=True, env=env,
     )
 
 
@@ -217,3 +223,47 @@ def test_the_worker_budget_hook_ships_and_is_registered():
     assert any("worker_budget.py" in h["command"] for e in post for h in e["hooks"])
     manifest = json.loads((HERE.parent / "MANIFEST.json").read_text(encoding="utf-8"))
     assert ".claude/hooks/worker_budget.py" in {r["dest"] for r in manifest["install"]}
+
+
+# --- the in-flight mark: end of dispatch ----------------------------------------------------
+
+def _mark(cwd, tid="toolu_01TEST"):
+    d = Path(cwd) / ".workflow" / "in-flight"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / (tid + ".json")).write_text(json.dumps({"agent": "reeve:execute"}))
+    return d / (tid + ".json")
+
+
+def test_a_returned_worker_is_no_longer_IN_FLIGHT(tmp_path):
+    path = _mark(tmp_path)
+    _run(response=SMALL, cwd=tmp_path)
+    assert not path.exists()
+
+
+def test_a_GENERAL_dispatch_is_retired_too(tmp_path):
+    """The reason the retire runs BEFORE every early return in this hook: `dispatch_guard.py`
+    marks every Agent|Task dispatch, but everything else here is about this package's own return
+    contract and skips a general worker. Clearing the mark down there would orphan one on every
+    ordinary search dispatch, and an orphan reads as "a worker is running"."""
+    path = _mark(tmp_path)
+    r = _run(subagent_type="general-purpose", response=SMALL, cwd=tmp_path)
+    assert r.returncode == SILENT
+    assert not path.exists()
+
+
+def test_an_OVERSIZED_return_still_retires_its_mark(tmp_path):
+    """The complaint path must not skip the bookkeeping — a warned return is still a return."""
+    path = _mark(tmp_path)
+    r = _run(response=HUGE, cwd=tmp_path)
+    assert r.returncode == WARNED
+    assert not path.exists()
+
+
+def test_retiring_a_mark_that_was_never_written_is_the_ordinary_case(tmp_path):
+    assert _run(response=SMALL, cwd=tmp_path).returncode == SILENT
+
+
+def test_another_workers_mark_is_not_retired(tmp_path):
+    other = _mark(tmp_path, "toolu_OTHER")
+    _run(response=SMALL, cwd=tmp_path, tool_use_id="toolu_MINE")
+    assert other.exists()

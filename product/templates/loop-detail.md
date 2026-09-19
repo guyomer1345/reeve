@@ -72,8 +72,8 @@ consumed-set to ids above it**, which is what keeps `handoff.md` bounded — a c
   needs a bare `continue` — it does not start on its own.
 - **`clear_safe`** — the anchor is written, nothing is waiting on a human, **and the session is idle**: no
   parked checkpoint (`parked_open == 0`), **no open dialog** (`awaiting_input` is null — a permission prompt is
-  waiting on a person just as much as a checkpoint is, and a live probe found a session sitting in one), and
-  **`session_idle` is non-null**. That fourth condition is the one the other three were wrong about: the anchor
+  waiting on a person just as much as a checkpoint is, and a live probe found a session sitting in one), **`session_idle` is non-null**, and
+  **no dispatched worker is still running** (`workers_in_flight` is empty). The last two are the ones the first three were wrong about, and the fifth exists because the fourth is not enough: `idle_prompt` fires while a backgrounded worker runs — the parent genuinely is at the prompt — so idle alone would clear a session mid-dispatch and throw the worker away. As for idle: the anchor
   is written *during* a turn, so all three went true while the model was still working, and every reset was
   sent into a running turn. Keys sent then are not queued into it — they land in the prompt box as text and are
   never submitted. This is not for you; it is what the supervisor reads before resetting the session, and

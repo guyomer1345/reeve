@@ -40,6 +40,7 @@ must never have is noise, and the one thing it must never do is interfere with a
 already fine.
 """
 import json
+import os
 import re
 import sys
 
@@ -114,12 +115,39 @@ def declared_status(text):
     return m.group(1).lower() if m else None
 
 
+# Kept in step with `context_band.IN_FLIGHT_DIR` and `dispatch_guard.IN_FLIGHT_DIR` by hand.
+IN_FLIGHT_DIR = "in-flight"
+_ID_SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def clear_in_flight(payload):
+    """The worker came back. Removing a file that is already gone is the ordinary case."""
+    tid = str(payload.get("tool_use_id") or "").strip()
+    if not tid or not _ID_SAFE.match(tid):
+        return False
+    cwd = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or "."
+    try:
+        os.remove(os.path.join(cwd, ".workflow", IN_FLIGHT_DIR, tid + ".json"))
+        return True
+    except OSError:
+        return False
+
+
 def main():
     payload = read_payload()
     if not isinstance(payload, dict):
         return 0
     if payload.get("tool_name") not in DISPATCH_TOOLS:
         return 0
+
+    # RETIRE THE IN-FLIGHT MARK FIRST, before any early return below. `dispatch_guard.py` marks
+    # EVERY Agent|Task dispatch, package agent or not, because the gates that read the mark care
+    # whether the parent is waiting rather than whose worker it is. Everything after this point
+    # is about this package's own return contract and skips a general dispatch — so clearing the
+    # mark down there would orphan one on every ordinary search dispatch, and an orphan reads as
+    # "a worker is running" until it ages out.
+    clear_in_flight(payload)
+
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict):
         return 0

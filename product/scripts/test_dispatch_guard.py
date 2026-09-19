@@ -44,10 +44,12 @@ def _project(tmp_path, loop=LOOP):
     return tmp_path
 
 
-def _run(cwd, subagent_type="general-purpose", description="", prompt="", tool="Agent"):
+def _run(cwd, subagent_type="general-purpose", description="", prompt="", tool="Agent",
+         tool_use_id="toolu_01"):
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": tool,
+        "tool_use_id": tool_use_id,
         "tool_input": {
             "subagent_type": subagent_type,
             "description": description,
@@ -272,3 +274,52 @@ def test_the_second_gate_does_not_touch_the_other_leaves(tmp_path):
         r = _run(p, subagent_type="reeve:" + cap, description="%s s2a" % cap,
                  prompt=".workflow/items/s2a/plan.md")
         assert r.returncode == ALLOWED, cap
+
+
+# --- the in-flight mark: start of dispatch --------------------------------------------------
+# This hook is not what the record is FOR. It is simply the only thing already wired to the
+# START of a dispatch — `dispatch_return.py` was already wired to the end — so between them the
+# fact was observable all along and nothing read it. See `context_band.workers_in_flight`.
+
+def _flight(cwd):
+    d = Path(cwd) / ".workflow" / "in-flight"
+    return sorted(p.name for p in d.glob("*.json")) if d.is_dir() else []
+
+
+def test_a_dispatch_is_marked_IN_FLIGHT(tmp_path):
+    p = _project(tmp_path)
+    _run(p, subagent_type="reeve:planner", description="plan ph-07b", tool_use_id="toolu_ab")
+    assert _flight(p) == ["toolu_ab.json"]
+    rec = json.loads((Path(p) / ".workflow" / "in-flight" / "toolu_ab.json").read_text())
+    assert rec["agent"] == "reeve:planner"
+
+
+def test_EVERY_dispatch_is_marked_not_only_this_packages_agents(tmp_path):
+    """The gates that read this care whether the PARENT IS WAITING, not whose worker it is. A
+    general search dispatch backgrounds exactly the same way."""
+    p = _project(tmp_path)
+    _run(p, subagent_type="general-purpose", description="search", tool_use_id="toolu_gp")
+    assert _flight(p) == ["toolu_gp.json"]
+
+
+def test_a_dispatch_the_gate_BLOCKS_is_still_marked(tmp_path):
+    """Deliberate: a blocked dispatch never reaches PostToolUse, so its entry is orphaned. An
+    orphan costs a held reset and ages out; the opposite costs the worker."""
+    p = _project(tmp_path)
+    r = _run(p, subagent_type="general-purpose", description="execute ph-01",
+             tool_use_id="toolu_blk")
+    assert r.returncode == 2, r.stderr
+    assert _flight(p) == ["toolu_blk.json"]
+
+
+def test_a_missing_tool_use_id_marks_nothing_and_never_raises(tmp_path):
+    p = _project(tmp_path)
+    _run(p, subagent_type="reeve:planner", tool_use_id="")
+    assert _flight(p) == []
+
+
+def test_a_project_with_no_workflow_dir_is_left_alone(tmp_path):
+    (tmp_path / "bare").mkdir()
+    r = _run(tmp_path / "bare", subagent_type="reeve:planner", tool_use_id="toolu_x")
+    assert r.returncode == 0
+    assert _flight(tmp_path / "bare") == []

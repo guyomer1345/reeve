@@ -219,6 +219,33 @@ def viability_gate(project_dir, workflow, prompt, description):
         )
 
 
+# Kept in step with `context_band.IN_FLIGHT_DIR` by hand — a `PreToolUse` gate must not be able
+# to fail because an unrelated module did not parse.
+IN_FLIGHT_DIR = "in-flight"
+_ID_SAFE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def mark_in_flight(workflow, payload):
+    """One file per `tool_use_id`, whose PRESENCE means the worker has not come back."""
+    tid = str(payload.get("tool_use_id") or "").strip()
+    if not tid or not _ID_SAFE.match(tid) or not os.path.isdir(workflow):
+        return False
+    tool_input = payload.get("tool_input") or {}
+    rec = {"agent": (tool_input.get("subagent_type") or payload.get("tool_name") or "unknown"),
+           "description": (tool_input.get("description") or "")[:200],
+           "session_id": payload.get("session_id")}
+    try:
+        d = os.path.join(workflow, IN_FLIGHT_DIR)
+        os.makedirs(d, exist_ok=True)
+        tmp = os.path.join(d, "." + tid + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(rec, fh, sort_keys=True)
+        os.replace(tmp, os.path.join(d, tid + ".json"))
+        return True
+    except OSError:
+        return False
+
+
 def main():
     payload = read_payload()
     if payload.get("tool_name") not in DISPATCH_TOOLS:
@@ -228,6 +255,16 @@ def main():
 
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or payload.get("cwd") or "."
     workflow = os.path.join(project_dir, WORKFLOW)
+
+    # MARK THE DISPATCH AS IN FLIGHT, before any gate below can return. This hook is not what
+    # that record is for -- it is simply the only thing already wired to the START of a dispatch,
+    # and `hooks/dispatch_return.py` is already wired to the end. Both existed the whole time and
+    # nothing read them, which is why the turn gate and the reset gate could not tell a
+    # backgrounded worker from a stopped session. `context_band.workers_in_flight` reads it.
+    # Deliberately BEFORE the gates: a dispatch this hook then BLOCKS never reaches PostToolUse,
+    # so its entry would be orphaned -- but an orphan reads as "a worker is running", which costs
+    # a held reset and ages out, where the opposite costs the worker. Fails silent throughout.
+    mark_in_flight(workflow, payload)
 
     # This package's own capabilities are the point of the FIRST rule — always allowed there.
     # `execute` still answers to the second gate: it is the blocking dispatch that "never wait

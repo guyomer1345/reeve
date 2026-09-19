@@ -101,6 +101,7 @@ the demand is made once per fill cycle rather than nagging every turn afterwards
 import argparse
 import json
 import re
+import time
 import os
 import sys
 
@@ -136,6 +137,21 @@ AWAITING_FILE = "awaiting-input.json"
 # harness's own `idle_prompt` notification; `prompt_submit.py` removes it the instant a prompt is
 # submitted, so the pair brackets idleness exactly rather than guessing at it.
 IDLE_FILE = "session-idle.json"
+
+# Dispatched workers that have not come back. One file per `tool_use_id`, written by
+# `hooks/dispatch_guard.py` (PreToolUse on Agent|Task) and removed by `hooks/dispatch_return.py`
+# (PostToolUse on the same) -- both hooks already existed and were already wired, so start and end
+# were observable all along and nothing read them.
+IN_FLIGHT_DIR = "in-flight"
+
+# How long an entry may sit before it is presumed dead. This is a BACKSTOP, not a timeout: the
+# ordinary end of an entry is its PostToolUse, and a session that dies mid-dispatch has its whole
+# directory cleared at the next `SessionStart`. What is left is the one case neither covers -- a
+# worker that vanishes without its PostToolUse inside a session that keeps running -- and an entry
+# that never ages out there would stop the supervisor resetting, forever. An hour is roughly four
+# times the longest dispatch observed on a real drive (16m02s, `reeve:planner`), so it cannot fire
+# on a working worker; it is not a guess about how long work takes.
+IN_FLIGHT_STALE_SECONDS = 3600
 
 
 # WHAT MAKES AN ANCHOR AN ANCHOR, and why mtime alone was not enough. A resume reads
@@ -443,6 +459,54 @@ def clear_idle(workflow_dir):
         return False
 
 
+def workers_in_flight(workflow_dir, now=None, stale=IN_FLIGHT_STALE_SECONDS):
+    """Dispatched workers that have not returned, newest first. `[]` when none.
+
+    THE FACT NOTHING IN THIS PACKAGE HAD, and the harness made it load-bearing. The turn gate and
+    the reset gate were both designed when a dispatch BLOCKED the parent: a turn that ended meant
+    a session that had stopped. The harness now auto-backgrounds agents, so the parent's turn ends
+    while the worker runs -- and both gates read that as a stop.
+      · `turn_check.may_end` called every background dispatch a stop for nothing. On a real drive
+        `turn-gate.json` reached `{"demands": 35}` against `MAX_DEMANDS = 2`: all false, and having
+        spent the budget on them the gate stood down for the case it exists to catch.
+      · `clear_safe` was worse. `idle_prompt` fires while a worker runs -- the parent genuinely IS
+        at the prompt -- so with the band at `handoff-now` and an anchor written, the supervisor
+        would `/clear` mid-dispatch and throw the worker away.
+    Presence is the fact; the body is for humans. A file that will not parse still counts.
+    """
+    if now is None:
+        now = time.time()
+    path = os.path.join(workflow_dir, IN_FLIGHT_DIR)
+    out = []
+    try:
+        names = os.listdir(path)
+    except OSError:
+        return out
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        full = os.path.join(path, name)
+        try:
+            age = now - os.path.getmtime(full)
+        except OSError:
+            continue
+        if age > stale:
+            continue                  # presumed dead -- see IN_FLIGHT_STALE_SECONDS
+        rec = {}
+        try:
+            with open(full, encoding="utf-8") as fh:
+                val = json.load(fh)
+            if isinstance(val, dict):
+                rec = val
+        except (OSError, ValueError):
+            pass
+        rec.setdefault("agent", "unknown")
+        rec["age_seconds"] = int(age)
+        out.append(rec)
+    out.sort(key=lambda r: r.get("age_seconds", 0))
+    return out
+
+
 def _parked_open(workflow_dir):
     """How many checkpoints are waiting on a human — or None when that cannot be established.
 
@@ -496,6 +560,12 @@ def gate(workflow_dir, project_dir=None, now=None, arm=True):
                        "prompt and nothing has since been submitted, and neither is true right "
                        "now. Keys sent into a running turn land in the prompt box as text and "
                        "are never submitted")
+    flight = workers_in_flight(workflow_dir, now=None)
+    out["workers_in_flight"] = flight
+    if flight:
+        blocked.append("%d dispatched worker(s) have not returned (%s) — the parent is idle "
+                       "BECAUSE it is waiting for them, and a reset here throws the work away"
+                       % (len(flight), ", ".join(sorted({str(r.get("agent")) for r in flight}))))
     n = _parked_open(workflow_dir)
     out["parked_open"] = n
     if n is None:

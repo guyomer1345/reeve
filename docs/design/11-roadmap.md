@@ -1539,7 +1539,7 @@ anything), and the session transcripts under `~/.claude/projects/`. **The `agent
 was asked and should not have been is STILL UNDIAGNOSED** — it was reported on 2026-09-19 and never read.
 That is the one finding here with no artifact behind it yet.
 
-**1. Nothing in the package knows a WORKER IS IN FLIGHT, and the harness now backgrounds them.** `[HIGH]`
+**1. Nothing in the package knows a WORKER IS IN FLIGHT, and the harness now backgrounds them. ✅ CLOSED 2026-09-19 — `D241`.** `[was HIGH — built the same night, out of order, because item 5's config half could not land safely without it]`
 Observed live: `reeve:planner` running 3m34s / 71.9k tokens as a **backgrounded** agent, the parent turn
 ended, and the `Stop` hook printed *"Turn gate: asked 2 times … there is no reason for this turn to end …
 this is being recorded as a stop for no reason."* `turn-gate.json` read `{"demands": 35, "rung": "continue"}`
@@ -1556,9 +1556,12 @@ against `MAX_DEMANDS = 2`. **One missing fact, three symptoms:**
 **The fix is one condition with two consumers** (`turn_check.py`: no demand · `gate()`: no reset), and the
 counter symptom dissolves for free — `turn_gate.py` already resets `demands` on the path where a turn may
 legitimately end, so once a background dispatch stops being demanded at, every dispatch re-arms the gate.
-**Unverified precondition, and check it FIRST:** that in-flight is derivable from what already ships
-(`worker_budget.py`'s per-worker breadcrumbs, `hooks/dispatch_return.py` on `SubagentStop`). If dispatch
-START is recorded nowhere, this needs a new hook and the cost changes.
+**The precondition held, and better than expected:** `PreToolUse` on `Agent|Task` (`dispatch_guard.py`) and
+`PostToolUse` on the same (`dispatch_return.py`) were BOTH already wired, and the harness carries
+`tool_use_id` on both payloads — so start and end were observable the whole time and nothing read them. No
+new hook. `.workflow/in-flight/<tool_use_id>.json` between them; `D241` owns the calls, the two ordering
+rules that go against the obvious reading, and the one residual (`schemas-runtime.md` is now over its doc
+budget and wants a split, queued as item 6).
 **Record the premise change, not just the bug.** The turn gate was designed when a dispatch BLOCKED the
 parent. The harness auto-backgrounds now (`Allowed by auto mode classifier`), which is a change underneath a
 shipped control rather than a coding error — so item 5 asks where else the package assumes a synchronous
@@ -1582,6 +1585,12 @@ and say so in the docs. `D239` deliberately did not decide it.
 A shipped config key documented only in `turn_gate.py`'s docstring and `loop-detail.md:343`. `schemas-config.md`
 owns the config keys; this one is not in it. Exactly the single-owner violation `D80` and
 `check_owner_sweep.py` exist to catch, in a shape the sweep cannot see. Found in conversation 2026-09-19.
+
+**4b. `schemas-runtime.md` is over its doc budget and wants a SPLIT.** `[LOW — `D241`'s named residual]`
+15,370 against the 15,000 advisory cap. Three slices in one day added runtime records to it
+(`session-idle`, `supervise-latch`, `in-flight`) and the third could not pay its own rent without cutting
+content that is load-bearing. `D184`'s prescription for a file at its cap is **split-and-pointer**, not more
+shaving: a lean survivor plus a detail file with a marker at the head. Do that rather than trimming again.
 
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of

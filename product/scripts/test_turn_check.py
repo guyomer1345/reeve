@@ -51,6 +51,38 @@ def test_a_building_loop_with_no_reason_MAY_NOT_end(tmp_path):
     assert not ok and "no reason for this turn to end" in why
 
 
+def test_a_BACKGROUNDED_WORKER_is_a_reason(tmp_path):
+    """The rung the ladder never had, and the most common legitimate end there is now.
+
+    The gate was written when a dispatch BLOCKED the parent, so a turn that ended meant a session
+    that had stopped. The harness auto-backgrounds agents: the parent's turn ends and the worker
+    runs on. Measured on a real drive before this existed — `turn-gate.json` reached
+    `{"demands": 35}` against `MAX_DEMANDS = 2`, every one of them a false alarm on an ordinary
+    dispatch, and the gate then stood down for the case it exists to catch."""
+    wf = project(tmp_path)
+    assert not tc.may_end(wf)[0]                       # the control: nothing running
+    d = os.path.join(wf, "in-flight")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "toolu_1.json"), "w") as fh:
+        json.dump({"agent": "reeve:review"}, fh)
+    ok, why = tc.may_end(wf)
+    assert ok and "still running" in why and "reeve:review" in why
+
+
+def test_the_demand_RETURNS_once_the_worker_does(tmp_path):
+    """Why the counter symptom needs no separate fix: `turn_gate.py` resets `demands` on the
+    path where a turn may legitimately end, so every background dispatch now re-arms the gate."""
+    wf = project(tmp_path)
+    d = os.path.join(wf, "in-flight")
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, "toolu_1.json")
+    with open(path, "w") as fh:
+        json.dump({"agent": "reeve:planner"}, fh)
+    assert tc.may_end(wf)[0]
+    os.remove(path)
+    assert not tc.may_end(wf)[0]
+
+
 def test_a_parked_checkpoint_is_a_reason(tmp_path):
     ok, why = tc.may_end(project(tmp_path, parked=True))
     assert ok and "parked" in why

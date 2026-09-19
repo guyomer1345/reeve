@@ -449,6 +449,19 @@ def main():
     except OSError:
         pass
 
+    # And no session inherits the PREVIOUS one's dispatched workers. A session that died
+    # mid-dispatch leaves entries whose PostToolUse will never arrive; left behind they would
+    # read as "a worker is running" and hold the reset gate until they aged out. This is the
+    # across-session half of that cleanup; the age-out in `context_band` is the within-session
+    # backstop for the rarer case of a worker that vanishes while its session keeps going.
+    try:
+        d = os.path.join(cwd, ".workflow", "in-flight")
+        for name in os.listdir(d):
+            if name.endswith(".json"):
+                os.remove(os.path.join(d, name))
+    except OSError:
+        pass
+
     parts = []
     note = assert_pre_commit(cwd)
     if note:

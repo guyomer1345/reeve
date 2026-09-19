@@ -119,6 +119,22 @@ def may_end(workflow):
     status = state.get("status")
     if status != "building":
         return True, "the loop is `%s`, not building" % status
+    # A BACKGROUNDED WORKER IS THE MOST COMMON LEGITIMATE END, and this rung was missing
+    # entirely. The ladder was written when a dispatch BLOCKED the parent, so a turn that ended
+    # meant a session that had stopped. The harness auto-backgrounds agents now: the parent's
+    # turn ends and the worker runs on. Without this, every background dispatch was read as a
+    # stop for nothing -- `demands: 35` against `MAX_DEMANDS = 2` on one real drive, all false,
+    # and the gate then stood down for the case it exists to catch. `turn_gate.py` resets the
+    # counter on this path, so getting it right here also re-arms the gate for free.
+    try:
+        import context_band
+        flight = context_band.workers_in_flight(workflow)
+    except Exception:
+        flight = []               # cannot tell -> say nothing, the old behaviour
+    if flight:
+        return True, ("%d dispatched worker(s) still running (%s) — the turn ended because the "
+                      "parent is waiting, which is what a backgrounded dispatch looks like"
+                      % (len(flight), ", ".join(sorted({str(r.get("agent")) for r in flight}))))
     tickets = _parked(workflow)
     if tickets:
         return True, "%d checkpoint(s) parked — the human genuinely owes an answer" % len(tickets)
