@@ -1728,11 +1728,20 @@ The second is the one that has been waking him, and it **bypasses `decision-engi
 itself calls *"the project's decision authority of last resort"* and which runs `research` before answering.
 **FIRST, AND BEFORE ANY GATE IS REBUILT: the repo never states what the HUMAN IS FOR.** `00-vision.md` has no
 sentence for a gate to contradict, which is how it drifted. Write it, and derive every gate from it:
-> **The human is the PRODUCT OWNER and nothing else.** They decide what the product is and what it promises.
-> They do not decide how it is built, which library, which algorithm, or whether an implementation is
-> correct — those belong to `decision-engineer`, `review`, `debug` and `research`, which are better at them
-> than a non-expert owner and are awake at 3am. **A checkpoint is justified only when the answer could change
-> what the product IS or what it promises.**
+> **The human is the PRODUCT OWNER and nothing else — ONCE INCEPTION HAS CLOSED.** They decide what the
+> product is and what it promises. They do not decide how it is built, which library, which algorithm, or
+> whether an implementation is correct — those belong to `decision-engineer`, `review`, `debug` and
+> `research`, which are better at them than a non-expert owner and are awake at 3am. **A checkpoint is
+> justified only when the answer could change what the product IS or what it promises.**
+>
+> **The caveat is load-bearing and is the maintainer's** (signed 2026-09-20): *"Before we start developing the
+> product we have a discussion on everything I want to close on my side — architecture, use cases, similar
+> products. After the repo understands my vision, then yes, your sentence is valid."* Inception is
+> human-led and deliberately unbounded; the rule above governs **the build**, not the conversation that
+> precedes it. **The line between them, drawn precisely so the gate cannot drift again: at inception the human
+> sets DIRECTION AND CONSTRAINTS ("local-first", "no cloud", "must work offline"); during the build
+> `decision-engineer` chooses WITHIN them. A decision that would break an inception constraint is
+> product-changing and comes back.**
 **Then the gates, in order:** (1) *could the answer change the product or its promise?* — if no it is not a
 checkpoint, and the mechanical anchor already exists: reuse the floor's predicate rather than inventing a
 second. (2) if yes, *can the loop get the evidence by RUNNING it?* — then run it and bring only the product
@@ -1752,6 +1761,25 @@ whether a deferred qa reconciles after the fact without `verify` losing its mean
 an item whole, and *"passed, pending a human's later look"* is a third state it does not have.
 **Multiplier: `4h`.** A CORRECT qa checkpoint still stops the whole loop today, against the package's own
 written rule. **If only one of the two is built, `4h` buys more.**
+
+**4k. There is NO capability that runs the inception conversation the maintainer's caveat requires.** `[HIGH — surfaced by signing 4j, 2026-09-20]`
+`discuss` is the only candidate and it **refuses the job by design**: *"Core principle: turn a user's intent
+into a written spec. Requirements only — never decide the tech stack or any engineering choice here,"* and
+step 4, *"for any genuine engineering decision (stack, library, architecture), do not decide."* So
+architecture, comparable products and use-case shape are either deferred to `decision-engineer` mid-build —
+one decision at a time, on demand, with no vision behind them — or never had at all.
+**Why this is the item that earns "don't wake me", not a nicety before it: inception is what POPULATES the
+`locked` commitments the autonomy floor later enforces.** The floor routes a change to a `locked` element or
+an acceptance criterion; a thin inception leaves it **nothing to hold**, so every architectural question the
+build hits is either guessed or escalated. The conversation is the thing that buys the autonomy.
+**Shape, not yet a design:** the pieces exist and are not composed — `discuss` (requirements), `research`
+(market practice, comparable products), `decision-engineer` (the decision authority), `create-forecast` (show
+the chain before walking it). What is missing is an inception phase the HUMAN leads that closes his side and
+**emits constraints as `locked` spec elements** rather than as prose nobody can enforce.
+**Open:** whether this extends `discuss` or is a new capability (extending it means breaking its stated core
+principle, which was written for a reason — requirements and engineering choices blur easily and the
+separation is load-bearing); how a constraint becomes a `locked` element the floor can actually test; and
+whether brownfield's `reconcile` checkpoint is the same conversation wearing a different hat.
 
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
