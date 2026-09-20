@@ -1600,6 +1600,29 @@ owns the config keys; this one is not in it. Exactly the single-owner violation 
 content that is load-bearing. `D184`'s prescription for a file at its cap is **split-and-pointer**, not more
 shaving: a lean survivor plus a detail file with a marker at the head. Do that rather than trimming again.
 
+**✅ THE FIRST CLEAN AUTONOMOUS RESET, 2026-09-20 14:16Z — `agentic cyber`.** `[evidence for `D239` + `D241` + the operator ceiling, together]`
+`12h` shipped the supervisor with the exit test unmet — *"tested against a real tmux pane and a recording
+stand-in, never against a real orchestrator going the whole way round."* That gap is now closed, and the
+sequence is in `supervise.log` in order:
+```
+14:05–14:12  holding — band says hold, no anchor        working normally, under the 30% ceiling
+14:13:17     holding — no anchor; not known to be idle  THE CEILING FIRED; Stop demanded an anchor
+14:14:21     holding — not known to be idle             anchor written, model still mid-turn
+14:15:24     holding — not known to be idle             D239 holding the reset
+14:16:24     clear_safe — resetting %1
+14:16:32     sent /clear then continue                  ONE send
+14:17:36     holding — band says hold                   window collapsed: the reset LANDED
+```
+**The two polls at 14:14 and 14:15 are the whole point.** The anchor was written, nothing was parked and no
+dialog was open — the pre-`D239` three-condition gate would have fired straight into a running turn, which is
+what produced the stacked `/clear continue /clear continue`. It waited for idle instead, sent once, and the
+band collapsing afterwards is the DERIVED proof the keys were actually submitted (the same signal `D241`'s
+attempt cap grades on). No second pair a poll later; no `GIVING UP`.
+**The same log carries the contrast**: two resets 68 seconds apart — one poll interval, the stacking signature
+— earlier in its history. Before/after in one file.
+**What this does NOT prove:** a whole night, a goal reaching `met`, or any of `4c`–`4g` below, all of which were
+observed on the same day and are unfixed. One clean cycle is one clean cycle.
+
 **4c. The MONITOR escalates on a gap it did not observe.** `[HIGH — it cost a whole night, and it is decidable]`
 OBSERVED 2026-09-20: the supervisor was restarted at 13:32:17Z and `monitor.py` parked a `steer` **seventeen
 seconds later** — *"still nothing written 251m after a nudge"*. Those 251 minutes were the window in which the
