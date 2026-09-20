@@ -1776,10 +1776,37 @@ build hits is either guessed or escalated. The conversation is the thing that bu
 (market practice, comparable products), `decision-engineer` (the decision authority), `create-forecast` (show
 the chain before walking it). What is missing is an inception phase the HUMAN leads that closes his side and
 **emits constraints as `locked` spec elements** rather than as prose nobody can enforce.
-**Open:** whether this extends `discuss` or is a new capability (extending it means breaking its stated core
-principle, which was written for a reason — requirements and engineering choices blur easily and the
-separation is load-bearing); how a constraint becomes a `locked` element the floor can actually test; and
-whether brownfield's `reconcile` checkpoint is the same conversation wearing a different hat.
+**DECIDED 2026-09-20 — all three open questions are settled; only the capability's own design is left.**
+- **A NEW CAPABILITY, not an extension of `discuss`** (the maintainer's call). His own practice is the
+  evidence: *"usually I just discussed tech stack, engineering choices and all of that AFTER I ran `/start`"* —
+  i.e. the conversation happens, in the wrong place, with nothing to catch its output. `discuss` keeps its
+  stated core principle intact (requirements and engineering choices blur easily and the separation is
+  load-bearing); the new capability owns goals, purpose, use cases, comparable products and the constraints
+  that follow from them.
+- **A constraint becomes testable by landing as a `locked` block in `docs/spec.md`, and needs NO new
+  machinery** — three enforcements already exist, each covering a different failure: *editing the constraint
+  away* → the autonomy floor (a changed hunk in a `locked` block routes to the human); *a decision that would
+  break it* → `decision-engineer`, which reads the spec before weighing options, and for which an option
+  breaking a `locked` element is goal-affecting; *code drifting off it silently* → `align`'s semantic pass.
+  **So inception must emit FALSIFIABLE `locked` content, not prose.** Not *"local-first"* — a slogan — but
+  *"no runtime dependency on a network service for core reading and writing."* The test is one question:
+  **could `align` or a reviewer DEMONSTRATE a violation?** If not it is not a constraint and it buys nothing.
+  **Stated limit, inherited rather than escaped:** the floor is a *spec-diff* floor by its own declaration, so
+  a constraint is protected from being edited away, **not** from being ignored. Ignoring is `align`'s job and
+  `align` is budget-bounded and scoped to changed surface — the honest enforcement strength is *"align finds
+  it eventually"*, which is the same limit `locked` behaviours already carry.
+- **`reconcile` is NOT this conversation, and the difference costs brownfield today.** Reconcile derives from
+  CODE and asks *"is this what it is?"*; inception derives from the HUMAN and asks *"what must be true going
+  forward?"* Opposite directions, and only one can produce a constraint: **reconstruction cannot see what is
+  not there.** *"No cloud"* is invisible in a codebase that simply never added one — every exclusion, every
+  "I would never accept that", is unreachable from artifacts. Reconcile is also a *checkpoint* (a yes/no on a
+  document) where this is a *conversation* (unbounded, iterative, human-led). **So: separate capabilities, and
+  the new one runs in BOTH modes — greenfield after `/start`, brownfield AFTER `reconcile`.** Brownfield is
+  missing inception more invisibly than greenfield, because `reconcile` makes it feel as though the
+  conversation already happened: today a brownfield project gets a goal minted from reconstructed acceptance
+  and nothing else — no purpose, no constraints, no exclusions.
+**Left for the build slice:** the capability's name, its conversation structure, where it sits in `loop.md`,
+and how much of `research` (comparable products, market practice) it drives itself versus dispatches.
 
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
