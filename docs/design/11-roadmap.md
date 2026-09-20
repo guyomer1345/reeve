@@ -1808,6 +1808,38 @@ the chain before walking it). What is missing is an inception phase the HUMAN le
 **Left for the build slice:** the capability's name, its conversation structure, where it sits in `loop.md`,
 and how much of `research` (comparable products, market practice) it drives itself versus dispatches.
 
+**4l. A session that habitually stops cannot be held, and the recovery rediscovers slowly what was known instantly.** `[HIGH — measured contrast between two live drives, 2026-09-20]`
+Same package, same supervisor, same night:
+| | `demands` | `rung` | clean resets |
+|---|---|---|---|
+| `agentic cyber` | **0** | None | **23** |
+| `consumer` | **53** | continue | **0** |
+`demands: 0` means the last stop was a LEGITIMATE end — `turn_gate` resets the counter there. So agentic
+cyber essentially never stops for nothing, and resets itself normally. **Consumer is at 53 CONSECUTIVE
+illegitimate stops** (`turn_check` live: *"OWES: continue — the loop is building, nothing is parked, the goal
+is neither met nor stalled and the operator has not paused"*), and it has had **zero** resets — not because
+the reset is broken but because **it never runs long enough to fill a window.** `D239`/`D241` and the
+supervisor are exonerated: the difference is the session's own behaviour.
+**Two distinct defects, and the second is ours:**
+- **The give-up is PERMANENT for the rung.** `demands` only resets on the may-end path, so a session whose
+  stops are all illegitimate never resets it: 53 > `MAX_DEMANDS = 2` and the gate has been standing down for
+  51 stops. `D241` re-arms the counter only for sessions that interleave legitimate ends (background
+  dispatches); one that stops for nothing every time is exactly the case it cannot reach.
+- **The recovery is a 10-minute rediscovery of a fact known instantly.** `turn_gate` knows AT THE MOMENT OF
+  THE STOP that the turn owed a `continue`. `monitor.py` then spends `QUIET_SECONDS = 600` independently
+  noticing silence to conclude the same thing — and gets ONE nudge before escalating to a `steer`. Measured
+  cadence on consumer: work → stop → 10 min → nudge → work → stop → 10 min. `nudges_total: 4`,
+  `escalations_total: 1` — **the nudge works every time; it is just priced at ten minutes.**
+**Fix shape, using pieces that already exist:** when `turn_gate` gives up on a `continue` rung it should leave
+a breadcrumb, and `supervise.sh` should send the `continue` on its next 60s poll instead of waiting for the
+monitor to notice quiet. A 10-minute tax collapses to 60 seconds, and the monitor's ladder goes back to being
+what it is for — a session that is *dead*, not one that merely stopped. Composes with `4e` (put the idle
+condition in `monitor.py`) rather than conflicting with it.
+**Hypothesis worth TESTING, not assuming, before touching the model side:** rung 4 asks a legitimately-ending
+turn for a `[reeve-report state:…]` block. If the model has learned "produce the report" ⇒ "end the turn",
+the gate is *teaching* the stop it exists to prevent. Check whether consumer's stops cluster around report
+emission before concluding anything.
+
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
 it, where a prompt costs a second; left running overnight the same rule halts the loop until somebody
