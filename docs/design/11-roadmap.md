@@ -1530,7 +1530,15 @@ fix.** Every item traces to an observation, not to a reading, and the order is d
 > first, and **the full smoke run is LAST and only once** — every edit to `product/` throws its receipt away
 > (`D220`/`D227`).
 
-**0. Harvest the overnight run BEFORE building anything.** `[blocking — evidence, not work]`
+**0. Harvest the overnight run BEFORE building anything. ⚠ PARTLY SPENT — the 2026-09-19 night produced NO
+evidence about the fixes.** `[blocking for the NEXT run; items 4c/4d came out of this one]`
+The supervisors were stopped for a deploy that evening and never restarted, so both drives ran unsupervised
+until they stopped on their own (~00:59) and then sat idle for eleven hours. **`D239` and `D241` were never
+exercised.** What the night DID produce is items 4c and 4d below, both found on restart the next morning, and
+one number worth keeping: `turn-gate.json` reached `demands: 52` on `consumer` and `36` on `agentic cyber` —
+and consumer's grew *after* `D241` landed, on stops that look legitimate (the session printed its route and
+then stopped without dispatching it). So `D241` removed the false demands; it did not make the gate able to
+hold a session that ignores it. **The harvest below still applies to the next real run.**
 Two drives, two questions each. For both projects: `.workflow/parked/` (what stopped it, and was the kind
 legitimate), `.workflow/supervise.log` (did `D239`'s idle condition hold — one `sent /clear then continue` per
 cycle, never two in a row, never a `GIVING UP`), `.workflow/turn-gate.json` (`demands` and `rung` — if
@@ -1591,6 +1599,29 @@ owns the config keys; this one is not in it. Exactly the single-owner violation 
 (`session-idle`, `supervise-latch`, `in-flight`) and the third could not pay its own rent without cutting
 content that is load-bearing. `D184`'s prescription for a file at its cap is **split-and-pointer**, not more
 shaving: a lean survivor plus a detail file with a marker at the head. Do that rather than trimming again.
+
+**4c. The MONITOR escalates on a gap it did not observe.** `[HIGH — it cost a whole night, and it is decidable]`
+OBSERVED 2026-09-20: the supervisor was restarted at 13:32:17Z and `monitor.py` parked a `steer` **seventeen
+seconds later** — *"still nothing written 251m after a nudge"*. Those 251 minutes were the window in which the
+monitor **itself was not running**. It derives quiet time from file mtimes, so it cannot tell *"the loop was
+quiet"* from *"I was not watching"*, and on restart it reads its own downtime as evidence against the loop.
+The park is durable and `clear_safe` holds on it forever, so a false escalation **stops the drive until a human
+deletes a ticket with no question in it**. Fix shape: `monitor.json` already carries `at` — a tick whose gap
+since the previous tick exceeds its own interval has an UNOBSERVED window and must re-baseline rather than
+judge. Same family as `D241`: a signal that was correct under an assumption that stopped holding.
+
+**4d. Nothing notices that the supervisor is not running.** `[HIGH — the same night, the other half]`
+`monitor.py` runs INSIDE `supervise.sh`. So the heartbeat that exists to catch a dead loop is itself hosted by a
+process that can simply not be there — and when it is not, **nothing anywhere says so**: not the console, not
+the status line, not the loop, not `turn_check`. On 2026-09-19 the supervisors were stopped for a deploy and
+never restarted; both drives ran until they stopped on their own and then sat idle for **eleven hours** with no
+nudge, no reset and no alert. The whole night produced no evidence about `D239`/`D241` because neither ever
+ran. The two halves of recovery — the turn gate's demand and the monitor's nudge — are only ever as live as a
+process nobody is watching. **Decide what owns "is a supervisor alive for this project": the status line is the
+cheapest surface, `loop.sh --supervise` could write a pidfile the gate reads, or the console could show it.**
+Related and NOT the same thing: the turn gate can flag a stop-for-nothing but cannot prevent one — it demands
+twice and then gives up for good (`demands` reached 52 on `consumer`), so the nudge is the only recovery there
+is. That is why losing it costs a night rather than a turn.
 
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
