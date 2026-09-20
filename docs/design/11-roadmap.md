@@ -1623,6 +1623,43 @@ Related and NOT the same thing: the turn gate can flag a stop-for-nothing but ca
 twice and then gives up for good (`demands` reached 52 on `consumer`), so the nudge is the only recovery there
 is. That is why losing it costs a night rather than a turn.
 
+**4e. The idle veto sits in the TRANSPORT, and it burns a budget it does not own.** `[HIGH — a `D239` regression, OBSERVED 2026-09-20]`
+`supervise.sh` states its own law in its header: *"Judgement lives in `monitor.py` (testable, and runnable by a
+human); this file is transport."* `D239` put the idle precondition in the transport as a veto, so the judge
+says `nudge`, the transport silently declines, and **the counter lives with the judge**:
+`13:45:48Z no motion — nothing written for 10m; NOT nudging: the session is not known idle` with
+`monitor.json` recording `nudges: 1`. The one-nudge budget was spent on a nudge that never left, and the next
+rung is **escalate → park a `steer`** — a session heading for a durable false park having never been nudged.
+**Fix:** move the idle condition into `monitor.py` as a `waiting` state, beside parked / dialog / paused, which
+is the same family ("the session is not in a state where a keystroke helps"). Then the budget is not spent, the
+escalation does not fire, and the judgement is testable where every other judgement in this package is.
+
+**4f. `session-idle.json` has its semantics BACKWARDS at `SessionStart`, and a cleared session can never recover itself.** `[HIGH — same observation]`
+`D239` made `SessionStart` **clear** the flag, reasoning that a new session has not been observed idle. For a
+`/clear` that is exactly wrong: a cleared session is **definitionally** idle — sitting at the prompt with
+nothing submitted. And the harness will never say so, because `idle_prompt` is armed off the LAST MESSAGE
+TIMESTAMP and guarded by `if (fv === 0) return` — **a freshly cleared session has no messages, so the timer is
+never armed.** Measured: consumer sat 11 minutes after a manual `/clear` with the flag absent.
+Combined with `4e` this is the sharp one: **a human's manual `/clear`, or a reset whose `/clear` lands and
+whose `continue` does not, produces a session only a human can restart.**
+**Fix:** the flag means *no prompt submitted and no turn running*. `SessionStart` **sets** it,
+`UserPromptSubmit` clears it, `idle_prompt` re-sets it after a turn ends.
+
+**4g. Getting INTO a supervised run is vague, manual and unverified — the maintainer's own words.** `[HIGH — this is the product, not the plumbing]`
+*"Currently the process of getting to a not-supervised run is very vague; I need to run a few commands, make
+sure there isn't idle stuff, verify that they work — it isn't robust. I want one `supervise.sh`, I run it, I
+prompt Claude `continue` once, and from there on we are inside a supervised run."* (2026-09-20.)
+Today it takes: `tmux new-session` · `loop.sh --supervise` (which refuses outside tmux) · `continue` · and
+separately knowing to check `pgrep -af supervise.sh` for duplicates or absences, `parked/` for a stale park,
+`.workflow/config.json` for a ceiling, and the log to confirm any of it took. **Every failure this week came
+from that list, not from the loop:** three supervisors on one pane and none on the other; supervisors stopped
+for a deploy and never restarted (eleven hours lost, `4d`); a false park nobody could see without reading JSON.
+**This is the acceptance to design against: ONE command, then ONE `continue`, and the run is supervised — with
+the command itself refusing to hand back a half-armed state.** It owns the preconditions nothing owns today
+(a goal exists · no stale park · no duplicate or missing supervisor · the ceiling is set · the trust flag is
+there) and it SAYS what it armed. Related: `4d` (nothing notices a missing supervisor) is a symptom of the same
+gap — there is no single thing whose job is "this project is under supervision, and here is the proof."
+
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
 it, where a prompt costs a second; left running overnight the same rule halts the loop until somebody
