@@ -1683,6 +1683,32 @@ the command itself refusing to hand back a half-armed state.** It owns the preco
 there) and it SAYS what it armed. Related: `4d` (nothing notices a missing supervisor) is a symptom of the same
 gap — there is no single thing whose job is "this project is under supervision, and here is the proof."
 
+**4h. `may_end` licenses exactly the idling the shipped rule forbids.** `[HIGH — OBSERVED 2026-09-20, and the package already states the correct behaviour]`
+`loop-detail.md:182` is unambiguous: *"Interleaving is the degenerate case, not a separate feature. While an
+item is parked on a human verdict, the next independent item starts rather than the loop idling … A whole-loop
+park is simply 'nothing eligible'."* But `turn_check.may_end` rung 1 returns
+*"N checkpoint(s) parked — the human genuinely owes an answer"* for **any** park, so the turn may end.
+**The gate contradicts the rule, and the model follows the gate.** Observed on `consumer`: it parked
+`gap-027-qa` (legitimate — a human must test it), then wrote *"Decision work doesn't collide, so that's what
+runs next: `decision-engineer` on `gap-028`, which blocks `ga-4`, a goal acceptance"* — **named the eligible
+work and stopped anyway.** `turn_check` agreed: the only thing it said the turn owed was `report`.
+A checkpoint parks the **ITEM**; `checkpoint/SKILL.md` says it "parks the ticket durably and yields", and
+yield means yield the item, not the machine. **Fix:** rung 1 must be *parked AND nothing else eligible*, not
+*parked*. The eligibility predicate already exists and is already authoritative —
+`check_wave_independence.py` plus `prioritize`. This is the single highest-value item in the queue for an
+unattended drive: every human gate currently stops the whole loop for as long as the human is asleep.
+
+**4i. An idle session's context reading AGES OUT, and then it can never be reset.** `[MED — latent, seen while diagnosing 4h]`
+`read_reading` discards a reading older than `STALE_SECONDS = 900`. The statusline publishes it per turn, so a
+session that has been idle 15+ minutes has **no reading**, the band returns `unknown`, and `gate()` blocks with
+*"the band says unknown, not handoff-now"* — which `clear_safe` can never satisfy. Seen on `consumer` at 14:55Z
+after ~40 minutes idle. Harmless there (17% used, no reset wanted) and **dangerous in the case that matters**:
+a session that stops at 95% and sits for a quarter of an hour can no longer be reset by the supervisor at all,
+only nudged by the monitor — and `4e`/`4f` are about the nudge failing too. The staleness rule is right for its
+original purpose (*"a reading older than this describes a session that is likely gone"*); what is missing is
+that **an idle session is not a gone session**, and `session-idle.json` is exactly the evidence that
+distinguishes them.
+
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
 it, where a prompt costs a second; left running overnight the same rule halts the loop until somebody
