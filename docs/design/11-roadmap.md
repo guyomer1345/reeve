@@ -1709,6 +1709,39 @@ original purpose (*"a reading older than this describes a session that is likely
 that **an idle session is not a gone session**, and `session-idle.json` is exactly the evidence that
 distinguishes them.
 
+**4j. WHAT DESERVES TO STOP FOR A HUMAN — `human-qa` is a residual class, and it is absorbing a missing category.** `[DESIGN QUESTION with a proposed answer — the maintainer's ask, 2026-09-20]`
+*"We need to understand and precisely write as something persistent what deserves to stop on human QA, cause
+the things that stopped me so far were not justified at all and just halted developing for hours because I
+can't attend to them immediately."*
+**The root cause is not an eager gate; it is a missing discharge class.** `schemas.md:139` classifies every
+criterion by one question — *can you name a mechanical discharge?* — where the allowed answers are a test ref
+or `type` / `lint` / `structural`. Everything else falls through to `human-qa` **by residue**, and the doc
+says so approvingly: *"the classification is mechanical (can you name a check?), not a judgment call."*
+Meanwhile `verify` is chartered to operate *"on artifacts, not runtime behaviour."* So **nothing in the
+package can express "verified by running the thing"**, and every criterion about actual behaviour — does the
+fetch work, does the endpoint answer, does the app boot — has no mechanical home and lands on the human.
+**`gap-027` is the proof:** *"PDFs are fetched, not recorded as visible-and-refused"* is entirely
+machine-observable, and the session said so while parking it — *"I won't run it: it's a network fetch, and
+nobody may be at the terminal."* It had the means (the package ships a `/run` skill for exactly this) and
+parked instead.
+**PROPOSED RULE — the test becomes "what does a human contribute that nothing else can?", three gates in order:**
+1. **Can the loop observe it by RUNNING something?** (`/run`, a script, a fetch, a screenshot, a log
+   assertion.) If yes → an `artifact` criterion with a **`run` discharge**, never `human-qa`. *This needs a new
+   discharge class and is the concrete lever; it likely removes most of what has stopped the maintainer.*
+2. **Does the answer require human judgement or perception** — taste, aesthetics, "is this what you meant"?
+   If no → not `human-qa`.
+3. **Must the answer precede the COMMIT?** If no → a **deferred qa**: commit, queue the question, and a later
+   "no" files a ticket rather than rewinding. Today every checkpoint is `blocking: true` and that is the only
+   mode there is. Gate 3 probably keys off `commitment` — `locked` blocks, `provisional` batches.
+**Open, and why this is a question rather than an item:** what a `run` discharge may execute in a
+stack-agnostic package (the adopted-stack gate already refuses to run a tree's own commands undeclared); who
+pays when a `run` discharge is flaky; and whether a deferred qa can be reconciled after the fact without
+`verify` losing its meaning.
+**Its multiplier is `4h`.** Even a CORRECT qa checkpoint stops the whole loop today, against the package's own
+written rule. Fix `4h` and a wrong gate costs one item instead of a night; fix this and the gate stops firing
+on things the human was never needed for. Independent, both wanted — **and if only one is built, `4h` buys
+more.**
+
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
 it, where a prompt costs a second; left running overnight the same rule halts the loop until somebody
