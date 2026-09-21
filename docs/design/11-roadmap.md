@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, five items that two real unattended drives exposed on 2026-09-19 and that `D239`/`D240` did NOT close. **Its item 0 is BLOCKING and is not work:** a third overnight run was left going, so read its artifacts before building — they may reorder the rest. Items 1–4 are builds, item 5 is a design question. The standing queue below it is CLOSED**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. Start at `4e`. `4j` and `4k` are the two that change what the package IS; `5` stays a conversation. The standing queue below this one is CLOSED**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1530,8 +1530,25 @@ fix.** Every item traces to an observation, not to a reading, and the order is d
 > first, and **the full smoke run is LAST and only once** — every edit to `product/` throws its receipt away
 > (`D220`/`D227`).
 
-**0. Harvest the overnight run BEFORE building anything. ⚠ PARTLY SPENT — the 2026-09-19 night produced NO
-evidence about the fixes.** `[blocking for the NEXT run; items 4c/4d came out of this one]`
+**BUILD IN THIS ORDER. The labels are stable ids (`4h` stays `4h` wherever it sits) — the ORDER is the file's
+order, and it is not the order these were found in.** Rationale, because the sequence is the argument:
+`4e`+`4f` first because they are a regression THIS WORK introduced and they leave a session only a human can
+restart — nothing else can be trusted overnight until they are gone. Then `4h`, the single highest-value item:
+**three separate drives have now been halted by a human gate that should have stopped the ITEM, not the
+machine.** Then `4l`, which collapses a ten-minute recovery tax to sixty seconds. Then `4c`+`4i`, the monitor's
+two blind spots, same files and same family as the three above. Then `4d`+`4g` together — "this project is
+under supervision, and here is the proof" — because `4d` is a symptom of `4g`'s missing owner. The four small
+ones fold in wherever cheapest. `4k` and `4j` last and in that order: the product-owner rule only holds once
+inception has closed, so `4j` cannot be built on a precondition nothing produces yet. `5` stays a conversation.
+
+**0. Harvest the overnight runs. ✅ DISCHARGED 2026-09-21 — everything below `1` IS the harvest.** `[was blocking; it is not any more]`
+Two nights, two projects. The 2026-09-19 night produced **no** evidence about the fixes (the supervisors were
+stopped for a deploy and never restarted — that is `4d`), and the 2026-09-20 night produced the first clean
+autonomous reset, 23 of them on one project, and **every item from `4c` to `4l`**. The contrast between the
+two projects on the second night is the most useful measurement this repo has taken: same package, same
+supervisor, same hours, `demands: 0`/23 resets against `demands: 53`/0 resets. **Do not re-harvest; read the
+items.** What is still unread, and is the one loose thread: the `agentic cyber` question from 2026-09-19 that
+should not have been asked was never diagnosed, and its artifacts may have aged out of `parked/` by now.
 The supervisors were stopped for a deploy that evening and never restarted, so both drives ran unsupervised
 until they stopped on their own (~00:59) and then sat idle for eleven hours. **`D239` and `D241` were never
 exercised.** What the night DID produce is items 4c and 4d below, both found on restart the next morning, and
@@ -1569,11 +1586,156 @@ legitimately end, so once a background dispatch stops being demanded at, every d
 `tool_use_id` on both payloads — so start and end were observable the whole time and nothing read them. No
 new hook. `.workflow/in-flight/<tool_use_id>.json` between them; `D241` owns the calls, the two ordering
 rules that go against the obvious reading, and the one residual (`schemas-runtime.md` is now over its doc
-budget and wants a split, queued as item 6).
+budget and wants a split, queued as `4b`).
 **Record the premise change, not just the bug.** The turn gate was designed when a dispatch BLOCKED the
 parent. The harness auto-backgrounds now (`Allowed by auto mode classifier`), which is a change underneath a
 shipped control rather than a coding error — so item 5 asks where else the package assumes a synchronous
 dispatch.
+
+**✅ THE FIRST CLEAN AUTONOMOUS RESET, 2026-09-20 14:16Z — `agentic cyber`.** `[evidence for `D239` + `D241` + the operator ceiling, together]`
+`12h` shipped the supervisor with the exit test unmet — *"tested against a real tmux pane and a recording
+stand-in, never against a real orchestrator going the whole way round."* That gap is now closed, and the
+sequence is in `supervise.log` in order:
+```
+14:05–14:12  holding — band says hold, no anchor        working normally, under the 30% ceiling
+14:13:17     holding — no anchor; not known to be idle  THE CEILING FIRED; Stop demanded an anchor
+14:14:21     holding — not known to be idle             anchor written, model still mid-turn
+14:15:24     holding — not known to be idle             D239 holding the reset
+14:16:24     clear_safe — resetting %1
+14:16:32     sent /clear then continue                  ONE send
+14:17:36     holding — band says hold                   window collapsed: the reset LANDED
+```
+**The two polls at 14:14 and 14:15 are the whole point.** The anchor was written, nothing was parked and no
+dialog was open — the pre-`D239` three-condition gate would have fired straight into a running turn, which is
+what produced the stacked `/clear continue /clear continue`. It waited for idle instead, sent once, and the
+band collapsing afterwards is the DERIVED proof the keys were actually submitted (the same signal `D241`'s
+attempt cap grades on). No second pair a poll later; no `GIVING UP`.
+**The same log carries the contrast**: two resets 68 seconds apart — one poll interval, the stacking signature
+— earlier in its history. Before/after in one file.
+**What this does NOT prove:** a whole night, a goal reaching `met`, or any of `4c`–`4g` below, all of which were
+observed on the same day and are unfixed. One clean cycle is one clean cycle.
+
+**4e. The idle veto sits in the TRANSPORT, and it burns a budget it does not own.** `[HIGH — a `D239` regression, OBSERVED 2026-09-20]`
+`supervise.sh` states its own law in its header: *"Judgement lives in `monitor.py` (testable, and runnable by a
+human); this file is transport."* `D239` put the idle precondition in the transport as a veto, so the judge
+says `nudge`, the transport silently declines, and **the counter lives with the judge**:
+`13:45:48Z no motion — nothing written for 10m; NOT nudging: the session is not known idle` with
+`monitor.json` recording `nudges: 1`. The one-nudge budget was spent on a nudge that never left, and the next
+rung is **escalate → park a `steer`** — a session heading for a durable false park having never been nudged.
+**Fix:** move the idle condition into `monitor.py` as a `waiting` state, beside parked / dialog / paused, which
+is the same family ("the session is not in a state where a keystroke helps"). Then the budget is not spent, the
+escalation does not fire, and the judgement is testable where every other judgement in this package is.
+
+**4f. `session-idle.json` has its semantics BACKWARDS at `SessionStart`, and a cleared session can never recover itself.** `[HIGH — same observation]`
+`D239` made `SessionStart` **clear** the flag, reasoning that a new session has not been observed idle. For a
+`/clear` that is exactly wrong: a cleared session is **definitionally** idle — sitting at the prompt with
+nothing submitted. And the harness will never say so, because `idle_prompt` is armed off the LAST MESSAGE
+TIMESTAMP and guarded by `if (fv === 0) return` — **a freshly cleared session has no messages, so the timer is
+never armed.** Measured: consumer sat 11 minutes after a manual `/clear` with the flag absent.
+Combined with `4e` this is the sharp one: **a human's manual `/clear`, or a reset whose `/clear` lands and
+whose `continue` does not, produces a session only a human can restart.**
+**Fix:** the flag means *no prompt submitted and no turn running*. `SessionStart` **sets** it,
+`UserPromptSubmit` clears it, `idle_prompt` re-sets it after a turn ends.
+
+**4h. `may_end` licenses exactly the idling the shipped rule forbids.** `[HIGH — OBSERVED THREE TIMES on two projects, 2026-09-20/21; the package already states the correct behaviour]`
+**Third confirmation, 2026-09-21, and it is the one that settles it: BOTH drives stopped overnight on qa
+checkpoints — including `agentic cyber`, which is otherwise the clean run** (23 self-resets, `demands: 0`,
+nothing else wrong with it). A project doing everything right is still halted for the night by one human gate.
+That removes the last reading in which this is a consumer-specific problem or a symptom of `4l`.
+`loop-detail.md:182` is unambiguous: *"Interleaving is the degenerate case, not a separate feature. While an
+item is parked on a human verdict, the next independent item starts rather than the loop idling … A whole-loop
+park is simply 'nothing eligible'."* But `turn_check.may_end` rung 1 returns
+*"N checkpoint(s) parked — the human genuinely owes an answer"* for **any** park, so the turn may end.
+**The gate contradicts the rule, and the model follows the gate.** Observed on `consumer`: it parked
+`gap-027-qa` (legitimate — a human must test it), then wrote *"Decision work doesn't collide, so that's what
+runs next: `decision-engineer` on `gap-028`, which blocks `ga-4`, a goal acceptance"* — **named the eligible
+work and stopped anyway.** `turn_check` agreed: the only thing it said the turn owed was `report`.
+A checkpoint parks the **ITEM**; `checkpoint/SKILL.md` says it "parks the ticket durably and yields", and
+yield means yield the item, not the machine. **Fix:** rung 1 must be *parked AND nothing else eligible*, not
+*parked*. The eligibility predicate already exists and is already authoritative —
+`check_wave_independence.py` plus `prioritize`. This is the single highest-value item in the queue for an
+unattended drive: every human gate currently stops the whole loop for as long as the human is asleep.
+
+**4l. A session that habitually stops cannot be held, and the recovery rediscovers slowly what was known instantly.** `[HIGH — measured contrast between two live drives, 2026-09-20]`
+Same package, same supervisor, same night:
+| | `demands` | `rung` | clean resets |
+|---|---|---|---|
+| `agentic cyber` | **0** | None | **23** |
+| `consumer` | **53** | continue | **0** |
+`demands: 0` means the last stop was a LEGITIMATE end — `turn_gate` resets the counter there. So agentic
+cyber essentially never stops for nothing, and resets itself normally. **Consumer is at 53 CONSECUTIVE
+illegitimate stops** (`turn_check` live: *"OWES: continue — the loop is building, nothing is parked, the goal
+is neither met nor stalled and the operator has not paused"*), and it has had **zero** resets — not because
+the reset is broken but because **it never runs long enough to fill a window.** `D239`/`D241` and the
+supervisor are exonerated: the difference is the session's own behaviour.
+**Two distinct defects, and the second is ours:**
+- **The give-up is PERMANENT for the rung.** `demands` only resets on the may-end path, so a session whose
+  stops are all illegitimate never resets it: 53 > `MAX_DEMANDS = 2` and the gate has been standing down for
+  51 stops. `D241` re-arms the counter only for sessions that interleave legitimate ends (background
+  dispatches); one that stops for nothing every time is exactly the case it cannot reach.
+- **The recovery is a 10-minute rediscovery of a fact known instantly.** `turn_gate` knows AT THE MOMENT OF
+  THE STOP that the turn owed a `continue`. `monitor.py` then spends `QUIET_SECONDS = 600` independently
+  noticing silence to conclude the same thing — and gets ONE nudge before escalating to a `steer`. Measured
+  cadence on consumer: work → stop → 10 min → nudge → work → stop → 10 min. `nudges_total: 4`,
+  `escalations_total: 1` — **the nudge works every time; it is just priced at ten minutes.**
+**Fix shape, using pieces that already exist:** when `turn_gate` gives up on a `continue` rung it should leave
+a breadcrumb, and `supervise.sh` should send the `continue` on its next 60s poll instead of waiting for the
+monitor to notice quiet. A 10-minute tax collapses to 60 seconds, and the monitor's ladder goes back to being
+what it is for — a session that is *dead*, not one that merely stopped. Composes with `4e` (put the idle
+condition in `monitor.py`) rather than conflicting with it.
+**Hypothesis worth TESTING, not assuming, before touching the model side:** rung 4 asks a legitimately-ending
+turn for a `[reeve-report state:…]` block. If the model has learned "produce the report" ⇒ "end the turn",
+the gate is *teaching* the stop it exists to prevent. Check whether consumer's stops cluster around report
+emission before concluding anything.
+
+**4c. The MONITOR escalates on a gap it did not observe.** `[HIGH — it cost a whole night, and it is decidable]`
+OBSERVED 2026-09-20: the supervisor was restarted at 13:32:17Z and `monitor.py` parked a `steer` **seventeen
+seconds later** — *"still nothing written 251m after a nudge"*. Those 251 minutes were the window in which the
+monitor **itself was not running**. It derives quiet time from file mtimes, so it cannot tell *"the loop was
+quiet"* from *"I was not watching"*, and on restart it reads its own downtime as evidence against the loop.
+The park is durable and `clear_safe` holds on it forever, so a false escalation **stops the drive until a human
+deletes a ticket with no question in it**. Fix shape: `monitor.json` already carries `at` — a tick whose gap
+since the previous tick exceeds its own interval has an UNOBSERVED window and must re-baseline rather than
+judge. Same family as `D241`: a signal that was correct under an assumption that stopped holding.
+
+**4i. An idle session's context reading AGES OUT, and then it can never be reset.** `[MED — latent, seen while diagnosing 4h]`
+`read_reading` discards a reading older than `STALE_SECONDS = 900`. The statusline publishes it per turn, so a
+session that has been idle 15+ minutes has **no reading**, the band returns `unknown`, and `gate()` blocks with
+*"the band says unknown, not handoff-now"* — which `clear_safe` can never satisfy. Seen on `consumer` at 14:55Z
+after ~40 minutes idle. Harmless there (17% used, no reset wanted) and **dangerous in the case that matters**:
+a session that stops at 95% and sits for a quarter of an hour can no longer be reset by the supervisor at all,
+only nudged by the monitor — and `4e`/`4f` are about the nudge failing too. The staleness rule is right for its
+original purpose (*"a reading older than this describes a session that is likely gone"*); what is missing is
+that **an idle session is not a gone session**, and `session-idle.json` is exactly the evidence that
+distinguishes them.
+
+**4d. Nothing notices that the supervisor is not running.** `[HIGH — the same night, the other half]`
+`monitor.py` runs INSIDE `supervise.sh`. So the heartbeat that exists to catch a dead loop is itself hosted by a
+process that can simply not be there — and when it is not, **nothing anywhere says so**: not the console, not
+the status line, not the loop, not `turn_check`. On 2026-09-19 the supervisors were stopped for a deploy and
+never restarted; both drives ran until they stopped on their own and then sat idle for **eleven hours** with no
+nudge, no reset and no alert. The whole night produced no evidence about `D239`/`D241` because neither ever
+ran. The two halves of recovery — the turn gate's demand and the monitor's nudge — are only ever as live as a
+process nobody is watching. **Decide what owns "is a supervisor alive for this project": the status line is the
+cheapest surface, `loop.sh --supervise` could write a pidfile the gate reads, or the console could show it.**
+Related and NOT the same thing: the turn gate can flag a stop-for-nothing but cannot prevent one — it demands
+twice and then gives up for good (`demands` reached 52 on `consumer`), so the nudge is the only recovery there
+is. That is why losing it costs a night rather than a turn.
+
+**4g. Getting INTO a supervised run is vague, manual and unverified — the maintainer's own words.** `[HIGH — this is the product, not the plumbing]`
+*"Currently the process of getting to a not-supervised run is very vague; I need to run a few commands, make
+sure there isn't idle stuff, verify that they work — it isn't robust. I want one `supervise.sh`, I run it, I
+prompt Claude `continue` once, and from there on we are inside a supervised run."* (2026-09-20.)
+Today it takes: `tmux new-session` · `loop.sh --supervise` (which refuses outside tmux) · `continue` · and
+separately knowing to check `pgrep -af supervise.sh` for duplicates or absences, `parked/` for a stale park,
+`.workflow/config.json` for a ceiling, and the log to confirm any of it took. **Every failure this week came
+from that list, not from the loop:** three supervisors on one pane and none on the other; supervisors stopped
+for a deploy and never restarted (eleven hours lost, `4d`); a false park nobody could see without reading JSON.
+**This is the acceptance to design against: ONE command, then ONE `continue`, and the run is supervised — with
+the command itself refusing to hand back a half-armed state.** It owns the preconditions nothing owns today
+(a goal exists · no stale park · no duplicate or missing supervisor · the ceiling is set · the trust flag is
+there) and it SAYS what it armed. Related: `4d` (nothing notices a missing supervisor) is a symptom of the same
+gap — there is no single thing whose job is "this project is under supervision, and here is the proof."
 
 **2. `research` reaches for `curl` while holding `WebFetch` and `WebSearch`.** `[MED — D240 left it open]`
 Both web tools are granted in its frontmatter AND broad-allow in `settings.json`; its body says nothing about
@@ -1600,114 +1762,51 @@ owns the config keys; this one is not in it. Exactly the single-owner violation 
 content that is load-bearing. `D184`'s prescription for a file at its cap is **split-and-pointer**, not more
 shaving: a lean survivor plus a detail file with a marker at the head. Do that rather than trimming again.
 
-**✅ THE FIRST CLEAN AUTONOMOUS RESET, 2026-09-20 14:16Z — `agentic cyber`.** `[evidence for `D239` + `D241` + the operator ceiling, together]`
-`12h` shipped the supervisor with the exit test unmet — *"tested against a real tmux pane and a recording
-stand-in, never against a real orchestrator going the whole way round."* That gap is now closed, and the
-sequence is in `supervise.log` in order:
-```
-14:05–14:12  holding — band says hold, no anchor        working normally, under the 30% ceiling
-14:13:17     holding — no anchor; not known to be idle  THE CEILING FIRED; Stop demanded an anchor
-14:14:21     holding — not known to be idle             anchor written, model still mid-turn
-14:15:24     holding — not known to be idle             D239 holding the reset
-14:16:24     clear_safe — resetting %1
-14:16:32     sent /clear then continue                  ONE send
-14:17:36     holding — band says hold                   window collapsed: the reset LANDED
-```
-**The two polls at 14:14 and 14:15 are the whole point.** The anchor was written, nothing was parked and no
-dialog was open — the pre-`D239` three-condition gate would have fired straight into a running turn, which is
-what produced the stacked `/clear continue /clear continue`. It waited for idle instead, sent once, and the
-band collapsing afterwards is the DERIVED proof the keys were actually submitted (the same signal `D241`'s
-attempt cap grades on). No second pair a poll later; no `GIVING UP`.
-**The same log carries the contrast**: two resets 68 seconds apart — one poll interval, the stacking signature
-— earlier in its history. Before/after in one file.
-**What this does NOT prove:** a whole night, a goal reaching `met`, or any of `4c`–`4g` below, all of which were
-observed on the same day and are unfixed. One clean cycle is one clean cycle.
-
-**4c. The MONITOR escalates on a gap it did not observe.** `[HIGH — it cost a whole night, and it is decidable]`
-OBSERVED 2026-09-20: the supervisor was restarted at 13:32:17Z and `monitor.py` parked a `steer` **seventeen
-seconds later** — *"still nothing written 251m after a nudge"*. Those 251 minutes were the window in which the
-monitor **itself was not running**. It derives quiet time from file mtimes, so it cannot tell *"the loop was
-quiet"* from *"I was not watching"*, and on restart it reads its own downtime as evidence against the loop.
-The park is durable and `clear_safe` holds on it forever, so a false escalation **stops the drive until a human
-deletes a ticket with no question in it**. Fix shape: `monitor.json` already carries `at` — a tick whose gap
-since the previous tick exceeds its own interval has an UNOBSERVED window and must re-baseline rather than
-judge. Same family as `D241`: a signal that was correct under an assumption that stopped holding.
-
-**4d. Nothing notices that the supervisor is not running.** `[HIGH — the same night, the other half]`
-`monitor.py` runs INSIDE `supervise.sh`. So the heartbeat that exists to catch a dead loop is itself hosted by a
-process that can simply not be there — and when it is not, **nothing anywhere says so**: not the console, not
-the status line, not the loop, not `turn_check`. On 2026-09-19 the supervisors were stopped for a deploy and
-never restarted; both drives ran until they stopped on their own and then sat idle for **eleven hours** with no
-nudge, no reset and no alert. The whole night produced no evidence about `D239`/`D241` because neither ever
-ran. The two halves of recovery — the turn gate's demand and the monitor's nudge — are only ever as live as a
-process nobody is watching. **Decide what owns "is a supervisor alive for this project": the status line is the
-cheapest surface, `loop.sh --supervise` could write a pidfile the gate reads, or the console could show it.**
-Related and NOT the same thing: the turn gate can flag a stop-for-nothing but cannot prevent one — it demands
-twice and then gives up for good (`demands` reached 52 on `consumer`), so the nudge is the only recovery there
-is. That is why losing it costs a night rather than a turn.
-
-**4e. The idle veto sits in the TRANSPORT, and it burns a budget it does not own.** `[HIGH — a `D239` regression, OBSERVED 2026-09-20]`
-`supervise.sh` states its own law in its header: *"Judgement lives in `monitor.py` (testable, and runnable by a
-human); this file is transport."* `D239` put the idle precondition in the transport as a veto, so the judge
-says `nudge`, the transport silently declines, and **the counter lives with the judge**:
-`13:45:48Z no motion — nothing written for 10m; NOT nudging: the session is not known idle` with
-`monitor.json` recording `nudges: 1`. The one-nudge budget was spent on a nudge that never left, and the next
-rung is **escalate → park a `steer`** — a session heading for a durable false park having never been nudged.
-**Fix:** move the idle condition into `monitor.py` as a `waiting` state, beside parked / dialog / paused, which
-is the same family ("the session is not in a state where a keystroke helps"). Then the budget is not spent, the
-escalation does not fire, and the judgement is testable where every other judgement in this package is.
-
-**4f. `session-idle.json` has its semantics BACKWARDS at `SessionStart`, and a cleared session can never recover itself.** `[HIGH — same observation]`
-`D239` made `SessionStart` **clear** the flag, reasoning that a new session has not been observed idle. For a
-`/clear` that is exactly wrong: a cleared session is **definitionally** idle — sitting at the prompt with
-nothing submitted. And the harness will never say so, because `idle_prompt` is armed off the LAST MESSAGE
-TIMESTAMP and guarded by `if (fv === 0) return` — **a freshly cleared session has no messages, so the timer is
-never armed.** Measured: consumer sat 11 minutes after a manual `/clear` with the flag absent.
-Combined with `4e` this is the sharp one: **a human's manual `/clear`, or a reset whose `/clear` lands and
-whose `continue` does not, produces a session only a human can restart.**
-**Fix:** the flag means *no prompt submitted and no turn running*. `SessionStart` **sets** it,
-`UserPromptSubmit` clears it, `idle_prompt` re-sets it after a turn ends.
-
-**4g. Getting INTO a supervised run is vague, manual and unverified — the maintainer's own words.** `[HIGH — this is the product, not the plumbing]`
-*"Currently the process of getting to a not-supervised run is very vague; I need to run a few commands, make
-sure there isn't idle stuff, verify that they work — it isn't robust. I want one `supervise.sh`, I run it, I
-prompt Claude `continue` once, and from there on we are inside a supervised run."* (2026-09-20.)
-Today it takes: `tmux new-session` · `loop.sh --supervise` (which refuses outside tmux) · `continue` · and
-separately knowing to check `pgrep -af supervise.sh` for duplicates or absences, `parked/` for a stale park,
-`.workflow/config.json` for a ceiling, and the log to confirm any of it took. **Every failure this week came
-from that list, not from the loop:** three supervisors on one pane and none on the other; supervisors stopped
-for a deploy and never restarted (eleven hours lost, `4d`); a false park nobody could see without reading JSON.
-**This is the acceptance to design against: ONE command, then ONE `continue`, and the run is supervised — with
-the command itself refusing to hand back a half-armed state.** It owns the preconditions nothing owns today
-(a goal exists · no stale park · no duplicate or missing supervisor · the ceiling is set · the trust flag is
-there) and it SAYS what it armed. Related: `4d` (nothing notices a missing supervisor) is a symptom of the same
-gap — there is no single thing whose job is "this project is under supervision, and here is the proof."
-
-**4h. `may_end` licenses exactly the idling the shipped rule forbids.** `[HIGH — OBSERVED 2026-09-20, and the package already states the correct behaviour]`
-`loop-detail.md:182` is unambiguous: *"Interleaving is the degenerate case, not a separate feature. While an
-item is parked on a human verdict, the next independent item starts rather than the loop idling … A whole-loop
-park is simply 'nothing eligible'."* But `turn_check.may_end` rung 1 returns
-*"N checkpoint(s) parked — the human genuinely owes an answer"* for **any** park, so the turn may end.
-**The gate contradicts the rule, and the model follows the gate.** Observed on `consumer`: it parked
-`gap-027-qa` (legitimate — a human must test it), then wrote *"Decision work doesn't collide, so that's what
-runs next: `decision-engineer` on `gap-028`, which blocks `ga-4`, a goal acceptance"* — **named the eligible
-work and stopped anyway.** `turn_check` agreed: the only thing it said the turn owed was `report`.
-A checkpoint parks the **ITEM**; `checkpoint/SKILL.md` says it "parks the ticket durably and yields", and
-yield means yield the item, not the machine. **Fix:** rung 1 must be *parked AND nothing else eligible*, not
-*parked*. The eligibility predicate already exists and is already authoritative —
-`check_wave_independence.py` plus `prioritize`. This is the single highest-value item in the queue for an
-unattended drive: every human gate currently stops the whole loop for as long as the human is asleep.
-
-**4i. An idle session's context reading AGES OUT, and then it can never be reset.** `[MED — latent, seen while diagnosing 4h]`
-`read_reading` discards a reading older than `STALE_SECONDS = 900`. The statusline publishes it per turn, so a
-session that has been idle 15+ minutes has **no reading**, the band returns `unknown`, and `gate()` blocks with
-*"the band says unknown, not handoff-now"* — which `clear_safe` can never satisfy. Seen on `consumer` at 14:55Z
-after ~40 minutes idle. Harmless there (17% used, no reset wanted) and **dangerous in the case that matters**:
-a session that stops at 95% and sits for a quarter of an hour can no longer be reset by the supervisor at all,
-only nudged by the monitor — and `4e`/`4f` are about the nudge failing too. The staleness rule is right for its
-original purpose (*"a reading older than this describes a session that is likely gone"*); what is missing is
-that **an idle session is not a gone session**, and `session-idle.json` is exactly the evidence that
-distinguishes them.
+**4k. There is NO capability that runs the inception conversation the maintainer's caveat requires.** `[HIGH — surfaced by signing 4j, 2026-09-20]`
+`discuss` is the only candidate and it **refuses the job by design**: *"Core principle: turn a user's intent
+into a written spec. Requirements only — never decide the tech stack or any engineering choice here,"* and
+step 4, *"for any genuine engineering decision (stack, library, architecture), do not decide."* So
+architecture, comparable products and use-case shape are either deferred to `decision-engineer` mid-build —
+one decision at a time, on demand, with no vision behind them — or never had at all.
+**Why this is the item that earns "don't wake me", not a nicety before it: inception is what POPULATES the
+`locked` commitments the autonomy floor later enforces.** The floor routes a change to a `locked` element or
+an acceptance criterion; a thin inception leaves it **nothing to hold**, so every architectural question the
+build hits is either guessed or escalated. The conversation is the thing that buys the autonomy.
+**Shape, not yet a design:** the pieces exist and are not composed — `discuss` (requirements), `research`
+(market practice, comparable products), `decision-engineer` (the decision authority), `create-forecast` (show
+the chain before walking it). What is missing is an inception phase the HUMAN leads that closes his side and
+**emits constraints as `locked` spec elements** rather than as prose nobody can enforce.
+**DECIDED 2026-09-20 — all three open questions are settled; only the capability's own design is left.**
+- **A NEW CAPABILITY, not an extension of `discuss`** (the maintainer's call). His own practice is the
+  evidence: *"usually I just discussed tech stack, engineering choices and all of that AFTER I ran `/start`"* —
+  i.e. the conversation happens, in the wrong place, with nothing to catch its output. `discuss` keeps its
+  stated core principle intact (requirements and engineering choices blur easily and the separation is
+  load-bearing); the new capability owns goals, purpose, use cases, comparable products and the constraints
+  that follow from them.
+- **A constraint becomes testable by landing as a `locked` block in `docs/spec.md`, and needs NO new
+  machinery** — three enforcements already exist, each covering a different failure: *editing the constraint
+  away* → the autonomy floor (a changed hunk in a `locked` block routes to the human); *a decision that would
+  break it* → `decision-engineer`, which reads the spec before weighing options, and for which an option
+  breaking a `locked` element is goal-affecting; *code drifting off it silently* → `align`'s semantic pass.
+  **So inception must emit FALSIFIABLE `locked` content, not prose.** Not *"local-first"* — a slogan — but
+  *"no runtime dependency on a network service for core reading and writing."* The test is one question:
+  **could `align` or a reviewer DEMONSTRATE a violation?** If not it is not a constraint and it buys nothing.
+  **Stated limit, inherited rather than escaped:** the floor is a *spec-diff* floor by its own declaration, so
+  a constraint is protected from being edited away, **not** from being ignored. Ignoring is `align`'s job and
+  `align` is budget-bounded and scoped to changed surface — the honest enforcement strength is *"align finds
+  it eventually"*, which is the same limit `locked` behaviours already carry.
+- **`reconcile` is NOT this conversation, and the difference costs brownfield today.** Reconcile derives from
+  CODE and asks *"is this what it is?"*; inception derives from the HUMAN and asks *"what must be true going
+  forward?"* Opposite directions, and only one can produce a constraint: **reconstruction cannot see what is
+  not there.** *"No cloud"* is invisible in a codebase that simply never added one — every exclusion, every
+  "I would never accept that", is unreachable from artifacts. Reconcile is also a *checkpoint* (a yes/no on a
+  document) where this is a *conversation* (unbounded, iterative, human-led). **So: separate capabilities, and
+  the new one runs in BOTH modes — greenfield after `/start`, brownfield AFTER `reconcile`.** Brownfield is
+  missing inception more invisibly than greenfield, because `reconcile` makes it feel as though the
+  conversation already happened: today a brownfield project gets a goal minted from reconstructed acceptance
+  and nothing else — no purpose, no constraints, no exclusions.
+**Left for the build slice:** the capability's name, its conversation structure, where it sits in `loop.md`,
+and how much of `research` (comparable products, market practice) it drives itself versus dispatches.
 
 **4j. WHAT DESERVES TO STOP FOR A HUMAN — the package has TWO predicates for "does this need the human", and only one of them is the rule.** `[DESIGN QUESTION — the maintainer's ask and his rule, 2026-09-20. My first proposal was REJECTED and why is the useful part]`
 *"The QA should only come to me if it is product-changing. The whole point of this repo is to allow me to
@@ -1761,84 +1860,6 @@ whether a deferred qa reconciles after the fact without `verify` losing its mean
 an item whole, and *"passed, pending a human's later look"* is a third state it does not have.
 **Multiplier: `4h`.** A CORRECT qa checkpoint still stops the whole loop today, against the package's own
 written rule. **If only one of the two is built, `4h` buys more.**
-
-**4k. There is NO capability that runs the inception conversation the maintainer's caveat requires.** `[HIGH — surfaced by signing 4j, 2026-09-20]`
-`discuss` is the only candidate and it **refuses the job by design**: *"Core principle: turn a user's intent
-into a written spec. Requirements only — never decide the tech stack or any engineering choice here,"* and
-step 4, *"for any genuine engineering decision (stack, library, architecture), do not decide."* So
-architecture, comparable products and use-case shape are either deferred to `decision-engineer` mid-build —
-one decision at a time, on demand, with no vision behind them — or never had at all.
-**Why this is the item that earns "don't wake me", not a nicety before it: inception is what POPULATES the
-`locked` commitments the autonomy floor later enforces.** The floor routes a change to a `locked` element or
-an acceptance criterion; a thin inception leaves it **nothing to hold**, so every architectural question the
-build hits is either guessed or escalated. The conversation is the thing that buys the autonomy.
-**Shape, not yet a design:** the pieces exist and are not composed — `discuss` (requirements), `research`
-(market practice, comparable products), `decision-engineer` (the decision authority), `create-forecast` (show
-the chain before walking it). What is missing is an inception phase the HUMAN leads that closes his side and
-**emits constraints as `locked` spec elements** rather than as prose nobody can enforce.
-**DECIDED 2026-09-20 — all three open questions are settled; only the capability's own design is left.**
-- **A NEW CAPABILITY, not an extension of `discuss`** (the maintainer's call). His own practice is the
-  evidence: *"usually I just discussed tech stack, engineering choices and all of that AFTER I ran `/start`"* —
-  i.e. the conversation happens, in the wrong place, with nothing to catch its output. `discuss` keeps its
-  stated core principle intact (requirements and engineering choices blur easily and the separation is
-  load-bearing); the new capability owns goals, purpose, use cases, comparable products and the constraints
-  that follow from them.
-- **A constraint becomes testable by landing as a `locked` block in `docs/spec.md`, and needs NO new
-  machinery** — three enforcements already exist, each covering a different failure: *editing the constraint
-  away* → the autonomy floor (a changed hunk in a `locked` block routes to the human); *a decision that would
-  break it* → `decision-engineer`, which reads the spec before weighing options, and for which an option
-  breaking a `locked` element is goal-affecting; *code drifting off it silently* → `align`'s semantic pass.
-  **So inception must emit FALSIFIABLE `locked` content, not prose.** Not *"local-first"* — a slogan — but
-  *"no runtime dependency on a network service for core reading and writing."* The test is one question:
-  **could `align` or a reviewer DEMONSTRATE a violation?** If not it is not a constraint and it buys nothing.
-  **Stated limit, inherited rather than escaped:** the floor is a *spec-diff* floor by its own declaration, so
-  a constraint is protected from being edited away, **not** from being ignored. Ignoring is `align`'s job and
-  `align` is budget-bounded and scoped to changed surface — the honest enforcement strength is *"align finds
-  it eventually"*, which is the same limit `locked` behaviours already carry.
-- **`reconcile` is NOT this conversation, and the difference costs brownfield today.** Reconcile derives from
-  CODE and asks *"is this what it is?"*; inception derives from the HUMAN and asks *"what must be true going
-  forward?"* Opposite directions, and only one can produce a constraint: **reconstruction cannot see what is
-  not there.** *"No cloud"* is invisible in a codebase that simply never added one — every exclusion, every
-  "I would never accept that", is unreachable from artifacts. Reconcile is also a *checkpoint* (a yes/no on a
-  document) where this is a *conversation* (unbounded, iterative, human-led). **So: separate capabilities, and
-  the new one runs in BOTH modes — greenfield after `/start`, brownfield AFTER `reconcile`.** Brownfield is
-  missing inception more invisibly than greenfield, because `reconcile` makes it feel as though the
-  conversation already happened: today a brownfield project gets a goal minted from reconstructed acceptance
-  and nothing else — no purpose, no constraints, no exclusions.
-**Left for the build slice:** the capability's name, its conversation structure, where it sits in `loop.md`,
-and how much of `research` (comparable products, market practice) it drives itself versus dispatches.
-
-**4l. A session that habitually stops cannot be held, and the recovery rediscovers slowly what was known instantly.** `[HIGH — measured contrast between two live drives, 2026-09-20]`
-Same package, same supervisor, same night:
-| | `demands` | `rung` | clean resets |
-|---|---|---|---|
-| `agentic cyber` | **0** | None | **23** |
-| `consumer` | **53** | continue | **0** |
-`demands: 0` means the last stop was a LEGITIMATE end — `turn_gate` resets the counter there. So agentic
-cyber essentially never stops for nothing, and resets itself normally. **Consumer is at 53 CONSECUTIVE
-illegitimate stops** (`turn_check` live: *"OWES: continue — the loop is building, nothing is parked, the goal
-is neither met nor stalled and the operator has not paused"*), and it has had **zero** resets — not because
-the reset is broken but because **it never runs long enough to fill a window.** `D239`/`D241` and the
-supervisor are exonerated: the difference is the session's own behaviour.
-**Two distinct defects, and the second is ours:**
-- **The give-up is PERMANENT for the rung.** `demands` only resets on the may-end path, so a session whose
-  stops are all illegitimate never resets it: 53 > `MAX_DEMANDS = 2` and the gate has been standing down for
-  51 stops. `D241` re-arms the counter only for sessions that interleave legitimate ends (background
-  dispatches); one that stops for nothing every time is exactly the case it cannot reach.
-- **The recovery is a 10-minute rediscovery of a fact known instantly.** `turn_gate` knows AT THE MOMENT OF
-  THE STOP that the turn owed a `continue`. `monitor.py` then spends `QUIET_SECONDS = 600` independently
-  noticing silence to conclude the same thing — and gets ONE nudge before escalating to a `steer`. Measured
-  cadence on consumer: work → stop → 10 min → nudge → work → stop → 10 min. `nudges_total: 4`,
-  `escalations_total: 1` — **the nudge works every time; it is just priced at ten minutes.**
-**Fix shape, using pieces that already exist:** when `turn_gate` gives up on a `continue` rung it should leave
-a breadcrumb, and `supervise.sh` should send the `continue` on its next 60s poll instead of waiting for the
-monitor to notice quiet. A 10-minute tax collapses to 60 seconds, and the monitor's ladder goes back to being
-what it is for — a session that is *dead*, not one that merely stopped. Composes with `4e` (put the idle
-condition in `monitor.py`) rather than conflicting with it.
-**Hypothesis worth TESTING, not assuming, before touching the model side:** rung 4 asks a legitimately-ending
-turn for a `[reeve-report state:…]` block. If the model has learned "produce the report" ⇒ "end the turn",
-the gate is *teaching* the stop it exists to prevent. Check whether consumer's stops cluster around report
-emission before concluding anything.
 
 **5. An `ask` in an unattended drive is a STOP, not a tripwire.** `[DESIGN QUESTION — do not build blind]`
 The whole class behind the `curl` halt. The ask list was calibrated for a session with a human in front of
