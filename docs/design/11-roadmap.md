@@ -1530,6 +1530,28 @@ fix.** Every item traces to an observation, not to a reading, and the order is d
 > first, and **the full smoke run is LAST and only once** — every edit to `product/` throws its receipt away
 > (`D220`/`D227`).
 
+**THE THREE GOALS THESE ITEMS SERVE — agreed with the maintainer 2026-09-21, before the context reset. Every
+item below belongs to exactly one.**
+- **G1 · A DRIVE SURVIVES THE NIGHT UNATTENDED.** *Done:* you start it, sleep, and in the morning it is still
+  working or it stopped for a reason you agree with. Six measured failures stand in the way: a stopped session
+  cannot restart itself (`4e` `4f`); recovery costs ten minutes a turn (`4l`); the monitor invents stops
+  (`4c` `4i`); **one human gate halts the whole machine** (`4h` — the highest-value item in this queue); and a
+  run can silently half-arm with nothing noticing (`4d` `4g`).
+- **G2 · THE HUMAN IS WOKEN ONLY FOR WHAT IS ACTUALLY HIS.** *Done:* the only thing that reaches him is a
+  question about what the product IS or PROMISES; design, logic, library choice, correctness and "is this a
+  real bug" are answered by `decision-engineer`, `review`, `debug` and `research`, which are better at them
+  than a non-expert owner and are awake at 3am. `4k` (the inception conversation that does not exist, and the
+  thing that BUYS the autonomy — a thin inception leaves the floor nothing to hold), then `4j` (rebuild the qa
+  gate on *product-changing*), plus `5` (an `ask` should defer, not halt) and `2` (do not reach for a tool
+  that prompts while holding one that does not).
+- **G3 · DEBTS THE PACKAGE OWES ITSELF.** `3` · `4` · `4b`. Small, cheap, folded in where convenient.
+
+**The baseline they build on, so nothing here is re-litigated:** `D239` (idle condition), `D240` (curl/wget off
+the ask list), `D241` (in-flight workers), and the operator ceiling at 30/33%. Evidence: **23 clean self-resets
+on `agentic cyber`, zero stacking, zero `GIVING UP`.** The reset mechanism WORKS; everything left is around it.
+**Out of scope and staying that way:** org mode (parked at the maintainer's word), the standing deferred menu
+below this queue, and any release — the smoke receipt is void and a release costs a full run.
+
 **BUILD IN THIS ORDER. The labels are stable ids (`4h` stays `4h` wherever it sits) — the ORDER is the file's
 order, and it is not the order these were found in.** Rationale, because the sequence is the argument:
 `4e`+`4f` first because they are a regression THIS WORK introduced and they leave a session only a human can
