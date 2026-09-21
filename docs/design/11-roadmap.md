@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **THE QUEUE IS BUILT OUT as of 2026-09-21 (`D242`–`D249`): all of G1 (`4e` `4f` `4h` `4l` `4c` `4i` `4d` `4g`), all of G3 (`3` `4` `4b`), and all of G2's buildable half (`2`; `4k`, the `charter` skill; `4j`, the qa gate). Only `5` remains and it is EXCLUDED by the standing orders — a design question that wants a conversation. WHAT IS LEFT IS NOT A FIX, IT IS A MEASUREMENT: a night. Nothing here has been exercised by a real unattended run, and the two items that change what the package IS (`4k`, `4j`) have no drive behind them at all. The next session's job is to run one and harvest it — and before any release the smoke receipt is void, because every edit to `product/` throws it away.** The standing queue below this one is CLOSED**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next entry is `#### ▶ NEXT — a night, and then read what it wrote`: the unattended-drive bundle below it is CLOSED (**fourteen items**, labels are stable ids, not the order) and the periodic anchor `reckon` is BUILT (`D250`), so what is outstanding is a real drive rather than another slice. Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **THE QUEUE IS BUILT OUT as of 2026-09-21 (`D242`–`D249`): all of G1 (`4e` `4f` `4h` `4l` `4c` `4i` `4d` `4g`), all of G3 (`3` `4` `4b`), and all of G2's buildable half (`2`; `4k`, the `charter` skill; `4j`, the qa gate). Only `5` remains and it is EXCLUDED by the standing orders — a design question that wants a conversation. WHAT IS LEFT IS NOT A FIX, IT IS A MEASUREMENT: a night. Nothing here has been exercised by a real unattended run, and the two items that change what the package IS (`4k`, `4j`) have no drive behind them at all. The next session's job is to run one and harvest it — and before any release the smoke receipt is void, because every edit to `product/` throws it away.** The standing queue below this one is CLOSED**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1509,7 +1509,22 @@ defect and is **not fixed** (it is now a tool-choice issue, not a drive-stopper)
 `ask` in an unattended drive is a STOP, not a tripwire** — wants an outbox deferral, which is recorded and
 not built.
 
-#### ▶ NEXT — the unattended-drive bundle. `[no ask — found by RUNNING it, 2026-09-19]`
+#### ▶ NEXT — a night, and then read what it wrote. `[the periodic anchor is BUILT; what is left is the measurement]`
+**`reckon` is BUILT (`D250`) — every `config.reckon.every_n_commits` commits (default 5) the loop stops driving
+and asks whether the window moved the goal, and whether the goal is reachable at all.** Its clock is a plain
+commit counter *on purpose*: every other progress signal is computed against a goal it assumes is sound, so
+none of them can report a goal that is itself the broken thing. The default is measured off two live projects
+(1.56 and 1.60 commits per closed item; a five-item drift run corrected by hand).
+**Its own stated residual (`D250`): the trigger is a consultation, not a gate** — `prioritize` is a skill, so
+injecting the item is an instruction the loop may skip, exactly like the three sibling triggers beside it. The
+cheapest real enforcement is one line in the **status report**, which the turn gate already demands every turn;
+that is the obvious next slice and it is not built.
+**What it has NOT had, and it is the same gap the bundle below has:** a real drive. It is validated against
+both projects' current state — both return `goal-unreachable` and name the criteria — but no drive has yet
+injected it, staged its receipt, and had the next window measured from it. **That is the one thing left: a
+night, and then read what it wrote.**
+
+#### The unattended-drive bundle — CLOSED. `[no ask — found by RUNNING it, 2026-09-19]`
 Two supervised drives (`consumer`, `agentic cyber`) were left unattended for two hours and neither got far.
 `D239` and `D240` came out of that and are closed. **What follows is what those two hours exposed and did not
 fix.** Every item traces to an observation, not to a reading, and the order is dependency order.
@@ -2209,6 +2224,6 @@ sub-linearly, and the constrained window turns out to be the **router's** (43–
 98–179k per item) — where an inline node costs 9–29k against a dispatched node's 0.3–2.6k, and `planner` outweighs
 `verify`. That question is logged in `07`, not scheduled here.
 **`### Phase 12` is COMPLETE (D185 → D221, 2026-09-13 → 2026-09-14); the live pointer is now
-`### The ordered build sequence` § `▶ NEXT — the unattended-drive bundle` (the standing queue that followed
-Phase 12 is itself closed).
+`### The ordered build sequence` § `▶ NEXT — a night, and then read what it wrote` (the standing queue that
+followed Phase 12 is itself closed, and so is the unattended-drive bundle after it).
 What Phase 12 was, kept because the way it opened is the part worth reusing — standing intent.** It is the third kind of phase-opening this repo has had: not a stale-claim sweep (Phase 10) and not an instrument reading (Phase 11), but **lived use** — the maintainer noticing which instructions he re-types every session. Five of them, one root cause: the package has no owner for a standing operator directive about how the *loop* behaves, so each one decays at the next `/clear`. The channel is built first and everything else registers in it; then return contracts, the wave coordinator D91's predicate has been waiting on since it was decided, an acceptance-derived convergence measure, and last — because it multiplies every defect above it — a `loop.sh` that drives session after session toward a goal on its own. **Where to start reading if you know nothing else: `### The ordered build sequence` (D186)** — it places Phase 12 against the two decided-but-unbuilt entries that come first (D184's remainder, then D183), and it is the only copy of that order.

@@ -9660,3 +9660,95 @@ the precondition — the product-owner rule only holds once inception has closed
 last), the autonomy floor and the commitment model, **D236** (`review`, one of the capabilities the residue was
 bypassing).
 → `product/shared/{schemas.md,schemas-bus.md,schemas-config.md}`, `product/scripts/{check_criterion_discharge.py,bus.py,context_band.py,turn_check.py}`, `product/agents/{planner.md,execute.md}`, `product/skills/{verify,checkpoint}/SKILL.md`, `product/templates/loop.md`, `00`, `11`.
+
+## D250 — `reckon`: the periodic anchor, on a clock that nothing it watches can silence **[BUILT 2026-09-21 — the maintainer's ask. The trigger was argued the other way first and he was right; the number is measured off his own two live projects]**
+**The ask:** *"after X commits the repo will stop driving development and stop to think: ok the goal is X, in
+the last 5 sessions we did Y, does Y truly progress us towards X? have we been scoped on the wrong thing?
+working in loops around a problem that needs stopping and consulting qa? is the goal just not anchored enough
+and needs to be clarified for us to progress?"*
+
+**I proposed triggering it off the convergence signals and that was wrong.** My argument was that a commit
+count is an effort measure, which `converge.py` rejects by name (*"a loop that counts sessions spent will churn
+happily and report progress the whole time"*). His answer — *"I want it objective from the other
+measurements"* — is the stronger one, and the reason is one level below mine: **every existing progress signal
+is computed from the loop's own bookkeeping AGAINST A GOAL IT ASSUMES IS SOUND.** When the goal's acceptance is
+unreachable, the stall streak, the discharge fraction, the report and `prioritize`'s own unbound check all
+faithfully measure a fiction — and anything triggered BY them inherits the fiction and cannot report it. The
+reflection must be able to audit the measuring apparatus, so its trigger has to sit outside the apparatus. A
+commit counter is crude *precisely because* nothing it watches can silence it. I had even written the hole
+myself (*"a loop can discharge every criterion cleanly, streak 0, nothing unbound, and still be building the
+wrong product"*) and then designed a trigger that could not see it.
+
+**MEASURED ON HIS OWN TWO PROJECTS, 2026-09-21, which is where the number comes from.**
+| | commits/item | ledger | acceptance |
+|---|---|---|---|
+| `consumer` | 14/9 = **1.56** | five straight items discharging nothing, then one that did | 4 discharged, **3 unbound** |
+| `agentic cyber` | 8/5 = **1.60** | 3 empty, 1 discharge, 1 empty | 1 discharged, 2 planned, **10 unbound** |
+Two codebases with nothing in common agree at ~1.6 commits per closed item, so **five commits ≈ three items**.
+The window to beat is from the same data: consumer's drift ran **five items (~8 commits)** before its owner
+re-steered the queue by hand (`chore(workflow): the owner's re-steer — three directives that point the queue at
+the goal`). Firing at five lands two items ahead of where a person caught it. **That is the whole basis for the
+default**, and it is a knob because two projects is two projects.
+
+**WHAT IT MEASURES — all arithmetic over artifacts that already exist.** No dispatch, no model call, no new
+bookkeeping. The window is *commits since the last reckon receipt was ADDED* (git), and the ledger lines
+appended in that span (`git show <base>:` gives the ledger's length then; subtraction gives the window
+exactly). From that: acceptance **moved** in the window · **unbound** · **commits per closed item** against the
+1.6 baseline. Verdicts: `progressing` · `churning` · `no-progress` · `goal-unreachable` · `no-goal`.
+**Validated against both live projects before a line of the skill was written**: both return
+`goal-unreachable` and name the exact criteria (`ga-4, ga-6, ga-7`; ten of thirteen) — the conclusion their
+owner had to reach by hand.
+
+**THE WINDOW RATE IS NOT THE STALL STREAK, and that is a second reason to keep them apart.** The streak counts
+CONSECUTIVE empty promotions, so **one lucky discharge resets it to zero**: consumer's five straight
+nothing-items followed by one `ga-5` reads `streak 0 — not stalled` while its owner was re-steering. A window
+rate cannot be reset by one item. `converge`'s terminal semantics are deliberately left alone — this is a
+second consumer with its own question, not a redefinition of the stop.
+
+**THE FLOOR IT CANNOT ARGUE PAST.** Zero acceptance moved ⇒ the verdict is never `progressing`, whatever the
+reading skill concludes. A loop grading its own progress drifts toward *"yes"* — the same reason the autonomy
+floor exists — so the skill may DOWNGRADE a verdict and never upgrade one.
+
+**ROUTING, and only one outcome reaches the human.** `progressing` is silent (a pass that always finds
+something is one nobody reads). `churning` → `debug`/`decision-engineer`, or get the evidence by running it.
+`no-progress`/wrong scope → re-prioritize. **`goal-unreachable` → a `steer` checkpoint** carrying the specific
+criteria and a proposed sharpening of each — changing goal acceptance is the product owner's by the autonomy
+floor (`D249`), and by `D243` the park stops the item, not the machine.
+
+**TWO CORRECTIONS THIS INVESTIGATION FORCED, both of which I had told the maintainer wrongly.**
+- **`agentic cyber` is NOT stalled.** Its installed `converge.py` differs from source and reports `streak 5/5`
+  where the current code, run against the same data, reports `1`. The project is running a **stale install**;
+  the staleness detector exists (`session_start.py` hop A) and either did not fire or was not acted on. Not a
+  defect in current code — but the reading I quoted was from old code, and the correction matters because it
+  removes the one piece of evidence that looked like the stall machinery working.
+- **`unbound` is not unconsumed.** `prioritize` step 3 already instructs the loop to run `converge status` and
+  file each unbound acceptance with `create-issue`. It is a consultation nothing enforces, and the live
+  evidence shows what it buys even when it fires: `agentic cyber` filed exactly one such ticket
+  (`GOAL-runb-s-13-acceptances-are-all-unbound-…`) and that ticket discharged nothing. **Filing a goal's own
+  unreachability as a backlog row sends it to compete with features**; `reckon` asks the different question —
+  *can this acceptance be discharged at all as written* — and routes it to the person who can re-anchor it.
+  Both skills now state the boundary, so there is one owner per question rather than two for one.
+
+*Rejected:* **triggering off the streak / discharge rate** (the maintainer's call, and the right one — see
+above) · **a sessions clock** (a session is not durable or countable from artifacts; a commit is) · **counting
+only item commits** (a window where three of five commits were housekeeping is a window with little product
+progress, and filtering that out before looking hides the finding) · **giving the pass a veto** (it reports and
+routes; a gate that could halt a drive on a torn JSON file is worse than the drift it watches) · **redefining
+`converge`'s stall streak to be a rate** (the terminal stop is a different consumer with a different
+tolerance; changing it to fix this would couple them back together) · **re-filing what `prioritize` files**
+(two owners for one question).
+*Residual, stated because this slice criticised the same shape elsewhere:* **the trigger is a consultation,
+not a gate.** `prioritize` is a skill, so "inject a `reckon` when it is due" is an instruction the loop may
+skip — exactly what was just said about `prioritize` step 3's unbound check. It is no weaker than its three
+sibling triggers (retention, drift, doc-size all have the same property) and it is not thereby fine. The
+cheapest real enforcement is the **status report**, which the turn gate already demands every turn: one line
+saying a reckon is owed would put it in front of the loop continuously rather than at a step it can pass over.
+Not built here — it changes the report's digest and line budget, and it wants its own slice.
+*Evidence:* the two-project measurement table above; both projects' `reckon measure` output naming their own
+unreachable criteria; consumer's by-hand re-steer commit, which is this capability performed manually.
+**Builds on:** **D249** (what the human is for — this routes by that rule), **D243** (the park stops the item,
+not the machine), **D248** (`charter`, which is where the constraints a goal should be anchored to come from),
+and `converge.py`'s acceptance-derived law, which it reuses rather than replaces.
+→ `product/scripts/reckon.py` (NEW), `product/skills/reckon/SKILL.md` (NEW),
+`product/skills/prioritize/SKILL.md`, `product/shared/{schemas.md,schemas-config.md}`,
+`product/hooks/verify_check.py`, `product/templates/loop.md`, `product/MANIFEST.json`, `README.md`, `10`, `11`.

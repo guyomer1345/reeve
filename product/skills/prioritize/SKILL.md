@@ -21,8 +21,8 @@ The backlog (items with `depends_on`, `kind`, `severity`).
    and `issue` entries whose `github_ref` **is** closed on GitHub. Both rules matter: local issues are not a
    greenfield edge case — `/rebind` files machine-move losses as exactly that shape, and an entry no rule
    collects is permanent sediment.
-2. **Schedule maintenance — three decoupled triggers** (memory pressure ≠ drift risk ≠ doc size, so separate
-   thresholds — a shared one would make any of them fire for the wrong reason):
+2. **Schedule maintenance — four decoupled triggers** (memory pressure ≠ drift risk ≠ doc size ≠ goal drift, so
+   separate thresholds — a shared one would make any of them fire for the wrong reason):
    - *Retention/size* → inject a `document:audit` item when a threshold retention can actually **reduce** is
      tripped — a node's `# Sessions` exceeds `sessions_k` **by a margin** (retention caps back to `sessions_k`,
      leaving headroom so the next single append doesn't immediately re-trip), **superseded** `docs/decisions/`
@@ -40,7 +40,14 @@ The backlog (items with `depends_on`, `kind`, `severity`).
      **trim or a split-and-pointer** — never a deletion of content that carries intent, and never an automatic
      rewrite: splitting prose coherently is judgment, which is exactly why this is a ticket and not a script.
      `memory-model.md` owns the convention and the head marker.
-   All three are self-contained maintenance items (`loop.md` § Maintenance items) — they run their pass and flow
+   - *Goal drift* → inject a `reckon` item when
+     `python3 .claude/scripts/reckon.py due --project-root .` exits 0 — every
+     `config.reckon.every_n_commits` commits (default 5) since the last reckon receipt.
+     **Its clock is deliberately outside every convergence signal**, and that is the whole point of it: the
+     stall streak, the discharge fraction and step 3 below are all computed against a goal they assume is
+     sound, so none of them can report a goal that is itself the broken thing. A commit counter is crude
+     precisely because it is independent. Inject at most one open `reckon` item at a time.
+   All four are self-contained maintenance items (`loop.md` § Maintenance items) — they run their pass and flow
    straight to `commit`, never through `planner`/`execute`/`verify`. Because of that each **stages a maintenance
    receipt** (`.workflow/maintenance/<item-id>.json`) in its own commit: with no verdict to show, that receipt is
    the only thing standing between a verify-free item and a commit gate that reads it as an unverified one.
@@ -52,6 +59,11 @@ The backlog (items with `depends_on`, `kind`, `severity`).
    here — naming the gap is queue work, filling it is `discuss`/`planner`'s. Report `unbound` at most once per
    acceptance: it stays unbound until something plans it, and re-filing every pass would be sediment, not a
    signal — the same rule the `doc-budget` trigger above runs on.
+   **This is not `reckon`'s job and does not become it.** Here the question is *has anyone planned this yet*,
+   and the answer is a backlog row. `reckon` asks the different one — *can this acceptance be discharged at
+   all as written* — and routes that to the human, because filing "ga-4 is unbound" as ordinary work sends a
+   goal's own unreachability into the queue to compete with features. Measured on two live projects: 3 of 7
+   and 10 of 13 acceptance unbound, one ticket filed between them, neither goal any closer to reachable.
 4. Make eligible only items whose `depends_on` are already done.
 5. Order eligible items by **urgency × dependency-readiness**.
 6. **Emit the PLAN BATCH: the head of the queue, up to `config.run.wave.plan_max`**, skipping anything already

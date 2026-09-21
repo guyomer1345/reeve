@@ -107,6 +107,7 @@ overlap into one adjudicator.
 | create-issue | skill | capture a problem/idea → backlog + GitHub issue | `skills/create-issue` |
 | close-issue | skill | close the GitHub issue a completed item resolved (commit tail) | `skills/close-issue` |
 | align | skill | periodic spec↔code reconciliation scan (mechanical always-whole + scoped semantic) | `skills/align` |
+| reckon | skill *(D250)* | the periodic anchor: every N commits, does the window actually move the goal — and is the goal itself reachable | `skills/reckon` |
 | answer | skill *(side door — entered from the boundary drain)* | answer a human's question from the project's own record → the conversation thread | `skills/answer` |
 | status | skill *(side door — a pure read; advances no node)* | "where is this project" — done · how it connects · what's left · what's blocked on you, synthesized fresh from spec + code map + backlog + items + git, never stored (D175) | `skills/status` |
 

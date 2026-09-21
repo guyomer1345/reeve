@@ -19,7 +19,7 @@ detail lives in **`loop-detail.md`**, pointed to from each section below — rea
 | `create-demo` | approved, or the gate never triggered | `planner:decompose` |
 | `planner:decompose` | roadmap → backlog + goal (receipt staged) | `commit` |
 | `prioritize` | plan batch emitted | `planner:plan-one` (per item in the batch) |
-| `prioritize` | maintenance due (retention, drift, or doc-size threshold) | `document:audit` / `align` / `doc-budget` |
+| `prioritize` | maintenance due (retention · drift · doc-size · the reckon clock) | `document:audit` / `align` / `doc-budget` / `reckon` |
 | `prioritize` | backlog empty | `idle` (await steering) |
 | `idle` | steering arrives / new backlog item (a `create-issue` side-door) | `prioritize` (re-pick) |
 | `planner:plan-one` | open decisions | `decision-engineer` → back to `planner:plan-one` |
@@ -54,8 +54,9 @@ detail lives in **`loop-detail.md`**, pointed to from each section below — rea
 | `close-issue` | issue closed (or no linked issue → skip) | `converge?` (if a goal) → `prioritize` |
 | `converge` | `met`, or `STALLED` (see `converge.py`) | `idle` (await steering) — **never** retry the item |
 | `document:audit` | retention pass done (changes + receipt staged) | `commit` |
-| `align` | scan done (tickets filed via `create-issue`, fixes + receipt staged, anchor written) | `commit` |
-| `doc-budget` | over-budget doc trimmed or split-and-pointered (changes + receipt staged) | `commit` |
+| `align` | scan done (tickets filed, fixes + receipt staged, anchor written) | `commit` |
+| `doc-budget` | over-budget doc trimmed or split-and-pointered (receipt staged) | `commit` |
+| `reckon` | the window judged (receipt staged) | `commit` — re-prioritize or `debug` first; the GOAL unreachable ⇒ escalate → `checkpoint` (steer) |
 
 <!-- Every side door must be named ON the "Side doors" line: the linter reads only that line, so a
      door introduced on a continuation line is silently unrouted. -->
@@ -116,18 +117,17 @@ skipping one is not silent — but they fire mid-turn, where a boundary is cheap
 starting work — boundary only, never mid-item: `loop-detail.md § forecast divergence check`.**
 
 ## Stack-wiring at tech_stack lock
-A greenfield project starts with no stack, so `/start` writes a coverage-only `checks.env`. The **one-time**
-transition when `decision-engineer` flips `tech_stack` to `locked` — fill the gate commands, specialize the
-`rules/` tags, wire the enforcers — is the orchestrator's, before the next `execute`.
+Greenfield starts with no stack (`/start` writes a coverage-only `checks.env`). When `decision-engineer` flips
+`tech_stack` to `locked` the orchestrator runs the **one-time** transition — gate commands, `rules/` tags,
+enforcers — before the next `execute`.
 
-→ **The steps, why skipping cannot silently disarm the gate, and the `STACK_GATE_NONE` exemption:
+→ **Steps, why skipping cannot silently disarm the gate, and `STACK_GATE_NONE`:
 `loop-detail.md § stack-wiring at tech_stack lock`.**
 
 ## Non-item commits — the receipt
-A maintenance item (injected by `prioritize`) runs no `planner`/`execute`/`verify`, so it has no verdict; nor
-has `planner:decompose`. **Every commit with no item behind it stages a receipt**
-(`.workflow/maintenance/<item-id>.json`, `kind` = the motion); without one there is no legal commit. Never
-fake a `pass: true` verdict instead.
+A maintenance item has no `planner`/`execute`/`verify` behind it, so no verdict; nor has `planner:decompose`.
+**Every commit with no item behind it stages a receipt** (`.workflow/maintenance/<item-id>.json`, `kind` = the
+motion) — without one there is no legal commit, and never fake a `pass: true` verdict instead.
 
 → **The contract, who stages inception's, and why the thresholds are decoupled:
 `loop-detail.md § maintenance items`.**

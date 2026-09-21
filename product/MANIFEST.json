@@ -46,6 +46,10 @@
    "dest": ".claude/scripts/monitor.py"
   },
   {
+   "src": "scripts/reckon.py",
+   "dest": ".claude/scripts/reckon.py"
+  },
+  {
    "src": "scripts/drive.py",
    "dest": ".claude/scripts/drive.py"
   },

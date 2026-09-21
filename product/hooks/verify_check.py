@@ -76,7 +76,8 @@ PASS_FALSE_RE = re.compile(r"(?i)^\s*pass:\s*false(\W|$)")
 # `.workflow/goal.json` + the backlog after bootstrap has already ended, so the bootstrap escape does not
 # cover it and there is no item to carry a verdict. Without a kind of its own the drive's stop condition
 # either sits uncommitted or rides an unrelated feature commit -- both observed, across seven runs.
-RECEIPT_KINDS = ("align", "document:audit", "doc-budget", "update", "planner:decompose")
+RECEIPT_KINDS = ("align", "document:audit", "doc-budget", "reckon", "update",
+                 "planner:decompose")
 
 
 def resolve_runtime_root():

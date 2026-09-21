@@ -258,7 +258,7 @@ without this the wrong-but-green change reaches `commit` unread.
   avoidance. The anchor makes the node *visible* to the forecast and divergence machinery; making it
   *compulsory* is a separate decision with its own evidence.
 
-## commit-receipt  · produced by the non-item motion itself (`align` / `document:audit` / `doc-budget` / `update` / `planner:decompose`) · *on disk at `.workflow/maintenance/<item-id>.json`; COMMITTED (it must ride the commit it describes), and self-collecting — each pass deletes any earlier receipt as it writes its own, so the directory holds one file and the history lives in its git log*
+## commit-receipt  · produced by the non-item motion itself (`align` / `document:audit` / `doc-budget` / `reckon` / `update` / `planner:decompose`) · *on disk at `.workflow/maintenance/<item-id>.json`; COMMITTED (it must ride the commit it describes), and self-collecting — each pass deletes any earlier receipt as it writes its own, so the directory holds one file and the history lives in its git log*
 **The verify-free counterpart of `verify-verdict`, and the same kind of load-bearing on-disk contract.** Some
 motions reach `commit` with no `planner`/`execute`/`verify` behind them — the three maintenance nodes, which run
 their own pass and flow straight to `commit` (`loop.md` § Maintenance items), and the `/update` package refresh,
@@ -266,7 +266,7 @@ which is a bounded command motion rather than a loop node, and **greenfield ince
 mints `.workflow/goal.json` and the backlog before any item exists. None of them has a verdict, and the commit gate
 cannot otherwise tell a legitimately verify-free commit from one whose verify was skipped. The receipt is how
 the motion *says which one it is*.
-- `item` — the motion's item id; **must equal the filename stem** · `kind: align|document:audit|doc-budget|update|planner:decompose`
+- `item` — the motion's item id; **must equal the filename stem** · `kind: align|document:audit|doc-budget|reckon|update|planner:decompose`
   — the motion that ran · `summary` — one line, human-readable.
 - **Inception is in the set because it is NOT bootstrap.** `phase: bootstrap` ends when the spec lands; decompose
   runs after it, and may run much later still (a drive that skipped the node and had it demanded back). The
@@ -281,6 +281,10 @@ the motion *says which one it is*.
   `status` to `idle`, committing and flipping back is the gate being OFF for the duration, with a window where a
   crash leaves the file lying about the loop's position, and it misreports the loop to the console while a wave
   is in flight. A motion that needs a commit takes a receipt.
+- **`reckon`'s receipt is also an ANCHOR**, which no other kind is: the next window is measured from the commit
+  that ADDED it (`git log --diff-filter=A`), so the clock needs no counter anybody has to keep. The
+  self-collecting rule is what makes `--diff-filter=A` load-bearing rather than fussy — a later pass deletes the
+  file, and a plain path filter would find that deletion and measure the window from the wrong end.
 - **The directory name is narrower than the set it holds**, and that is deliberate rather than overlooked: this
   is the maintenance receipt generalized, not a second mechanism, and relocating it would put a migration inside
   `/update` — the very motion that joining this set exists to unblock.

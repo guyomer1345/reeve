@@ -83,6 +83,18 @@ anchor, and the parts are one schema.*
   *(It still governs alone in one case: when the harness reports no window size, runway in nodes
   is not computable and the statusline degrades to the fraction rule at 30. A percentage is the
   wrong unit, not a wrong signal.)*
+- `reckon` — `every_n_commits` (default **5**), the periodic anchor's clock: how many commits pass before the
+  loop stops driving and asks whether the window actually moved the goal (`skills/reckon`).
+  **Deliberately independent of every convergence signal, and that independence IS the feature.** The stall
+  streak, the discharge fraction and `prioritize`'s unbound check are all computed from the loop's own
+  bookkeeping *against a goal they assume is sound* — so when the goal itself is the broken thing they measure a
+  fiction faithfully, and anything triggered by them inherits it. A commit counter is crude precisely because
+  nothing it watches can silence it.
+  **The default is measured, not chosen:** two live projects ran at **1.56 and 1.60 commits per closed item**,
+  so five commits ≈ three items; the drift run their owner corrected by hand was five items (~8 commits), and
+  firing at five lands inside that window rather than after it. Raise it on a project whose items are large,
+  lower it on one you do not trust yet. Nonsense or absent ⇒ the default, never off: a mistyped knob must not
+  silently remove the anchor.
 - `retention` — the memory-bound knobs the `audit` pass reads: `sessions_k` (per-node `# Sessions` cap — the
   retention script's only knob) + the scheduling thresholds `prioritize` trips on (`decisions_superseded_n` —
   **superseded** decision bodies awaiting GC, the count retention actually lowers, not the active count;

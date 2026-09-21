@@ -130,6 +130,7 @@ capabilities you can call by name when you want them; the loop also reaches for 
 | **`discuss`** | The requirements conversation. **The first step of any new intake**, whether a new project or a new feature on an existing one, and it produces the spec. This is where you do the design work, and it is the single most valuable place to spend your attention. |
 | **`create-forecast`** | Lays out the chain of events it proposes to walk, before it walks it. Use it on anything big. |
 | **`create-demo`** | Builds the throwaway sandbox of a user-facing change for you to approve before it is really built. |
+| **`reckon`** | Every few commits the loop stops driving and asks whether the last window actually moved the goal — and whether the goal is still reachable at all. Its clock is a plain commit counter *on purpose*: every other progress signal is computed against a goal it assumes is sound, so none of them can tell you the goal is the broken thing. Almost always silent; the one thing it wakes you for is a goal that cannot be met as written. |
 | **`status`** | Where is this project: what is done, how the pieces connect, what is left, what is blocked on you. Synthesized fresh every time, never a stored document. Good for coming back after time away. |
 | **`create-issue`** | File a bug or a "do this later" without addressing it now. Opens a real GitHub issue, which `planner` later picks up and `close-issue` closes. |
 | **`align`** | Run the drift scan on demand, rather than waiting for its commit threshold. Worth doing after a merge or at a phase boundary. |
@@ -139,7 +140,7 @@ capabilities you can call by name when you want them; the loop also reaches for 
 
 ## Skills and agents
 
-The package ships **17 skills** and **7 agents**, and the split between them is deliberate rather than
+The package ships **18 skills** and **7 agents**, and the split between them is deliberate rather than
 cosmetic.
 
 A **skill** runs *inline*, in the session you are already in. It sees your conversation and can talk back to
