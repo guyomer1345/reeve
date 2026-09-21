@@ -113,6 +113,27 @@ GATE="$PROJECT/.claude/scripts/context_band.py"
 
 log() { printf '%s supervise: %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 
+# PUBLISH, BECAUSE THERE IS NO AMBIENT SIGNAL TO READ. The heartbeat that catches a dead loop
+# runs INSIDE this process, so it is hosted by something that can simply not be there — and when
+# it was not (supervisors stopped for a deploy and never restarted, 2026-09-19) NOTHING anywhere
+# said so: not the console, not the status line, not the loop, not the turn gate. Both drives ran
+# until they stopped on their own and then sat idle for eleven hours. The same argument `loop.sh`
+# makes for the orchestrator lock applies here: a live process must say so. `supervisor.py` owns
+# the record and the liveness check; this file only states its own existence.
+SUPERVISOR="$PROJECT/.claude/scripts/supervisor.py"
+publish_self() {
+  [ -f "$SUPERVISOR" ] || return 0
+  python3 "$SUPERVISOR" publish --workflow-dir "$PROJECT/$WORKFLOW" --pid "$$" --pane "$PANE" \
+    >/dev/null 2>&1 || true
+}
+# Retired on EVERY exit, because a record left by a supervisor that stopped cleanly reads as
+# `gone` — an alarm rather than a fact. A kill -9 leaves it behind and the liveness check is what
+# makes that harmless: the pid is not there, so the answer is `gone`, which is true.
+retire_self() {
+  [ -f "$SUPERVISOR" ] || return 0
+  python3 "$SUPERVISOR" retire --workflow-dir "$PROJECT/$WORKFLOW" >/dev/null 2>&1 || true
+}
+
 # THE HEARTBEAT. `context_band.py` answers "may this session be reset"; it says nothing about
 # whether the session is still ALIVE. A session that idles, or sits in a dialog, never ends a
 # turn — so the `Stop` gate that catches every other stop-for-nothing cannot see it, and the
@@ -280,8 +301,13 @@ tick() {
   return 1
 }
 
+# `--once` is a whole process and deliberately publishes nothing: a cron-style driver that
+# announced itself for a second and vanished would leave every reader flapping between `running`
+# and `gone`. The long-running poller below is the thing that can honestly claim to be watching.
 if [ "$ONESHOT" -eq 1 ]; then tick; exit $?; fi
 
+trap retire_self EXIT INT TERM
+publish_self
 log "supervising $PANE every ${INTERVAL}s (project: $PROJECT)"
 while true; do
   tick || true

@@ -19,10 +19,16 @@
 #
 # Pass-through: every argument goes to `claude` unchanged (`loop.sh --resume …`, etc.).
 #
-# `--supervise` (must be the FIRST argument) starts the self-clearing supervisor beside an
-# ordinary interactive session: it polls the context gate and, when a reset is safe, sends
-# `/clear` then `continue` into this pane. Requires already being inside tmux — see below for
-# why that is a refusal rather than a gap.
+# `--supervise` (must be the FIRST argument) is THE ONE COMMAND: it preflights the project,
+# puts itself inside tmux if it is not already, starts the self-clearing supervisor beside the
+# session, and prints what it armed. From there the operator types `continue` once and the run
+# is supervised. It used to be three commands plus four things you had to know to check by hand
+# (`pgrep` for duplicate supervisors, `parked/` for a stale ticket, `config.json` for a ceiling,
+# the log to confirm any of it took) — and every failure of the week that produced this came
+# from that list rather than from the loop: three supervisors on one pane and none on the other,
+# supervisors stopped for a deploy and never restarted, a false park nobody could see without
+# reading JSON. It REFUSES rather than hand back a half-armed state, and it reports everything
+# it cannot refuse over.
 #
 # `--drive` (must be the FIRST argument) turns this launcher into a session DRIVER: hold the
 # lock, run a session, and when it exits start the next one against the same goal until the
@@ -34,6 +40,47 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WF="${WORKFLOW_DIR:-.workflow}"
+
+# THE tmux BOOTSTRAP, AND IT RUNS BEFORE THE LOCK IS TAKEN — which is the whole reason it can
+# exist at all. The refusal it replaces was right about the hazard: if THIS process took the
+# orchestrator lock and then started tmux, the lock would belong to the tmux CLIENT, and
+# detaching (the normal thing to do with tmux) would release it while the orchestrator ran on.
+# So this branch re-enters the same script INSIDE the pane, before touching the lock: the inner
+# instance is the one that takes it and execs `claude`, exactly as a hand-started session does.
+# Nothing is held across the exec below, so there is no window in which the lock is dropped.
+if [ "${1:-}" = "--supervise" ] && [ -z "${TMUX:-}" ]; then
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo "loop.sh --supervise: tmux is not installed. It is the transport — a supervisor" >&2
+    echo "         cannot put keystrokes into a running session's stdin without one." >&2
+    exit 69
+  fi
+  SESSION="${REEVE_TMUX_SESSION:-reeve}"
+  if tmux has-session -t "$SESSION" 2>/dev/null; then
+    echo "loop.sh --supervise: a tmux session named '$SESSION' already exists. Attach to it" >&2
+    echo "         (tmux attach -t $SESSION) — or pick another name:" >&2
+    echo "             REEVE_TMUX_SESSION=other .claude/scripts/loop.sh --supervise" >&2
+    echo "         Refusing to guess: starting a second orchestrator against one .workflow/" >&2
+    echo "         is the hazard this launcher exists to prevent." >&2
+    exit 1
+  fi
+  # The preflight runs HERE, where its output is on a terminal the operator is still looking at.
+  # Inside the pane the TUI paints over everything within a second of starting.
+  if [ -f "$HERE/supervisor.py" ]; then
+    python3 "$HERE/supervisor.py" preflight --project . || exit 1
+  fi
+  shift
+  # Re-entered under a DIFFERENT flag, so the inner instance cannot bootstrap a second time if
+  # `$TMUX` is somehow still unset inside the pane — a launcher that can recurse into tmux is a
+  # fork bomb with a friendly name.
+  inner="$(printf '%q' "$HERE/loop.sh") --supervise-inner"
+  for arg in "$@"; do inner="$inner $(printf '%q' "$arg")"; done
+  # The pane dies with its command, so a launch that fails inside it would close the window
+  # before anyone read why. Hold it open on failure only; a successful launch execs `claude`
+  # and never reaches this.
+  exec tmux new-session -s "$SESSION" \
+    "$inner || { printf '\n[loop.sh: the supervised launch failed — press Enter to close] '; read x; }"
+fi
+if [ "${1:-}" = "--supervise-inner" ]; then set -- "--supervise" "${@:2}"; fi
 
 # Resolve the lock path through bus.py's Paths — the single owner of runtime-path
 # resolution — so a relocated runtime tree (runtime.json) is honoured automatically.
@@ -73,22 +120,32 @@ echo "$$" >&9
 # launch normally. The supervisor polls `context_band.py --gate` and, when a reset is safe,
 # sends `/clear` then `continue` into THIS pane.
 #
-# IT REQUIRES ALREADY BEING INSIDE tmux, and that is a deliberate refusal rather than a missing
-# feature. The lock above is held on fd 9 by the process that becomes `claude`, for claude's
-# whole lifetime — that is what the relaunch-runner probes. If this script instead launched tmux
-# and let the server fork claude as its child, the lock would belong to the tmux CLIENT, and
-# detaching (which is the normal thing to do with tmux) would release it while the orchestrator
-# was still running. Two orchestrators against one `.workflow/` is the exact hazard this file
-# exists to prevent, so tmux is the terminal claude is started IN, never something started for it.
+# IT RUNS INSIDE tmux, and the bootstrap at the top of this file is what puts it there — before
+# the lock is taken, and by re-entering this same script in the new pane. That ordering is the
+# whole design, and it is why this used to be a flat refusal. The lock above is held on fd 9 by
+# the process that becomes `claude`, for claude's whole lifetime — that is what the relaunch-
+# runner probes. If the OUTER process took the lock and then started tmux, the lock would belong
+# to the tmux CLIENT, and detaching (the normal thing to do with tmux) would release it while
+# the orchestrator was still running. Two orchestrators against one `.workflow/` is the exact
+# hazard this file exists to prevent. So tmux is still the terminal claude is started IN and
+# never something started for it — the launcher simply walks into that terminal first.
 if [ "${1:-}" = "--supervise" ]; then
   shift
+  # Unreachable by the ordinary path — the bootstrap at the top of this file puts a supervised
+  # launch inside tmux itself. It stays as the floor: `$TMUX` set without `$TMUX_PANE` is a
+  # shell that inherited the environment without being in a pane, and typing into a pane that
+  # does not exist is how a supervisor clears the wrong window.
   if [ -z "${TMUX:-}" ] || [ -z "${TMUX_PANE:-}" ]; then
-    echo "loop.sh --supervise: not inside tmux, and the supervisor drives this session through" >&2
-    echo "         tmux send-keys — there is no other way to put keystrokes into a running" >&2
-    echo "         session's stdin. Start tmux first, then run this inside it:" >&2
-    echo "             tmux new-session -s reeve" >&2
-    echo "             .claude/scripts/loop.sh --supervise" >&2
+    echo "loop.sh --supervise: \$TMUX is set but \$TMUX_PANE is not, so there is no pane to" >&2
+    echo "         supervise. Run this from a real tmux pane." >&2
     exit 78
+  fi
+  # Already inside tmux (either the bootstrap above put us here, or the operator was). The
+  # preflight is re-run rather than trusted from the outer process: between the two there is an
+  # exec and a new pane, and the one fatal it can catch — a supervisor already running — is
+  # exactly the race that produced three supervisors on one pane.
+  if [ -f "$HERE/supervisor.py" ]; then
+    python3 "$HERE/supervisor.py" preflight --project . --pane "$TMUX_PANE" >&2 || exit 1
   fi
   if [ -x "$HERE/supervise.sh" ]; then
     # Detached and best-effort: a supervisor that fails to start must never stop the session

@@ -1052,7 +1052,7 @@ def steer_floor(workflow_dir, rec):
         # floor that reads "cannot tell" as "you are wrong" refuses the ask at exactly the
         # moment the project is least able to answer it itself.
         return None
-    if monitor_saw_a_stall(workflow_dir):
+    if monitor_saw_a_stall(workflow_dir) or supervisor_is_gone(workflow_dir):
         return None
     return ("a `steer` park says the drive needs direction, and the goal disagrees: %s, %d "
             "promotion(s) with no new acceptance out of %s before it counts as stalled. Resolve "
@@ -1086,6 +1086,29 @@ def monitor_saw_a_stall(workflow_dir):
     except Exception:                              # noqa: BLE001
         return False
     return bool(now) and rec.get("fingerprint") == now
+
+
+def supervisor_is_gone(workflow_dir):
+    """The THIRD evidence a steer is allowed on, and the narrowest of them.
+
+    A session can be launched supervised and have its supervisor stop underneath it — measured
+    on 2026-09-19, when both drives ran on with theirs stopped for a deploy, hit their own stops
+    and sat idle for ELEVEN HOURS with nothing anywhere saying why. *"The process that resets my
+    context window is not running"* is a claim `converge.py` cannot make and the drive monitor
+    cannot make either (it runs INSIDE that same process), so the floor accepts the supervisor's
+    own record instead.
+
+    ONLY `gone`, never `none`, and the difference is the whole guard. `gone` means a record
+    exists and the pid behind it does not — a supervisor that WAS armed and is not there. `none`
+    means no record at all, which is every unsupervised project in the world; accepting it would
+    make this floor permissive by default, which is precisely what it exists not to be.
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import supervisor
+        return supervisor.alive(workflow_dir).get("state") == "gone"
+    except Exception:                              # noqa: BLE001 — never block the ask on this
+        return False
 
 
 def write_park(paths, rec, summary=None, deadline=None):

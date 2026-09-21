@@ -1,19 +1,18 @@
 # Loop — the routing graph
 <!-- doc-budget: detail split -> loop-detail.md -->
 
-The orchestrator reads this to route. **Topology is fixed** (it changes only with the package);
-the live position lives in `state.json`. Nodes are skills/agents; edges are followed on a node's output.
-
-This file is read **before every turn**, so it is budgeted as an always-loaded doc and carries only what
-routing needs. The long-form detail — per-kind drain semantics, the forecast divergence check, the
-stack-wiring transition, the maintenance-item contract — lives in **`loop-detail.md`**, pointed to
-from each section below — read it when that situation arises.
+The orchestrator reads this to route. **Topology is fixed** (it changes only with the package); the live
+position lives in `state.json`. Nodes are skills/agents; edges are followed on a node's output.
+Read **before every turn**, so it is budgeted always-loaded and carries only what routing needs: the long-form
+detail lives in **`loop-detail.md`**, pointed to from each section below — read it when that situation arises.
 
 ## Routing table
 | node | on output | next |
 |---|---|---|
+| `charter` *(greenfield entry, ahead of `discuss`)* | founding conversation settled → falsifiable `locked` constraints | `discuss` |
+| `charter` | no human present — nothing may be `locked` | escalate → `checkpoint` (steer) |
 | `ingest` *(brownfield entry — `/start` routes here)* | knowledge graph + reconstructed spec built | `checkpoint:reconcile` |
-| `checkpoint:reconcile` | reconstructed spec confirmed | `prioritize` |
+| `checkpoint:reconcile` | reconstructed spec confirmed | `charter` → `prioritize` |
 | `checkpoint:reconcile` | corrections needed | `ingest` (re-run) / `discuss` |
 | `discuss` | spec drafted | `create-forecast?` (forecast gate) |
 | `create-forecast` | forecast approved (checkpoint pass) | `create-demo?` (sandbox gate) |
@@ -63,20 +62,19 @@ from each section below — read it when that situation arises.
 <!-- Every side door must be named ON the line below: the contract linter reads only the line that
      starts with "Side doors", so a door introduced on a continuation line is silently unrouted. -->
 Side doors (callable from anywhere): `create-issue` → backlog · `research` (service) · `answer` · `status`.
-`answer` and `status` enter from the boundary drain, never from a node: neither advances anything, so neither
-has an edge.
+The last two enter from the boundary drain, never from a node: neither advances anything, so neither has an edge.
 
 ## The autonomy boundary — who owns the decision
-Take every decision that does not change the goal; **route anything that may**. Before acting on a decision that
-could change what the project is committed to, run
-`python3 .claude/scripts/check_autonomy_floor.py --project-root .` — **exit 1 ⇒ `checkpoint` (human), regardless
-of your own read.** Judgment may escalate **above** that floor, never below it; it is a minimum, not a cap.
+Take every decision that does not change the goal; **route anything that may**. Before acting on one that could
+change what the project is committed to, run
+`python3 .claude/scripts/check_autonomy_floor.py --project-root .` — **exit 1 ⇒ `checkpoint` (human), whatever
+your own read.** Judgment may escalate **above** that floor, never below it; it is a minimum, not a cap.
 → **Why, and what the floor cannot see: `shared/schemas.md § the autonomy floor`** (the standing directive lives
 in `.workflow/directives.md`).
 
 **The gated rows (`create-demo?` · `review?`) are the router's call, before any dispatch** — default **no
-demo**, decided per work-item; **`review?` runs whenever the item's diff changed code**. Each gate's conditions
-live once in its own capability; read them there.
+demo**, per work-item; **`review?` runs whenever the item's diff changed code**. Each gate's conditions live
+once in its own capability; read them there.
 
 ## Dispatch boundary — form the batch, and never wait alone
 Concurrency exists only for work dispatched **together**, so the batch is the speed lever. Before any
@@ -96,23 +94,23 @@ verdict at this commit covers — including one sent alone while the gate said N
 
 ## Scheduler boundary — the inbox drain
 Between items (and before any pick) the orchestrator **drains `.workflow/inbox/`** — the console's typed
-messages to the loop. This is **plain control-flow, not a node**: no skill runs and no edge is followed, so it
-appears nowhere in the table above. Order within one boundary:
+messages to the loop. **Plain control-flow, not a node**: no skill runs and no edge is followed, so it appears
+nowhere in the table above. Order within one boundary:
 
 `drain (skip already-consumed ids) → apply control → resume a ready-parked ticket (oldest verdict first, +aging)
 → promote intake → start-new → fire release → answer questions → sleep`
 
-A parked ticket resumes **only** via this drain. The consumer **never deletes** an inbox file (the bus owns
-that directory and collects consumed messages itself).
+A parked ticket resumes **only** via this drain. The consumer **never deletes** an inbox file — the bus owns
+that directory and collects consumed messages itself.
 
 → **What each kind does and its idempotence anchor, and why the drain is split between `drain.py` and
 judgment: `loop-detail.md § the boundary drain, by kind`.**
 
 **Read the context gate here too** — `python3 .claude/scripts/context_band.py --gate --json`.
 `handoff-at-boundary` ⇒ finish the drain, write `handoff.md`, then stop picking. `handoff-now` ⇒ write it
-**now**, before anything else, and say a `/clear` is safe. **Ending a turn is an EVENT, not a default:** unattended,
-it needs a reason (parked · met · stalled · paused · `idle`) and leaves the report, `status_report.py` pasted
-whole; anything else is resolved here. `Stop` hooks enforce all three, so
+**now**, before anything else, and say a `/clear` is safe. **Ending a turn is an EVENT, not a default:**
+unattended it needs a reason (parked AND nothing else eligible · met · stalled · paused · `idle`) and leaves
+the report, `status_report.py` pasted whole; anything else is resolved here. `Stop` hooks enforce all three, so
 skipping one is not silent — but they fire mid-turn, where a boundary is cheaper and truer.
 → **`loop-detail.md § the context gate` · `§ the turn gate`.**
 
@@ -122,15 +120,14 @@ starting work — boundary only, never mid-item: `loop-detail.md § forecast div
 ## Stack-wiring at tech_stack lock
 A greenfield project starts with no stack, so `/start` writes a coverage-only `checks.env`. The **one-time**
 transition when `decision-engineer` flips `tech_stack` to `locked` — fill the gate commands, specialize the
-`rules/` tags, wire the enforcers — is the orchestrator's to run, before the next `execute`.
+`rules/` tags, wire the enforcers — is the orchestrator's, before the next `execute`.
 
 → **The steps, why skipping cannot silently disarm the gate, and the `STACK_GATE_NONE` exemption:
 `loop-detail.md § stack-wiring at tech_stack lock`.**
 
 ## Non-item commits — the receipt
-A maintenance item (injected by `prioritize`, per the table) is **self-contained** — no
-`planner`/`execute`/`verify`, so no verdict; nor has `planner:decompose`.
-**Every commit with no item behind it stages a receipt**
+A maintenance item (injected by `prioritize`) runs no `planner`/`execute`/`verify`, so it has no verdict; nor
+has `planner:decompose`. **Every commit with no item behind it stages a receipt**
 (`.workflow/maintenance/<item-id>.json`, `kind` = the motion); without one there is no legal commit. Never
 fake a `pass: true` verdict instead.
 
@@ -138,5 +135,5 @@ fake a `pass: true` verdict instead.
 `loop-detail.md § maintenance items`.**
 
 ## Item-complete tail
-The tail is the table's and is not restated. Not in it: the backlog done-flip and the `handoff.md` rewrite
-happen **before** `commit` (it captures them); `close-issue` is the only post-commit step.
+The tail is the table's. Not in it: the backlog done-flip and the `handoff.md` rewrite happen **before**
+`commit` (it captures them); `close-issue` is the only post-commit step.

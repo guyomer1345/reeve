@@ -3766,6 +3766,20 @@ class SteerFloor(Tmp):
             json.dump({"state": "stalled", "fingerprint": "something-else-entirely"}, fh)
         self.assertIsNotNone(bus.steer_floor(wf, self._rec()))
 
+    def test_a_GONE_supervisor_allows_it(self):
+        """The third evidence. *"The process that resets my context window is not running"* is a
+        claim `converge.py` cannot make and the drive monitor cannot make either — it runs INSIDE
+        that same process. Measured: two drives sat idle for eleven hours with nothing saying so."""
+        wf = self._wf()
+        with open(os.path.join(wf, "supervisor.json"), "w") as fh:
+            json.dump({"pid": 4_000_000, "pane": "reeve:0.0", "since": 0}, fh)
+        self.assertIsNone(bus.steer_floor(wf, self._rec()))
+
+    def test_NO_supervisor_record_does_NOT_allow_it(self):
+        """`none` is every unsupervised project on earth; accepting it would make this floor
+        permissive by default, which is exactly what it exists not to be."""
+        self.assertIsNotNone(bus.steer_floor(self._wf(), self._rec()))
+
     def test_write_park_REFUSES_and_writes_nothing(self):
         wf = self._wf()
         paths = bus.Paths(wf)

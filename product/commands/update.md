@@ -34,8 +34,8 @@ follows from that one question.
 
 ## 0. Refuse the wrong situations
 - **No `.workflow/`** → this project was never started. Say so and stop: the command is `/start`.
-- **Bootstrap still in flight** (`.workflow/handoff.md`'s `bootstrap:` is `installed` / `ingesting` /
-  `discussing` / `reconcile-parked`) → do **not** update mid-bootstrap. Report the state and stop;
+- **Bootstrap still in flight** (`.workflow/handoff.md`'s `bootstrap:` is `installed` / `chartering` /
+  `ingesting` / `discussing` / `reconcile-parked`) → do **not** update mid-bootstrap. Report the state and stop;
   finish the bootstrap (or resolve the parked reconcile) first, then update.
 - **An item is mid-build** (`state.json` `status: building` with a `current_item`) → say so and ask
   before proceeding. Refreshing the package under a half-built item is safe for the *files*, but the

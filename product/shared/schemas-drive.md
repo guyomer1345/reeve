@@ -177,6 +177,28 @@ mid-dispatch is cleared wholesale at `SessionStart`. What remains is a worker va
 keeps running. One hour ≈ 4× the longest dispatch observed on a real drive (16m02s), so it cannot fire on a
 working worker.
 
+## supervisor.json  · written by `scripts/supervise.sh` through `scripts/supervisor.py` (publish at start, retire on every exit), read by `statusline.py`, `hooks/turn_gate.py`, `bus.py`'s steer floor and `loop.sh --supervise`'s preflight · *`.workflow/supervisor.json`; RUNTIME, gitignored, atomic write; repo mount*
+- `{ pid, pane, since }` — and **presence is NOT the fact here**, unlike every other record in this file. The
+  answer is `alive()`'s: `running` | `gone` | `none` | `unknown`, and it is a LIVENESS CHECK, not a read. The pid
+  must still exist *and* (where `/proc` is available) still be a `supervise.sh`, because pid reuse means the
+  shell that died at 02:00 can be a compiler at 02:05.
+**`gone` and `none` are different answers and the difference is the whole record.** Nothing was ever armed here,
+versus something was armed and is not there any more. The second is the eleven-hour failure: on 2026-09-19 two
+drives ran on with their supervisors stopped for a deploy, hit their own stops, and sat idle overnight with
+**nothing anywhere** saying so — not the console, not the status line, not the loop, not the turn gate. The
+heartbeat that exists to catch a dead loop (`monitor.py`) runs INSIDE `supervise.sh`, so it dies with the thing
+it would have reported.
+**Why a record with a liveness check where the orchestrator uses an flock.** The orchestrator lock is held by
+the process that becomes `claude`, so the kernel releases it on death and a stale lock is impossible. A
+supervisor is a bash poller: it cannot exec into what it supervises, and an flock held by a shell loop says
+nothing about WHICH pane it drives.
+**Three consumers, one answer.** The status line shows `⛨ supervised` or the alarm (and only when
+`REEVE_SUPERVISE` is in the environment, which is proof the session was *launched* supervised). `turn_gate.py`
+parks `steer-supervisor-gone` — once, guarded by the ticket's existence, because `write_park` restamps the
+alert-dedup key. `loop.sh --supervise`'s preflight REFUSES to arm a second supervisor over a live one.
+**`--once` publishes nothing**, deliberately: a cron-style driver that announced itself for a second and
+vanished would leave every reader flapping between `running` and `gone`.
+
 ## supervise-latch.json  · written by `scripts/supervise.sh`, `gave_up` also read by `scripts/monitor.py` · *`.workflow/supervise-latch.json`; RUNTIME, gitignored, atomic write*
 - `{ attempts, used, gave_up }` — consecutive resets sent, the context reading at the first of them, and
   whether the cap has been hit. **`gave_up` is a FACT about that process, not a judgement**: what to do about

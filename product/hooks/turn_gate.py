@@ -162,6 +162,61 @@ def workers_this_session(transcript):
         return None
 
 
+# The ticket id is FIXED rather than goal-scoped, unlike the monitor's two. This ask is not
+# about the goal or even about the loop — it is about the machine the session is running on, and
+# a project that re-mints its goal mid-drive must not acquire a second copy of the same ticket.
+GONE_TICKET = "steer-supervisor-gone"
+
+
+def missing_supervisor(workflow):
+    """A session LAUNCHED supervised has lost its supervisor -> park a `steer`, once. -> id|None.
+
+    WHY THE `Stop` HOOK IS THE RIGHT PLACE, when nothing else could be. The process whose job is
+    to notice a dead loop (`monitor.py`) runs INSIDE `supervise.sh`, so it dies with the thing it
+    would have reported. The console daemon may not be running. What IS running is the session
+    itself, and the instant it is about to hand the machine back to nobody is exactly when the
+    absence matters. MEASURED 2026-09-19: two drives whose supervisors were stopped for a deploy
+    ran until they stopped on their own at ~00:59 and then sat idle for ELEVEN HOURS. A park at
+    that stop would have alerted a phone.
+
+    `REEVE_SUPERVISE` IS THE PROOF, not an inference. `loop.sh --supervise` exports it into the
+    session it starts, so its presence says *this session was armed*; without it there is nothing
+    to be missing. And only `gone` parks — a record whose pid is dead. `none` cannot be told
+    apart from "supervise.sh was never installed here", and `supervisor.py preflight` already
+    refuses that at launch.
+
+    IDEMPOTENT BY EXISTENCE CHECK, not by rewrite: `write_park` restamps `deadline`, which is
+    the daemon's alert-dedup key, so re-parking every turn would alert a phone every turn — the
+    fastest way to teach someone to ignore the channel that matters.
+    """
+    if not os.environ.get("REEVE_SUPERVISE"):
+        return None
+    try:
+        import bus
+        import supervisor
+        if supervisor.alive(workflow).get("state") != "gone":
+            return None
+        paths = bus.Paths(workflow)
+        if os.path.exists(os.path.join(paths.parked, GONE_TICKET + ".json")):
+            return None
+        bus.write_park(paths, {
+            "ticket_id": GONE_TICKET,
+            "token": "%s:turn-gate" % GONE_TICKET,
+            "checkpoint": {"kind": "steer", "request": {
+                "kind": "steer",
+                "what": ("this session was launched supervised and its supervisor has stopped — "
+                         "nothing will reset its context window, so it will run until the window "
+                         "fills and then stay stopped. Restart it: "
+                         "`.claude/scripts/loop.sh --supervise`"),
+                "expected": "a supervisor running again, or a decision to finish here",
+                "blocking": True}},
+            "loop_position": "turn-gate",
+        }, summary="the supervisor stopped and nothing restarted it")
+        return GONE_TICKET
+    except Exception:                     # noqa: BLE001 — a hook never wedges a session
+        return None
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -191,6 +246,10 @@ def main():
             return 0      # the anchor outranks everything here; that gate is already blocking
     except Exception:
         pass
+
+    # Before the ladder, and independent of it: this is not something the TURN owes, it is
+    # something the machine is missing, and it must be raised whether or not the turn may end.
+    missing_supervisor(workflow)
 
     latch = _latch(workflow)
     transcript = payload.get("transcript_path")

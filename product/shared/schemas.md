@@ -47,7 +47,16 @@ read law) live in `shared/memory-model.md`.*
 > a split can't ship past the gate unnoticed; it is not a reason any reader may parse one part and stop.
 
 ## spec  · *rewrite-in-place · STABLE (changes only with the code it specifies) · on disk at `<project_root>/docs/spec.md`*
-The product definition `discuss` produces and the whole build runs against.
+The product definition `discuss` produces and the whole build runs against, over a `## Charter` section only
+`charter` may write.
+- **`## Charter`** — `purpose` · `users` · `use_cases[]` · `comparables[]` `{ product, what_it_gets_right,
+  what_it_gets_wrong }` · `constraints[]` and `exclusions[]`, each `{ text, falsifier }` and each **`locked`**.
+  **The `falsifier` is what makes the element worth writing**: the observation that would prove the constraint
+  broken. *"local-first"* is a slogan and buys nothing; *"no runtime dependency on a network service for core
+  reading and writing"* is a constraint `align` or a reviewer can demonstrate a violation of. One with no
+  falsifier is not written. Written ONCE per project by the founding conversation — greenfield before
+  `discuss`, brownfield after `reconcile`, because reconstruction cannot see what is not there and every
+  exclusion is unreachable from artifacts.
 - `audience` — who it's for
 - `runtime` — where it runs
 - `purpose`
@@ -314,8 +323,8 @@ above it and never below it. The floor is computed from the **spec diff**:
 Either condition ⇒ **auto-route to the human, regardless of the model's read.**
 **A spec the change CREATES is clear, and says so** (`created: true`): every rule asks what the change does to
 an *existing* demand, and a criterion that did not exist has none. The first spec always arrives through a
-capability that already gates on a human — `discuss`'s requirements conversation, `ingest`'s `reconcile`
-checkpoint — so routing it stops the human for a decision they just made. Failures to *compute* are untouched
+capability that already gates on a human — `charter`'s founding conversation, `discuss`'s requirements
+conversation, `ingest`'s `reconcile` checkpoint — so routing it stops the human for a decision they just made. Failures to *compute* are untouched
 by this: a created spec that also trips path drift still routes.
 
 **Its limit is stated rather than implied, because a floor that is really a judgment in a gate's clothes is worse

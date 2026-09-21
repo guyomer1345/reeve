@@ -15,10 +15,17 @@ HERE = Path(__file__).resolve().parent            # product/scripts
 SCRIPT = HERE / "statusline.py"
 
 
-def _run(status, cwd):
+def _run(status, cwd, supervised=False):
+    import os
+    env = dict(os.environ)
+    env.pop("REEVE_SUPERVISE", None)
+    if supervised:
+        # What `loop.sh --supervise` exports into the session it starts. The status line runs as
+        # a child of that session, so the environment IS the proof — no file, no guess.
+        env["REEVE_SUPERVISE"] = "1"
     return subprocess.run(
         ["python3", str(SCRIPT)],
-        input=json.dumps(status), cwd=cwd, capture_output=True, text=True,
+        input=json.dumps(status), cwd=cwd, capture_output=True, text=True, env=env,
     )
 
 
@@ -176,3 +183,48 @@ def test_a_hold_prints_no_banner_at_all(tmp_path):
     r = _run(_status(tokens=100_000, size=1_000_000, project_dir=str(root)), root)
     assert "hand off" not in r.stdout
     assert "nodes left" in r.stdout          # the figure is on the base line instead
+
+
+# --- the supervision segment --------------------------------------------------
+
+def _supervisor_record(tmp_path, pid):
+    wf = tmp_path / ".workflow"
+    wf.mkdir(parents=True, exist_ok=True)
+    (wf / "supervisor.json").write_text(json.dumps({"pid": pid, "pane": "reeve:0.0",
+                                                    "since": 0}))
+
+
+def test_an_UNSUPERVISED_session_says_nothing_about_supervision(tmp_path):
+    """The band's own rule: a persistent "you are fine" is how a status line teaches someone to
+    ignore it, and most sessions are not supervised at all."""
+    _supervisor_record(tmp_path, 4_000_000)
+    out = _run(_status(pct=10), cwd=str(tmp_path)).stdout
+    assert "supervis" not in out.lower()
+
+
+def test_a_session_whose_SUPERVISOR_IS_GONE_is_told_so_loudly(tmp_path):
+    """The eleven-hour failure had no surface anywhere. This is the cheapest one that is always
+    in front of the operator."""
+    _supervisor_record(tmp_path, 4_000_000)
+    out = _run(_status(pct=10), cwd=str(tmp_path), supervised=True).stdout
+    assert "SUPERVISOR GONE" in out and "loop.sh --supervise" in out
+
+
+def test_a_supervised_session_with_NO_RECORD_AT_ALL_is_told_too(tmp_path):
+    """Launched supervised and the supervisor never came up — the other half-armed state."""
+    (tmp_path / ".workflow").mkdir(parents=True, exist_ok=True)
+    out = _run(_status(pct=10), cwd=str(tmp_path), supervised=True).stdout
+    assert "NO SUPERVISOR" in out
+
+
+def test_a_LIVE_supervisor_is_a_quiet_mark_on_the_base_line(tmp_path):
+    import subprocess as sp
+    script = tmp_path / "supervise.sh"
+    script.write_text("#!/usr/bin/env bash\nsleep 60\n")
+    proc = sp.Popen(["bash", str(script)])
+    try:
+        _supervisor_record(tmp_path, proc.pid)
+        out = _run(_status(pct=10), cwd=str(tmp_path), supervised=True).stdout
+        assert "⛨ supervised" in out.splitlines()[0]
+    finally:
+        proc.kill(), proc.wait()

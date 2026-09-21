@@ -86,6 +86,7 @@ overlap into one adjudicator.
 | rebind | command | bind the machine-local runtime half to THIS machine after a move (D141/D142) | `commands/rebind` |
 | dispatch | command | write a complete `handoff.md` on demand so a `/clear` is safe (D136) | `commands/dispatch` |
 | adjudicate | skill (base) | gather views → judge → confidence-gate | `skills/adjudicate` |
+| charter | skill *(D248)* | the founding conversation → falsifiable `locked` constraints in the spec; once per project (greenfield before `discuss`, brownfield after `reconcile`) | `skills/charter` |
 | discuss | skill | intake conversation → `spec` | `skills/discuss` |
 | create-demo | agent *(D178)* | throwaway sandbox for product approval (the gate is the router's — `loop.md`) | `agents/create-demo` |
 | create-forecast | skill | the chain of events the loop proposes, before it walks it | `skills/create-forecast` |
@@ -114,8 +115,8 @@ overlap into one adjudicator.
 resolve phase — brownfield entry, per-item demo, fail-**by-kind**, `debug`/`verify` **escalate→checkpoint**,
 `idle`→`prioritize` wake, `execute` structural→re-plan — live there, not duplicated here.
 ```
-brownfield: /start → ingest → checkpoint(reconcile) → prioritize    ┐ intake (09)
-greenfield: /start → discuss → create-demo (if the gate fires)      ┘
+brownfield: /start → ingest → checkpoint(reconcile) → charter → prioritize   ┐ intake (09)
+greenfield: /start → charter → discuss → create-demo (if the gate fires)     ┘
   → prioritize (pick next)
   → planner (blocker ──► decision-engineer ──► research, then re-dispatch)  [demo gate → create-demo → execute]
   → execute (→ changelog; structural divergence → re-plan)

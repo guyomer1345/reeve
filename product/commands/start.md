@@ -19,7 +19,7 @@ built-in Claude Code command.
   - **Install incomplete** (a hollow scaffold from an earlier non-interactive run) → do **not** re-scaffold and do
     **not** report "already initialised"; **resume the install** — re-run steps 4–7 (idempotent copies + the
     verification gate). Say plainly you are completing a previous half-init, not starting over.
-  - **Install complete, bootstrap incomplete** (`handoff.md`'s `bootstrap:` is `installed`/`ingesting`/
+  - **Install complete, bootstrap incomplete** (`handoff.md`'s `bootstrap:` is `installed`/`chartering`/`ingesting`/
     `discussing` — or absent, the signature of an older install) → do **not** report "already initialised" and do
     **not** stop: **resume the motion** — run `ingest` (§3) / `discuss` (§2) now, in this session. If the phase is
     `reconcile-parked`, report the open reconcile checkpoint (console + `parked/`) and stop — the motion is
@@ -120,7 +120,7 @@ loop's normal `state.json` takes over when the motion ends.
    Add the **runtime** paths to the target's `.gitignore` — `state.json`, `runtime.json`, `bus.json`, `bus.lock`,
    `bundles/` (org mode's review bundles — regenerable from git at any time, so they are a hand-off artifact
    rather than a record; the history they summarise is already committed), 
-   `orchestrator.lock`, `control.json`, `context.json`, `handoff-gate.json`, `turn-gate.json`, `monitor.json`, `wave-decision.json`, `.claude/scripts/**/__pycache__/` (created by Python the first time a hook imports an installed script — never copied, never a leak, and it comes back if you delete it), `awaiting-input.json`, `session-idle.json`, `supervise-latch.json`, `in-flight/`, `supervise.log`, `alerts.json`, `worker-budget/` (the worker-budget hook's per-exit breadcrumbs — rewritten on EVERY tool call of every worker, so committing them would churn the very diffs `verify` reads), `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
+   `orchestrator.lock`, `control.json`, `context.json`, `handoff-gate.json`, `turn-gate.json`, `monitor.json`, `wave-decision.json`, `.claude/scripts/**/__pycache__/` (created by Python the first time a hook imports an installed script — never copied, never a leak, and it comes back if you delete it), `awaiting-input.json`, `session-idle.json`, `supervise-latch.json`, `supervisor.json`, `in-flight/`, `supervise.log`, `alerts.json`, `worker-budget/` (the worker-budget hook's per-exit breadcrumbs — rewritten on EVERY tool call of every worker, so committing them would churn the very diffs `verify` reads), `outbox/`, `parked/`, `inbox/`, `thread/`, **`secrets/`**, `remote_token`, `statusline.delegate`, `demos/`, **`items/*/scratch/`** (a dispatched agent's heavy working
    material — the one runtime path that sits *inside* a committed directory, so it needs its own line or the
    allowlist's commit-by-default rule takes it; `shared/schemas.md § scratch`), and the per-ticket worktrees (created at runtime by the
    bus/orchestrator, not scaffolded here); the durable artifacts (`config.json`, `loop.md`, `checks.sh`,
@@ -508,10 +508,15 @@ loop's normal `state.json` takes over when the motion ends.
 ## 2. Greenfield (new project)  — fully supported
 - Scaffold an empty `<project_root>/docs/` (spec, architecture, knowledge, decisions); it grows as the project
   is built.
-- **Continue now — do not stop at the commit.** Update the ledger to **`bootstrap: discussing`** and invoke
-  **`discuss`** (inception) in this session to build the spec from zero — restating the interaction contract
-  (step 5) once as the dialogue opens, since this is the moment the human starts talking to the loop. When the
-  spec lands, flip the ledger to **`bootstrap: complete`** → then the normal loop (`prioritize → planner → …`).
+- **Continue now — do not stop at the commit.** Update the ledger to **`bootstrap: chartering`** and invoke
+  **`charter`** in this session — the founding conversation, and the first thing the human is asked for:
+  purpose, users, comparable products, direction, and what must never be true. Restate the interaction contract
+  (step 5) once as that dialogue opens, since this is the moment the human starts talking to the loop.
+  **It comes before `discuss` and that order is the point**: what the human settles here lands as `locked`
+  constraints, and every field `discuss` then fills is filled inside them. A thin start leaves the autonomy
+  floor nothing to hold, so every architectural question the build later hits is guessed or escalated.
+  Then flip the ledger to **`bootstrap: discussing`**, invoke **`discuss`** to build the rest of the spec, and
+  when it lands flip to **`bootstrap: complete`** → the normal loop (`prioritize → planner → …`).
 
 ## 3. Brownfield (integrate existing codebase)  — driven end-to-end
 - **Rules + enforcement are already adopted** by shared step 6 (adopt existing configs, gap-fill the missing
@@ -534,8 +539,13 @@ loop's normal `state.json` takes over when the motion ends.
   reconcile is waiting (console link + terminal), restate the interaction contract once, and end this context
   window — the loop resumes on the verdict in a fresh session (the drain/runner picks it up), never by rolling
   the bootstrap window into feature work.
-- The session that consumes the reconcile verdict flips the ledger to **`bootstrap: complete`** and hands to
-  the normal loop.
+- The session that consumes the reconcile verdict sets the ledger to **`bootstrap: chartering`** and runs
+  **`charter`** — the founding conversation, which brownfield is missing MORE invisibly than greenfield,
+  because `reconcile` makes it feel as though it already happened. It did not: reconcile derives from CODE and
+  asks *"is this what it is?"*, while the charter derives from the HUMAN and asks *"what must be true going
+  forward?"* **Reconstruction cannot see what is not there** — *"no cloud"* is invisible in a codebase that
+  never added one, and every exclusion is unreachable from artifacts. Then flip to **`bootstrap: complete`**
+  and hand to the normal loop.
 
 ## 3a. Org (a product you do not own)  — brownfield minus footprint
 Invoked only as **`/start org <repo-url-or-path>`**, from an **empty directory** — the *brain*. Everything the

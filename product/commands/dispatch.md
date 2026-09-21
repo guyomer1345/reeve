@@ -29,7 +29,7 @@ You (the orchestrator) do this now, in this turn:
    knows *nothing* — write it for a stranger. Use the `handoff.md` schema (`shared/schemas.md § handoff.md`).
    Capture the live state as it is **right now**:
    - the `bootstrap:` ledger line if the bootstrap motion is still in progress (`installed` /
-     `ingesting` / `discussing` / `reconcile-parked` / `complete`) — omit only once the loop drives;
+     `chartering` / `ingesting` / `discussing` / `reconcile-parked` / `complete`) — omit only once the loop drives;
    - `current_item` and `loop_position` (which `loop.md` node you are at). **Not `parked[]`** — the
      `<!-- parked:begin -->` block is machine-owned and already mirrors every open ticket;
      hand-writing a second copy is how the two disagree. **First run

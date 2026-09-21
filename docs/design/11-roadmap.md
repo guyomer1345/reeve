@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **`4e`, `4f`, `4h`, `4l`, `4c`, `4i` and all four small ones (`2` `3` `4` `4b`) are CLOSED (`D242`–`D246`, 2026-09-21) — G3 is finished entire. Start at `4d`+`4g` — the last G1 pair, and the only one of them that is a product question rather than plumbing. Then `4k`, then `4j`. `5` stays a conversation.** `4j` and `4k` are the two that change what the package IS; `5` stays a conversation. The standing queue below this one is CLOSED**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **THIRTEEN OF THE FOURTEEN ARE CLOSED as of 2026-09-21 (`D242`–`D248`): all of G1 (`4e` `4f` `4h` `4l` `4c` `4i` `4d` `4g`), all of G3 (`3` `4` `4b`), `2` from G2, and `4k` — the `charter` skill, the one that changes what the package IS. What G1 needs now is not another fix but a NIGHT: a real unattended run is the measurement. THE LAST ITEM IS `4j` — the qa gate rebuilt on *product-changing*, which could not be built before `charter` existed because it rested on a precondition nothing produced. `5` stays a conversation and is excluded by the standing orders.** The standing queue below this one is CLOSED**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1536,14 +1536,14 @@ item below belongs to exactly one.**
   working or it stopped for a reason you agree with. Six measured failures stood in the way: a stopped session
   cannot restart itself (`4e` `4f` — ✅ `D242`); recovery costs ten minutes a turn (`4l` — ✅ `D244`); the
   monitor invents stops (`4c` `4i` — ✅ `D245`); **one human gate halts the whole machine** (`4h` — ✅ `D243`, and it was
-  the highest-value item in this queue); and a run can silently half-arm with nothing noticing (`4d` `4g`).
-  **One pair left: `4d`+`4g`.**
+  the highest-value item in this queue); and a run can silently half-arm with nothing noticing (`4d` `4g` —
+  ✅ `D247`). **ALL SIX ARE CLOSED, 2026-09-21. What G1 needs now is a NIGHT — a measurement, not another fix.**
 - **G2 · THE HUMAN IS WOKEN ONLY FOR WHAT IS ACTUALLY HIS.** *Done:* the only thing that reaches him is a
   question about what the product IS or PROMISES; design, logic, library choice, correctness and "is this a
   real bug" are answered by `decision-engineer`, `review`, `debug` and `research`, which are better at them
   than a non-expert owner and are awake at 3am. `4k` (the inception conversation that does not exist, and the
-  thing that BUYS the autonomy — a thin inception leaves the floor nothing to hold), then `4j` (rebuild the qa
-  gate on *product-changing*), plus `5` (an `ask` should defer, not halt) and `2` (do not reach for a tool
+  thing that BUYS the autonomy — a thin inception leaves the floor nothing to hold; ✅ `D248`, the `charter`
+  skill), then `4j` (rebuild the qa gate on *product-changing*), plus `5` (an `ask` should defer, not halt) and `2` (do not reach for a tool
   that prompts while holding one that does not — ✅ `D246`).
 - **G3 · DEBTS THE PACKAGE OWES ITSELF.** `3` · `4` · `4b`. **✅ ALL CLOSED 2026-09-21 (`D246`), together with `2` from G2.**
 
@@ -1785,7 +1785,7 @@ owns the config keys; this one is not in it. Exactly the single-owner violation 
 content that is load-bearing. `D184`'s prescription for a file at its cap is **split-and-pointer**, not more
 shaving: a lean survivor plus a detail file with a marker at the head. Do that rather than trimming again.
 
-**4k. There is NO capability that runs the inception conversation the maintainer's caveat requires.** `[HIGH — surfaced by signing 4j, 2026-09-20]`
+**4k. There is NO capability that runs the inception conversation the maintainer's caveat requires. ✅ CLOSED 2026-09-21 — `D248`: the `charter` skill, greenfield before `discuss` and brownfield after `reconcile`.** `[was HIGH — surfaced by signing 4j, 2026-09-20]`
 `discuss` is the only candidate and it **refuses the job by design**: *"Core principle: turn a user's intent
 into a written spec. Requirements only — never decide the tech stack or any engineering choice here,"* and
 step 4, *"for any genuine engineering decision (stack, library, architecture), do not decide."* So

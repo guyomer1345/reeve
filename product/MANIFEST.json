@@ -1,193 +1,197 @@
 {
-  "plugin": "reeve",
-  "comment": "The authoritative product boundary. Everything published lives under this plugin root; this file draws the ship line exactly once. The release build, the shipped-file leak check, and /start's install step all DERIVE from it \u2014 there is no second hand-maintained copy to drift. Physical location is deliberately NOT the ship line: this manifest is, which is what lets the tests sit beside the code they import without being published (see `exclude`).",
-  "ship": [
-    "commands",
-    "agents",
-    "skills",
-    "hooks",
-    "shared",
-    "rules",
-    "templates",
-    "scripts"
-  ],
-  "exclude": [
-    "**/test_*.py",
-    "**/*.pyc",
-    "**/*.pyo"
-  ],
-  "install": [
-    {
-      "src": "scripts/bus.py",
-      "dest": ".claude/scripts/bus.py"
-    },
-    {
-      "src": "scripts/drain.py",
-      "dest": ".claude/scripts/drain.py"
-    },
-    {
-      "src": "scripts/retention.py",
-      "dest": ".claude/scripts/retention.py"
-    },
-    {
-      "src": "scripts/loop.sh",
-      "dest": ".claude/scripts/loop.sh"
-    },
-    {
-      "src": "scripts/supervise.sh",
-      "dest": ".claude/scripts/supervise.sh"
-    },
-    {
-      "src": "scripts/monitor.py",
-      "dest": ".claude/scripts/monitor.py"
-    },
-    {
-      "src": "scripts/drive.py",
-      "dest": ".claude/scripts/drive.py"
-    },
-    {
-      "src": "scripts/check_contracts.py",
-      "dest": ".claude/scripts/check_contracts.py"
-    },
-    {
-      "src": "scripts/check_promise_coverage.py",
-      "dest": ".claude/scripts/check_promise_coverage.py"
-    },
-    {
-      "src": "scripts/check_criterion_discharge.py",
-      "dest": ".claude/scripts/check_criterion_discharge.py"
-    },
-    {
-      "src": "scripts/check_decision_coverage.py",
-      "dest": ".claude/scripts/check_decision_coverage.py"
-    },
-    {
-      "src": "scripts/check_demo_bundle.py",
-      "dest": ".claude/scripts/check_demo_bundle.py"
-    },
-    {
-      "src": "scripts/check_doc_budget.py",
-      "dest": ".claude/scripts/check_doc_budget.py"
-    },
-    {
-      "src": "scripts/check_autonomy_floor.py",
-      "dest": ".claude/scripts/check_autonomy_floor.py"
-    },
-    {
-      "src": "scripts/check_codemap_fresh.py",
-      "dest": ".claude/scripts/check_codemap_fresh.py"
-    },
-    {
-      "src": "scripts/spec_approval.py",
-      "dest": ".claude/scripts/spec_approval.py"
-    },
-    {
-      "src": "scripts/check_wave_independence.py",
-      "dest": ".claude/scripts/check_wave_independence.py"
-    },
-    {
-      "src": "scripts/plan_freshness.py",
-      "dest": ".claude/scripts/plan_freshness.py"
-    },
-    {
-      "src": "scripts/converge.py",
-      "dest": ".claude/scripts/converge.py"
-    },
-    {
-      "src": "scripts/turn_check.py",
-      "dest": ".claude/scripts/turn_check.py"
-    },
-    {
-      "src": "scripts/status_report.py",
-      "dest": ".claude/scripts/status_report.py"
-    },
-    {
-      "src": "scripts/check_directives.py",
-      "dest": ".claude/scripts/check_directives.py"
-    },
-    {
-      "src": "scripts/forecast.py",
-      "dest": ".claude/scripts/forecast.py"
-    },
-    {
-      "src": "scripts/wave_build.py",
-      "dest": ".claude/scripts/wave_build.py"
-    },
-    {
-      "src": "scripts/project_state.py",
-      "dest": ".claude/scripts/project_state.py"
-    },
-    {
-      "src": "scripts/review_bundle.py",
-      "dest": ".claude/scripts/review_bundle.py"
-    },
-    {
-      "src": "scripts/codemap",
-      "dest": ".claude/scripts/codemap"
-    },
-    {
-      "src": "scripts/context_band.py",
-      "dest": ".claude/scripts/context_band.py"
-    },
-    {
-      "src": "scripts/statusline.py",
-      "dest": ".claude/scripts/statusline.py"
-    },
-    {
-      "src": "scripts/update_reconcile.py",
-      "dest": ".claude/scripts/update_reconcile.py"
-    },
-    {
-      "src": "scripts/rebind.py",
-      "dest": ".claude/scripts/rebind.py"
-    },
-    {
-      "src": "hooks/guard.sh",
-      "dest": ".claude/hooks/guard.sh"
-    },
-    {
-      "src": "hooks/pre-commit.sh",
-      "dest": ".claude/hooks/pre-commit.sh"
-    },
-    {
-      "src": "hooks/verify_check.py",
-      "dest": ".claude/hooks/verify_check.py"
-    },
-    {
-      "src": "hooks/dispatch_guard.py",
-      "dest": ".claude/hooks/dispatch_guard.py"
-    },
-    {
-      "src": "hooks/dispatch_return.py",
-      "dest": ".claude/hooks/dispatch_return.py"
-    },
-    {
-      "src": "hooks/worker_budget.py",
-      "dest": ".claude/hooks/worker_budget.py"
-    },
-    {
-      "src": "hooks/session_start.py",
-      "dest": ".claude/hooks/session_start.py"
-    },
-    {
-      "src": "hooks/precompact.py",
-      "dest": ".claude/hooks/precompact.py"
-    },
-    {
-      "src": "hooks/handoff_gate.py",
-      "dest": ".claude/hooks/handoff_gate.py"
-    },
-    {
-      "src": "hooks/turn_gate.py",
-      "dest": ".claude/hooks/turn_gate.py"
-    },
-    {
-      "src": "hooks/awaiting_input.py",
-      "dest": ".claude/hooks/awaiting_input.py"
-    },
-    {
-      "src": "hooks/prompt_submit.py",
-      "dest": ".claude/hooks/prompt_submit.py"
-    }
-  ]
+ "plugin": "reeve",
+ "comment": "The authoritative product boundary. Everything published lives under this plugin root; this file draws the ship line exactly once. The release build, the shipped-file leak check, and /start's install step all DERIVE from it \u2014 there is no second hand-maintained copy to drift. Physical location is deliberately NOT the ship line: this manifest is, which is what lets the tests sit beside the code they import without being published (see `exclude`).",
+ "ship": [
+  "commands",
+  "agents",
+  "skills",
+  "hooks",
+  "shared",
+  "rules",
+  "templates",
+  "scripts"
+ ],
+ "exclude": [
+  "**/test_*.py",
+  "**/*.pyc",
+  "**/*.pyo"
+ ],
+ "install": [
+  {
+   "src": "scripts/bus.py",
+   "dest": ".claude/scripts/bus.py"
+  },
+  {
+   "src": "scripts/drain.py",
+   "dest": ".claude/scripts/drain.py"
+  },
+  {
+   "src": "scripts/retention.py",
+   "dest": ".claude/scripts/retention.py"
+  },
+  {
+   "src": "scripts/loop.sh",
+   "dest": ".claude/scripts/loop.sh"
+  },
+  {
+   "src": "scripts/supervise.sh",
+   "dest": ".claude/scripts/supervise.sh"
+  },
+  {
+   "src": "scripts/supervisor.py",
+   "dest": ".claude/scripts/supervisor.py"
+  },
+  {
+   "src": "scripts/monitor.py",
+   "dest": ".claude/scripts/monitor.py"
+  },
+  {
+   "src": "scripts/drive.py",
+   "dest": ".claude/scripts/drive.py"
+  },
+  {
+   "src": "scripts/check_contracts.py",
+   "dest": ".claude/scripts/check_contracts.py"
+  },
+  {
+   "src": "scripts/check_promise_coverage.py",
+   "dest": ".claude/scripts/check_promise_coverage.py"
+  },
+  {
+   "src": "scripts/check_criterion_discharge.py",
+   "dest": ".claude/scripts/check_criterion_discharge.py"
+  },
+  {
+   "src": "scripts/check_decision_coverage.py",
+   "dest": ".claude/scripts/check_decision_coverage.py"
+  },
+  {
+   "src": "scripts/check_demo_bundle.py",
+   "dest": ".claude/scripts/check_demo_bundle.py"
+  },
+  {
+   "src": "scripts/check_doc_budget.py",
+   "dest": ".claude/scripts/check_doc_budget.py"
+  },
+  {
+   "src": "scripts/check_autonomy_floor.py",
+   "dest": ".claude/scripts/check_autonomy_floor.py"
+  },
+  {
+   "src": "scripts/check_codemap_fresh.py",
+   "dest": ".claude/scripts/check_codemap_fresh.py"
+  },
+  {
+   "src": "scripts/spec_approval.py",
+   "dest": ".claude/scripts/spec_approval.py"
+  },
+  {
+   "src": "scripts/check_wave_independence.py",
+   "dest": ".claude/scripts/check_wave_independence.py"
+  },
+  {
+   "src": "scripts/plan_freshness.py",
+   "dest": ".claude/scripts/plan_freshness.py"
+  },
+  {
+   "src": "scripts/converge.py",
+   "dest": ".claude/scripts/converge.py"
+  },
+  {
+   "src": "scripts/turn_check.py",
+   "dest": ".claude/scripts/turn_check.py"
+  },
+  {
+   "src": "scripts/status_report.py",
+   "dest": ".claude/scripts/status_report.py"
+  },
+  {
+   "src": "scripts/check_directives.py",
+   "dest": ".claude/scripts/check_directives.py"
+  },
+  {
+   "src": "scripts/forecast.py",
+   "dest": ".claude/scripts/forecast.py"
+  },
+  {
+   "src": "scripts/wave_build.py",
+   "dest": ".claude/scripts/wave_build.py"
+  },
+  {
+   "src": "scripts/project_state.py",
+   "dest": ".claude/scripts/project_state.py"
+  },
+  {
+   "src": "scripts/review_bundle.py",
+   "dest": ".claude/scripts/review_bundle.py"
+  },
+  {
+   "src": "scripts/codemap",
+   "dest": ".claude/scripts/codemap"
+  },
+  {
+   "src": "scripts/context_band.py",
+   "dest": ".claude/scripts/context_band.py"
+  },
+  {
+   "src": "scripts/statusline.py",
+   "dest": ".claude/scripts/statusline.py"
+  },
+  {
+   "src": "scripts/update_reconcile.py",
+   "dest": ".claude/scripts/update_reconcile.py"
+  },
+  {
+   "src": "scripts/rebind.py",
+   "dest": ".claude/scripts/rebind.py"
+  },
+  {
+   "src": "hooks/guard.sh",
+   "dest": ".claude/hooks/guard.sh"
+  },
+  {
+   "src": "hooks/pre-commit.sh",
+   "dest": ".claude/hooks/pre-commit.sh"
+  },
+  {
+   "src": "hooks/verify_check.py",
+   "dest": ".claude/hooks/verify_check.py"
+  },
+  {
+   "src": "hooks/dispatch_guard.py",
+   "dest": ".claude/hooks/dispatch_guard.py"
+  },
+  {
+   "src": "hooks/dispatch_return.py",
+   "dest": ".claude/hooks/dispatch_return.py"
+  },
+  {
+   "src": "hooks/worker_budget.py",
+   "dest": ".claude/hooks/worker_budget.py"
+  },
+  {
+   "src": "hooks/session_start.py",
+   "dest": ".claude/hooks/session_start.py"
+  },
+  {
+   "src": "hooks/precompact.py",
+   "dest": ".claude/hooks/precompact.py"
+  },
+  {
+   "src": "hooks/handoff_gate.py",
+   "dest": ".claude/hooks/handoff_gate.py"
+  },
+  {
+   "src": "hooks/turn_gate.py",
+   "dest": ".claude/hooks/turn_gate.py"
+  },
+  {
+   "src": "hooks/awaiting_input.py",
+   "dest": ".claude/hooks/awaiting_input.py"
+  },
+  {
+   "src": "hooks/prompt_submit.py",
+   "dest": ".claude/hooks/prompt_submit.py"
+  }
+ ]
 }

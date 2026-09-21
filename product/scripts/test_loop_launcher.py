@@ -63,6 +63,41 @@ def _sandbox(tmp_path, *, with_flock):
     return binv, proj, lock
 
 
+def _supervise_sandbox(tmp_path, *, tmux=True, preflight_ok=True):
+    """The `--supervise` bootstrap, with tmux and the preflight both standing in.
+
+    The python3 stub has to answer TWO callers now — the Paths resolution and
+    `supervisor.py preflight` — and the second's EXIT CODE is the contract `loop.sh` branches
+    on. A stub that always exited 0 would make the refusal test vacuous, which is the same trap
+    `test_the_harness_can_actually_hide_flock` exists to guard.
+    """
+    binv, proj, lock = _sandbox(tmp_path, with_flock=True)
+    (binv / "supervisor.py").write_text("# stood in for by the python3 stub\n")
+    (binv / "python3").write_text(
+        '#!/bin/sh\n'
+        'case "$*" in\n'
+        '  *supervisor.py*preflight*) echo "ARMED: (stub)"; exit %d ;;\n'
+        'esac\n'
+        'echo "%s"\n' % (0 if preflight_ok else 1, lock))
+    (binv / "python3").chmod(0o755)
+    if tmux:
+        # Records its own argv so the re-entry can be asserted, and does NOT run it: the point
+        # is which command the launcher hands to tmux, not what claude does afterwards.
+        (binv / "tmux").write_text(
+            '#!/bin/sh\n'
+            'if [ "$1" = "has-session" ]; then exit 1; fi\n'
+            'echo "TMUX_ARGV: $*" > "%s/tmux.argv"\n' % proj)
+        (binv / "tmux").chmod(0o755)
+    return binv, proj
+
+
+def _run_supervise(binv, proj):
+    return subprocess.run(
+        [str(binv / "bash"), str(binv / "loop.sh"), "--supervise"],
+        cwd=proj, env={"PATH": str(binv)}, capture_output=True, text=True,
+    )
+
+
 def _run(binv, proj):
     return subprocess.run(
         [str(binv / "bash"), str(binv / "loop.sh")],
@@ -121,3 +156,54 @@ def test_held_lock_still_reports_a_held_lock(tmp_path):
         assert "CLAUDE_STARTED" not in r.stdout
     finally:
         os.close(fd)
+
+
+# --- one command, and it refuses rather than half-arm -------------------------
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock unavailable")
+def test_supervise_outside_tmux_PUTS_ITSELF_in_tmux(tmp_path):
+    """*"I want one `supervise.sh`, I run it, I prompt Claude `continue` once."* It used to
+    refuse outside tmux and tell the operator to run two more commands."""
+    binv, proj = _supervise_sandbox(tmp_path)
+    r = _run_supervise(binv, proj)
+    argv = (proj / "tmux.argv").read_text()
+    assert "new-session" in argv and "-s reeve" in argv, argv
+    # Re-entered under a DIFFERENT flag, so the inner instance cannot bootstrap a second time.
+    assert "--supervise-inner" in argv
+    assert r.returncode == 0
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock unavailable")
+def test_a_FAILED_PREFLIGHT_starts_nothing(tmp_path):
+    """Handing back a half-armed state is the failure being fixed, so the refusal must happen
+    BEFORE tmux, the lock, or claude."""
+    binv, proj = _supervise_sandbox(tmp_path, preflight_ok=False)
+    r = _run_supervise(binv, proj)
+    assert r.returncode == 1
+    assert not (proj / "tmux.argv").exists(), "tmux was started over a refused preflight"
+    assert "CLAUDE_STARTED" not in r.stdout
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock unavailable")
+def test_supervise_without_tmux_installed_says_so(tmp_path):
+    """tmux is the transport — there is no other way to put keystrokes into a running session's
+    stdin — so its absence is a refusal with a diagnosis, not a silent unsupervised start."""
+    binv, proj = _supervise_sandbox(tmp_path, tmux=False)
+    r = _run_supervise(binv, proj)
+    assert r.returncode == 69
+    assert "tmux is not installed" in r.stderr
+    assert "CLAUDE_STARTED" not in r.stdout
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock unavailable")
+def test_an_EXISTING_tmux_session_is_never_reused_by_guess(tmp_path):
+    """Attaching to whatever is already called `reeve` is how a second orchestrator ends up
+    against one `.workflow/` — the hazard this launcher exists to prevent."""
+    binv, proj = _supervise_sandbox(tmp_path)
+    (binv / "tmux").write_text('#!/bin/sh\nif [ "$1" = "has-session" ]; then exit 0; fi\n'
+                               'echo "TMUX_ARGV: $*" > "%s/tmux.argv"\n' % proj)
+    (binv / "tmux").chmod(0o755)
+    r = _run_supervise(binv, proj)
+    assert r.returncode == 1
+    assert "already exists" in r.stderr and "REEVE_TMUX_SESSION" in r.stderr
+    assert not (proj / "tmux.argv").exists()

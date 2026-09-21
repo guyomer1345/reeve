@@ -78,9 +78,18 @@ consumed-set to ids above it**, which is what keeps `handoff.md` bounded — a c
   sent into a running turn. Keys sent then are not queued into it — they land in the prompt box as text and are
   never submitted. This is not for you; it is what the supervisor reads before resetting the session, and
   `blocked_by` says why not.
-  **The supervisor** is `loop.sh --supervise` (inside tmux): it polls this gate and sends `/clear` then
+  **The supervisor** is `loop.sh --supervise`: it polls this gate and sends `/clear` then
   `continue` — two sends, because a cleared session does not start on its own. It never writes the anchor, and
-  after three sends that leave the context reading untouched it stops rather than filling the prompt box.
+  after three sends that leave the context reading untouched it stops rather than filling the prompt box — and
+  says so where something can act on it, which is how the give-up reaches a person rather than a log file.
+  **ONE COMMAND, THEN ONE `continue`.** It preflights the project, puts itself inside tmux if it is not already
+  there, arms the supervisor and prints what it armed — pane, goal, parked tickets, ceiling, workspace trust.
+  It REFUSES rather than hand back a half-armed state (an unstarted project; a supervisor already running,
+  which would put two of them on one pane on their own schedules) and REPORTS everything it cannot refuse over
+  (no goal yet, a ticket already parked, no ceiling set, an untrusted workspace). **And something now notices
+  when it dies:** the supervisor publishes itself, the status line shows `⛨ supervised` or an alarm, and a
+  session that was launched supervised parks a `steer` when its supervisor is gone — because the heartbeat that
+  watches for a dead loop runs *inside* the supervisor and dies with it.
 
 **Why both, when the old rule was one flag.** Writing an anchor is always safe, so nothing may veto it — not an
 open checkpoint, not an unreachable runtime root, which is exactly when the anchor matters most. *Resetting* a

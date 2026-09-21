@@ -60,7 +60,7 @@ def transcript(tmp_path, text):
     return str(path)
 
 
-def run(cwd, unattended=True, **extra):
+def run(cwd, unattended=True, supervised=False, **extra):
     payload = {"hook_event_name": "Stop", "cwd": str(cwd)}
     payload.update(extra)
     env = dict(os.environ)
@@ -68,6 +68,10 @@ def run(cwd, unattended=True, **extra):
     env.pop("REEVE_SUPERVISE", None)
     if unattended:
         env["REEVE_DRIVE"] = "1"
+    if supervised:
+        # What `loop.sh --supervise` exports into the session it starts — the proof that this
+        # session was ARMED, which is what makes a missing supervisor a missing one.
+        env["REEVE_SUPERVISE"] = "1"
     return subprocess.run(["python3", str(HOOK)], input=json.dumps(payload),
                           capture_output=True, text=True, env=env)
 
@@ -206,6 +210,69 @@ def test_fixing_the_anchor_re_arms_the_conversion(tmp_path):
     assert blocked(run(p)) and blocked(run(p))   # rung 1 again, twice
     assert blocked(run(p))                       # and the conversion, re-armed
     assert json.loads((p / ".workflow" / "turn-gate.json").read_text())["anchor_demanded"] is True
+
+
+# --- a supervised session that lost its supervisor ---------------------------
+
+DEAD_PID = 4_000_000
+
+
+def _supervisor(p, pid):
+    (p / ".workflow" / "supervisor.json").write_text(
+        json.dumps({"pid": pid, "pane": "reeve:0.0", "since": 0}))
+
+
+def test_a_session_that_LOST_its_supervisor_parks_a_steer(tmp_path):
+    """MEASURED 2026-09-19: two drives whose supervisors were stopped for a deploy ran until
+    they stopped on their own at ~00:59 and then sat idle for ELEVEN HOURS, with nothing
+    anywhere saying why. The process whose job is to notice a dead loop runs INSIDE the
+    supervisor, so it dies with it; the session is the only thing still running."""
+    p = project(tmp_path)
+    for name in ("supervisor.py", "bus.py"):
+        shutil.copy(HERE / name, p / ".claude" / "scripts" / name)
+    _supervisor(p, DEAD_PID)
+    run(p, supervised=True)
+    assert (p / ".workflow" / "parked" / "steer-supervisor-gone.json").exists()
+
+
+def test_it_parks_ONCE_because_the_deadline_is_the_alert_dedup_key(tmp_path):
+    """`write_park` restamps `deadline`, so re-parking every turn alerts a phone every turn —
+    the fastest way to teach someone to ignore the channel that matters."""
+    p = project(tmp_path)
+    for name in ("supervisor.py", "bus.py"):
+        shutil.copy(HERE / name, p / ".claude" / "scripts" / name)
+    _supervisor(p, DEAD_PID)
+    run(p, supervised=True)
+    first = (p / ".workflow" / "parked" / "steer-supervisor-gone.json").read_text()
+    run(p, supervised=True)
+    assert (p / ".workflow" / "parked" / "steer-supervisor-gone.json").read_text() == first
+
+
+def test_an_UNSUPERVISED_session_is_never_told_its_supervisor_is_missing(tmp_path):
+    """Without `REEVE_SUPERVISE` there is nothing to be missing — every ordinary drive would
+    otherwise park this on its first stop."""
+    p = project(tmp_path)
+    for name in ("supervisor.py", "bus.py"):
+        shutil.copy(HERE / name, p / ".claude" / "scripts" / name)
+    _supervisor(p, DEAD_PID)
+    run(p, supervised=False)
+    assert not (p / ".workflow" / "parked" / "steer-supervisor-gone.json").exists()
+
+
+def test_a_LIVE_supervisor_parks_nothing(tmp_path):
+    """The negative control, against a process whose command line really says supervise.sh."""
+    p = project(tmp_path)
+    for name in ("supervisor.py", "bus.py"):
+        shutil.copy(HERE / name, p / ".claude" / "scripts" / name)
+    script = tmp_path / "supervise.sh"
+    script.write_text("#!/usr/bin/env bash\nsleep 60\n")
+    proc = subprocess.Popen(["bash", str(script)])
+    try:
+        _supervisor(p, proc.pid)
+        run(p, supervised=True)
+        assert not (p / ".workflow" / "parked" / "steer-supervisor-gone.json").exists()
+    finally:
+        proc.kill(), proc.wait()
 
 
 # --- the give-up: per episode, and it leaves a breadcrumb --------------------

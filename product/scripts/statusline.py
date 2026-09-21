@@ -135,6 +135,36 @@ def _banner(verdict):
     return "\033[%sm%s — %s\033[0m" % (style, lead, verdict["reason"])
 
 
+def _supervision(project_dir):
+    """The supervision segment, or None when there is nothing to say.
+
+    IT SPEAKS ONLY WHEN SOMETHING IS WRONG OR SOMETHING IS ARMED, on the same rule as the band's
+    `hold`: a persistent "you are fine" is how a status line teaches someone to ignore it. The
+    one that matters is `⚠ SUPERVISOR GONE` — this session was LAUNCHED supervised (`loop.sh`
+    exports `REEVE_SUPERVISE` into it, so the environment is proof, not a guess) and the process
+    that was resetting its context window is not there any more. That state used to be invisible
+    everywhere: on 2026-09-19 two drives ran on with their supervisors stopped for a deploy, hit
+    their own stops, and sat idle for eleven hours with nothing anywhere saying why.
+    """
+    if not os.environ.get("REEVE_SUPERVISE"):
+        return None
+    try:
+        import supervisor
+        rec = supervisor.alive(os.path.join(project_dir, ".workflow"))
+    except Exception:
+        return None
+    if rec["state"] == "running":
+        return "⛨ supervised"
+    if rec["state"] == "none":
+        # Launched supervised and no record at all: the supervisor never came up.
+        return "\033[1;31m⚠ NO SUPERVISOR — this session was launched supervised and nothing " \
+               "is watching it\033[0m"
+    if rec["state"] == "gone":
+        return "\033[1;31m⚠ SUPERVISOR GONE (pid %s) — nothing will reset this window; " \
+               "restart it: .claude/scripts/loop.sh --supervise\033[0m" % rec["pid"]
+    return "\033[1;33m? supervisor: %s\033[0m" % rec["why"]
+
+
 def main():
     raw = ""
     try:
@@ -183,6 +213,15 @@ def main():
         runway = verdict.get("runway_nodes")
         if runway is not None and pct is not None:
             lines[0] = lines[0] + " · ~%.0f nodes left" % runway
+
+    sup = _supervision(project_dir)
+    if sup:
+        # Appended to the base line when it is the quiet "⛨ supervised", given its own line when
+        # it is an alarm — the same shape the band uses, for the same reason.
+        if sup.startswith("⛨"):
+            lines[0] = lines[0] + " · " + sup
+        else:
+            lines.append(sup)
 
     print("\n".join(lines))
     return 0

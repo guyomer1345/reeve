@@ -9428,3 +9428,138 @@ section — the live `schemas-runtime.md § …` references are to `orchestrator
 **D242**/**D245** (the transport/judgement line `3` is decided on).
 → `product/agents/research.md`, `product/scripts/{supervise.sh,monitor.py}`,
 `product/shared/{schemas-config.md,schemas-runtime.md,schemas-drive.md,schemas.md}`, `05`, `11`.
+
+## D247 — ONE command, then one `continue`: getting into a supervised run becomes a thing the package owns, and a supervisor that dies is no longer invisible **[BUILT 2026-09-21 — queue items `4g` + `4d`, the last G1 pair. `4g` is the maintainer's own words; `4d` is the half of it that cost eleven hours]**
+**The ask, verbatim (2026-09-20):** *"Currently the process of getting to a not-supervised run is very vague; I
+need to run a few commands, make sure there isn't idle stuff, verify that they work — it isn't robust. I want
+one `supervise.sh`, I run it, I prompt Claude `continue` once, and from there on we are inside a supervised
+run."* **Every failure of that week came from the list of things you had to know to check, not from the loop:**
+three supervisors on one pane and none on the other; supervisors stopped for a deploy and never restarted
+(eleven hours lost, which is `4d`); a false park nobody could see without reading JSON.
+
+**`4g` — the launcher walks into tmux itself, and the ordering is the whole design.** `loop.sh --supervise`
+used to REFUSE outside tmux, and the refusal was right about the hazard: the orchestrator lock is held on fd 9
+by the process that becomes `claude`, so if the outer process took the lock and *then* started tmux, the lock
+would belong to the tmux CLIENT and detaching — the normal thing to do with tmux — would release it while the
+orchestrator ran on. Two orchestrators against one `.workflow/` is the exact hazard the launcher exists to
+prevent. The fix is not to relax that, it is to bootstrap **before the lock is taken**: re-enter the same script
+inside the new pane, under a different flag (`--supervise-inner`, so it cannot recurse), and let the INNER
+instance take the lock and exec `claude` exactly as a hand-started session does. Nothing is held across the
+exec, so there is no window in which the lock is dropped.
+**The preflight, and where the fatal/report line falls.** FATAL is reserved for a state in which arming does
+not achieve what was asked: no project to supervise, or **a supervisor already running** — three on one pane is
+measured, not hypothetical. Everything else is REPORTED and started anyway, because the other half of these
+failures was invisibility rather than the fact: no goal (legitimate before inception has run — refusing would
+make a greenfield project's first supervised run impossible), a parked ticket (a legitimate state, and `D243`
+just established that a park is not a reason to stop the machine), no operator ceiling, an untrusted workspace.
+Then it SAYS what it armed — pane, goal, parked, ceiling, trust — on the outer terminal, because inside the
+pane the TUI paints over everything within a second.
+
+**`4d` — the heartbeat was hosted by a process nobody was watching.** `monitor.py` runs INSIDE `supervise.sh`,
+so the thing that exists to catch a dead loop dies with the thing that was driving it — and when it did,
+**nothing anywhere said so**: not the console, not the status line, not the loop, not the turn gate. On
+2026-09-19 both drives ran until they stopped on their own at ~00:59 and then sat idle for **eleven hours**.
+**Decided: the supervisor PUBLISHES itself, and one owner answers "is a supervisor alive here".** `supervisor.py`
+holds the record, the liveness check and the preflight; three consumers read the one answer. It is a record with
+a liveness check rather than an flock because a bash poller cannot exec into what it supervises, and an flock
+held by a shell loop says nothing about which pane it drives. Pid existence alone is not the question — pid
+reuse means the shell that died at 02:00 can be a compiler at 02:05 — so `/proc/<pid>/cmdline` settles it where
+it exists, and an answer that cannot be established reads `unknown`, never `running`.
+**`gone` and `none` are different answers, and keeping them apart is what makes the escape narrow.** Nothing was
+ever armed here, versus something was armed and is not there. Only `gone` parks and only `gone` passes the steer
+floor; accepting `none` would make that floor permissive for every unsupervised project on earth.
+**THREE SURFACES, IN ORDER OF WHO IS AWAKE.** (1) `loop.sh --supervise` refuses to arm a second supervisor over
+a live one — the failure prevented rather than reported. (2) The status line shows `⛨ supervised`, or an alarm,
+**and only when `REEVE_SUPERVISE` is in the environment** — the launcher exports it into the session it starts,
+so that is proof the session was ARMED rather than an inference. (3) The one that works at 3am: a session
+launched supervised that finds its supervisor gone **parks a `steer`**, which is what the away channel already
+alerts on. The `Stop` hook is the only place that check could live — the monitor dies with the supervisor and
+the console daemon may not be running, but the session is still there, and the instant it is about to hand the
+machine back to nobody is exactly when the absence matters. Parked once, guarded by the ticket's existence:
+`write_park` restamps `deadline`, which is the alert-dedup key, so re-parking every turn would alert a phone
+every turn.
+
+*Rejected:* **`tmux new-session -A`** (attach-if-exists — it would silently join whatever is already called
+`reeve`, which is how a second orchestrator ends up on one `.workflow/`; refusing with the session name and the
+`REEVE_TMUX_SESSION` override is the honest form) · **making a missing goal or a parked ticket FATAL** (the
+first blocks inception, the second contradicts `D243` — and the maintainer's failure was not seeing them, not
+having them) · **a pidfile the turn gate polls instead of a park** (a flag nothing reads at 3am is the log line
+`D246` just stopped shipping) · **teaching `monitor.py` to watch itself** (it is the process that is missing) ·
+**an flock for the supervisor** (nothing can exec into it, and the reader needs the PANE, not just liveness) ·
+**making the console the owner** (a bigger build, and it is the surface most likely to be down in exactly the
+case that matters) · **parking on `none` as well as `gone`** (see the floor argument above).
+*Evidence:* the maintainer's statement of the ask; the eleven-hour idle night of 2026-09-19; three supervisors
+observed on one pane; the false park that took a JSON read to find.
+**Builds on:** **D239** (the supervisor and its attempt cap), **D225** (`monitor.py`, whose hosting is the
+defect), **D243** (why a park is reported rather than refused), **D246** (the same transport/judgement split,
+and the same away-channel argument), **D165** (`loop.sh`'s lock discipline, which the bootstrap had to preserve
+exactly).
+→ `product/scripts/{supervisor.py (NEW),loop.sh,supervise.sh,statusline.py,bus.py}`,
+`product/hooks/turn_gate.py`, `product/MANIFEST.json`, `product/shared/schemas-drive.md`,
+`product/templates/loop-detail.md`, `product/commands/start.md`, `05`, `11`.
+
+## D248 — `charter`: the founding conversation the package never had, and the constraints that make the autonomy floor able to hold anything **[BUILT 2026-09-21 — queue item `4k`. Its three open questions were settled 2026-09-20; this is the capability's own design, which was all that was left]**
+**The gap, stated by the maintainer's own practice:** *"usually I just discussed tech stack, engineering
+choices and all of that AFTER I ran `/start`."* The conversation happens — in the wrong place, with nothing to
+catch its output. `discuss` refuses the job by design (*"requirements only — never decide the tech stack or any
+engineering choice here"*), so architecture, comparable products and the shape of the use cases were either
+deferred to `decision-engineer` one decision at a time with no vision behind them, or never had at all.
+**And this is what earns "don't wake me", not a nicety before it: inception is what POPULATES the `locked`
+commitments the autonomy floor enforces.** The floor routes a change to a `locked` element or an acceptance
+criterion; a thin inception leaves it **nothing to hold**, so every architectural question the build hits is
+guessed or escalated — and the human who asked not to be woken is woken for questions `research` answers
+better than he does.
+
+**NAME: `charter`, and `inception` was rejected for a collision that already exists.** `discuss`'s required
+fields already say *"project (inception): audience, runtime, purpose, screens…"* — the word is taken, and a
+capability sharing a name with another's mode is a routing label nobody can read. `charter` names the artifact
+(purpose, users, constraints, exclusions), reads as a verb, and is standard product vocabulary.
+
+**WHERE IT SITS, and the order is the argument.** Greenfield: `/start` → **`charter`** → `discuss` → the gates
+→ `planner:decompose`. What the human settles lands as `locked` constraints, and every field `discuss` then
+fills is filled INSIDE them; the reverse order would make the constraints a retrofit over a spec already
+written. Brownfield: `ingest` → `checkpoint:reconcile` → **`charter`** → `prioritize`, because *reconstruction
+cannot see what is not there* — *"no cloud"* is invisible in a codebase that never added one, and every
+exclusion is unreachable from artifacts. **Brownfield is missing this MORE invisibly than greenfield**, since
+`reconcile` makes it feel as though the conversation already happened. A new ledger value (`chartering`) so a
+session that dies mid-conversation does not resume past it.
+
+**THE FALSIFIABILITY PASS IS THE CAPABILITY.** Every candidate constraint faces one question: *could `align` or
+a reviewer DEMONSTRATE a violation?* Not *"local-first"* — a slogan — but *"no runtime dependency on a network
+service for core reading and writing"*. Each element carries its own `falsifier` (the observation that would
+prove it broken) and **one with no falsifier is not written**. Three enforcements already exist and no new
+machinery was needed: editing the constraint away → the autonomy floor; a decision that would break it →
+`decision-engineer`, for which an option breaking a `locked` element is goal-affecting; code drifting off it
+silently → `align`'s semantic pass.
+**The enforcement strength is stated in the skill rather than implied.** The floor is a *spec-diff* floor by its
+own declaration, so a constraint is protected from being **edited away**, not from being **ignored** — the
+honest strength is *"align finds it eventually"*, the same limit every `locked` behaviour already carries.
+
+**IT CANNOT RUN WITHOUT A HUMAN, and that is a rule rather than a hope.** `locked` records that an approval
+happened; here the human's own statement IS the approving event, which is what lets this capability write it at
+all and exactly why nothing else may. With no human in the conversation it writes **nothing** and escalates to
+a `steer` — and explicitly does not fall back to `provisional` "to make progress", because an unfounded
+constraint is worse than a missing one: the floor will defend it. (Measured precedent: an unattended inception
+that tagged most of a spec `locked` raised 13 floor findings.)
+
+*Rejected:* **extending `discuss`** (the maintainer's call, and the separation is load-bearing — requirements
+and engineering choices blur easily) · **`inception` as the name** (see the collision above) · **charter AFTER
+`discuss`** (constraints as a retrofit) · **deciding the stack here** (the rule is: at inception the human sets
+DIRECTION AND CONSTRAINTS, during the build `decision-engineer` chooses WITHIN them — so a stack is recorded
+only where the human states it firmly, which is the same rule `discuss` already runs on) · **driving `research`
+inline** (it is a leaf worker with the web tools and the scratch discipline; the charter dispatches and
+distills) · **a new schema file for the charter** (it lands as a `## Charter` section of the existing `spec`,
+which is what makes it enforceable at all) · **making it re-runnable on a schedule** (a charter re-derived
+every so often is not a commitment; it re-runs only on a stated change of direction).
+*Rent paid:* `loop.md` took three routing rows and went over its always-loaded cap, so it was trimmed back
+under (3219 → 3196 → under 3200 at 13 templates, 0 per-file advisories). **The always-loaded TOTAL advisory
+(6714/6400) is pre-existing and untouched by this slice** (+9 tokens net): `D184`'s prescription there is to
+move a whole file out of the set, which is its own decision and not this one.
+*Evidence:* the maintainer's statement of his own practice; `discuss`'s stated refusal, quoted from the shipped
+file; the 13-finding unattended-inception measurement behind the `locked` rule.
+**Builds on:** **D185**/**D214** (the standing-intent line of work this queue came from), the `locked`
+commitment model and **`check_autonomy_floor.py`**, **D236** (`review`, one of the three enforcements),
+**D243** (the same question from the other end: what deserves to stop for a human).
+→ `product/skills/charter/SKILL.md` (NEW), `product/templates/loop.md`,
+`product/shared/{schemas.md,schemas-loopstate.md}`, `product/commands/{start.md,update.md,dispatch.md}`,
+`README.md`, `10`, `11`.

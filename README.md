@@ -94,7 +94,7 @@ Three things worth knowing up front:
 
 | term | what it means here |
 |---|---|
-| **greenfield** | An empty directory, where the thing does not exist yet. `/start` routes you into `discuss` and you design it before anything is built. Your code lands under `project/`. |
+| **greenfield** | An empty directory, where the thing does not exist yet. `/start` routes you into `charter`, then `discuss`, and you design it before anything is built. Your code lands under `project/`. |
 | **brownfield** | A repository that already has code. `/start` routes you into `ingest`, and your layout is left exactly as it is. |
 | **ingest** | The brownfield bootstrap. Builds the code map and reconstructs a spec from your existing `CLAUDE.md` and docs (never guessed from the code alone), then stops at a blocking checkpoint for you to confirm it. |
 | **spec** | The written, testable statement of what the project is for. Everything downstream is held against it. |
@@ -117,7 +117,7 @@ capabilities you can call by name when you want them; the loop also reaches for 
 
 | command | when | what it does |
 |---|---|---|
-| **`/start`** | once, per project | Bootstraps the project. Detects greenfield vs brownfield and confirms it with you, scaffolds `.workflow/`, installs the scripts and git hooks into `.claude/`, starts the console daemon, and hands off to `discuss` or `ingest`. Safe to re-run: it resumes a half-finished init rather than clobbering a live one. |
+| **`/start`** | once, per project | Bootstraps the project. Detects greenfield vs brownfield and confirms it with you, scaffolds `.workflow/`, installs the scripts and git hooks into `.claude/`, starts the console daemon, and hands off to `charter` (greenfield) or `ingest` (brownfield). Safe to re-run: it resumes a half-finished init rather than clobbering a live one. |
 | **`/update`** | after upgrading the plugin | Migrates an already-initialised project onto the currently-installed version. Refreshes the package-owned files, regenerates the code map, and **never touches what the project owns**. |
 | **`/dispatch`** | when the statusline warns | Writes a complete, current `handoff.md` so a `/clear` is safe. Run it, then `/clear`, then say "continue". The next session rehydrates from the handoff on its own. |
 | **`/rebind`** | after a machine move | Re-binds the machine-local runtime half to *this* machine. The symptom is a tool refusing to start because the runtime root does not exist, because you moved the repo or rebuilt the machine. It repairs the pointer, recovers what survived, and itemizes what did not. |
@@ -126,6 +126,7 @@ capabilities you can call by name when you want them; the loop also reaches for 
 
 | capability | what it does |
 |---|---|
+| **`charter`** | The founding conversation, and the first thing you are asked for: purpose, users, comparable products, direction, and what must never be true. What you settle here lands as **falsifiable** constraints the build is not allowed to quietly leave — not *"local-first"*, which nothing can test, but *"no runtime dependency on a network service for core reading and writing"*. Run once per project: greenfield before `discuss`, brownfield after the reconcile checkpoint, because reconstruction cannot see what is not there. **This is the conversation that buys the autonomy** — the loop can only decide within constraints somebody gave it. |
 | **`discuss`** | The requirements conversation. **The first step of any new intake**, whether a new project or a new feature on an existing one, and it produces the spec. This is where you do the design work, and it is the single most valuable place to spend your attention. |
 | **`create-forecast`** | Lays out the chain of events it proposes to walk, before it walks it. Use it on anything big. |
 | **`create-demo`** | Builds the throwaway sandbox of a user-facing change for you to approve before it is really built. |
@@ -138,7 +139,7 @@ capabilities you can call by name when you want them; the loop also reaches for 
 
 ## Skills and agents
 
-The package ships **16 skills** and **7 agents**, and the split between them is deliberate rather than
+The package ships **17 skills** and **7 agents**, and the split between them is deliberate rather than
 cosmetic.
 
 A **skill** runs *inline*, in the session you are already in. It sees your conversation and can talk back to
