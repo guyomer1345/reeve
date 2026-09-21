@@ -50,6 +50,11 @@
 # report of success: a `/clear` that lands collapses the context reading, and one that does not
 # leaves it where it was. A supervisor that gives up costs a session that stops where it would
 # have stopped anyway; one that retries into a corrupted prompt box costs the conversation.
+# THE GIVE-UP IS RECORDED WHERE SOMETHING CAN ACT ON IT (`gave_up` on the latch). It used to be a
+# log line and nothing else, so an operator who was not reading `supervise.log` learned about it
+# by noticing the drive had stopped — the failure mode the away channel exists to abolish.
+# `monitor.py` reads the flag and parks a `steer`; the judgement stays there, this file only
+# records its own state.
 #
 # FAIL DIRECTION, THROUGHOUT: do nothing. Every unreadable file, missing tool, absent pane and
 # unexpected exit code leaves the session alone. A supervisor that fails by not resetting costs
@@ -202,6 +207,13 @@ except Exception:
     print(0)' "$LATCH" "${1:-}" "$DROP_TOKENS" 2>/dev/null || echo 0
 }
 
+# `$3` is the give-up flag, and it is the one thing on this ledger a second process reads.
+# RECORDING A FACT, NOT MAKING A JUDGEMENT: "my sends stopped changing anything and I have
+# stopped trying" is this process's own state, the same way `attempts` is. What to DO about it —
+# park a `steer` so the away channel alerts somebody — is `monitor.py`'s, because that is where
+# every other escalation in this package is decided and where the steer floor's evidence is read
+# from. A give-up that only ever reached `supervise.log` was a stop nobody outside this terminal
+# could learn about, which is the failure the away channel exists to abolish.
 remember_attempt() {
   python3 -c '
 import json, os, sys
@@ -209,10 +221,11 @@ path, used, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
 tmp = path + ".tmp"
 try:
     with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump({"attempts": n, "used": int(used) if used.isdigit() else 0}, fh, sort_keys=True)
+        json.dump({"attempts": n, "used": int(used) if used.isdigit() else 0,
+                   "gave_up": sys.argv[4] == "1"}, fh, sort_keys=True)
     os.replace(tmp, path)
 except OSError:
-    pass' "$LATCH" "${1:-}" "${2:-1}" 2>/dev/null || true
+    pass' "$LATCH" "${1:-}" "${2:-1}" "${3:-0}" 2>/dev/null || true
 }
 
 reset_session() {
@@ -251,6 +264,7 @@ tick() {
     # were ever submitted — says the last $MAX_RESETS did nothing. Sending again is how a
     # prompt box fills with `/clear continue /clear continue`. Stop, and keep saying so: the
     # heartbeat still runs, and `monitor.py` still owns the escalation to a `steer`.
+    remember_attempt "$used" "$n" 1
     heartbeat
     log "GIVING UP on resetting $PANE — $n sends left the context reading at ${used:-unknown}."
     log "  The keys are reaching tmux and not reaching the session. Look at the pane: if the"
@@ -260,7 +274,7 @@ tick() {
   fi
 
   if reset_session; then
-    remember_attempt "$used" "$((n + 1))"
+    remember_attempt "$used" "$((n + 1))" 0
     return 0
   fi
   return 1

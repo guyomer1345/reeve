@@ -120,6 +120,8 @@ RESERVE_NODES = 2
 COMFORTABLE_NODES = 5
 
 STALE_SECONDS = 900          # a reading older than this describes a session that is likely gone
+                             # -- UNLESS it is known idle, which is evidence of the opposite; see
+                             # `read_reading`.
 
 # The latch that gives "freshly written" a moment to be fresh relative to. Beside `context.json`
 # on the repo mount deliberately: the `Stop` hook reads it every turn and must not have to
@@ -233,7 +235,24 @@ def band(used_tokens, window_tokens, warn_pct=None):
 def read_reading(workflow_dir, now=None):
     """The last reading `statusline.py` published, or None. A reading older than STALE_SECONDS
     is None too: it describes a session that has probably already ended, and a verdict about a
-    dead session's window is worse than no verdict."""
+    dead session's window is worse than no verdict.
+
+    AN IDLE SESSION IS NOT A GONE SESSION, and the staleness rule could not tell them apart.
+    The statusline publishes once per turn, so a session that has been sitting at the prompt for
+    fifteen minutes has no fresh reading, the band returns `unknown`, and `clear_safe` blocks on
+    *"the band says unknown, not handoff-now"* -- a condition it can never satisfy, because the
+    thing that would refresh the reading is the turn the reset exists to make possible. Harmless
+    where it was first seen (`consumer` at 17% after ~40 idle minutes, no reset wanted) and
+    exactly backwards in the case that matters: **a session that stops at 95% and sits for a
+    quarter of an hour can no longer be reset by the supervisor at all.** `session-idle.json` is
+    the evidence that distinguishes the two, and it is already the gate's fourth condition.
+
+    THE RISK THIS ACCEPTS, stated rather than hidden: a session that DIED leaves its idle flag
+    behind (the next `SessionStart` is what rewrites it), so its last reading is honoured
+    indefinitely and the supervisor may type into a pane whose session is gone. That costs
+    keystrokes a dead pane ignores, capped by `supervise.sh`'s `MAX_RESETS` -- which is exactly
+    the case that cap was built for: sends that change nothing.
+    """
     path = os.path.join(workflow_dir, "context.json")
     try:
         with open(path, encoding="utf-8") as fh:
@@ -243,7 +262,7 @@ def read_reading(workflow_dir, now=None):
     if not isinstance(val, dict):
         return None
     if now is not None and isinstance(val.get("mono"), (int, float)):
-        if now - val["mono"] > STALE_SECONDS:
+        if now - val["mono"] > STALE_SECONDS and session_idle(workflow_dir) is None:
             return None
     return val
 

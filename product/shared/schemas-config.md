@@ -46,18 +46,27 @@ anchor, and the parts are one schema.*
   driven through `install-set.json`. `unknown` is never a no-op. If `/update` ever needs true ordering,
   the escape hatch is a product-owned `schema_version` in a shipped file — a *different* field from the
   delivery cache key, adopted deliberately
-- `run` — per-project run config (model/effort routing — fields grow as those land), plus `wave`, the
-  fan-out caps read by `prioritize` (how many to plan), `check_wave_independence.py` (how many may run at once)
-  and `plan_freshness.py` (when to stop patching a plan):
-  - `plan_max` — items planned per wave. Planning ahead is what makes fan-out possible at all: the independence
-    predicate reads `files_touched` from a plan, and a backlog row has none until it is picked. Surplus plans are
-    **not waste** — a plan is durable and an unbuilt item walks into the next wave already eligible, so the pool
-    of provably-independent work grows monotonically. Only the first wave pays full price.
-  - `execute_max` — workers dispatched at once. This is a **review** bound, not a machine one: it is how many
-    simultaneous writers a human can still meaningfully read afterwards. Raise it knowing that is the dial.
-  - `refresh_max` — in-place refreshes a plan may take before it is re-planned from scratch. Each refresh is
-    locally correct and a stack of them is not, the same way repeated patches to a document drift.
-  - Absent → shipped defaults (`plan_max` 10, `execute_max` 5, `refresh_max` 2).
+- `run` — per-project run config (model/effort routing — fields grow as those land), plus `drive` and `wave`:
+  - `drive.gate_turns` — **arm the turn gate for an operator who drives some other way.** The gate
+    (`hooks/turn_gate.py` → `scripts/turn_check.py`) is scoped to an UNATTENDED drive at the maintainer's word,
+    and it normally detects that from the driver's own environment (`REEVE_DRIVE` / `REEVE_SUPERVISE`, exported
+    by `loop.sh`). Absent → off, which is the right default for a human sitting there planning: a gate that
+    demanded a `continue` from an interactive session would be the same nuisance in the opposite direction, and
+    the first thing they would do is switch it off — taking the unattended case with it. Set it and every
+    `Stop` runs the ladder regardless of environment. *(Documented here because this file owns the config keys:
+    it shipped with its only description in a docstring and a `loop-detail.md` aside, and a fact with two
+    part-owners and no real one is exactly what this file exists to prevent.)*
+  - `wave` — the fan-out caps read by `prioritize` (how many to plan), `check_wave_independence.py` (how many
+    may run at once) and `plan_freshness.py` (when to stop patching a plan):
+    - `plan_max` — items planned per wave. Planning ahead is what makes fan-out possible at all: the independence
+      predicate reads `files_touched` from a plan, and a backlog row has none until it is picked. Surplus plans are
+      **not waste** — a plan is durable and an unbuilt item walks into the next wave already eligible, so the pool
+      of provably-independent work grows monotonically. Only the first wave pays full price.
+    - `execute_max` — workers dispatched at once. This is a **review** bound, not a machine one: it is how many
+      simultaneous writers a human can still meaningfully read afterwards. Raise it knowing that is the dial.
+    - `refresh_max` — in-place refreshes a plan may take before it is re-planned from scratch. Each refresh is
+      locally correct and a stack of them is not, the same way repeated patches to a document drift.
+    - Absent → shipped defaults (`plan_max` 10, `execute_max` 5, `refresh_max` 2).
 - `context` — the interactive context-governor knob, **read by the shipped statusline** (the one
   surface the running token count reaches — hooks and the model receive none): `warn_pct`, a
   context-usage **percentage**. **Absent → there is no ceiling, and the BAND governs**

@@ -9,10 +9,11 @@ read law) live in `shared/memory-model.md`.*
 <!-- doc-budget: detail split -> schemas-config.md -->
 <!-- doc-budget: detail split -> schemas-bus.md -->
 <!-- doc-budget: detail split -> schemas-loopstate.md -->
+<!-- doc-budget: detail split -> schemas-drive.md -->
 
-> **This file is one of FIVE parts, split by who the artifact belongs to.** It owns what the **build loop**
-> produces and consumes — a spec, a plan, a changelog, a verdict, a receipt, a forecast, an issue. The four
-> siblings own the other four belongings:
+> **This file is one of SIX parts, split by who the artifact belongs to.** It owns what the **build loop**
+> produces and consumes — a spec, a plan, a changelog, a verdict, a receipt, a forecast, an issue. The five
+> siblings own the other five belongings:
 > - [`schemas-config.md`](schemas-config.md) — the **operator's control surface**: every setting a human turns,
 >   wherever it physically lives: `config.json` · `subagentPromptCacheTtl`.
 > - [`schemas-runtime.md`](schemas-runtime.md) — the records the package's own **processes** own, never authored
@@ -20,6 +21,10 @@ read law) live in `shared/memory-model.md`.*
 >   `install-set.json` · `orchestrator-brief managed block` · `statusline.delegate` · `bus.lock` ·
 >   `orchestrator.lock` · `wave-build slot` · `bus.json` · `remote_token` · `alerts.json` ·
 >   `session-start warn-once markers`.
+> - [`schemas-drive.md`](schemas-drive.md) — the records that decide whether a session may **keep going, be
+>   reset, or be typed at**, one mechanism end to end (reading → band → gates → heartbeat → supervisor):
+>   `context.json` · `handoff-gate.json` · `turn-gate.json` · `monitor.json` · `awaiting-input.json` ·
+>   `session-idle.json` · `in-flight/` · `supervise-latch.json`.
 > - [`schemas-bus.md`](schemas-bus.md) — the records that cross the **console↔orchestrator boundary**, where the
 >   other end is a human: `parked-ticket` · `inbox-message` · `conversation-thread` · `refine-ledger` ·
 >   `demo-approvals` · `outbox / pending-outward-action` · `secret store`.

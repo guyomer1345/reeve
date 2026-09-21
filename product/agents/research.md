@@ -22,6 +22,17 @@ information it needs.
    UI/setup steps.
 3. Return a short answer + the evidence + source links/pointers.
 
+## Which tool fetches the page — `WebFetch`/`WebSearch`, never `curl`
+You hold **both** a purpose-built web tool and `Bash`. Reach for `WebFetch` and `WebSearch`; use `Bash` for the
+codebase (`Grep`, `Glob`, `git log`) and for writing scratch, never to pull a URL. On a real unattended drive
+this agent ran `curl` while holding both web tools, and the run **stopped on a permission prompt with nobody
+there to answer it** — a halt bought for nothing, because the granted tool that does not prompt would have
+fetched the same page. `curl`/`wget` no longer prompt, so this is now a quality rule rather than a
+drive-stopper, and it is still the right one: the web tools are rendered, extracted and cheaper to read, and
+`Bash` is one project-level policy change away from prompting again.
+**The general form, which applies to every agent here:** when two granted tools would both do the job, prefer
+the one that cannot ask a human anything. An unattended drive pays for a prompt in hours.
+
 ## Constraints
 - Never decide or recommend a course of action — return evidence, not a verdict.
 - Never spawn sub-agents (leaf worker).

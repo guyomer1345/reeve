@@ -9325,3 +9325,106 @@ nudge productive; `turn-gate.json` at 53.
 **Builds on:** **D241** (the counter re-arm this completes), **D242** (the monitor now owns the judgement this
 rung is added to), **D225**, **D239**.
 → `product/hooks/turn_gate.py`, `product/scripts/monitor.py`, `product/shared/schemas-runtime.md`, `11`.
+
+## D245 — the monitor's two blind spots: it judged a window it never watched, and the gate could not tell an idle session from a gone one **[BUILT 2026-09-21 — queue items `4c` + `4i`. `4c` cost a whole night; `4i` was latent, found while diagnosing `4h`]**
+**`4c` — a signal that was correct under an assumption that stopped holding, exactly like `D241`.** `monitor.py`
+derives quiet time from file mtimes, which keep accruing while the process is not running — so on restart it
+reads **its own downtime** as evidence against the loop. OBSERVED 2026-09-20: the supervisor was restarted at
+13:32:17Z and a `steer` was parked **seventeen seconds later**, *"still nothing written 251m after a nudge"*.
+Those 251 minutes were the window in which the monitor itself was not watching. The park is durable and
+`clear_safe` holds on it for ever, so a false escalation **stops the drive until a human deletes a ticket that
+asks no question**. `monitor.json` already carried `at`: a tick whose gap since the previous one exceeds its own
+poll interval has an UNOBSERVED window and re-baselines (`watching_since`) rather than judging.
+**The asymmetry is the design, and it is the one judgement call here.** The NUDGE still fires on mtime quiet —
+it is a keystroke, it is precisely what a session idle since a deploy needs, and withholding it for ten minutes
+after every restart would cost the recovery this file exists for. The ESCALATION is durable and halts the
+drive, so it may only fire over a window this process actually watched. A re-baseline also drops the nudge
+count: the previous nudge happened in an era nobody observed, so its outcome is unknown and re-spending it is
+the honest move. Net effect on the observed night: the restart would have NUDGED a session idle for four hours
+(which is what it needed) and escalated only if thirty observed minutes of silence followed.
+
+**`4i` — `clear_safe` had a condition it could never satisfy.** `read_reading` discards a reading older than
+`STALE_SECONDS = 900`; the statusline publishes one per turn; so a session idle for fifteen minutes has **no
+reading**, the band returns `unknown`, and the gate blocks on *"the band says unknown, not handoff-now"* — a
+blocker only the turn the reset exists to enable could clear. Seen on `consumer` at 14:55Z after ~40 idle
+minutes and harmless there (17% used), and **exactly backwards in the case that matters: a session that stops
+at 95% and sits for a quarter of an hour can no longer be reset by the supervisor at all.** The staleness rule
+is right for its original purpose — *"a reading older than this describes a session that is likely gone"* —
+and what was missing is that **an idle session is not a gone session**. `session-idle.json` already
+distinguishes them and is already the gate's fourth condition, so a known-idle session's reading survives.
+
+*Rejected (`4c`):* **bounding quiet by the observed window throughout** (`min(quiet_for, observed_for)` — the
+honest measure, and it would delay every post-restart nudge by ten minutes, which is the opposite of what the
+night that produced this item needed) · **a pidfile or a heartbeat file for the monitor itself** (that is `4d`'s
+question — who notices the supervisor is gone — and it is not the same fix) · **clearing `monitor.json` on
+supervisor start** (loses the totals that turn *"it pauses a lot"* into a number, and hides the gap rather than
+recording it).
+*Rejected (`4i`):* **raising `STALE_SECONDS`** (the rule is right; the exception is the point, and a bigger
+number just moves the cliff) · **a second, longer staleness bound for the idle case** (a number with no
+measurement behind it) · **treating a stale reading as `hold`** (it would block the reset just as permanently,
+in a way that reads as a verdict).
+*The risk `4i` accepts, stated rather than hidden:* a session that DIED leaves its idle flag behind, so its last
+reading is honoured indefinitely and the supervisor may type into a pane whose session is gone. That costs
+keystrokes a dead pane ignores, capped by `supervise.sh`'s `MAX_RESETS` — which is the case that cap was built
+for: sends that change nothing.
+*Evidence:* the 13:32:17Z restart and the 13:32:34Z park, from `supervise.log` and `parked/`; `consumer` at
+14:55Z with no reading after ~40 idle minutes.
+**Builds on:** **D225** (`monitor.py`), **D239** (the idle flag, and `MAX_RESETS`), **D242** (which moved the
+idle judgement into this file in the first place), **D241** (same shape: a signal correct under an assumption
+that stopped holding).
+→ `product/scripts/{monitor.py,context_band.py}`, `product/shared/schemas-runtime.md`, `11`.
+
+## D246 — the four small debts, paid together: a tool choice, a give-up nobody could hear, a config key with no owner, and a file over its rent **[BUILT 2026-09-21 — queue items `2`, `3`, `4`, `4b`. Three builds and one DECISION taken under the standing delegation rather than asked]**
+Folded in together because each is cheap and none earns its own slice. `3` is the one that was a decision
+before it was a build, and `D239` deliberately left it open.
+
+**`2` — `research` reached for `curl` while holding `WebFetch` and `WebSearch`.** Both web tools are in its
+frontmatter and broad-allowed in `settings.json`; its body said nothing about which to prefer, and it used the
+one that prompted — halting a live unattended drive on a permission nobody was there to answer. `D240` took
+`curl` off the ask list, so the halt is gone and this is now a tool-choice quality rule, which is exactly the
+fix `D240` considered and did not take. The rule is stated in the agent, with its general form: **when two
+granted tools would both do the job, prefer the one that cannot ask a human anything — an unattended drive
+pays for a prompt in hours.** The sweep `4`'s parent item asked for was run across all seven agents and the
+skills: nothing else reaches for a prompting tool where a granted silent one would serve. `create-issue` /
+`close-issue` touch `gh issue`, which is not on the ask list and already queues through `outbox/`.
+
+**`3` — the supervisor's give-up was a LOG LINE.** `MAX_RESETS` stopped the send loop and said what a human
+could do, into `supervise.log`; nothing parked and nothing alerted, so an operator who does not read that file
+learns about it when the drive stops moving — the failure mode the away channel exists to abolish.
+**DECIDED: park a `steer`, and split the fact from the judgement.** `supervise.sh` records `gave_up` on its own
+latch (its own state, the same way `attempts` is) and `monitor.py` decides what that means, because that is
+where every other escalation in this package is decided and where the steer floor reads its evidence. Its own
+ticket (`steer-<goal>-reset-not-landing`), because its ask is its own: look at the pane, flush the prompt box
+with Esc, send `continue`, delete the latch. **Idempotent by placement** — the rung sits below the parked check,
+so the park it raises makes the next poll `waiting`; a `deadline` restamped every 60s is an away channel that
+teaches its reader to ignore it.
+*Rejected for `3`:* **an away alert fired from the shell** (a second sender beside the one that owns
+notifications — the argument `drive.py` and `monitor.py` both already make) · **leaving it and documenting it**
+(the documentation would say "watch a log file", which is what being away makes impossible) · **reusing the
+`not-moving` ticket** (two different asks under one card, and each would overwrite the other's `what`) ·
+**deciding it in `supervise.sh`** (transport, per `D242`, decided in the same week for the same reason).
+
+**`4` — `run.drive.gate_turns` had no owner.** A shipped config key documented only in a docstring and a
+`loop-detail.md` aside, while `schemas-config.md` owns the config keys. Exactly the single-owner violation
+`D80` exists to stop, in a shape `check_owner_sweep.py` cannot see. Now documented where the owner is, with the
+reason the default is off.
+
+**`4b` — `schemas-runtime.md` was over its budget and wanted a SPLIT, not another shave.** 16,335 against the
+15,000 advisory cap after four slices in two days added runtime records to it. `D184`'s prescription for a file
+at its cap is split-and-pointer, and the split line is **belonging**, as it was the three times before:
+`schemas-drive.md` takes the records that decide *may this session keep going, be reset, or be typed at* —
+`context.json` · `handoff-gate.json` · `turn-gate.json` · `monitor.json` · `awaiting-input.json` ·
+`session-idle.json` · `in-flight/` · `supervise-latch.json`. They are one mechanism end to end (reading → band
+→ gates → heartbeat → supervisor) and they are where every one of those four slices landed. Survivor 10,832,
+detail 6,058, both well under. `wave-decision.json` stayed despite sitting in the middle of the range: it
+governs the loop's fan-out, not the session's liveness.
+*Checked rather than assumed:* no reference anywhere in the package or the design record points at a moved
+section — the live `schemas-runtime.md § …` references are to `orchestrator.lock`, `spec-approval.json`,
+`dispatch_return.py` and the brief markers, all of which stayed.
+*Evidence:* the live `curl` halt (`D240`'s own trigger); `MAX_RESETS` reachable in `supervise.log` alone;
+`--report` at 16,335 before and 10,832 + 6,058 after; 13 package templates in budget, 0 advisory.
+**Builds on:** **D240** (which left `2` open by name), **D239** (which left `3` undecided by name), **D241**
+(which named `4b` as its residual), **D184** (the budget rule and the split-and-pointer prescription),
+**D242**/**D245** (the transport/judgement line `3` is decided on).
+→ `product/agents/research.md`, `product/scripts/{supervise.sh,monitor.py}`,
+`product/shared/{schemas-config.md,schemas-runtime.md,schemas-drive.md,schemas.md}`, `05`, `11`.

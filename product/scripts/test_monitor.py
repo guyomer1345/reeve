@@ -41,6 +41,23 @@ def later(seconds):
     return time.time() + seconds
 
 
+def polled_through(wf, start, end, step=60):
+    """Run the poller the way `supervise.sh` runs it — every `step` seconds — and return the last
+    verdict.
+
+    A test that jumps straight from one tick to one twenty minutes later is not describing a
+    monitor that watched twenty minutes; it is describing one that was NOT RUNNING for nineteen
+    of them, which is a different thing and has its own tests below. Quiet time comes from file
+    mtimes and accrues either way, so the distinction has to be made by the caller.
+    """
+    rec, t = None, start
+    while t <= end:
+        rec = monitor.observe(wf, now=t)
+        monitor.write_record(wf, rec)
+        t += step
+    return rec
+
+
 # --- waiting is not stalling --------------------------------------------------
 
 def test_a_PARKED_checkpoint_is_waiting_not_stalling(tmp_path):
@@ -112,9 +129,7 @@ def test_a_NEW_pulse_resets_everything(tmp_path):
 
 
 def test_a_drive_that_IGNORED_the_nudge_escalates(tmp_path):
-    wf = project(tmp_path)
-    monitor.write_record(wf, monitor.observe(wf, now=later(700)))
-    rec = monitor.observe(wf, now=later(2_000))
+    rec = polled_through(project(tmp_path), later(700), later(2_600))
     assert rec["state"] == "stalled" and rec["action"] == "escalate"
 
 
@@ -123,8 +138,8 @@ def test_the_escalation_PARKS_a_steer_and_the_floor_lets_it_through(tmp_path):
     the steer floor — which refuses a park the goal's verdict does not support — must accept
     this one, or the monitor could observe a stall nobody is ever told about."""
     wf = project(tmp_path)
-    monitor.write_record(wf, monitor.observe(wf, now=later(700)))
-    rec = monitor.tick(wf, now=later(2_000))
+    polled_through(wf, later(700), later(2_500))
+    rec = monitor.tick(wf, now=later(2_600))
     assert rec["parked"].get("ticket_id") == "steer-G-1-not-moving", rec["parked"]
     assert os.path.exists(os.path.join(wf, "parked", "steer-G-1-not-moving.json"))
 
@@ -133,10 +148,10 @@ def test_the_escalation_is_IDEMPOTENT(tmp_path):
     """A stall a human has not answered must not accumulate one ticket per poll — that is how an
     away channel trains someone to ignore it."""
     wf = project(tmp_path)
-    monitor.write_record(wf, monitor.observe(wf, now=later(700)))
-    monitor.tick(wf, now=later(2_000))
+    polled_through(wf, later(700), later(2_500))
+    monitor.tick(wf, now=later(2_600))
     # The park itself now makes the loop `waiting`, which is correct: a human owes an answer.
-    assert monitor.observe(wf, now=later(3_000))["state"] == "waiting"
+    assert monitor.observe(wf, now=later(2_660))["state"] == "waiting"
     assert len(os.listdir(os.path.join(wf, "parked"))) == 1
 
 
@@ -249,9 +264,83 @@ def test_a_MID_TURN_session_quiet_for_the_WHOLE_STALL_WINDOW_still_escalates(tmp
     working loop writes constantly, so it never reaches the quiet window at all — quiet for the
     full stall window AND not at the prompt means wedged, or an idle flag that was lost. Neither
     is fixed by typing, and both are things the operator must be told about."""
-    wf = project(tmp_path, idle=False)
-    rec = monitor.observe(wf, now=later(2_000))
+    rec = polled_through(project(tmp_path, idle=False), later(700), later(2_600))
     assert rec["state"] == "stalled" and rec["action"] == "escalate"
+
+
+# --- the supervisor's give-up is not just a log line --------------------------
+
+def test_the_SUPERVISORS_GIVE_UP_reaches_a_human(tmp_path):
+    """`MAX_RESETS` stopped the send loop and said so into `supervise.log` — nothing parked and
+    nothing alerted, so an operator who does not read that file learns about it when the drive
+    stops moving. That is the failure mode the away channel exists to abolish."""
+    wf = project(tmp_path)
+    (tmp_path / ".workflow" / "supervise-latch.json").write_text(json.dumps(
+        {"attempts": 3, "used": 190_000, "gave_up": True}))
+    rec = monitor.tick(wf)
+    assert rec["state"] == "stalled" and rec["action"] == "escalate"
+    assert rec["parked"].get("ticket_id") == "steer-G-1-reset-not-landing", rec["parked"]
+    # Its own ticket, because its ask is its own: look at the pane, flush the prompt box.
+    parked = json.loads((tmp_path / ".workflow" / "parked"
+                         / "steer-G-1-reset-not-landing.json").read_text())
+    assert "Esc" in parked["checkpoint"]["request"]["what"]
+
+
+def test_the_GIVE_UP_escalation_does_not_re_alert_every_poll(tmp_path):
+    """The park it raises IS a parked checkpoint, so the next poll reports `waiting`. That is
+    what the rung's placement below the parked check buys — a `deadline` restamped every 60s is
+    an away channel that teaches its reader to ignore it."""
+    wf = project(tmp_path)
+    (tmp_path / ".workflow" / "supervise-latch.json").write_text(json.dumps({"gave_up": True}))
+    monitor.tick(wf)
+    rec = monitor.tick(wf)
+    assert rec["state"] == "waiting" and rec["action"] == "none"
+    assert len(os.listdir(os.path.join(wf, "parked"))) == 1
+
+
+def test_a_supervisor_that_has_NOT_given_up_escalates_nothing(tmp_path):
+    """The negative control: an ordinary attempt ledger is not an alarm."""
+    wf = project(tmp_path)
+    (tmp_path / ".workflow" / "supervise-latch.json").write_text(json.dumps(
+        {"attempts": 1, "used": 190_000, "gave_up": False}))
+    assert monitor.observe(wf)["action"] == "none"
+
+
+# --- a window nobody watched is not evidence ----------------------------------
+
+def test_a_RESTARTED_monitor_does_not_escalate_on_its_OWN_DOWNTIME(tmp_path):
+    """It cost a whole night. OBSERVED 2026-09-20: the supervisor was restarted at 13:32:17Z and
+    a `steer` was parked SEVENTEEN SECONDS later — *"still nothing written 251m after a nudge"*,
+    and those 251 minutes were the window in which the monitor itself was not running. The park
+    is durable and `clear_safe` holds on it for ever, so the drive stops until a human deletes a
+    ticket that asks no question."""
+    wf = project(tmp_path)
+    monitor.write_record(wf, monitor.observe(wf, now=later(700)))          # before the deploy
+    when = later(15_000)
+    rec = monitor.observe(wf, now=when)                                    # restarted, 4h later
+    assert rec["action"] != "escalate", rec
+    assert rec["watching_since"] == when, "the restart must re-baseline, not judge"
+    # And it holds for the whole stall window rather than escalating on the next poll.
+    assert polled_through(wf, when + 60, when + 1_700)["action"] != "escalate"
+
+
+def test_a_RESTARTED_monitor_still_NUDGES_which_is_the_whole_point(tmp_path):
+    """The asymmetry is the design. A keystroke is cheap and is exactly what a session idle
+    since a deploy needs; withholding it for ten minutes after every restart would cost the
+    recovery this file exists for. Only the durable escalation waits for an observed window."""
+    wf = project(tmp_path)
+    monitor.write_record(wf, dict(monitor.observe(wf, now=later(700)), nudges=1))
+    rec = monitor.observe(wf, now=later(15_000))
+    assert rec["action"] == "nudge", rec
+    assert rec["nudges"] == 1, "the nudge spent in an unobserved era is not evidence either"
+
+
+def test_an_OBSERVED_stall_still_escalates_after_a_restart(tmp_path):
+    """The negative control: re-baselining delays the escalation, it does not remove it."""
+    wf = project(tmp_path)
+    monitor.write_record(wf, monitor.observe(wf, now=later(700)))
+    rec = polled_through(wf, later(15_000), later(17_000))
+    assert rec["state"] == "stalled" and rec["action"] == "escalate", rec
 
 
 # --- fail direction: do nothing -----------------------------------------------

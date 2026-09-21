@@ -69,6 +69,15 @@ still dead. So the floor accepts this file's record instead, and only while it i
 stall must name the fingerprint the loop is still sitting on. That is what keeps the escape from
 becoming a bypass -- a session cannot talk its way through it, it can only be observed through it.
 
+A WINDOW NOBODY WATCHED IS NOT EVIDENCE. The pulse is a file mtime, so quiet time keeps accruing
+while this process is not running, and on restart it reads its own downtime as a case against the
+loop: OBSERVED 2026-09-20, a supervisor restarted at 13:32:17Z and a `steer` parked seventeen
+seconds later for *"still nothing written 251m after a nudge"* -- 251 minutes in which nothing was
+watching. A tick whose gap since the previous one exceeds its own poll interval RE-BASELINES. The
+asymmetry is deliberate: the NUDGE still runs on mtime quiet (a keystroke is cheap and is exactly
+what a session idle since a deploy needs), while the durable ESCALATION may only fire over a
+window this process actually watched.
+
 FAIL DIRECTION: do nothing, throughout — the same rule `supervise.sh` runs on. Every unreadable
 file, absent git and unexpected shape reports `unknown` and takes no action. A monitor that fails
 by staying quiet costs a stall nobody was told about, which is the status quo; one that fails by
@@ -115,10 +124,18 @@ IDLE_FILE = "session-idle.json"
 # minutes -> nudge -> work -> stop, with `nudges_total: 4` and every nudge working. The tax was
 # the ten minutes, not the nudge.
 TURN_GATE = "turn-gate.json"
+# The supervisor's own attempt ledger. `gave_up` means its sends stopped changing anything and it
+# has stopped trying -- a fact about that process, recorded by it; what to DO about it is decided
+# here, because this is where every other escalation in the package is decided.
+SUPERVISE_LATCH = "supervise-latch.json"
 # Breadcrumbs served that moved nothing before this escalates. Three, because the keystroke's
 # effect is DERIVED (a pulse that advances) and one unmoved poll can mean a turn that is still
 # starting. A session that ignores three is not one more typing will reach.
 OWED_MISSES = int(os.environ.get("REEVE_MONITOR_OWED_MISSES") or 3)
+# A gap between ticks longer than this means THIS PROCESS WAS NOT RUNNING. `supervise.sh` polls
+# every 60s, so five minutes is unambiguous and leaves room for a slow poll, a busy machine or a
+# laptop that slept. See `observe` for what is done about it -- and what is deliberately not.
+GAP_SECONDS = int(os.environ.get("REEVE_MONITOR_GAP") or 300)
 
 
 def _read(path):
@@ -233,6 +250,29 @@ def observe(workflow, now=None, quiet=QUIET_SECONDS, stall=STALL_SECONDS):
            "owed_served": prev.get("owed_served"), "owed_pulse": prev.get("owed_pulse"),
            "owed_misses": int(prev.get("owed_misses") or 0)}
 
+    # AN UNOBSERVED WINDOW IS NOT EVIDENCE, and this file could not tell the difference. Quiet
+    # time is derived from file mtimes, which keep accruing while this process is not running --
+    # so on restart it reads its OWN downtime as evidence against the loop. OBSERVED 2026-09-20:
+    # the supervisor was restarted at 13:32:17Z and a `steer` was parked SEVENTEEN SECONDS later,
+    # *"still nothing written 251m after a nudge"* -- 251 minutes in which nothing was watching.
+    # The park is durable and `clear_safe` holds on it for ever, so a false escalation stops the
+    # drive until a human deletes a ticket that asks no question.
+    #
+    # THE ASYMMETRY IS THE DESIGN, not a shortcut. The NUDGE still runs on mtime quiet: it is a
+    # keystroke, it is what a session idle since a deploy actually needs, and withholding it for
+    # ten minutes after every restart would cost the recovery this file exists for. The
+    # ESCALATION is durable and halts the drive, so it may only fire over a window this process
+    # was actually watching. A re-baseline also drops the nudge count: the previous nudge
+    # happened in an era nobody observed, so its outcome is unknown and re-spending it is the
+    # honest move.
+    prev_at = prev.get("at")
+    unobserved = not isinstance(prev_at, (int, float)) or (now - prev_at) > GAP_SECONDS
+    since = prev.get("watching_since")
+    if unobserved or not isinstance(since, (int, float)):
+        since = now
+    out["watching_since"] = since
+    observed_for = max(0.0, now - since)
+
     kind, reason = waiting_on_a_human(workflow)
     if kind in ("dialog", "paused"):
         out.update(state="waiting", action="none", why=reason, quiet_for=0, nudges=0)
@@ -272,6 +312,21 @@ def observe(workflow, now=None, quiet=QUIET_SECONDS, stall=STALL_SECONDS):
     if kind:
         out.update(state="waiting", action="none", why=reason, quiet_for=0, nudges=0)
         return out
+
+    # THE SUPERVISOR GAVE UP, and until now that was a line in `supervise.log` and nothing else.
+    # An operator who does not read that file learns about it when the drive stops moving --
+    # which is precisely the failure the away channel exists to abolish. It is checked BELOW the
+    # parked rung, and that placement is what makes it idempotent: the park it raises is itself a
+    # parked checkpoint, so the next poll reports `waiting` and does not re-alert. The session is
+    # at a full window with keys that are not landing; a nudge cannot help, and this is the one
+    # rung where the ask is specific enough to be actionable (look at the pane, flush the prompt
+    # box, delete the latch).
+    if _read(os.path.join(workflow, SUPERVISE_LATCH)).get("gave_up"):
+        out.update(state="stalled", action="escalate", quiet_for=0, nudges=0, ask="reset-not-landing",
+                   escalations_total=out["escalations_total"] + 1,
+                   why=("the supervisor gave up resetting this session — its sends reach tmux "
+                        "and not the session, so the context window can no longer be recycled"))
+        return out
     if beat is None:
         out.update(state="unknown", action="none", why="nothing under .workflow/ is readable",
                    quiet_for=0, nudges=0)
@@ -281,7 +336,7 @@ def observe(workflow, now=None, quiet=QUIET_SECONDS, stall=STALL_SECONDS):
     # A NEW pulse resets the count, whatever the fingerprint says: a loop that is writing is a
     # loop that is alive, even mid-item where no anchor has landed yet. Tying this to the
     # fingerprint alone would call a long `execute` a stall and nudge a session that is working.
-    nudges = int(prev.get("nudges") or 0) if quiet_for >= quiet else 0
+    nudges = int(prev.get("nudges") or 0) if quiet_for >= quiet and not unobserved else 0
     if quiet_for < quiet:
         out.update(state="moving", action="none", quiet_for=quiet_for, nudges=0,
                    why="written %ds ago" % int(quiet_for))
@@ -292,7 +347,7 @@ def observe(workflow, now=None, quiet=QUIET_SECONDS, stall=STALL_SECONDS):
         # the session is reachable. At the stall window it is the wedged case -- see the
         # docstring -- and the escalation is the only rung left that does not type into a
         # running turn.
-        if quiet_for >= stall:
+        if quiet_for >= stall and observed_for >= stall:
             out.update(state="stalled", action="escalate", quiet_for=quiet_for, nudges=nudges,
                        escalations_total=out["escalations_total"] + 1,
                        why=("nothing written for %dm and the session is not at an idle prompt — "
@@ -309,10 +364,16 @@ def observe(workflow, now=None, quiet=QUIET_SECONDS, stall=STALL_SECONDS):
                    nudges_total=out["nudges_total"] + 1,
                    why="nothing written under .workflow/ for %dm" % int(quiet_for // 60))
         return out
-    if quiet_for >= stall:
+    if quiet_for >= stall and observed_for >= stall:
         out.update(state="stalled", action="escalate", quiet_for=quiet_for, nudges=nudges,
                    escalations_total=out["escalations_total"] + 1,
                    why="still nothing written %dm after a nudge" % int(quiet_for // 60))
+        return out
+    if quiet_for >= stall:
+        out.update(state="quiet", action="none", quiet_for=quiet_for, nudges=nudges,
+                   why=("quiet %dm, but this process has only been watching %dm of it — the "
+                        "rest is an unobserved window, not evidence"
+                        % (int(quiet_for // 60), int(observed_for // 60))))
         return out
     out.update(state="quiet", action="none", quiet_for=quiet_for, nudges=nudges,
                why="nudged %ds ago; waiting for the stall window" % int(quiet_for))
@@ -331,6 +392,20 @@ def write_record(workflow, rec):
         return False
 
 
+# The two asks this file can raise, and they are different asks. "The drive stopped moving" wants
+# direction; "the reset is not landing" wants a person to look at the pane and flush a prompt box
+# that has filled with unsubmitted text. One ticket each, so a human reading the card knows which
+# of the two they are being asked to do -- and so neither can silently overwrite the other.
+ASKS = {
+    "not-moving": ("the drive has stopped moving and did not answer a nudge — it needs "
+                   "direction, not a retry"),
+    "reset-not-landing": ("the supervisor cannot recycle this session's context window: its "
+                          "keystrokes reach tmux and never reach the session. Look at the pane — "
+                          "if the prompt box holds unsubmitted text, clear it (Esc), send "
+                          "`continue` yourself, then delete `.workflow/supervise-latch.json`"),
+}
+
+
 def escalate(workflow, rec):
     """Raise the `steer` checkpoint, idempotently. -> a result dict, never raises.
 
@@ -339,7 +414,8 @@ def escalate(workflow, rec):
     its own evidence exists would be refused by the gate that is meant to let it through.
     """
     goal = _read(os.path.join(workflow, "goal.json")).get("id") or "goal"
-    ticket = "steer-%s-not-moving" % goal
+    ask = rec.get("ask") if rec.get("ask") in ASKS else "not-moving"
+    ticket = "steer-%s-%s" % (goal, ask)
     try:
         from bus import Paths, write_park
         return write_park(Paths(workflow), {
@@ -347,8 +423,7 @@ def escalate(workflow, rec):
             "token": "%s:monitor" % ticket,
             "checkpoint": {"kind": "steer", "request": {
                 "kind": "steer",
-                "what": ("the drive has stopped moving and did not answer a nudge — it needs "
-                         "direction, not a retry"),
+                "what": ASKS[ask],
                 "expected": rec.get("why", ""),
                 "blocking": True}},
             "loop_position": "monitor",

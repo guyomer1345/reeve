@@ -136,6 +136,21 @@ def test_a_stale_reading_reads_as_absent(tmp_path):
     assert cb.read_reading(wf, now=time.monotonic()) is None
 
 
+def test_a_stale_reading_SURVIVES_while_the_session_is_known_IDLE(tmp_path):
+    """An idle session is not a gone session, and the staleness rule could not tell them apart.
+    The statusline publishes once per turn, so a session sitting at the prompt has no fresh
+    reading — the band goes `unknown` and `clear_safe` blocks on a condition only the turn it is
+    trying to make possible could satisfy. Harmless at 17%; at 95% it means the supervisor can
+    never reset that session at all."""
+    wf = str(tmp_path / ".workflow")
+    cb.publish(wf, 190_000, 200_000, time.monotonic() - cb.STALE_SECONDS - 1)
+    cb.mark_idle(wf, {"kind": "idle_prompt"})
+    r = cb.read_reading(wf, now=time.monotonic())
+    assert r is not None and r["used"] == 190_000
+    cb.clear_idle(wf)                                   # a prompt was submitted; the turn runs
+    assert cb.read_reading(wf, now=time.monotonic()) is None
+
+
 def test_a_fresh_reading_survives(tmp_path):
     wf = str(tmp_path / ".workflow")
     cb.publish(wf, 1, 2, time.monotonic() - 5)

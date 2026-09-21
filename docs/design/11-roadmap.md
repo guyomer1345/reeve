@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **`4e`, `4f`, `4h` and `4l` are CLOSED (`D242`/`D243`/`D244`, 2026-09-21) — G1's first four measured failures are gone. Start at `4c`.** `4j` and `4k` are the two that change what the package IS; `5` stays a conversation. The standing queue below this one is CLOSED**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **`4e`, `4f`, `4h`, `4l`, `4c`, `4i` and all four small ones (`2` `3` `4` `4b`) are CLOSED (`D242`–`D246`, 2026-09-21) — G3 is finished entire. Start at `4d`+`4g` — the last G1 pair, and the only one of them that is a product question rather than plumbing. Then `4k`, then `4j`. `5` stays a conversation.** `4j` and `4k` are the two that change what the package IS; `5` stays a conversation. The standing queue below this one is CLOSED**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1535,17 +1535,17 @@ item below belongs to exactly one.**
 - **G1 · A DRIVE SURVIVES THE NIGHT UNATTENDED.** *Done:* you start it, sleep, and in the morning it is still
   working or it stopped for a reason you agree with. Six measured failures stood in the way: a stopped session
   cannot restart itself (`4e` `4f` — ✅ `D242`); recovery costs ten minutes a turn (`4l` — ✅ `D244`); the
-  monitor invents stops (`4c` `4i`); **one human gate halts the whole machine** (`4h` — ✅ `D243`, and it was
+  monitor invents stops (`4c` `4i` — ✅ `D245`); **one human gate halts the whole machine** (`4h` — ✅ `D243`, and it was
   the highest-value item in this queue); and a run can silently half-arm with nothing noticing (`4d` `4g`).
-  **Two left: `4c`+`4i`, then `4d`+`4g`.**
+  **One pair left: `4d`+`4g`.**
 - **G2 · THE HUMAN IS WOKEN ONLY FOR WHAT IS ACTUALLY HIS.** *Done:* the only thing that reaches him is a
   question about what the product IS or PROMISES; design, logic, library choice, correctness and "is this a
   real bug" are answered by `decision-engineer`, `review`, `debug` and `research`, which are better at them
   than a non-expert owner and are awake at 3am. `4k` (the inception conversation that does not exist, and the
   thing that BUYS the autonomy — a thin inception leaves the floor nothing to hold), then `4j` (rebuild the qa
   gate on *product-changing*), plus `5` (an `ask` should defer, not halt) and `2` (do not reach for a tool
-  that prompts while holding one that does not).
-- **G3 · DEBTS THE PACKAGE OWES ITSELF.** `3` · `4` · `4b`. Small, cheap, folded in where convenient.
+  that prompts while holding one that does not — ✅ `D246`).
+- **G3 · DEBTS THE PACKAGE OWES ITSELF.** `3` · `4` · `4b`. **✅ ALL CLOSED 2026-09-21 (`D246`), together with `2` from G2.**
 
 **The baseline they build on, so nothing here is re-litigated:** `D239` (idle condition), `D240` (curl/wget off
 the ask list), `D241` (in-flight workers), and the operator ceiling at 30/33%. Evidence: **23 clean self-resets
@@ -1711,7 +1711,7 @@ turn for a `[reeve-report state:…]` block. If the model has learned "produce t
 the gate is *teaching* the stop it exists to prevent. Check whether consumer's stops cluster around report
 emission before concluding anything.
 
-**4c. The MONITOR escalates on a gap it did not observe.** `[HIGH — it cost a whole night, and it is decidable]`
+**4c. The MONITOR escalates on a gap it did not observe. ✅ CLOSED 2026-09-21 — `D245`.** `[was HIGH — it cost a whole night, and it is decidable]`
 OBSERVED 2026-09-20: the supervisor was restarted at 13:32:17Z and `monitor.py` parked a `steer` **seventeen
 seconds later** — *"still nothing written 251m after a nudge"*. Those 251 minutes were the window in which the
 monitor **itself was not running**. It derives quiet time from file mtimes, so it cannot tell *"the loop was
@@ -1721,7 +1721,7 @@ deletes a ticket with no question in it**. Fix shape: `monitor.json` already car
 since the previous tick exceeds its own interval has an UNOBSERVED window and must re-baseline rather than
 judge. Same family as `D241`: a signal that was correct under an assumption that stopped holding.
 
-**4i. An idle session's context reading AGES OUT, and then it can never be reset.** `[MED — latent, seen while diagnosing 4h]`
+**4i. An idle session's context reading AGES OUT, and then it can never be reset. ✅ CLOSED 2026-09-21 — `D245`.** `[was MED — latent, seen while diagnosing 4h]`
 `read_reading` discards a reading older than `STALE_SECONDS = 900`. The statusline publishes it per turn, so a
 session that has been idle 15+ minutes has **no reading**, the band returns `unknown`, and `gate()` blocks with
 *"the band says unknown, not handoff-now"* — which `clear_safe` can never satisfy. Seen on `consumer` at 14:55Z
@@ -1760,26 +1760,26 @@ the command itself refusing to hand back a half-armed state.** It owns the preco
 there) and it SAYS what it armed. Related: `4d` (nothing notices a missing supervisor) is a symptom of the same
 gap — there is no single thing whose job is "this project is under supervision, and here is the proof."
 
-**2. `research` reaches for `curl` while holding `WebFetch` and `WebSearch`.** `[MED — D240 left it open]`
+**2. `research` reaches for `curl` while holding `WebFetch` and `WebSearch`. ✅ CLOSED 2026-09-21 — `D246`.** `[was MED — D240 left it open]`
 Both web tools are granted in its frontmatter AND broad-allow in `settings.json`; its body says nothing about
 which to prefer, and it used the one that prompted. `D240` took `curl` off the ask list, so this is now a
 tool-choice quality defect rather than a drive-stopper — **but it is still the fix that removes prompts
 without trading any safety, which is why it was the recommendation `D240` did not take.** Sweep all seven
 agents for the same shape: a granted tool that prompts where a granted tool that does not would serve.
 
-**3. The supervisor's give-up is a LOG LINE.** `[MED — named residual of `D239`]`
+**3. The supervisor's give-up is a LOG LINE. ✅ CLOSED 2026-09-21 — `D246`, decided under the standing delegation: it parks a `steer`.** `[was MED — named residual of `D239`]`
 `MAX_RESETS` stops the send loop and says what a human can do, into `supervise.log`. Nothing parks, nothing
 alerts. An operator who does not read that file learns about it when the drive stops moving — which is the
 failure mode the away channel exists to abolish. **This is a decision before it is a build:** park a `steer`
 (consistent with `monitor.py`'s escalation, which already owns that route), fire an away alert, or leave it
 and say so in the docs. `D239` deliberately did not decide it.
 
-**4. `run.drive.gate_turns` has no owner in `schemas-config.md`.** `[LOW — cheap, and it is the repo's own law]`
+**4. `run.drive.gate_turns` has no owner in `schemas-config.md`. ✅ CLOSED 2026-09-21 — `D246`.** `[was LOW — cheap, and it is the repo's own law]`
 A shipped config key documented only in `turn_gate.py`'s docstring and `loop-detail.md:343`. `schemas-config.md`
 owns the config keys; this one is not in it. Exactly the single-owner violation `D80` and
 `check_owner_sweep.py` exist to catch, in a shape the sweep cannot see. Found in conversation 2026-09-19.
 
-**4b. `schemas-runtime.md` is over its doc budget and wants a SPLIT.** `[LOW — `D241`'s named residual]`
+**4b. `schemas-runtime.md` is over its doc budget and wants a SPLIT. ✅ CLOSED 2026-09-21 — `D246`, split to `schemas-drive.md`.** `[was LOW — `D241`'s named residual]`
 15,370 against the 15,000 advisory cap. Three slices in one day added runtime records to it
 (`session-idle`, `supervise-latch`, `in-flight`) and the third could not pay its own rent without cutting
 content that is load-bearing. `D184`'s prescription for a file at its cap is **split-and-pointer**, not more
