@@ -1752,7 +1752,7 @@ original purpose (*"a reading older than this describes a session that is likely
 that **an idle session is not a gone session**, and `session-idle.json` is exactly the evidence that
 distinguishes them.
 
-**4d. Nothing notices that the supervisor is not running.** `[HIGH — the same night, the other half]`
+**4d. Nothing notices that the supervisor is not running. ✅ CLOSED 2026-09-21 — `D247`: the supervisor publishes itself (`supervisor.json`); three consumers read it, and the one awake at 3am is a `steer` parked by the session when its supervisor is gone.** `[was HIGH — the same night, the other half]`
 `monitor.py` runs INSIDE `supervise.sh`. So the heartbeat that exists to catch a dead loop is itself hosted by a
 process that can simply not be there — and when it is not, **nothing anywhere says so**: not the console, not
 the status line, not the loop, not `turn_check`. On 2026-09-19 the supervisors were stopped for a deploy and
@@ -1765,7 +1765,7 @@ Related and NOT the same thing: the turn gate can flag a stop-for-nothing but ca
 twice and then gives up for good (`demands` reached 52 on `consumer`), so the nudge is the only recovery there
 is. That is why losing it costs a night rather than a turn.
 
-**4g. Getting INTO a supervised run is vague, manual and unverified — the maintainer's own words.** `[HIGH — this is the product, not the plumbing]`
+**4g. Getting INTO a supervised run is vague, manual and unverified — the maintainer's own words. ✅ CLOSED 2026-09-21 — `D247`: `loop.sh --supervise` is ONE command — preflight, walk into tmux, arm, and say what it armed.** `[was HIGH — this is the product, not the plumbing]`
 *"Currently the process of getting to a not-supervised run is very vague; I need to run a few commands, make
 sure there isn't idle stuff, verify that they work — it isn't robust. I want one `supervise.sh`, I run it, I
 prompt Claude `continue` once, and from there on we are inside a supervised run."* (2026-09-20.)
