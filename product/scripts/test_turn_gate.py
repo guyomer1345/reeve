@@ -190,7 +190,11 @@ def test_the_anchor_conversion_IS_ONE_SHOT_and_cannot_wedge(tmp_path):
 
 
 def test_fixing_the_anchor_re_arms_the_conversion(tmp_path):
-    """Spent-until-fixed, not spent-forever: a later bad anchor gets its own demand."""
+    """Spent-until-fixed, not spent-forever: a later bad anchor gets its own demand.
+
+    Reaching the conversion a second time costs the two `continue` demands again, because the
+    give-up re-arms the counter — see `test_the_GIVE_UP_re_arms_the_gate_rather_than_standing_down`.
+    """
     p = project(tmp_path)
     h = p / ".workflow" / "handoff.md"
     h.write_text("# handoff\n- base_sha: (the tech-stack commit)\n")
@@ -199,8 +203,44 @@ def test_fixing_the_anchor_re_arms_the_conversion(tmp_path):
     run(p)                                       # anchor good -> flag clears
     assert json.loads((p / ".workflow" / "turn-gate.json").read_text())["anchor_demanded"] is False
     h.write_text("# handoff\n- base_sha: none yet\n")
-    assert blocked(run(p))
+    assert blocked(run(p)) and blocked(run(p))   # rung 1 again, twice
+    assert blocked(run(p))                       # and the conversion, re-armed
     assert json.loads((p / ".workflow" / "turn-gate.json").read_text())["anchor_demanded"] is True
+
+
+# --- the give-up: per episode, and it leaves a breadcrumb --------------------
+
+def test_the_GIVE_UP_re_arms_the_gate_rather_than_standing_down(tmp_path):
+    """MEASURED on a real drive: `demands: 53` against `MAX_DEMANDS = 2` — the counter only ever
+    reset on the may-end path, so a session whose every stop was illegitimate never re-armed it
+    and the gate had been standing down for fifty-one stops. Re-arming cannot wedge anything:
+    every third stop still releases."""
+    p = project(tmp_path)
+    run(p), run(p)
+    res = run(p)
+    assert not blocked(res) and "Letting the turn end" in res.stdout
+    latch = json.loads((p / ".workflow" / "turn-gate.json").read_text())
+    assert latch["demands"] == 0 and latch["rung"] is None
+    assert blocked(run(p)), "the very next stop must be gated again, not waved through"
+
+
+def test_the_GIVE_UP_leaves_the_breadcrumb_the_supervisor_acts_on(tmp_path):
+    """The fact that this turn owed a `continue` is known HERE, at the instant of the stop.
+    Without it `monitor.py` spends `QUIET_SECONDS` rediscovering it — a ten-minute tax on a
+    recovery that then works every time."""
+    p = project(tmp_path)
+    run(p), run(p), run(p)
+    latch = json.loads((p / ".workflow" / "turn-gate.json").read_text())
+    assert latch["owed"] == "continue" and isinstance(latch["owed_at"], float)
+    assert "no reason for this turn to end" in latch["owed_why"]
+
+
+def test_a_BLOCKED_stop_retires_the_breadcrumb(tmp_path):
+    """It means "this turn ENDED owing something", and a turn being blocked has not ended."""
+    p = project(tmp_path)
+    run(p), run(p), run(p)                       # gave up: breadcrumb stamped
+    run(p)                                       # gated again
+    assert json.loads((p / ".workflow" / "turn-gate.json").read_text())["owed"] is None
 
 
 def test_a_GOOD_anchor_leaves_the_give_up_alone(tmp_path):

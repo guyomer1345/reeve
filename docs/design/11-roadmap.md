@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. Start at `4e`. `4j` and `4k` are the two that change what the package IS; `5` stays a conversation. The standing queue below this one is CLOSED**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **`4e`, `4f`, `4h` and `4l` are CLOSED (`D242`/`D243`/`D244`, 2026-09-21) — G1's first four measured failures are gone. Start at `4c`.** `4j` and `4k` are the two that change what the package IS; `5` stays a conversation. The standing queue below this one is CLOSED**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1533,10 +1533,11 @@ fix.** Every item traces to an observation, not to a reading, and the order is d
 **THE THREE GOALS THESE ITEMS SERVE — agreed with the maintainer 2026-09-21, before the context reset. Every
 item below belongs to exactly one.**
 - **G1 · A DRIVE SURVIVES THE NIGHT UNATTENDED.** *Done:* you start it, sleep, and in the morning it is still
-  working or it stopped for a reason you agree with. Six measured failures stand in the way: a stopped session
-  cannot restart itself (`4e` `4f`); recovery costs ten minutes a turn (`4l`); the monitor invents stops
-  (`4c` `4i`); **one human gate halts the whole machine** (`4h` — the highest-value item in this queue); and a
-  run can silently half-arm with nothing noticing (`4d` `4g`).
+  working or it stopped for a reason you agree with. Six measured failures stood in the way: a stopped session
+  cannot restart itself (`4e` `4f` — ✅ `D242`); recovery costs ten minutes a turn (`4l` — ✅ `D244`); the
+  monitor invents stops (`4c` `4i`); **one human gate halts the whole machine** (`4h` — ✅ `D243`, and it was
+  the highest-value item in this queue); and a run can silently half-arm with nothing noticing (`4d` `4g`).
+  **Two left: `4c`+`4i`, then `4d`+`4g`.**
 - **G2 · THE HUMAN IS WOKEN ONLY FOR WHAT IS ACTUALLY HIS.** *Done:* the only thing that reaches him is a
   question about what the product IS or PROMISES; design, logic, library choice, correctness and "is this a
   real bug" are answered by `decision-engineer`, `review`, `debug` and `research`, which are better at them
@@ -1637,7 +1638,7 @@ attempt cap grades on). No second pair a poll later; no `GIVING UP`.
 **What this does NOT prove:** a whole night, a goal reaching `met`, or any of `4c`–`4g` below, all of which were
 observed on the same day and are unfixed. One clean cycle is one clean cycle.
 
-**4e. The idle veto sits in the TRANSPORT, and it burns a budget it does not own.** `[HIGH — a `D239` regression, OBSERVED 2026-09-20]`
+**4e. The idle veto sits in the TRANSPORT, and it burns a budget it does not own. ✅ CLOSED 2026-09-21 — `D242`.** `[was HIGH — a `D239` regression, OBSERVED 2026-09-20]`
 `supervise.sh` states its own law in its header: *"Judgement lives in `monitor.py` (testable, and runnable by a
 human); this file is transport."* `D239` put the idle precondition in the transport as a veto, so the judge
 says `nudge`, the transport silently declines, and **the counter lives with the judge**:
@@ -1648,7 +1649,7 @@ rung is **escalate → park a `steer`** — a session heading for a durable fals
 is the same family ("the session is not in a state where a keystroke helps"). Then the budget is not spent, the
 escalation does not fire, and the judgement is testable where every other judgement in this package is.
 
-**4f. `session-idle.json` has its semantics BACKWARDS at `SessionStart`, and a cleared session can never recover itself.** `[HIGH — same observation]`
+**4f. `session-idle.json` has its semantics BACKWARDS at `SessionStart`, and a cleared session can never recover itself. ✅ CLOSED 2026-09-21 — `D242`.** `[was HIGH — same observation]`
 `D239` made `SessionStart` **clear** the flag, reasoning that a new session has not been observed idle. For a
 `/clear` that is exactly wrong: a cleared session is **definitionally** idle — sitting at the prompt with
 nothing submitted. And the harness will never say so, because `idle_prompt` is armed off the LAST MESSAGE
@@ -1659,7 +1660,7 @@ whose `continue` does not, produces a session only a human can restart.**
 **Fix:** the flag means *no prompt submitted and no turn running*. `SessionStart` **sets** it,
 `UserPromptSubmit` clears it, `idle_prompt` re-sets it after a turn ends.
 
-**4h. `may_end` licenses exactly the idling the shipped rule forbids.** `[HIGH — OBSERVED THREE TIMES on two projects, 2026-09-20/21; the package already states the correct behaviour]`
+**4h. `may_end` licenses exactly the idling the shipped rule forbids. ✅ CLOSED 2026-09-21 — `D243`.** `[was HIGH — OBSERVED THREE TIMES on two projects, 2026-09-20/21; the package already states the correct behaviour]`
 **Third confirmation, 2026-09-21, and it is the one that settles it: BOTH drives stopped overnight on qa
 checkpoints — including `agentic cyber`, which is otherwise the clean run** (23 self-resets, `demands: 0`,
 nothing else wrong with it). A project doing everything right is still halted for the night by one human gate.
@@ -1678,7 +1679,7 @@ yield means yield the item, not the machine. **Fix:** rung 1 must be *parked AND
 `check_wave_independence.py` plus `prioritize`. This is the single highest-value item in the queue for an
 unattended drive: every human gate currently stops the whole loop for as long as the human is asleep.
 
-**4l. A session that habitually stops cannot be held, and the recovery rediscovers slowly what was known instantly.** `[HIGH — measured contrast between two live drives, 2026-09-20]`
+**4l. A session that habitually stops cannot be held, and the recovery rediscovers slowly what was known instantly. ✅ CLOSED 2026-09-21 — `D244`.** `[was HIGH — measured contrast between two live drives, 2026-09-20]`
 Same package, same supervisor, same night:
 | | `demands` | `rung` | clean resets |
 |---|---|---|---|

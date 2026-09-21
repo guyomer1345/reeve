@@ -92,18 +92,31 @@ def test_rehydrate_is_clear_only(tmp_path):
 
 
 # --- re-asserting the git pre-commit backstop --------------------------------
-def test_a_new_session_is_never_INHERITED_as_idle(tmp_path):
-    """`session-idle.json` is the supervisor's permission to type into this pane. A flag the
-    previous session left behind describes a window that no longer exists — and a session that
-    has only just started is, by definition, not one the harness has announced idle. Leaving it
-    would let the very first turn be reset out from under itself."""
+def test_a_STARTED_session_is_flagged_IDLE_because_nothing_else_can_say_so(tmp_path):
+    """`session-idle.json` is the supervisor's permission to type into this pane, and a started,
+    resumed or cleared session is at an idle prompt by definition. The harness will never say so:
+    `idle_prompt` is armed off the last message timestamp, so a freshly cleared session — which
+    has no messages — never arms it. Without this, a reset whose `/clear` lands and whose
+    `continue` does not leaves a session only a human can restart."""
+    (tmp_path / ".workflow").mkdir(parents=True, exist_ok=True)
+    flag = tmp_path / ".workflow" / "session-idle.json"
+    for source in ("clear", "startup", "resume"):
+        if flag.exists():
+            flag.unlink()
+        assert _run(tmp_path, source=source).returncode == 0
+        assert flag.exists(), source
+        assert json.loads(flag.read_text())["source"] == source
+
+
+def test_a_COMPACT_is_NOT_idle_and_a_stale_flag_is_removed_there(tmp_path):
+    """The exception that makes the list an allow-list. Auto-compact fires MID-TURN and the turn
+    continues afterwards — flagging that idle hands the supervisor permission to type into a
+    running turn, and keys sent there land in the prompt box as text and are never submitted."""
     (tmp_path / ".workflow").mkdir(parents=True, exist_ok=True)
     flag = tmp_path / ".workflow" / "session-idle.json"
     flag.write_text(json.dumps({"kind": "idle_prompt"}))
-    for source in ("clear", "startup", "resume"):
-        flag.write_text(json.dumps({"kind": "idle_prompt"}))
-        assert _run(tmp_path, source=source).returncode == 0
-        assert not flag.exists(), source
+    assert _run(tmp_path, source="compact").returncode == 0
+    assert not flag.exists()
 
 
 def test_a_new_session_inherits_no_DISPATCHED_WORKERS(tmp_path):

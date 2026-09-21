@@ -27,6 +27,34 @@ an open dialog (`awaiting-input.json`) and the operator's pause latch all mean *
 answer*; the drive is stopped on purpose and nudging it would be shouting at a session that is
 behaving correctly. Those states report `waiting` and take no action, ever.
 
+A SESSION THAT IS NOT AT AN IDLE PROMPT IS THE FOURTH MEMBER OF THAT FAMILY, and it lives here
+rather than in the transport. `supervise.sh` states its own law -- *"judgement lives in
+`monitor.py`; this file is transport"* -- and the idle precondition was put in the transport as a
+veto, so this file said `nudge`, the shell silently declined, and the BUDGET WAS SPENT ANYWAY:
+observed 2026-09-20, `no motion - nothing written for 10m; NOT nudging: the session is not known
+idle` against `monitor.json` recording `nudges: 1`. The one-nudge budget went on a nudge that
+never left the process, and the next rung is a durable `steer` park -- a false stop for a session
+that had never actually been nudged. The condition is the same family as the three above ("the
+session is not in a state where a keystroke helps"), so it is judged here, where it is testable.
+
+ITS ONE EXCEPTION IS THE STALL RUNG, and without it this file would go silent on the case it
+exists for. A session that is not idle is normally a session that is WORKING -- and a working
+loop writes constantly, so it never reaches the quiet window at all. Quiet for the full stall
+window AND not at an idle prompt therefore means wedged (or an idle flag that was lost), and
+neither is something a keystroke fixes. So the nudge is withheld and the escalation still fires:
+the operator still finds out, through the away channel that already owns that route.
+
+THE CHEAPEST SIGNAL IS NOT THE PULSE AT ALL -- IT IS THE TURN GATE SAYING SO. `turn_gate.py`
+knows at the INSTANT of a stop that the turn owed a `continue`; this file used to spend
+`QUIET_SECONDS` independently noticing silence to conclude the same thing. Measured cadence on a
+real drive: work -> stop -> 10 minutes -> nudge -> work -> stop, `nudges_total: 4`, and the nudge
+worked every single time. The nudge was never the problem; its PRICE was. So the gate leaves an
+`owed` breadcrumb when it gives up, and that rung sits above the quiet ladder -- a ten-minute tax
+collapses to the next 60-second poll, and the ladder below goes back to being what it is for: a
+session that is DEAD, not one that merely stopped. Each breadcrumb is served once (`owed_at` is
+its identity) and three served breadcrumbs that move no pulse escalate, so the shortcut cannot
+become a keystroke loop.
+
 TWO ESCALATIONS, IN ORDER, AND THE FIRST IS CHEAP. A quiet drive gets ONE nudge — a bare
 `continue`, which is exactly what a session that quietly ended a turn needs and what a session
 mid-work will simply queue behind its current turn. Only if it is still quiet after that does
@@ -75,6 +103,22 @@ STALL_SECONDS = int(os.environ.get("REEVE_MONITOR_STALL") or 1800)    # 30m -> e
 # failures only the second is quiet rather than wrong.
 PULSE_DIRS = ("items", "parked", "inbox", "outbox", "thread", "worker-budget", "maintenance")
 PULSE_FILES = ("state.json", "handoff.md", "goal-ledger.jsonl", "backlog.md", "bus.json")
+# PRESENCE IS THE FACT, and the body is only for humans -- the same reading `context_band.py`
+# takes, and the name is kept in step with `context_band.IDLE_FILE` by hand, as the two hooks
+# that write it already do. Reading the path directly rather than importing the band keeps this
+# file's fail direction intact: a band that will not import must not be able to silence the
+# monitor, and it cannot silence what it is not asked.
+IDLE_FILE = "session-idle.json"
+# The turn gate's give-up breadcrumb. The gate knows AT THE INSTANT OF THE STOP that the turn
+# owed a `continue`; without reading it this file spends `QUIET_SECONDS` independently
+# rediscovering the same fact, and the measured cadence on a real drive was work -> stop -> 10
+# minutes -> nudge -> work -> stop, with `nudges_total: 4` and every nudge working. The tax was
+# the ten minutes, not the nudge.
+TURN_GATE = "turn-gate.json"
+# Breadcrumbs served that moved nothing before this escalates. Three, because the keystroke's
+# effect is DERIVED (a pulse that advances) and one unmoved poll can mean a turn that is still
+# starting. A session that ignores three is not one more typing will reach.
+OWED_MISSES = int(os.environ.get("REEVE_MONITOR_OWED_MISSES") or 3)
 
 
 def _read(path):
@@ -118,18 +162,52 @@ def pulse(workflow):
 
 
 def waiting_on_a_human(workflow):
-    """-> a reason, or None. A drive stopped ON PURPOSE is not a drive that has stalled."""
+    """-> (kind, reason), or (None, None). A drive stopped ON PURPOSE has not stalled.
+
+    The KIND is returned because the three are not equally absolute. A dialog and the operator's
+    pause latch are unconditional -- there is a person in the middle of something either way. A
+    parked checkpoint is not: a checkpoint parks the ITEM, and the loop is supposed to pick up
+    the next independent one, so a park with the turn gate's give-up breadcrumb beside it is a
+    session that stopped for nothing WHILE something was parked. That distinction is the turn
+    ladder's to make and it has already made it; this file only has to not overrule it.
+    """
     parked = os.path.join(workflow, "parked")
     try:
         if any(n.endswith(".json") for n in os.listdir(parked)):
-            return "a checkpoint is parked"
+            return "parked", "a checkpoint is parked"
     except OSError:
         pass
     if os.path.exists(os.path.join(workflow, "awaiting-input.json")):
-        return "a dialog is open in the session"
+        return "dialog", "a dialog is open in the session"
     if _read(os.path.join(workflow, "control.json")).get("paused"):
-        return "the operator paused the loop"
-    return None
+        return "paused", "the operator paused the loop"
+    return None, None
+
+
+def turn_owed(workflow):
+    """-> (owed_at, why) from `turn-gate.json`'s give-up breadcrumb, or None.
+
+    Written by `hooks/turn_gate.py` when it releases a turn that still owed something, and
+    retired by the same hook the moment the gate is handling the stop in-session again or the
+    loop ends a turn legitimately. Presence alone is not enough to act on -- `owed_at` is the
+    identity of THIS give-up, so a breadcrumb already served is not served twice.
+    """
+    rec = _read(os.path.join(workflow, TURN_GATE))
+    at = rec.get("owed_at")
+    if not rec.get("owed") or not isinstance(at, (int, float)):
+        return None
+    return at, str(rec.get("owed_why") or rec.get("owed"))
+
+
+def at_an_idle_prompt(workflow):
+    """Is this session sitting at an idle prompt? -> bool.
+
+    ABSENT READS AS NOT IDLE, which is the asymmetry `context_band.session_idle` explains at
+    length: keys sent into a running turn do not queue into it, they land in the prompt box as
+    literal text and are never submitted. A nudge withheld costs a poll; a nudge mistimed costs
+    the conversation.
+    """
+    return os.path.exists(os.path.join(workflow, IDLE_FILE))
 
 
 def _fingerprint(workflow):
@@ -149,10 +227,49 @@ def observe(workflow, now=None, quiet=QUIET_SECONDS, stall=STALL_SECONDS):
     out = {"at": now, "fingerprint": fp, "pulse": beat,
            "nudges_total": int(prev.get("nudges_total") or 0),
            "escalations_total": int(prev.get("escalations_total") or 0),
-           "quiet_periods": int(prev.get("quiet_periods") or 0)}
+           "quiet_periods": int(prev.get("quiet_periods") or 0),
+           # Carried forward explicitly, because the record is rebuilt from scratch every tick
+           # and a breadcrumb ledger that resets each poll would re-serve the same one for ever.
+           "owed_served": prev.get("owed_served"), "owed_pulse": prev.get("owed_pulse"),
+           "owed_misses": int(prev.get("owed_misses") or 0)}
 
-    reason = waiting_on_a_human(workflow)
-    if reason:
+    kind, reason = waiting_on_a_human(workflow)
+    if kind in ("dialog", "paused"):
+        out.update(state="waiting", action="none", why=reason, quiet_for=0, nudges=0)
+        return out
+
+    # THE BREADCRUMB RUNG, and it is above the quiet ladder because that is the whole point: the
+    # turn gate established at the instant of the stop that this turn owed a `continue`, so
+    # waiting `QUIET_SECONDS` to observe silence is rediscovering a known fact at a cost of ten
+    # minutes. It outranks a parked checkpoint (the ladder already weighed that — a park stops
+    # the ITEM) and never outranks a dialog or the operator's pause.
+    owed = turn_owed(workflow)
+    if owed and owed[0] != out["owed_served"]:
+        at, why = owed
+        if not at_an_idle_prompt(workflow):
+            # The session is mid-turn: it stopped, and something started it again. Nothing to
+            # do, and nothing to spend — the breadcrumb stays unserved and is retired by the
+            # gate itself on the next legitimate end.
+            out.update(state="waiting", action="none", quiet_for=0, nudges=0,
+                       why="the turn gate says a `continue` is owed, but the session is not "
+                           "known to be idle — it is already moving again")
+            return out
+        misses = out["owed_misses"] + 1 if (beat is not None and out["owed_pulse"] == beat) else 0
+        if misses >= OWED_MISSES:
+            out.update(state="stalled", action="escalate", quiet_for=0, nudges=0,
+                       owed_served=at, owed_misses=misses,
+                       escalations_total=out["escalations_total"] + 1,
+                       why="%d nudges after the turn gate gave up moved nothing — %s" % (
+                           misses, why))
+            return out
+        out.update(state="stopped", action="nudge", quiet_for=0, nudges=0,
+                   owed_served=at, owed_pulse=beat, owed_misses=misses,
+                   nudges_total=out["nudges_total"] + 1,
+                   why="the turn gate gave up on a stop that owed `%s` — %s" % (
+                       _read(os.path.join(workflow, TURN_GATE)).get("owed") or "continue", why))
+        return out
+
+    if kind:
         out.update(state="waiting", action="none", why=reason, quiet_for=0, nudges=0)
         return out
     if beat is None:
@@ -168,6 +285,23 @@ def observe(workflow, now=None, quiet=QUIET_SECONDS, stall=STALL_SECONDS):
     if quiet_for < quiet:
         out.update(state="moving", action="none", quiet_for=quiet_for, nudges=0,
                    why="written %ds ago" % int(quiet_for))
+        return out
+    if not at_an_idle_prompt(workflow):
+        # Quiet AND not at the prompt. Below the stall window this is `waiting` and costs
+        # nothing: the budget is not spent, so the nudge is still there to be spent the moment
+        # the session is reachable. At the stall window it is the wedged case -- see the
+        # docstring -- and the escalation is the only rung left that does not type into a
+        # running turn.
+        if quiet_for >= stall:
+            out.update(state="stalled", action="escalate", quiet_for=quiet_for, nudges=nudges,
+                       escalations_total=out["escalations_total"] + 1,
+                       why=("nothing written for %dm and the session is not at an idle prompt — "
+                            "a keystroke cannot reach it" % int(quiet_for // 60)))
+            return out
+        out.update(state="waiting", action="none", quiet_for=quiet_for, nudges=nudges,
+                   why=("nothing written for %dm, but the session is not known to be idle — "
+                        "keys sent into a running turn are never submitted"
+                        % int(quiet_for // 60)))
         return out
     if nudges == 0:
         out.update(state="quiet", action="nudge", quiet_for=quiet_for, nudges=1,

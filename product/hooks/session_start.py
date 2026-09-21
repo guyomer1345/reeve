@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SessionStart — three jobs, one hook, none of which may ever wedge a session start.
+"""SessionStart — four jobs, one hook, none of which may ever wedge a session start.
 
   1. REHYDRATE (source=clear only). `/clear` wipes the conversation but preserves the
      filesystem, so the durable resume anchor `.workflow/handoff.md` is still on disk;
@@ -46,6 +46,15 @@
      is that the automatic delivery path is CLI-side and broken (issue #17361, live on
      2.1.220), so no author-side choice makes delivery automatic. What an author *can*
      control is that the install can SAY it is stale.
+
+  4. PUBLISH THE STARTING STATE the harness will not (EVERY source, two directions). A
+     started, resumed or cleared session is at an IDLE PROMPT by definition, and nothing
+     else in the package can say so — the harness's `idle_prompt` notification is armed off
+     the last message timestamp, so a freshly cleared session, having no messages, never
+     arms it. Without this a session whose reset half-landed can only be restarted by a
+     human. And no session inherits the previous one's dispatched workers. Both are written
+     in `main`, where the two exceptions live: `compact` is not idle, and only the in-flight
+     MARKS are removed. See `hooks/prompt_submit.py` for the other end of the bracket.
 
 Emits the SessionStart JSON contract (`hookSpecificOutput.additionalContext`) and always
 exits 0 — SessionStart cannot block a session anyway, and a hook that could would be a
@@ -440,12 +449,32 @@ def main():
         payload = {}
     cwd = payload.get("cwd") or "."
 
-    # A session that has only just begun has not been observed idle, and the flag the one
-    # before it left behind describes a window that no longer exists. Leaving it would let the
-    # supervisor reset a session that is mid-turn on its very first turn — the exact failure
-    # the flag was added to prevent. Best-effort and silent: already-gone is the normal case.
+    # THE SESSION IS AT AN IDLE PROMPT AND NOTHING ELSE WILL EVER SAY SO. This hook used to
+    # REMOVE `session-idle.json`, reasoning that a session which has only just begun has not
+    # been observed idle. For a session start that is exactly backwards: a started, resumed or
+    # cleared session is DEFINITIONALLY idle — sitting at the prompt with nothing submitted —
+    # and the harness will never announce it, because `idle_prompt` is armed off the last
+    # message timestamp and a freshly cleared session has no messages. Measured 2026-09-20: a
+    # real session sat eleven minutes after a manual `/clear` with the flag absent. Combined
+    # with a reset whose `/clear` lands and whose `continue` does not, that produced a session
+    # only a human could restart — the one outcome the supervisor exists to prevent.
+    #   set   -> `startup`, `resume`, `clear`: no prompt is in flight, by definition.
+    #   clear -> everything else, and `compact` is why the list is an allow-list. Auto-compact
+    #            fires MID-TURN and the turn continues afterwards; marking that idle would hand
+    #            the supervisor permission to type into a running turn, which is unrecoverable.
+    # `UserPromptSubmit` retires the flag the instant a prompt is submitted, so a session
+    # started with an initial prompt is flagged for the microseconds before its own first turn.
+    _idle = os.path.join(cwd, ".workflow", "session-idle.json")
     try:
-        os.remove(os.path.join(cwd, ".workflow", "session-idle.json"))
+        if payload.get("source") in ("startup", "resume", "clear"):
+            tmp = _idle + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as fh:
+                json.dump({"kind": "session_start",
+                           "session_id": payload.get("session_id"),
+                           "source": payload.get("source")}, fh, sort_keys=True)
+            os.replace(tmp, _idle)
+        else:
+            os.remove(_idle)
     except OSError:
         pass
 

@@ -133,9 +133,11 @@ GATE_FILE = "handoff-gate.json"
 AWAITING_FILE = "awaiting-input.json"
 
 # The session is sitting at an idle prompt — the FOURTH thing that must be true before a reset
-# may be sent, and the only one stated in the positive. `awaiting_input.py` writes it on the
-# harness's own `idle_prompt` notification; `prompt_submit.py` removes it the instant a prompt is
-# submitted, so the pair brackets idleness exactly rather than guessing at it.
+# may be sent, and the only one stated in the positive. TWO writers and one remover:
+# `awaiting_input.py` writes it on the harness's own `idle_prompt` notification, and
+# `session_start.py` writes it at a start / resume / clear, which the harness cannot announce
+# because its idle timer never arms in a session with no messages. `prompt_submit.py` removes it
+# the instant a prompt is submitted, so they bracket idleness exactly rather than guessing at it.
 IDLE_FILE = "session-idle.json"
 
 # Dispatched workers that have not come back. One file per `tool_use_id`, written by
@@ -449,9 +451,14 @@ def mark_idle(workflow_dir, record=None):
 
 
 def clear_idle(workflow_dir):
-    """Called from `UserPromptSubmit` (a turn is starting) and from `SessionStart` (a session
-    that has only just begun has not been observed idle, and a flag left by the one before it
-    describes a window that no longer exists)."""
+    """Called from `UserPromptSubmit`: a prompt has been submitted, so the turn is running.
+
+    It is the ONLY clearer. `SessionStart` used to call this too, and had it backwards — a
+    started, resumed or cleared session is at an idle prompt BY DEFINITION, and the harness
+    will never announce it (`idle_prompt` arms off the last message timestamp, and a cleared
+    session has no messages). So that hook WRITES the flag instead, for exactly those three
+    sources; see `hooks/session_start.py`, job 4, which also says why `compact` is not one.
+    """
     try:
         os.remove(os.path.join(workflow_dir, IDLE_FILE))
         return True

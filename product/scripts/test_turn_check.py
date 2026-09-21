@@ -83,9 +83,53 @@ def test_the_demand_RETURNS_once_the_worker_does(tmp_path):
     assert not tc.may_end(wf)[0]
 
 
-def test_a_parked_checkpoint_is_a_reason(tmp_path):
+def test_a_parked_checkpoint_is_a_reason_WHEN_NOTHING_ELSE_IS_ELIGIBLE(tmp_path):
+    """A whole-loop park — the only shape of park that is a reason to hand the machine back."""
     ok, why = tc.may_end(project(tmp_path, parked=True))
-    assert ok and "parked" in why
+    assert ok and "parked" in why and "nothing else is eligible" in why
+
+
+def _backlog(wf, *rows):
+    with open(os.path.join(wf, "backlog.md"), "w", encoding="utf-8") as fh:
+        fh.write("# Backlog\n\n")
+        for ident in rows:
+            fh.write("- [ ] `%s` — do the thing\n" % ident)
+
+
+def test_a_parked_checkpoint_is_NOT_a_reason_while_OTHER_WORK_is_eligible(tmp_path):
+    """The item this rung was rebuilt for. `loop-detail.md`: *"while an item is parked on a human
+    verdict, the next independent item starts rather than the loop idling ... a whole-loop park
+    is simply `nothing eligible`."* The gate said the opposite, and the model follows the gate —
+    three drives on two projects stopped for the night on one correct qa checkpoint."""
+    wf = project(tmp_path, parked=True)
+    _backlog(wf, "gap-028", "gap-029")
+    ok, why = tc.may_end(wf)
+    assert not ok, why
+    assert "parks the ITEM, not the machine" in why and "gap-028" in why
+
+
+def test_the_PARKED_ITEM_ITSELF_is_not_counted_as_the_work_that_is_left(tmp_path):
+    """`gap-027-qa` is the ticket; `gap-027` is the item. Nothing on the record says so, so the
+    naming convention is read charitably — otherwise the last item in the backlog, parked on its
+    own qa, would look like eligible work for ever."""
+    wf = project(tmp_path)
+    with open(os.path.join(wf, "parked", "gap-027-qa.json"), "w", encoding="utf-8") as fh:
+        json.dump({"ticket_id": "gap-027-qa", "checkpoint": {"kind": "qa"}}, fh)
+    _backlog(wf, "gap-027")
+    ok, why = tc.may_end(wf)
+    assert ok and "nothing else is eligible" in why
+
+
+def test_a_FINISHED_backlog_row_is_not_eligible_work(tmp_path):
+    """The promoted marker is the one owner of "this item is finished" — backlog prose is not
+    consulted, here or in the fan-out gate."""
+    wf = project(tmp_path, parked=True)
+    _backlog(wf, "gap-028")
+    os.makedirs(os.path.join(wf, "items", "gap-028"), exist_ok=True)
+    with open(os.path.join(wf, "items", "gap-028", "promoted.json"), "w", encoding="utf-8") as fh:
+        json.dump({"promoted": True}, fh)
+    ok, why = tc.may_end(wf)
+    assert ok and "nothing else is eligible" in why
 
 
 def test_a_paused_loop_is_a_reason(tmp_path):

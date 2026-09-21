@@ -111,6 +111,35 @@ def _parked(workflow):
         return []
 
 
+def _eligible_beside(workflow):
+    """-> the ids of work that is open while something is parked. `[]` ⇒ the loop has nothing.
+
+    ONE OWNER FOR "IS THERE OTHER WORK", and it is not this file: `check_wave_independence.py`
+    already enumerates the open candidate set (backlog rows plus planned item dirs, minus the
+    finished, the in-flight and the parked) for the fan-out gate. What is NOT reused is its
+    verdict -- that gate answers *may these run in the SAME turn*, refuses whenever the evidence
+    is thin, and reading its `[]` as "nothing to do" would turn a missing code map into a
+    licence to stop for the night.
+
+    CANNOT TELL ⇒ `[]` ⇒ the turn may end, which is this ladder's standing convention
+    (`may_end` is permissive on every unreadable input). The cost of the opposite is a session
+    nagged to continue when there is genuinely nothing left, every turn, for ever.
+    """
+    try:
+        import check_wave_independence as wave
+        return wave.open_candidates(os.path.dirname(os.path.abspath(workflow)))
+    except Exception:                     # noqa: BLE001 -- see CANNOT TELL above
+        return []
+
+
+def _park_phrase(tickets, eligible):
+    """The clause the goal rung's sentence needs, now that `parked` is not automatically an end."""
+    if not tickets:
+        return "nothing is parked"
+    return ("%d checkpoint(s) are parked but %d other item(s) are eligible"
+            % (len(tickets), len(eligible)))
+
+
 def may_end(workflow):
     """-> (True, why it may) | (False, why it may not). The closed set, in one function."""
     state = _json_file(os.path.join(workflow, "state.json"))
@@ -135,9 +164,22 @@ def may_end(workflow):
         return True, ("%d dispatched worker(s) still running (%s) — the turn ended because the "
                       "parent is waiting, which is what a backgrounded dispatch looks like"
                       % (len(flight), ", ".join(sorted({str(r.get("agent")) for r in flight}))))
-    tickets = _parked(workflow)
+    tickets, eligible = _parked(workflow), []
+    # A CHECKPOINT PARKS THE ITEM, NOT THE MACHINE, and this rung used to read it the other way
+    # round. `loop-detail.md` is unambiguous -- *"while an item is parked on a human verdict,
+    # the next independent item starts rather than the loop idling ... a whole-loop park is
+    # simply `nothing eligible`"* -- but any park at all satisfied this rung, so the turn was
+    # free to end, and THE MODEL FOLLOWS THE GATE. Observed three times on two projects,
+    # 2026-09-20/21: one of them named the eligible work in its final message ("decision work
+    # doesn't collide, so that's what runs next") and stopped anyway; both drives spent a whole
+    # night stopped on a qa checkpoint, including the one that was otherwise driving perfectly.
+    # Every human gate was halting the loop for as long as the human was asleep.
     if tickets:
-        return True, "%d checkpoint(s) parked — the human genuinely owes an answer" % len(tickets)
+        eligible = _eligible_beside(workflow)
+        if not eligible:
+            return True, ("%d checkpoint(s) parked and nothing else is eligible — the human "
+                          "genuinely owes the answer and there is no other work to pick up"
+                          % len(tickets))
     control = _json_file(os.path.join(workflow, "control.json")) or {}
     if control.get("paused"):
         return True, "the loop is paused by the operator"
@@ -159,11 +201,18 @@ def may_end(workflow):
         # of them is DONE. The two ways to have no goal are kept apart here for the same reason
         # the rung below keeps them apart: one is a node that never ran, the other is a file to
         # repair, and they send the session to different places.
-        return False, ("the loop is building, nothing is parked, the operator has not paused, "
+        return False, ("the loop is building, %s, the operator has not paused, "
                        "and %s — so `met` and `stalled` are both unreachable and this drive "
                        "has no stop-when-done condition at all"
-                       % ("NO GOAL IS SET" if _goal_missing(workflow) else
+                       % (_park_phrase(tickets, eligible),
+                          "NO GOAL IS SET" if _goal_missing(workflow) else
                           "the goal file is present but could not be read as a goal"))
+    if tickets:
+        return False, ("%d checkpoint(s) are parked, but %d item(s) are still eligible (%s) — a "
+                       "checkpoint parks the ITEM, not the machine. While one item waits on a "
+                       "human verdict the next independent item starts; a whole-loop park is "
+                       "simply `nothing eligible`, and that is not this"
+                       % (len(tickets), len(eligible), ", ".join(eligible[:4])))
     return False, ("the loop is building, nothing is parked, the goal is neither met nor stalled "
                    "and the operator has not paused — there is no reason for this turn to end")
 
@@ -383,7 +432,8 @@ def check(workflow, last_text="", prev_fingerprint=None, satisfied_digest=None,
     changed, fp = moved(workflow, prev_fingerprint)
     out["fingerprint"] = fp
     handback = _handing_back(workflow)
-    if (not ok or handback) and _planned_items(workflow) and _goal_missing(workflow):
+    if ((not ok and not _parked(workflow)) or handback) \
+            and _planned_items(workflow) and _goal_missing(workflow):
         # Rung 1, with the one reason that is actionable rather than generic. Gated on PLANNED
         # work so that a session still inside inception -- where the goal is not minted yet
         # because the node that mints it has not run yet -- is not told it skipped anything.

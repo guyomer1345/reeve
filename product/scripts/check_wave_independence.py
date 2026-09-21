@@ -538,16 +538,14 @@ def dependency_reasons(wf, row):
 
 # ---------------------------------------------------------------- held work
 
-def held(wf, code_root, graph_nodes):
-    """-> `{in_flight, parked, scopes, without_scope, blocked}`.
+def busy_ids(wf):
+    """-> `{in_flight: [...], parked: [...]}` — the cheap half of `held`, with no scope work.
 
-    Work already dispatched constrains the batch without being in it. An id with an item dir is
-    a writer and its scope must be readable; if it is not, nothing can be proven disjoint from
-    it and the caller is told to stay serial outright. An id with no item dir declares no files
-    and is reported without blocking -- see the module docstring for why that asymmetry is
-    deliberate and where its risk sits.
+    Split out because a second caller needs exactly this and nothing else: the turn ladder asks
+    *is any OTHER work eligible while a checkpoint is parked*, on the `Stop` hook, where loading
+    the code map and every plan would be a tax on every turn in the project.
     """
-    res = {"in_flight": [], "parked": [], "scopes": {}, "without_scope": [], "blocked": []}
+    res = {"in_flight": [], "parked": []}
     state = _read_json(os.path.join(wf, ".workflow", "state.json"), {}) or {}
     cur = state.get("current_item")
     if isinstance(cur, str) and cur.strip():
@@ -559,8 +557,74 @@ def held(wf, code_root, graph_nodes):
         rec = _read_json(os.path.join(pdir, name))
         tid = (rec or {}).get("ticket_id") if isinstance(rec, dict) else None
         tid = tid if isinstance(tid, str) and tid.strip() else os.path.splitext(name)[0]
-        if tid not in res["parked"]:
+        if tid.strip() not in res["parked"]:
             res["parked"].append(tid.strip())
+    return res
+
+
+def _is_busy(ident, busy):
+    """Is this item one of the ones already being worked, or waiting on a human?
+
+    EXACT ID, OR THE TICKET THAT NAMES IT. A checkpoint ticket is not an item id -- the
+    convention is `<item>-<kind>` (`gap-027-qa`), and nothing on the record says which item it
+    belongs to. So a ticket whose id is the item's id plus a suffix counts as that item being
+    parked. A project that spells its tickets some other way falls to the permissive side of
+    each caller in turn -- the fan-out gate still has to prove disjointness against the held
+    scope, and the turn ladder is nagged rather than halted -- which is why this is a naming
+    convention read charitably rather than a schema field nobody writes.
+    """
+    for other in busy:
+        if ident == other or other.startswith(ident + "-") or other.startswith(ident + "."):
+            return True
+    return False
+
+
+def open_candidates(project_root):
+    """-> the ids of work that is OPEN right now, in queue order. `[]` means nothing is left.
+
+    TWO SOURCES, UNIONED, because neither alone is the candidate set. The backlog is the queue
+    but a row is not planned until it is picked, and an item with no plan declares no scope; the
+    item dirs hold the plans but say nothing about order or dependencies. Finished items (the
+    promoted marker), the item in flight and anything parked are not candidates.
+
+    IT IS NOT A DISPATCH DECISION and must not be read as one. `scan` below takes this set and
+    asks the far harder question -- which of them can be PROVEN mutually non-intervening in one
+    turn -- and answers `[]` whenever the evidence is missing. "Is there other work at all" and
+    "may these run together" have opposite fail directions, so they are two functions.
+    """
+    wf = os.path.abspath(project_root)
+    rows, _present = parse_backlog(wf)
+    by_id = {r["id"]: r for r in rows}
+    busy = busy_ids(wf)
+    held_now = busy["in_flight"] + busy["parked"]
+    idir = os.path.join(wf, ".workflow", "items")
+    planned = [n for n in sorted(os.listdir(idir))
+               if os.path.isfile(os.path.join(idir, n, "plan.md"))] \
+        if os.path.isdir(idir) else []
+    out = []
+    for ident in [r["id"] for r in rows] + planned:
+        if ident in out or _is_busy(ident, held_now):
+            continue
+        m = _read_json(os.path.join(idir, ident, "promoted.json"))
+        if isinstance(m, dict) and m.get("promoted"):
+            continue
+        out.append(ident)
+    # Queue order first, ascending id as the tie-break -- and as the whole ordering for an id
+    # the backlog never mentions, which sorts after every row it does.
+    out.sort(key=lambda i: (by_id[i]["order"] if i in by_id else len(rows) + 1, i))
+    return out
+
+
+def held(wf, code_root, graph_nodes):
+    """-> `{in_flight, parked, scopes, without_scope, blocked}`.
+
+    Work already dispatched constrains the batch without being in it. An id with an item dir is
+    a writer and its scope must be readable; if it is not, nothing can be proven disjoint from
+    it and the caller is told to stay serial outright. An id with no item dir declares no files
+    and is reported without blocking -- see the module docstring for why that asymmetry is
+    deliberate and where its risk sits.
+    """
+    res = dict(busy_ids(wf), scopes={}, without_scope=[], blocked=[])
     for ident in res["in_flight"] + res["parked"]:
         if not os.path.isdir(os.path.join(wf, ".workflow", "items", ident)):
             res["without_scope"].append(ident)
@@ -593,23 +657,7 @@ def scan(project_root, candidates=None, max_batch=3):
     if candidates:
         wanted = list(dict.fromkeys(candidates))
     else:
-        # TWO SOURCES, UNIONED, because neither alone is the candidate set. The backlog is the
-        # queue but a row is not planned until it is picked, and an item with no plan declares
-        # no scope; the item dirs hold the plans but say nothing about order or dependencies.
-        # Finished items (the promoted marker) and already-dispatched ones are not candidates.
-        busy = set(hold["in_flight"]) | set(hold["parked"])
-        idir = os.path.join(wf, ".workflow", "items")
-        planned = [n for n in sorted(os.listdir(idir))
-                   if os.path.isfile(os.path.join(idir, n, "plan.md"))] \
-            if os.path.isdir(idir) else []
-        wanted = []
-        for ident in [r["id"] for r in rows] + planned:
-            if ident in busy or ident in wanted:
-                continue
-            m = _read_json(os.path.join(idir, ident, "promoted.json"))
-            if isinstance(m, dict) and m.get("promoted"):
-                continue
-            wanted.append(ident)
+        wanted = open_candidates(wf)
 
     # Queue order first, ascending id as the tie-break -- and as the whole ordering for an id
     # the backlog never mentions, which sorts after every row it does.

@@ -284,8 +284,10 @@ from *continue the loop* to *leave a report* is progress and resets the count, b
 demands and a session that satisfied the first should not inherit the second's patience.
 
 ## monitor.json  · written by `scripts/monitor.py` (driven by `supervise.sh`), read by `bus.py`'s steer floor · *`.workflow/monitor.json`; RUNTIME, gitignored, atomic write; repo mount*
-- `{ at, state, action, why, fingerprint, pulse, quiet_for, nudges, nudges_total, escalations_total, quiet_periods }`
-  — `state` ∈ `{ moving, quiet, stalled, waiting, unknown }`, `action` ∈ `{ none, nudge, escalate }`.
+- `{ at, state, action, why, fingerprint, pulse, quiet_for, nudges, nudges_total, escalations_total, quiet_periods, owed_served, owed_pulse, owed_misses }`
+  — `state` ∈ `{ moving, quiet, stopped, stalled, waiting, unknown }`, `action` ∈ `{ none, nudge, escalate }`.
+  The `owed_*` trio is the give-up breadcrumb's ledger: which one was served, the pulse when it was, and how
+  many served ones moved nothing (three ⇒ escalate, so the shortcut cannot become a keystroke loop).
 **It exists for the one failure a `Stop` hook cannot see: the session that never ends a turn.** The turn gate
 catches every stop-for-nothing at the instant it happens; a session that idles, or sits in a dialog, never
 reaches it. That residue is a poller's job and nothing else's.
@@ -299,9 +301,18 @@ every poll — so a monitor watching the whole directory would watch a dead sess
 reflected back for ever. The observers' files (`context.json`, `handoff-gate.json`, `turn-gate.json`,
 `monitor.json`, `supervise.log`) are excluded by not being listed, which is the safe direction: a new observer is
 silently fine, a new loop artifact is silently missed, and only the second failure is quiet rather than wrong.
-**WAITING IS NOT STALLING.** A parked checkpoint, an open dialog, or the pause latch all mean a human owes an
-answer — the drive is stopped on purpose, so the state is `waiting` and the action is always `none`. Nudging
-there would be shouting at a session that is behaving correctly.
+**WAITING IS NOT STALLING.** A parked checkpoint, an open dialog, the pause latch — and a session that is not at
+an idle prompt — all mean the drive is not in a state a keystroke helps, so the state is `waiting` and the action
+is always `none`. The last of those lives HERE and not in `supervise.sh`: put in the transport as a veto it let
+the judge say `nudge`, the shell decline, and the one-nudge budget be spent anyway on a nudge that never left the
+process (observed 2026-09-20, with a durable `steer` park as the next rung). Its one exception is the stall
+window — a working loop writes constantly, so quiet for the full window AND not at the prompt means wedged, and
+the escalation still fires where the nudge is withheld.
+**`stopped` is the cheap rung and it does not wait ten minutes.** `turn-gate.json`'s `owed` breadcrumb says the
+turn gate gave up on a stop that owed a `continue` — known at the instant of the stop, where waiting for
+`QUIET_SECONDS` rediscovers it at a cost of ten minutes (measured: work → stop → 10 min → nudge → work → stop,
+and the nudge worked every time). It outranks a parked checkpoint, because the turn ladder has already weighed
+that — a checkpoint parks the ITEM — and it never outranks a dialog or the operator's pause.
 **One nudge, then a checkpoint.** `nudge` sends a bare `continue` (what a session that quietly ended a turn
 needs; a working session just queues it). Only a still-quiet drive escalates, and it escalates by parking a
 `steer` — the same argument `drive.py` makes for its own terminal stops: a checkpoint is what the away channel
@@ -345,7 +356,7 @@ gate whose correctness depended on the wording of a UI this package does not con
 **Its twin is `session-idle.json`, below, written by the same hook from the same event stream and read with the
 opposite polarity.** Never both at once: a session cannot be idle at the prompt and sitting in a dialog.
 
-## session-idle.json  · written by `hooks/awaiting_input.py` (`Notification`, `idle_prompt`), removed by `hooks/prompt_submit.py` (`UserPromptSubmit`) and `hooks/session_start.py`, read through `context_band.py` · *`.workflow/session-idle.json`; RUNTIME, gitignored, atomic write; repo mount, beside the rest of the gate*
+## session-idle.json  · written by `hooks/awaiting_input.py` (`Notification`, `idle_prompt`) and by `hooks/session_start.py` (`startup`/`resume`/`clear`), removed by `hooks/prompt_submit.py` (`UserPromptSubmit`), read through `context_band.py` · *`.workflow/session-idle.json`; RUNTIME, gitignored, atomic write; repo mount, beside the rest of the gate*
 - `{ kind, session_id }` — the body is for humans. **PRESENCE is the fact**, which is why an unreadable file
   still counts as idle: one hook writes it, another removes it, and refusing to read a torn scratch file as idle
   would disable the supervisor over bookkeeping. (The dialog flag fails the other way for the same reason —
@@ -365,7 +376,13 @@ guess at model latency and fail unrecoverably; `PreToolUse` proves busy-ness too
 where the second send lands. **MEASURED:** the hook is dispatched *before* the branch on
 `preferredNotifChannel`, so OS notifications being off still produces the flag.
 **Necessary and NOT sufficient — see `in-flight/` below.** It fires while a backgrounded worker runs, because
-the parent genuinely is at the prompt. **Cleared on `SessionStart` too.**
+the parent genuinely is at the prompt.
+**`SessionStart` WRITES it, and used to remove it — which was backwards.** A started, resumed or cleared
+session is idle by definition, and the harness cannot say so: `idle_prompt` arms off the last message
+timestamp, so a cleared session, having none, never arms it (measured: 11 minutes idle, no flag). A reset whose
+`/clear` lands and whose `continue` does not then leaves a session only a human can restart. `compact` is
+excluded and that exclusion is the load-bearing half — auto-compact fires mid-turn and the turn resumes after
+it.
 
 ## in-flight/<tool_use_id>.json  · written by `hooks/dispatch_guard.py` (`PreToolUse` on `Agent|Task`), removed by `hooks/dispatch_return.py` (`PostToolUse` on the same) and by `hooks/session_start.py`, read through `context_band.py` · *`.workflow/in-flight/`; RUNTIME, gitignored, atomic write*
 - `{ agent, description, session_id }` — **presence is the fact**; the body is for humans, so a torn file

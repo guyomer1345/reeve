@@ -114,7 +114,11 @@ log() { printf '%s supervise: %s\n' "$(date -u +%H:%M:%SZ)" "$*" >&2; }
 # supervisor is the only process left watching. Judgement lives in `monitor.py` (testable, and
 # runnable by a human); this file is transport, as it is for the gate.
 #   action `nudge`    -> send a bare `continue`, which is what a session that quietly ended a
-#                        turn needs and what a working session simply queues behind its turn.
+#                        turn needs. The monitor has ALREADY established that the session is at
+#                        an idle prompt; this file does not re-decide it. It briefly did, as a
+#                        veto here, and that cost the thing the veto was protecting: the judge
+#                        spent its one-nudge budget on a nudge the transport silently dropped,
+#                        and the next rung up is a durable `steer` park (OBSERVED 2026-09-20).
 #   action `escalate` -> monitor.py has already parked a `steer`; the daemon's away channel
 #                        takes it from there. Nothing to send.
 MONITOR="$PROJECT/.claude/scripts/monitor.py"
@@ -133,15 +137,6 @@ except Exception: print("none\t")' )"
   why="${action#*$'\t'}"; action="${action%%$'\t'*}"
   case "$action" in
     nudge)
-      # The nudge is the same keystroke injection the reset is, so it carries the same
-      # precondition: a `continue` sent into a running turn lands in the prompt box as text.
-      # This costs nothing real — a session that "never ends a turn" because it is working is
-      # not one a `continue` would help, and one that quietly stopped IS idle and does get
-      # nudged. A session sitting in a dialog is neither, and needs a human, not a keystroke.
-      if [ "$1" != "idle" ]; then
-        log "no motion — $why; NOT nudging: the session is not known idle"
-        return 0
-      fi
       log "no motion — $why; nudging $PANE"
       tmux has-session -t "$PANE" >/dev/null 2>&1 || { log "pane $PANE is gone"; return 0; }
       tmux send-keys -t "$PANE" "continue" Enter || log "nudge failed; holding"
@@ -165,19 +160,19 @@ paused() {
 # a supervisor that needs `jq` has a new way to fail at 3am.
 #   field 1  safe   `1` when every condition holds
 #   field 2  used   the context reading, the derived effect a landed `/clear` collapses
-#   field 3  idle   `idle` when the session is known idle (the heartbeat needs it too)
-#   field 4  why    `blocked_by`, joined, for the log
+#   field 3  why    `blocked_by`, joined, for the log
+# There is deliberately no `idle` field: the heartbeat used to take one and veto itself with it,
+# which is the judgement this file does not own.
 ask_gate() {
   python3 "$GATE" --workflow-dir "$PROJECT/$WORKFLOW" --project-root "$PROJECT" --gate 2>/dev/null \
     | python3 -c 'import json,sys
 try:
     g = json.load(sys.stdin)
 except Exception:
-    print("0\x1f\x1f\x1fthe gate did not answer"); raise SystemExit
-print("%s\x1f%s\x1f%s\x1f%s" % (
+    print("0\x1f\x1fthe gate did not answer"); raise SystemExit
+print("%s\x1f%s\x1f%s" % (
     "1" if g.get("clear_safe") else "0",
     (g.get("used") if isinstance(g.get("used"), int) else ""),
-    "idle" if g.get("session_idle") is not None else "",
     "; ".join(g.get("blocked_by") or []) or "no reason given"))'
 }
 
@@ -235,7 +230,7 @@ reset_session() {
 tick() {
   if paused; then log "loop is paused; holding"; return 1; fi
 
-  IFS=$'\x1f' read -r safe used idle why <<<"$(ask_gate)"
+  IFS=$'\x1f' read -r safe used why <<<"$(ask_gate)"
 
   # Retire the ledger FIRST, on every tick, whatever the gate says. A landed reset collapses
   # the reading and then the gate is false for a long while — so a ledger only inspected on the
@@ -247,7 +242,7 @@ tick() {
   if [ "$safe" != "1" ]; then
     # The reset gate held. That is the normal state, and it is also what a dead session looks
     # like — so this is exactly where the heartbeat belongs, rather than beside it.
-    heartbeat "$idle"
+    heartbeat
     log "holding — ${why:-no reason given}"; return 1
   fi
 
@@ -256,7 +251,7 @@ tick() {
     # were ever submitted — says the last $MAX_RESETS did nothing. Sending again is how a
     # prompt box fills with `/clear continue /clear continue`. Stop, and keep saying so: the
     # heartbeat still runs, and `monitor.py` still owns the escalation to a `steer`.
-    heartbeat "$idle"
+    heartbeat
     log "GIVING UP on resetting $PANE — $n sends left the context reading at ${used:-unknown}."
     log "  The keys are reaching tmux and not reaching the session. Look at the pane: if the"
     log "  prompt box holds unsubmitted text, clear it (Esc), then send \`continue\` yourself."

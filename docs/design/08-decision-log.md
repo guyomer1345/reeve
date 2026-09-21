@@ -9198,3 +9198,130 @@ reason and reused here), **D178** (`dispatch_return`, likewise).
 → `product/hooks/{dispatch_guard.py,dispatch_return.py,session_start.py}`,
 `product/scripts/{context_band.py,turn_check.py}`, `product/shared/schemas-runtime.md`,
 `product/templates/loop-detail.md`, `product/commands/start.md`, `05`, `11`.
+
+## D242 — the idle signal, both ends: the veto moves OUT of the transport, and `SessionStart` had its polarity backwards **[BUILT 2026-09-21 — queue items `4e` + `4f`. Both are `D239` regressions, both OBSERVED on the 2026-09-20 night, neither reachable by reading]**
+**One fact, two bugs, and they compound into the sharp one.** `D239` added "the session is at an idle prompt"
+as the fourth `clear_safe` condition. It put the *judgement* in the wrong file and the *lifecycle* the wrong
+way round, and together they produce **a session only a human can restart**.
+
+**`4e` — the veto sat in the transport and burned a budget it did not own.** `supervise.sh` states its own law
+in its header: *"judgement lives in `monitor.py` (testable, and runnable by a human); this file is transport."*
+The idle precondition went in as a shell-side veto, so the judge said `nudge`, the transport declined, and the
+counter lived with the judge: `13:45:48Z no motion — nothing written for 10m; NOT nudging: the session is not
+known idle` against `monitor.json` recording `nudges: 1`. The one-nudge budget was spent on a nudge that never
+left the process, and the next rung up is **escalate → park a `steer`** — a durable false stop for a session
+that had never actually been nudged. It is now a `waiting` state in `monitor.py`, beside parked / dialog /
+paused, which is the same family: *the session is not in a state where a keystroke helps*.
+**Its one exception, added rather than inherited.** Withholding the nudge would have made this file go SILENT
+on a wedged session, since the old path still escalated at the stall window. A working loop writes constantly,
+so quiet for the full stall window **and** not at an idle prompt means wedged (or an idle flag that was lost) —
+neither is fixed by typing. So the nudge is withheld and **the escalation still fires**.
+
+**`4f` — `SessionStart` REMOVED the flag, and for a `/clear` that is exactly wrong.** A started, resumed or
+cleared session is **definitionally** idle: sitting at the prompt with nothing submitted. And the harness will
+never say so — `idle_prompt` is armed off the LAST MESSAGE TIMESTAMP and guarded by `if (fv === 0) return`, so
+a freshly cleared session, having no messages, never arms the timer. **Measured: `consumer` sat 11 minutes
+after a manual `/clear` with the flag absent.** Combined with `4e`, a reset whose `/clear` lands and whose
+`continue` does not leaves a session nothing in the package can restart. `SessionStart` now **writes** it.
+**`compact` is excluded and that exclusion is the load-bearing half** — auto-compact fires MID-TURN and the
+turn continues after it, so marking that idle hands the supervisor permission to type into a running turn,
+which is the one unrecoverable failure in this whole area.
+
+*Rejected:* **importing `context_band` into `monitor.py`** for the idle read (a band that will not parse must
+not be able to silence the monitor; the path check IS the semantics — presence is the fact — and the name is
+kept in step by hand exactly as the two writing hooks already do) · **keeping the veto and moving only the
+counter** (the log line would still be a judgement in the transport, and the next reader would move the counter
+back) · **a TTL on the flag** (`D239` rejected it and the reasoning stands: a guess at model latency that fails
+unrecoverably) · **setting the flag on EVERY `SessionStart` source** (see `compact`) · **marking idle from the
+turn gate's give-up path**, which would cut the remaining ~60s of harness latency: the gain is one poll and the
+risk is the unrecoverable one, so the harness stays the only in-session authority for "a turn is not running".
+*Evidence:* `supervise.log` 2026-09-20 with the NOT-nudging line beside `monitor.json: {"nudges": 1}`; the 11
+idle minutes after a manual `/clear`; the harness's own idle-timer guard read rather than assumed.
+**Builds on:** **D239** (both halves are its regressions), **D241** (the in-flight condition that sits beside
+this one in the same gate), **D225** (`monitor.py`, which now owns the judgement).
+→ `product/scripts/{monitor.py,supervise.sh,context_band.py}`, `product/hooks/session_start.py`,
+`product/shared/schemas-runtime.md`, `11`.
+
+## D243 — a checkpoint parks the ITEM, not the machine: rung 1 becomes *parked AND nothing else eligible* **[BUILT 2026-09-21 — queue item `4h`, the highest-value item in the unattended queue. OBSERVED THREE TIMES on two projects; the package already stated the correct behaviour and the gate contradicted it]**
+**The defect is a gate contradicting a written rule, and the model follows the gate.** `loop-detail.md` §
+*the wave* is unambiguous: *"while an item is parked on a human verdict, the next independent item starts
+rather than the loop idling … a whole-loop park is simply 'nothing eligible'."* But `turn_check.may_end` rung 1
+returned *"N checkpoint(s) parked — the human genuinely owes an answer"* for **any** park, so the turn was free
+to end. Observed on `consumer`: it parked `gap-027-qa` (legitimately — a human must test it), wrote *"Decision
+work doesn't collide, so that's what runs next: `decision-engineer` on `gap-028`"* — **named the eligible work
+and stopped anyway** — and `turn_check` agreed. Then, 2026-09-21, the confirmation that settles it: **both
+overnight drives stopped on qa checkpoints, including `agentic cyber`**, the run that was otherwise perfect (23
+clean self-resets, `demands: 0`). A project doing everything right was still halted for the night by one human
+gate, which removes every reading in which this was consumer-specific or a symptom of `4l`.
+
+**The predicate already existed and had one owner.** `check_wave_independence.py` enumerates the open candidate
+set — backlog rows ∪ planned item dirs, minus the finished (the `promoted.json` marker), the in-flight and the
+parked — as the input to its fan-out question. That enumeration is now `open_candidates()`, called by both
+`scan()` and rung 1, so there is no second notion of "is there work left".
+**What is deliberately NOT reused is its VERDICT.** That gate answers *may these run in the SAME turn* and
+returns `[]` whenever the evidence is thin (no code map, no declared scope, an unreadable plan) — correct for
+fan-out, catastrophic here: a missing code map would become a licence to stop for the night. *Is there other
+work at all* and *may these run together* have opposite fail directions, so they are two functions.
+**One naming convention read charitably, and it is stated rather than hidden.** A parked ticket carries no item
+id (`gap-027-qa` is the ticket; `gap-027` is the item), so a ticket whose id is an item's id plus a suffix
+counts as that item being parked. A project that spells tickets otherwise falls to the permissive side of each
+caller in turn — the fan-out gate must still prove disjointness, and the turn ladder nags rather than halts.
+**The measured `parked` exclusion on the goal rung is preserved explicitly.** `parked` previously implied
+rung 1 PASSED, so "demand a goal when rung 1 fails" could never fire under a park; it can now, and brownfield
+mints its goal from the acceptance a human confirms at `reconcile`. The rung is gated on `not _parked(...)`
+so the two-of-nine false positive `D234` measured cannot come back.
+
+*Rejected:* **calling `check_wave_independence.scan()` from the `Stop` hook** (loads the code map and every
+plan on every turn, and its conservative `[]` is the wrong direction here) · **asking `prioritize`** (a skill,
+not a script — nothing mechanical can call it) · **adding an `item_id` to the parked-ticket schema** (correct,
+and a change to a record five writers produce; the suffix convention buys the same answer at this rung's fail
+direction, and the schema change can come later without moving this rung) · **leaving rung 1 alone and fixing
+the ITEM's eligibility elsewhere** (the gate is what the model reads; a rule nothing enforces is what produced
+this).
+*Evidence:* three halted drives, 2026-09-20/21, on two projects; `consumer`'s own final message naming the work
+it then refused to start; the shipped rule at `loop-detail.md` § *the wave*, which has been correct all along.
+**Builds on:** **D91** (the wave predicate), **D234** (the measured `parked` false positive on the goal rung),
+**D225**/**D239** (the unattended-drive machinery this unblocks).
+→ `product/scripts/{turn_check.py,check_wave_independence.py}`, `product/templates/loop-detail.md`, `11`.
+
+## D244 — the give-up is PER EPISODE and leaves a breadcrumb: a ten-minute recovery collapses to one poll **[BUILT 2026-09-21 — queue item `4l`. Two defects, both measured in a two-project contrast on one night]**
+**The contrast is the evidence, and it exonerates the supervisor.** Same package, same supervisor, same night:
+`agentic cyber` at `demands: 0` with **23 clean self-resets**; `consumer` at `demands: 53` with **zero**. A
+session whose stops are legitimate resets the counter and resets itself normally; consumer never ran long
+enough to fill a window. `D239`/`D241` and `supervise.sh` are not the variable — the session's own behaviour is.
+
+**Defect 1 — the give-up was PERMANENT for the rung.** `demands` reset only on the may-end path, so a session
+whose every stop is illegitimate never re-arms it: 53 against `MAX_DEMANDS = 2` means the gate had been
+standing down for **fifty-one consecutive stops**. `D241` re-armed the counter only for sessions that interleave
+legitimate ends (background dispatches) — exactly the case a stop-for-nothing session cannot reach. The give-up
+now resets the counter, so it releases **this turn** rather than the rest of the session, and it cannot wedge
+anything: every third stop still releases.
+**Defect 2 — the recovery rediscovered, over ten minutes, a fact known instantly.** `turn_gate` knows AT THE
+MOMENT OF THE STOP that the turn owed a `continue`; `monitor.py` then spent `QUIET_SECONDS = 600` independently
+noticing silence to conclude the same thing, and got ONE nudge before escalating to a `steer`. Measured cadence
+on consumer: work → stop → 10 min → nudge → work → stop, `nudges_total: 4`, `escalations_total: 1` — **the
+nudge worked every time; it was priced at ten minutes.** The give-up now stamps `owed`/`owed_at` on
+`turn-gate.json`, `monitor.py` reads it as a rung ABOVE the quiet ladder, and the supervisor sends the keystroke
+on its next 60s poll. The monitor's ladder goes back to being what it is for: a session that is *dead*, not one
+that merely stopped.
+**Bounded by a DERIVED effect, like every other actuator here.** Each breadcrumb is served once (`owed_at` is
+its identity) and three served breadcrumbs that advance no pulse escalate — `send-keys` exiting 0 says tmux
+accepted the key, never that the session submitted it. A session that stops for nothing but *works between
+stops* keeps its budget indefinitely, which is precisely the consumer case.
+**It outranks a parked checkpoint and never outranks a dialog or the pause latch.** The turn ladder has already
+weighed the park (`D243`); a dialog and the operator's own latch mean a person is mid-something either way.
+
+*Rejected:* **reading the breadcrumb in `supervise.sh`** (it is transport — the same mistake `D242` is fixing
+in the same week) · **removing `MAX_DEMANDS`** (a gate that blocks forever wedges the session it protects; the
+budget is right, its permanence was not) · **lowering `QUIET_SECONDS`** (it is calibrated for a *dead* session
+and lowering it nudges working ones) · **an unbounded breadcrumb nudge** (a session that ignores three
+keystrokes is not reached by a fourth) · **stamping the breadcrumb for `continue` only** (every rung the gate
+gives up on ended a turn still owing something a restarted turn can do; one rule, and the record says which).
+*Untested and stated rather than assumed:* the hypothesis that rung 4's report demand TEACHES the stop it
+exists to prevent (*"produce the report" ⇒ "end the turn"*). Checking it needs consumer's transcripts, and the
+model side is deliberately untouched until someone has looked.
+*Evidence:* the two-project table above from one night; `nudges_total: 4` / `escalations_total: 1` with every
+nudge productive; `turn-gate.json` at 53.
+**Builds on:** **D241** (the counter re-arm this completes), **D242** (the monitor now owns the judgement this
+rung is added to), **D225**, **D239**.
+→ `product/hooks/turn_gate.py`, `product/scripts/monitor.py`, `product/shared/schemas-runtime.md`, `11`.

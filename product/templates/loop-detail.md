@@ -315,10 +315,14 @@ long, jumbled, and full of ids that mean nothing to the reader. Both land at the
 turn is decidable. `hooks/turn_gate.py` (`Stop`) runs the ladder in `scripts/turn_check.py`; ask it yourself at
 any time with `python3 .claude/scripts/turn_check.py`.
 
-**Rung 1 — may this turn end at all?** Only for a reason from a closed, mechanical set: something is **parked**
-· the goal is **met** or **stalled** (`converge.py`, the same verdict the driver stops on) · the loop is
-**paused** (`control.json`) · the loop is **`idle`** — backlog empty, awaiting steering · `state.json` does not
-say `building`, so nothing is in flight to abandon. None of those and the block tells you *which shape* it is,
+**Rung 1 — may this turn end at all?** Only for a reason from a closed, mechanical set: something is
+**parked AND nothing else is eligible** · the goal is **met** or **stalled** (`converge.py`, the same verdict
+the driver stops on) · the loop is **paused** (`control.json`) · the loop is **`idle`** — backlog empty,
+awaiting steering · `state.json` does not say `building`, so nothing is in flight to abandon. **A checkpoint
+parks the ITEM, not the machine** — § *the wave* above is the rule this rung enforces, and the rung used to
+contradict it: any park at all let the turn end, so one correct qa checkpoint stopped three unattended drives
+for a whole night each. Eligibility is `check_wave_independence.py`'s open-candidate set (backlog rows plus
+planned item dirs, minus the finished, the in-flight and the parked), not its fan-out verdict. None of those and the block tells you *which shape* it is,
 because they send you to different places: a turn that **moved no anchor** announced an action and did not take
 it; a turn that **moved anchors and stopped anyway** finished a piece and quit instead of picking up the next.
 The four ways out are in the block itself — continue the loop · resolve it (`decision-engineer` for a build

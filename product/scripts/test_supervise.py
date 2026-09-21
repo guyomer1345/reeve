@@ -267,12 +267,17 @@ def test_a_QUIET_drive_is_nudged_through_the_real_transport(tmp_path):
 def test_a_QUIET_drive_that_is_MID_TURN_is_not_nudged_either(tmp_path):
     """The nudge is the same keystroke injection the reset is, so it carries the same
     precondition. A session that never ends a turn because it is WORKING is not one a `continue`
-    would help, and typing into it corrupts the prompt box exactly as a mistimed reset does."""
+    would help, and typing into it corrupts the prompt box exactly as a mistimed reset does.
+
+    The judgement is `monitor.py`'s, not this file's, and the assertion below is the difference:
+    the transport does not decline a nudge, it is never told to send one — so the one-nudge
+    budget is still unspent when the session becomes reachable."""
     p = _heartbeat_project(tmp_path, quiet_seconds=1200)
     (p / ".workflow" / "session-idle.json").unlink()
     r = _once(p, "nosuchpane")
-    assert "NOT nudging" in r.stderr
     assert "nudging %s" % "nosuchpane" not in r.stderr
+    rec = json.loads((p / ".workflow" / "monitor.json").read_text())
+    assert rec["action"] == "none" and rec["nudges_total"] == 0, rec
 
 
 def test_a_MOVING_drive_is_left_alone(tmp_path):

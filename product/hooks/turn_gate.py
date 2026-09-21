@@ -25,6 +25,17 @@ block — otherwise the first block would poison the fingerprint comparison for 
 LOOP STOP. After MAX_DEMANDS blocks on the same rung the hook gives up and says so. A hook that
 blocks forever wedges the session it was protecting, and this one can fire on every turn.
 
+THE GIVE-UP IS PER EPISODE, AND IT LEAVES A BREADCRUMB. Both halves were measured on a real
+drive: `demands: 53` against `MAX_DEMANDS = 2` on a session whose every stop was illegitimate,
+which means the gate had been standing down for fifty-one of them -- the counter only ever reset
+on the may-end path, so a session that never ends legitimately never re-arms it. It now resets on
+the give-up too, so the give-up releases THIS turn rather than the rest of the session. And
+because the release hands a still-owing session back to nobody, it stamps `owed`/`owed_at` on the
+latch: the fact that this turn owed a `continue` is known HERE, at the instant of the stop, and
+`monitor.py` otherwise spends `QUIET_SECONDS` (ten minutes) independently rediscovering it. The
+supervisor's next 60s poll reads the breadcrumb and sends the keystroke, and the monitor's own
+ladder goes back to being what it is for: a session that is dead, not one that merely stopped.
+
 FAIL DIRECTION IS OPEN on every path — unparseable payload, no `.workflow/`, an import that
 raises, a torn latch. Same asymmetry `handoff_gate.py` argues: a session wrongly allowed to end
 costs a turn; a session wrongly prevented from ending loses everything it was doing.
@@ -32,6 +43,7 @@ costs a turn; a session wrongly prevented from ending loses everything it was do
 import json
 import os
 import sys
+import time
 
 MAX_DEMANDS = 2
 LATCH = "turn-gate.json"
@@ -203,13 +215,16 @@ def main():
            "anchor_demanded": bool(latch.get("anchor_demanded"))
                               and not res.get("anchor_ok", True)}
     if not res["demand"]:
-        rec.update(satisfied=res.get("digest") or latch.get("satisfied"), demands=0, rung=None)
+        rec.update(satisfied=res.get("digest") or latch.get("satisfied"), demands=0, rung=None,
+                   owed=None)
         _write_latch(workflow, rec)
         return 0
 
     same_rung = latch.get("rung") == res["demand"]
     demands = (rec["demands"] + 1) if same_rung else 1
-    rec.update(demands=demands, rung=res["demand"])
+    # The breadcrumb is retired the moment the gate is handling the stop in-session again: it
+    # says "this turn ended owing something", and a turn that is being BLOCKED has not ended.
+    rec.update(demands=demands, rung=res["demand"], owed=None)
     _write_latch(workflow, rec)
     if demands > MAX_DEMANDS:
         # GIVING UP IS THE MOMENT THE ANCHOR MATTERS MOST, and it was the one moment nothing
@@ -238,6 +253,19 @@ def main():
             }))
             print(reason, file=sys.stderr)
             return 2
+        # THE BREADCRUMB, AND THE RE-ARM. The turn is about to end still owing something, with
+        # nobody watching. Two consequences are recorded rather than one:
+        #   · `owed` — this stop was illegitimate, established here by the full ladder. The
+        #     supervisor's next poll sends the `continue`; without it `monitor.py` spends ten
+        #     minutes noticing silence to conclude what was known at this instant. MEASURED on a
+        #     real drive: work -> stop -> 10 min -> nudge -> work -> stop, four times over.
+        #   · `demands = 0` — the give-up is for THIS turn, not for the session. Left at 3 it
+        #     stands down for ever on a session whose stops are all illegitimate, which is
+        #     exactly the session it exists for (`demands: 53`, zero blocks). Re-arming cannot
+        #     wedge anything: every third stop still releases.
+        rec.update(demands=0, rung=None, owed=res["demand"], owed_at=time.time(),
+                   owed_why=(res.get("why") or "")[:200])
+        _write_latch(workflow, rec)
         print(json.dumps({"systemMessage": GAVE_UP % (MAX_DEMANDS, res["why"])}))
         return 0
 
