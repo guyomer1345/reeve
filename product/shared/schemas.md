@@ -15,7 +15,8 @@ read law) live in `shared/memory-model.md`.*
 > produces and consumes — a spec, a plan, a changelog, a verdict, a receipt, a forecast, an issue. The five
 > siblings own the other five belongings:
 > - [`schemas-config.md`](schemas-config.md) — the **operator's control surface**: every setting a human turns,
->   wherever it physically lives: `config.json` · `subagentPromptCacheTtl`.
+>   wherever it physically lives, and the one they write in prose: `config.json` · `subagentPromptCacheTtl` ·
+>   `directive`.
 > - [`schemas-runtime.md`](schemas-runtime.md) — the records the package's own **processes** own, never authored
 >   by a skill as work and never hand-edited: `dispatch_return.py` · `runtime.json` · `.workflow-runtime` ·
 >   `install-set.json` · `orchestrator-brief managed block` · `statusline.delegate` · `bus.lock` ·
@@ -151,11 +152,40 @@ token carries, and the two would eventually disagree.
   is trivially refreshable and one commit inverting a module's contract is fatal.
 - `steps[]` — ordered, each independently verifiable
 - `acceptance_criteria[]` — the definition-of-done; each `{ id, criterion, gate: artifact | human-qa,
-  boundary?: bool, discharge? }`. `artifact` → checked by `verify`; `human-qa` → confirmed by a `checkpoint`
-  (kind=qa). **`discharge` is required on every `artifact` criterion** — it names the concrete mechanical check
-  that settles it: a test ref, or a token `type` / `lint` / `structural` (a structural predicate the model can
-  point at). A criterion with **no nameable discharge is not artifact-checkable → it is `human-qa`** — the
-  classification is mechanical (*can you name a check?*), not a judgment call. This makes "**every criterion is
+  boundary?: bool, discharge?, why_human?, blocking? }`. `artifact` → checked by `verify`; `human-qa` →
+  confirmed by a `checkpoint` (kind=qa). **`discharge` is required on every `artifact` criterion** — it names
+  the concrete mechanical check that settles it: a test ref, a token `type` / `lint` / `structural` (a
+  structural predicate the model can point at), or **`run: <command>`**.
+  **THREE QUESTIONS, IN ORDER. `human-qa` IS THE LAST ANSWER, NEVER THE RESIDUE.**
+  1. **Could the answer change what the product IS or PROMISES?** If no it is not a checkpoint, however hard it
+     is to check — and the predicate is the autonomy floor's, not a second one (§ the autonomy floor). *"No
+     nameable mechanical check"* routing to a human was the defect: it made every behavioural criterion his.
+  2. **If yes, can the loop get the evidence by RUNNING it?** Then run it and bring only the product question,
+     never the verification. That is **`run: <command>`**: *"a PDF is recorded as visible-and-refused rather
+     than fetched"* is entirely machine-observable, and before this class existed nothing could say *"verified
+     by running the thing"* — `verify` is chartered on artifacts, not runtime behaviour, so behavioural
+     criteria fell to the human by residue. **`execute` runs the command as a plan step and records it in the
+     `changelog`; `verify` reads that record, exactly as it reads every other discharge.** The charter is
+     untouched: the run produces an artifact, and the artifact is what is checked.
+     **Two limits, stated rather than discovered later.** A `run` must be **deterministic and local** — one
+     whose outcome depends on a third party is a flake generator, not a discharge; stub it, or take the
+     criterion to question 3. And where `checks.env` declares `STACK_GATE_NONE` (a tree whose code must never
+     be executed on this machine) **`run` is unavailable** and the criterion falls back to `human-qa`.
+  3. **Must the answer precede the COMMIT?** If no, **`blocking: false`** — a *deferred qa*: the item documents
+     and commits, and the question waits for the human rather than the machine waiting for the human. Blocking
+     is for **irreversibility, not importance**, so it is read off the plan's own `risk_class`:
+     `data-destructive` / `prod-touching` block, everything else defers. A deferred `no` returns as an ordinary
+     correction (`debug` → `refine`), which is what a trunk-only repo does with every other mistake, and
+     **`verify` gains no third state** — it never judged `human-qa` criteria and still does not.
+     **A criterion that binds a `goal_ref` may NEVER defer**, and the gate blocks it: the goal ledger records
+     the binding at *promote* time, so `converge.py` would report the goal met on an answer nobody has given.
+     If the answer decides whether the goal is met, it is not deferrable.
+  Only a criterion surviving all three is `human-qa`, and one that does carries **`why_human`** — one line
+  naming what about the product could change. Required, and gated by `check_criterion_discharge.py`: a
+  `human-qa` with no product question behind it **is** the residue defect, written where a gate can see it.
+  **The risk this accepts, rather than hides:** a behavioural defect no test catches and no human is asked
+  about. That is question 2's job, plus `review`, `debug` and `align`'s drift scan — **not** a reason to
+  re-widen the human gate. This makes "**every criterion is
   one or the other, `planner` emits no un-checkable criterion**" *enforceable* rather than aspirational: `verify`
   **never passes an `artifact` criterion whose discharge produced no signal**, and
   `check_criterion_discharge.py` blocks a plan whose `artifact` criterion lacks a discharge. A plan with zero
@@ -269,69 +299,12 @@ the motion *says which one it is*.
   `prioritize`, never forecast, so an anchor for them would fire for a node no chain ever named — which that table
   reads as a **structural divergence** and would re-forecast the tail on every routine maintenance pass.
 
-## directive  · written by a human (or by the orchestrator on their instruction), validated by `check_directives.py` · *`.workflow/directives.md`; **COMMITTED** and **ALWAYS-LOADED**, so it is budgeted in the always-loaded set and inside its TOTAL ceiling (§ commit-receipt's sibling law in `memory-model.md`); PROJECT-OWNED — `/start` seeds it and no update ever overwrites it*
-**A standing operator instruction about how the LOOP behaves.** Neither `docs/decisions/` (build decisions,
-append-only, on-demand — a directive the loop does not see every turn is not in force) nor `rules/**` (about
-product CODE, each carrying an `— enforced by:` tag). Without this file such an instruction lives in the
-conversation and dies at the next `/clear`, which is why it is re-typed every session.
+## directive  → **moved to [`schemas-config.md`](schemas-config.md)** (2026-09-21)
+Re-homed on **belonging**, the same rule the family's other splits used: that file owns *the operator's control
+surface — every setting a human turns, wherever it physically lives*, and a standing instruction about how the
+LOOP behaves is exactly that, in prose rather than in JSON. `schemas.md § directive` still resolves — the
+section name is the anchor.
 
-**MECHANICAL-FIRST IS THE ENTRY RULE, and it is decidable rather than a matter of taste.** One question decides
-the type: *does the directive name a condition a script could evaluate?* A threshold, a file state, an event —
-then it is mechanizable, and it **is wired** as a hook, a `config.json` knob, a gate or a daemon term. Only a
-directive with no observable trigger stays as text. Prose is the fallback, never the default: an always-loaded
-file that accepts anything is unbounded growth in the most expensive place in the system.
-
-- `type` ∈ `{ mechanized, behavioural }` · `entered` — `YYYY-MM-DD` · `retire` — see below ·
-  `mechanism` — **required iff `type: mechanized`, forbidden otherwise**: the path or config key where the rule
-  actually lives.
-- **A `mechanized` entry states what it ACHIEVES and never restates the rule.** This is the second-copy hazard at
-  its sharpest, on a file whose whole purpose is to be obeyed — a directive written once here as prose and once
-  there as a hook gives the loop two masters that drift apart. The entry is an **index row**: a pointer, not a
-  copy, which is exactly what the one-owner law permits and what a restatement violates. It
-  is held to that mechanically — a `mechanized` body is capped at **one line**, and a one-line body cannot be a
-  second copy of a hook's logic. The mechanism is also checked to EXIST; a dangling pointer is how an index rots.
-- **Every entry carries a retire path, and none of them is "a human remembers":**
-  - `on:YYYY-MM-DD` — expires. `check_directives.py` FAILS once the date has passed, so an expired directive
-    stops the build rather than quietly staying in force.
-  - `when:<path>` — retires when that mechanism exists. The gate fails once the path is present, which is what
-    makes mechanical-first hold *over time* rather than only at entry: the prose is a placeholder that is
-    forced out the day its hook lands.
-  - `standing` — no expiry. Permitted, and deliberately the least convenient: standing entries are listed on
-    every `--report` so they are re-confirmed rather than accumulated.
-- **Why not `state.json` or `handoff.md`:** `handoff.md` is prose for a stranger, rewritten whole at every
-  `/dispatch`, so nothing in it survives as an instruction; `state.json` is volatile and gitignored, and a
-  standing instruction that does not survive a crash is not standing.
-
-### the autonomy floor  · read by the orchestrator before taking a decision, computed by `check_autonomy_floor.py`
-> **Consulted at decision time, ENFORCED at commit time (2026-09-13).** `loop.md` asks the orchestrator to run
-> this before acting on a goal-affecting decision — which is a consultation, and *a loop that simply does not run
-> it is precisely the case the floor exists for*. `checks.sh --check` now runs it as a gate, with
-> `spec_approval.py`'s receipt as the escape: a change that crosses the floor commits only when a human approved
-> **this exact spec content**. The receipt is bound to a **digest**, not a label, so approving one version and
-> committing another blocks again — see `schemas-runtime.md § spec-approval.json`.
-**The loop takes every decision that does not change the goal, and routes anything that may.** That criterion is
-sharper than reversibility × blast-radius, which grades *how carefully to decide* rather than *whose decision it
-is*, and it already has an owner: the spec's commitment model. *Goal-affecting* ≈ *would change a `locked`
-element, or change what an acceptance criterion demands.*
-
-**The judgment does not stand alone, because a loop grading its own decisions drifts toward "not fundamental" —
-that is the direction that lets it keep working.** So there is a mechanical floor, and judgment may escalate
-above it and never below it. The floor is computed from the **spec diff**:
-- a changed hunk in `docs/spec.md` whose enclosing block carries a `locked` commitment marker;
-- a hunk that removes or weakens a `locked` marker;
-- a changed hunk inside an `acceptance_criteria` region — editing a criterion's text *is* altering what it demands.
-Either condition ⇒ **auto-route to the human, regardless of the model's read.**
-**A spec the change CREATES is clear, and says so** (`created: true`): every rule asks what the change does to
-an *existing* demand, and a criterion that did not exist has none. The first spec always arrives through a
-capability that already gates on a human — `charter`'s founding conversation, `discuss`'s requirements
-conversation, `ingest`'s `reconcile` checkpoint — so routing it stops the human for a decision they just made. Failures to *compute* are untouched
-by this: a created spec that also trips path drift still routes.
-
-**Its limit is stated rather than implied, because a floor that is really a judgment in a gate's clothes is worse
-than no floor.** This is a *spec-diff* floor: it catches a change that rewrites the goal **in the spec**. A code
-change that quietly abandons a locked behaviour **without touching the spec** is not caught here — that is
-`align`'s drift scan and `verify`'s conformance check, and it is exactly the case judgment is expected to
-escalate on. The floor is a minimum, not a cap.
 
 ## decision-record  · produced by `decision-engineer` · *append-only — one record per decision; a reversal is a NEW record that supersedes (status flip), never an edit; global under `<project_root>/docs/decisions/`*
 - `id` — stable id (e.g. `D-001`); `plan.decisions[]` reference these, and coverage is checked id → step

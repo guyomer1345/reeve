@@ -69,7 +69,15 @@ Lean: for small changes, judge directly without fanning out workers.
   observed layer of the code map. That layer is not built — nothing in the package produces or consumes it — so
   the licence had no consumer and sat in tension with this very rule. It is removed rather than left dormant. If
   the observed layer is ever built, grant the licence again deliberately, against the real capture mechanism.)*
-- Never pass/fail a `human-qa`-gated criterion; those are confirmed by a `checkpoint` (kind=qa), not here.
+- Never pass/fail a `human-qa`-gated criterion; those are confirmed by a `checkpoint` (kind=qa), not here —
+  **including a deferred one** (`blocking: false`), whose verdict arrives after this item has already committed.
+  You gain no third state: *"passed, pending a human's later look"* is not a verdict you have ever issued and
+  is not one you issue now.
+- **A `run: <command>` discharge is read like every other one — from the artifacts.** `execute` runs the
+  command as a plan step and records it and its observed outcome in the `changelog`; you check that record.
+  You do not run it yourself: you are chartered on artifacts, not runtime behaviour, and that is exactly why
+  the run happens upstream. A `run` discharge with **no record in the changelog produced no signal** — a hard
+  fail, the same as any other silent discharge.
 - **A `fail` gates only with a deterministic signal behind it** — a failing test, a type/lint violation, a
   plan↔changelog↔diff mismatch, **or an `artifact` criterion whose `discharge` produced no signal** (a hard
   fail, never a silent pass). A changelog↔diff divergence is always such a signal: the offending path is
@@ -87,6 +95,8 @@ or omit this line; the mismatches and confidence follow as prose beneath it.
 ## Route
 - **pass** → `review?` → `document` / `commit`. If the `plan` declared any `human-qa` acceptance criteria, the
   orchestrator inserts a `checkpoint` (kind=qa) after `review`; otherwise straight through — no blanket human QA.
+  **A deferred criterion (`blocking: false`) parks its question and does not hold the item**: `document` and
+  `commit` run, and the verdict is consumed at a later drain.
   **`review` is where the question you do not ask gets asked.** Every check above is a *correspondence* check,
   so your `pass` means *what was built matches what was asked* and never *the code is right* — a change can
   satisfy all three and still be logically wrong. That is `review`'s subject, read cold; it is not a second

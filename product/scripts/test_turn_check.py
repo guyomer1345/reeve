@@ -132,6 +132,27 @@ def test_a_FINISHED_backlog_row_is_not_eligible_work(tmp_path):
     assert ok and "nothing else is eligible" in why
 
 
+def test_a_DEFERRED_qa_is_not_a_reason_to_end_the_turn_at_all(tmp_path):
+    """Its item has already documented, committed and closed. The question waits for the human
+    rather than the machine waiting for the human, so it holds nothing — and counting it would
+    reinstate the defect rung 1 was rebuilt to remove."""
+    wf = project(tmp_path)
+    with open(os.path.join(wf, "parked", "gap-9-qa.json"), "w", encoding="utf-8") as fh:
+        json.dump({"ticket_id": "gap-9-qa",
+                   "checkpoint": {"kind": "qa", "request": {"blocking": False}}}, fh)
+    ok, why = tc.may_end(wf)
+    assert not ok and "no reason for this turn to end" in why
+
+
+def test_an_UNREADABLE_ticket_still_counts_as_blocking(tmp_path):
+    """Fail direction: a record nobody can read must never be able to release a gate."""
+    wf = project(tmp_path)
+    with open(os.path.join(wf, "parked", "torn.json"), "w", encoding="utf-8") as fh:
+        fh.write("{not json")
+    ok, why = tc.may_end(wf)
+    assert ok and "parked" in why
+
+
 def test_a_paused_loop_is_a_reason(tmp_path):
     ok, why = tc.may_end(project(tmp_path, paused=True))
     assert ok and "paused" in why

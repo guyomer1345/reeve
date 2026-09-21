@@ -516,3 +516,20 @@ def test_what_counts_as_naming_a_base_commit(tmp_path, value, ok):
     path = tmp_path / "handoff.md"
     path.write_text("# handoff\n\n%s\n" % value)
     assert cb.anchor_names_base(str(path)) is ok
+
+
+def test_a_DEFERRED_qa_does_not_block_the_RESET(tmp_path):
+    """The same rule as the turn ladder's, on the other gate. A deferred question's item has
+    already committed and closed; holding every context reset until a human gets to it would put
+    back, on this gate, the defect the ladder was rebuilt to remove — one human gate stopping the
+    whole machine for as long as the human is asleep."""
+    wf = str(tmp_path / ".workflow")
+    os.makedirs(os.path.join(wf, "parked"), exist_ok=True)
+    with open(os.path.join(wf, "parked", "gap-9-qa.json"), "w", encoding="utf-8") as fh:
+        json.dump({"ticket_id": "gap-9-qa",
+                   "checkpoint": {"kind": "qa", "request": {"blocking": False}}}, fh)
+    assert cb._parked_open(wf) == 0
+    with open(os.path.join(wf, "parked", "gap-9-demo.json"), "w", encoding="utf-8") as fh:
+        json.dump({"ticket_id": "gap-9-demo",
+                   "checkpoint": {"kind": "demo", "request": {"blocking": True}}}, fh)
+    assert cb._parked_open(wf) == 1, "every other kind is answer-before-proceeding"

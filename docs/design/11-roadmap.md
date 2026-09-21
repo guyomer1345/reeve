@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **THIRTEEN OF THE FOURTEEN ARE CLOSED as of 2026-09-21 (`D242`–`D248`): all of G1 (`4e` `4f` `4h` `4l` `4c` `4i` `4d` `4g`), all of G3 (`3` `4` `4b`), `2` from G2, and `4k` — the `charter` skill, the one that changes what the package IS. What G1 needs now is not another fix but a NIGHT: a real unattended run is the measurement. THE LAST ITEM IS `4j` — the qa gate rebuilt on *product-changing*, which could not be built before `charter` existed because it rested on a precondition nothing produced. `5` stays a conversation and is excluded by the standing orders.** The standing queue below this one is CLOSED**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next thing to build is `#### ▶ NEXT — the unattended-drive bundle`, now **fourteen items in BUILD ORDER** (the labels are stable ids, not the order). Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **THE QUEUE IS BUILT OUT as of 2026-09-21 (`D242`–`D249`): all of G1 (`4e` `4f` `4h` `4l` `4c` `4i` `4d` `4g`), all of G3 (`3` `4` `4b`), and all of G2's buildable half (`2`; `4k`, the `charter` skill; `4j`, the qa gate). Only `5` remains and it is EXCLUDED by the standing orders — a design question that wants a conversation. WHAT IS LEFT IS NOT A FIX, IT IS A MEASUREMENT: a night. Nothing here has been exercised by a real unattended run, and the two items that change what the package IS (`4k`, `4j`) have no drive behind them at all. The next session's job is to run one and harvest it — and before any release the smoke receipt is void, because every edit to `product/` throws it away.** The standing queue below this one is CLOSED**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1514,6 +1514,11 @@ Two supervised drives (`consumer`, `agentic cyber`) were left unattended for two
 `D239` and `D240` came out of that and are closed. **What follows is what those two hours exposed and did not
 fix.** Every item traces to an observation, not to a reading, and the order is dependency order.
 
+> **⛔ SPENT 2026-09-21 — the queue is built out (`D242`–`D249`) and these orders expired with it, exactly as
+> they said they would. `CLAUDE.md`'s pointer to them has been retired too, on their own instruction. Kept here
+> as the record of what was authorized; they are NOT a live instruction, and "never capture unprompted" is in
+> force again.**
+>
 > **STANDING ORDERS for the session that picks this up (set 2026-09-19, by the maintainer, for this queue —
 > not a permanent rule).** *"Decide what to fix, make a proper list and reasoning, and then clear and take
 > care of them next chat."* So this list IS the authorization: **build items 1–4 without stopping to ask**,
@@ -1543,7 +1548,7 @@ item below belongs to exactly one.**
   real bug" are answered by `decision-engineer`, `review`, `debug` and `research`, which are better at them
   than a non-expert owner and are awake at 3am. `4k` (the inception conversation that does not exist, and the
   thing that BUYS the autonomy — a thin inception leaves the floor nothing to hold; ✅ `D248`, the `charter`
-  skill), then `4j` (rebuild the qa gate on *product-changing*), plus `5` (an `ask` should defer, not halt) and `2` (do not reach for a tool
+  skill), then `4j` (rebuild the qa gate on *product-changing* — ✅ `D249`), plus `5` (an `ask` should defer, not halt) and `2` (do not reach for a tool
   that prompts while holding one that does not — ✅ `D246`).
 - **G3 · DEBTS THE PACKAGE OWES ITSELF.** `3` · `4` · `4b`. **✅ ALL CLOSED 2026-09-21 (`D246`), together with `2` from G2.**
 

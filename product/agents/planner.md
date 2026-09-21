@@ -52,14 +52,26 @@ patch over drift, so it restamps `base_sha` and leaves the count alone. One coun
 ## Workflow
 1. Read the `spec` (decompose) or the item + knowledge graph (plan-one).
 2. Map purpose → concrete changes; list the files touched; write ordered, independently-verifiable steps.
-3. Tag each `acceptance_criterion` `gate: artifact | human-qa` and **name its `discharge`** — the concrete
-   mechanical check that settles an `artifact` criterion (a test ref, or `type`/`lint`/`structural`). If you
-   cannot name a mechanical discharge, the criterion is **not artifact-checkable → tag it `human-qa`** (the
-   classification is mechanical — *can you name a check?* — not a guess about perceptibility). Prefer *authoring
-   a discharging test* to keep a criterion `artifact`: that keeps the loop autonomous. `human-qa` (→ qa
-   `checkpoint`, which parks and mirrors onto `handoff.md` when unattended) is the fallback for the genuinely perceptual/runtime,
-   and it is what later triggers the checkpoint. Default to `artifact` **with** a real discharge — never a bare
-   `artifact` tag.
+3. Tag each `acceptance_criterion` and **name its `discharge`** — the concrete mechanical check that settles
+   an `artifact` criterion (a test ref, `type`/`lint`/`structural`, or **`run: <command>`**). **Three
+   questions, in order, and `human-qa` is the LAST answer rather than the residue** (`shared/schemas.md §
+   acceptance_criteria` owns the rule; this is how you apply it):
+   1. *Could the answer change what the product IS or PROMISES?* If no, it is **not** a checkpoint however hard
+      it is to check — author a discharging test instead. "I cannot name a check" is not a reason to route to a
+      person; it made every behavioural criterion theirs and stopped three unattended drives for a night each.
+   2. *If yes, can the loop get the evidence by RUNNING it?* Then it is `gate: artifact` with
+      **`discharge: run: <command>`**, and **your plan carries the step that runs it** — `execute` records the
+      command and its observed outcome in the `changelog`, which is what `verify` reads. The run must be
+      **deterministic and local**; one that depends on a third party is a flake generator, and where
+      `checks.env` declares `STACK_GATE_NONE` the class is unavailable entirely.
+   3. *Must the answer precede the COMMIT?* If no, tag it **`blocking: false`** — a deferred qa: the item
+      documents, commits and closes, and the question waits for the human. **Blocking is irreversibility, not
+      importance**, so read it off your own `risk_class`: `data-destructive`/`prod-touching` block, everything
+      else defers. **A criterion carrying a `goal_ref` never defers** — the goal ledger records that binding at
+      promote time, so deferring it would let `converge.py` call the goal met on an unanswered question.
+   A criterion that survives all three is `human-qa` and **must carry `why_human`** — one line naming what
+   about the product could change. `check_criterion_discharge.py` blocks a `human-qa` without it, and a bare
+   `artifact` tag with no discharge, mechanically.
 4. **Set `risk_class`** (`code-only` · `data-additive` · `data-destructive` · `prod-touching`). When it is
    destructive, author the required **`backup`** block (`what / mechanism / verification / restore`) —
    `execute` verifies it before the destructive step and refuses the plan without it.
@@ -72,7 +84,7 @@ patch over drift, so it restamps `base_sha` and leaves the count alone. One coun
    criterion must be **`boundary`-tagged** — a case drawn from *outside* the implementation's own enumerated
    set, because one in-scope example can't discharge a "for-any" claim (a floor is only a floor at the edge it
    must cover; prefer a property/structural check over the complement of the build's enumeration). Write the
-   resolved links + criterion ids **and the `criteria[]` (`{ id, gate, discharge, goal_ref }`)** to
+   resolved links + criterion ids **and the `criteria[]` (`{ id, gate, discharge, why_human, blocking, goal_ref }`)** to
    `.workflow/items/<id>/promises.json`; `check_promise_coverage.py` **blocks** an unlinked or non-boundary
    promise and `check_criterion_discharge.py` **blocks** a discharge-less `artifact` criterion (both in
    `checks.sh --check`). Reversible tier-0 decisions carry no promises → nothing to map. These gates prove

@@ -15,10 +15,8 @@ detail lives in **`loop-detail.md`**, pointed to from each section below — rea
 | `checkpoint:reconcile` | reconstructed spec confirmed | `charter` → `prioritize` |
 | `checkpoint:reconcile` | corrections needed | `ingest` (re-run) / `discuss` |
 | `discuss` | spec drafted | `create-forecast?` (forecast gate) |
-| `create-forecast` | forecast approved (checkpoint pass) | `create-demo?` (sandbox gate) |
-| `create-forecast` | gate not triggered | `create-demo?` (sandbox gate) |
-| `create-demo` | demo approved (checkpoint pass) | `planner:decompose` |
-| `create-demo` | gate not triggered | `planner:decompose` |
+| `create-forecast` | approved, or the gate never triggered | `create-demo?` (sandbox gate) |
+| `create-demo` | approved, or the gate never triggered | `planner:decompose` |
 | `planner:decompose` | roadmap → backlog + goal (receipt staged) | `commit` |
 | `prioritize` | plan batch emitted | `planner:plan-one` (per item in the batch) |
 | `prioritize` | maintenance due (retention, drift, or doc-size threshold) | `document:audit` / `align` / `doc-budget` |
@@ -41,8 +39,8 @@ detail lives in **`loop-detail.md`**, pointed to from each section below — rea
 | `debug` | root cause | `refine` |
 | `debug` | confidence stays < threshold after retries (no clear cause) | escalate → `checkpoint` (human) |
 | `refine` | correction plan | `planner:plan-one` → `execute` |
-| `checkpoint:qa` | pass (or no human-qa criteria → skip) | `document` |
-| `checkpoint:qa` | fail | `debug` |
+| `checkpoint:qa` | pass · no human-qa criteria → skip · **deferred (`blocking: false`) → park and carry on** | `document` |
+| `checkpoint:qa` | fail (a deferred one fails at a later drain, after the commit) | `debug` |
 | `checkpoint:demo` | approve | lock the spec state → **prune the demo** → continue (`planner:decompose` at inception · `execute` per-item) |
 | `checkpoint:demo` | changes | `create-demo` (refine the sandbox / spec — **keep** the bundle + its refine count) |
 | `checkpoint:demo` | reject | `discuss` (→ **prune the demo**) |
@@ -59,8 +57,8 @@ detail lives in **`loop-detail.md`**, pointed to from each section below — rea
 | `align` | scan done (tickets filed via `create-issue`, fixes + receipt staged, anchor written) | `commit` |
 | `doc-budget` | over-budget doc trimmed or split-and-pointered (changes + receipt staged) | `commit` |
 
-<!-- Every side door must be named ON the line below: the contract linter reads only the line that
-     starts with "Side doors", so a door introduced on a continuation line is silently unrouted. -->
+<!-- Every side door must be named ON the "Side doors" line: the linter reads only that line, so a
+     door introduced on a continuation line is silently unrouted. -->
 Side doors (callable from anywhere): `create-issue` → backlog · `research` (service) · `answer` · `status`.
 The last two enter from the boundary drain, never from a node: neither advances anything, so neither has an edge.
 

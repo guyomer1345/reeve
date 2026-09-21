@@ -72,11 +72,15 @@ sequence_).** This section carries **no copy of the phase list and no phase coun
 a four-phase order while the roadmap had grown to seven, which is the drift D80 exists to stop. *Where* we are, and
 *how many* phases there are, live in `docs/design/11-roadmap.md` alone.
 
-**A session resuming after 2026-09-19 has STANDING ORDERS, and they live in the work order, not here** —
-`11`'s `### The ordered build sequence` § `▶ NEXT`, in the blockquote at the top of that entry. They are the
-maintainer's, dated, and scoped to that queue: drive it end to end, do not stop to ask between items, capture
-as each one closes. **They expire when the queue does** — and this pointer goes with them, because a standing
-order left in `CLAUDE.md` after its stretch is over is an instruction with no owner. Read them before starting;
-they suspend the "never capture unprompted" rule above for that queue and nothing else. **The queue they govern
-now is the unattended-drive bundle, and its item 0 is BLOCKING: an overnight run's artifacts are read before
-anything is built, because they may reorder the rest.**
+**THE 2026-09-19 STANDING ORDERS ARE SPENT, and this pointer is retired with them (2026-09-21).** They were
+the maintainer's, dated, and scoped to the unattended-drive queue — *drive it end to end, do not stop to ask
+between items, capture as each one closes* — and they said so themselves: *"they expire when this queue does,
+and this pointer goes with them, because a standing order left in `CLAUDE.md` after its stretch is over is an
+instruction with no owner."* That queue is now built out, `D242`–`D249`; its one survivor, item `5`, was
+EXCLUDED from those orders by name because it is a design question that wants a conversation. **So the
+"never capture unprompted" rule above is in force again, undiluted.** The orders' text stays where it always
+lived — `11`'s `### The ordered build sequence` § `▶ NEXT` — as the record of what was authorized, not as a
+live instruction.
+**What the queue has NOT had is a night.** Everything in it was built and tested; none of it has been exercised
+by a real unattended run, and the two items that change what the package IS (`charter`, the qa gate) have no
+drive behind them at all. The next thing that queue needs is a MEASUREMENT, not another fix.

@@ -9563,3 +9563,100 @@ commitment model and **`check_autonomy_floor.py`**, **D236** (`review`, one of t
 → `product/skills/charter/SKILL.md` (NEW), `product/templates/loop.md`,
 `product/shared/{schemas.md,schemas-loopstate.md}`, `product/commands/{start.md,update.md,dispatch.md}`,
 `README.md`, `10`, `11`.
+
+## D249 — WHAT DESERVES TO STOP FOR A HUMAN: the qa gate is rebuilt on *product-changing*, and the two predicates become one **[BUILT 2026-09-21 — queue item `4j`, the LAST item in the unattended-drive bundle. The maintainer's ask and his rule; my first proposal was rejected and why is the useful part]**
+**The ask, verbatim:** *"The QA should only come to me if it is product-changing. The whole point of this repo
+is to allow me to develop things I'm not an expert in as good as possible, so design choices, logical choices
+and so on should also be taken by `decision-engineer` and not be routed to me — I'm in no way more certified
+than credible research."*
+**I proposed *"does it require human judgement or perception"* and that was REJECTED**, because *needing
+judgement* describes most of what the loop exists to do. The maintainer's criterion is **product-changing**,
+and it is sharper — and the package already stated it, in the autonomy floor.
+
+**So the defect was never a missing rule; it was a SECOND PREDICATE that never consulted the first.**
+| | asks | routes to the human when |
+|---|---|---|
+| autonomy floor (`check_autonomy_floor.py`) | does this change what the product is COMMITTED to? | a `locked` element or an acceptance criterion changes |
+| qa gate (`schemas.md`) | is there a criterion we cannot mechanically check? | any criterion lacks a nameable discharge |
+The second is the one that had been waking him, and it routes **by residue**: anything hard to automate became
+his, bypassing `decision-engineer`, `review`, `debug` and `research` — which this package itself calls its
+decision authority and which are awake at 3am.
+
+**FIRST, AND BEFORE THE GATE: the repo never stated what the HUMAN IS FOR.** `00-vision.md` listed the human's
+*modes* and never their purpose, so there was no sentence for a gate to contradict — which is how it drifted.
+It is now written there and in `shared/schemas.md § the autonomy floor` (the package's copy, where the gates
+read it): **the human is the PRODUCT OWNER and nothing else, once `charter` has closed**, with the maintainer's
+signed caveat and the line that keeps the two apart — *at inception the human sets DIRECTION AND CONSTRAINTS;
+during the build `decision-engineer` chooses WITHIN them.*
+
+**THEN THE GATE, AS THREE QUESTIONS IN ORDER, with `human-qa` as the last answer rather than the residue.**
+1. **Could the answer change what the product IS or PROMISES?** If no it is not a checkpoint, however hard it
+   is to check. The mechanical anchor is the floor's own predicate, reused rather than re-invented.
+2. **If yes, can the loop get the evidence by RUNNING it?** The missing **`run: <command>` discharge class**.
+   `gap-027` is the proof it was missing: *"PDFs are fetched, not recorded as visible-and-refused"* is entirely
+   machine-observable, and the session parked it saying *"I won't run it: it's a network fetch, and nobody may
+   be at the terminal."* **`execute` runs it as a plan step and records it in the `changelog`; `verify` reads
+   that record.** That placement is the whole design: `verify` is chartered *"on artifacts, not runtime
+   behaviour"*, and making it run things would have traded a real charter for a feature. The run produces an
+   artifact; the artifact is what is checked; no new executor, no new record, no charter change.
+3. **Must the answer precede the COMMIT?** If no, **`blocking: false`** — a deferred qa. The item documents,
+   commits and closes; the question waits for the human instead of the machine waiting for the human.
+
+**THE THREE OPEN QUESTIONS THE ITEM LEFT, all three decided here under the standing delegation.**
+- **What may a `run` execute in a stack-agnostic package?** Whatever the plan names, under the permission model
+  every other command in a plan already crosses (`settings.json` + `guard.sh`) — and **nothing at all where
+  `checks.env` declares `STACK_GATE_NONE`**, the existing declaration for a tree whose code must never be
+  executed on this machine; there the criterion falls back to `human-qa`. No new trust boundary was invented,
+  because the one that exists already answers the question.
+- **Who pays for a flaky `run`?** Nobody, by construction: a `run` must be **deterministic and local**, and one
+  whose outcome depends on a third party is a flake generator rather than a discharge — stub it or take the
+  criterion to question 3. A run that fails anyway routes `verify` → `debug`, which is already chartered to
+  tell a real defect from an environment failure. Stated as a rule on the class rather than a retry policy: a
+  retry would make a flaky discharge survivable, which is how it becomes permanent.
+- **Does a deferred qa cost `verify` its meaning?** No, and the reason is that it never touches `verify`:
+  `human-qa` criteria were never judged there. **`verify` gains no third state** — *"passed, pending a human's
+  later look"* is not a verdict it issues. A late `no` returns as an ordinary correction (`debug` → `refine`),
+  which is what a trunk-only repo does with every other mistake.
+
+**BLOCKING IS IRREVERSIBILITY, NOT IMPORTANCE, and it is read off a field that already exists.** `planner`
+derives it from the plan's `risk_class`: `data-destructive` / `prod-touching` block; everything else defers.
+Those are exactly the cases a later commit cannot undo.
+**AND A DEFERRED TICKET HOLDS NOTHING** — the interaction that would otherwise have reinstated the whole defect
+one level down. A parked ticket blocks the context-reset gate and counts in the turn ladder, so a deferred
+question sitting for a day would stop every reset and every turn: `D243`'s failure with a different label. Both
+gates now count **blocking** parks only, through one owner (`bus.ticket_blocks`), and **absent reads as
+blocking** — a record nobody can read must never release a gate.
+**`why_human` is the mechanized half.** A `human-qa` criterion must name, in one line, what about the product
+could change; `check_criterion_discharge.py` blocks one that does not. It cannot prove the answer is a good one
+— the same honest ceiling the `discharge` presence check has — but the ABSENCE of an answer is the residue
+defect, and absence is decidable.
+
+*Rejected:* **"requires human judgement or perception"** (the maintainer's rejection, and the reason is the
+useful part: needing judgement describes most of the loop) · **letting `verify` run things** (trades its
+charter for a feature; the run belongs upstream where a writer already runs commands) · **a per-project
+runbook registry for `run` commands** (new machinery for a trust question `checks.env` already answers) ·
+**retrying a flaky `run`** (makes a bad discharge survivable, therefore permanent) · **a third `verify` state
+for a deferred qa** (it never judged these criteria; a new state would be a second encoding of the ticket) ·
+**defaulting `blocking` to true for safety** (that is the halt this item exists to remove; the default is
+derived from `risk_class`, which is declared) · **leaving `blocking` decorative** (it has been in the schema as
+a literal `true` since the beginning — a field with one value is a field nobody reads).
+*Two things deferral would have broken, one closed and one accepted.* **Closed:** a deferred criterion binding
+a `goal_ref` would let `converge.py` report the goal **met** on an answer nobody has given — the ledger records
+the binding at *promote* time — so `goal_ref` ⇒ blocking, and the gate blocks the combination. **Accepted:** the
+console daemon still alerts and escalates on a deferred ticket's deadline exactly as on a blocking one. That is
+noisier than it needs to be and it is deliberately not changed here: the alert is correct (a question IS
+outstanding), only its urgency is wrong, and re-grading the away channel is its own slice with its own
+evidence.
+*Rent paid:* `schemas.md` was at 14,973/15,000 before this, so `directive` moved to `schemas-config.md` —
+re-homed on **belonging**, the family's standing rule: *the operator's control surface, every setting a human
+turns, wherever it physically lives*, and a standing instruction about how the loop behaves is exactly that, in
+prose rather than JSON. 13,245 + the new rule = 14,084. `loop.md` stayed under its always-loaded cap by
+collapsing two pairs of rows that shared a target.
+*Evidence:* the maintainer's statement of the rule; `gap-027`'s park and the sentence the session wrote while
+parking it; the three drives halted on qa checkpoints (`D243`'s evidence, which this completes).
+**Builds on:** **D243** (which fixed the *machine-wide* consequence of a park and is explicitly the bigger of
+the two — *"if only one of the two is built, `4h` buys more"*; this is the other half), **D248** (`charter`,
+the precondition — the product-owner rule only holds once inception has closed, which is why this was built
+last), the autonomy floor and the commitment model, **D236** (`review`, one of the capabilities the residue was
+bypassing).
+→ `product/shared/{schemas.md,schemas-bus.md,schemas-config.md}`, `product/scripts/{check_criterion_discharge.py,bus.py,context_band.py,turn_check.py}`, `product/agents/{planner.md,execute.md}`, `product/skills/{verify,checkpoint}/SKILL.md`, `product/templates/loop.md`, `00`, `11`.

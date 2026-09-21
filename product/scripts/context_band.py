@@ -548,10 +548,13 @@ def _parked_open(workflow_dir):
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import bus
-        paths = bus.Paths(workflow_dir)
-        if not os.path.isdir(paths.runtime):
-            return None
-        return len([n for n in os.listdir(paths.parked) if n.endswith(".json")])
+        # BLOCKING ones only. A DEFERRED qa parks a question the human answers when they get to
+        # it -- the item has already documented, committed and closed -- so nothing is waiting on
+        # the machine and a reset costs nobody anything. Counting it would reinstate, on the reset
+        # gate, exactly the defect the turn ladder was rebuilt to remove: one human gate stopping
+        # the whole machine for as long as the human is asleep. `bus.ticket_blocks` is the one
+        # owner of that reading and an unreadable record still counts as blocking.
+        return bus.open_blocking_parks(bus.Paths(workflow_dir))
     except FileNotFoundError:
         return 0            # a reachable runtime root that has simply never parked anything
     except (Exception, SystemExit):
@@ -598,7 +601,7 @@ def gate(workflow_dir, project_dir=None, now=None, arm=True):
         blocked.append("the open-checkpoint record is unreadable — nothing can say a human is "
                        "not waiting, so this reads as though one is")
     elif n > 0:
-        blocked.append("%d checkpoint(s) await a human verdict" % n)
+        blocked.append("%d BLOCKING checkpoint(s) await a human verdict" % n)
     out["clear_safe"] = not blocked
     out["blocked_by"] = blocked
     return out

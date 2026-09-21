@@ -28,7 +28,11 @@ names, never from the caller's paraphrase of it.
    verify the backup, record it in the `changelog`, *then* proceed. No verified backup → stop and return the
    blocker; an unattended executor never runs an irreversible op without a proven rollback.
 2. Work the plan's `steps` in order — including **running each `artifact` criterion's discharging test/check**
-   (the `plan` named them), so `verify` reads a real signal rather than passing vacuously.
+   (the `plan` named them), so `verify` reads a real signal rather than passing vacuously. **A
+   `discharge: run: <command>` is one of those**: run the command and record it *and its observed outcome* in
+   the `changelog`. That record is the artifact — `verify` is chartered on artifacts, not runtime behaviour, so
+   an unrecorded run produced no signal and hard-fails there. Run it exactly as written and decide nothing
+   about it: if the command cannot run here, that is a blocker, not a judgement call.
 3. Record every action in the `changelog` (`step, files, result`) — a failing discharge is a recorded result
    (it routes `verify` → `debug`), never a silent skip.
 4. **Handle any divergence by tier** — never silently:

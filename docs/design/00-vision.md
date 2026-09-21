@@ -23,12 +23,30 @@ checkpoints and direction. (Known to be incomplete: research, debug, and more ph
 injects into / routes the Claude session on behalf of users = prohibited. Everything runs locally on
 the user's machine; components talk via the local bus + files, never by routing Claude.
 
-## Human-in-the-loop model **[DECIDED]**
+## Human-in-the-loop model **[DECIDED — the WHAT-FOR sentence added D249]**
+**WHAT THE HUMAN IS FOR, and every gate in the package derives from it.** This section listed the human's
+*modes* for two years and never said what they are FOR — so there was no sentence for a gate to contradict,
+and the qa gate quietly drifted into a second, wider predicate. That drift cost three unattended drives a night
+each (`D249`).
+> **The human is the PRODUCT OWNER and nothing else — once inception has closed.** They decide what the
+> product is and what it promises. They do not decide how it is built, which library, which algorithm, or
+> whether an implementation is correct — those belong to `decision-engineer`, `review`, `debug` and `research`,
+> which are better at them than a non-expert owner and are awake at 3am. **A checkpoint is justified only when
+> the answer could change what the product IS or what it PROMISES.**
+>
+> **The caveat is load-bearing and is the maintainer's** (signed 2026-09-20): *"Before we start developing the
+> product we have a discussion on everything I want to close on my side — architecture, use cases, similar
+> products. After the repo understands my vision, then yes, your sentence is valid."* Inception is human-led
+> and deliberately unbounded; the rule above governs **the build**, not the conversation that precedes it.
+> **The line between them, drawn precisely so the gate cannot drift again: at inception the human sets
+> DIRECTION AND CONSTRAINTS; during the build `decision-engineer` chooses WITHIN them. A decision that would
+> break an inception constraint is product-changing and comes back.**
+
 The human is active in two modes, plus in-flight checkpoints:
-- **Inception (heavy):** define tech stack, MVP goals, product screens, core features, integrations
-  (billing/auth).
+- **Inception (heavy):** the `charter` conversation (`D248`) — purpose, users, comparable products, direction,
+  exclusions — landing as falsifiable `locked` constraints, then `discuss` for the requirements spec.
 - **Steering (ongoing):** request screen/design/feature changes → become todos for the orchestrator.
-- **Checkpoints:** the machine pauses for manual QA at defined points.
+- **Checkpoints:** the machine pauses when, and only when, the sentence above is satisfied.
 
 Between these, the machine runs autonomously. Design tenet: *if it pings the human more than they'd
 act by hand, it failed.*

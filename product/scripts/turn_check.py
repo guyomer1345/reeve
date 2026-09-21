@@ -104,11 +104,33 @@ def _json_file(path):
 
 
 def _parked(workflow):
+    """The tickets that hold the MACHINE — a deferred `qa` is not one of them.
+
+    A deferred qa's item has already documented, committed and closed; the question waits for the
+    human rather than the machine waiting for the human, so it is not a reason for anything. The
+    reading is `bus.ticket_blocks`'s, not a second one, and it fails towards BLOCKING: a record
+    nobody can read must not be able to release a gate.
+    """
     d = os.path.join(workflow, "parked")
     try:
-        return sorted(n for n in os.listdir(d) if n.endswith(".json"))
+        names = sorted(n for n in os.listdir(d) if n.endswith(".json"))
     except OSError:
         return []
+    try:
+        import bus
+    except Exception:                     # noqa: BLE001 -- no bus, no refinement
+        return names
+    out = []
+    for n in names:
+        try:
+            with open(os.path.join(d, n), encoding="utf-8") as fh:
+                rec = json.load(fh)
+        except (OSError, ValueError):
+            out.append(n)                 # unreadable ⇒ blocking
+            continue
+        if bus.ticket_blocks(rec):
+            out.append(n)
+    return out
 
 
 def _eligible_beside(workflow):

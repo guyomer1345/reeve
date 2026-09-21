@@ -1039,7 +1039,7 @@ def steer_floor(workflow_dir, rec):
     if not os.path.exists(os.path.join(workflow_dir, "goal.json")):
         return None
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        _own_dir_on_path()
         import converge
         m = converge.measure(converge.read_goal(workflow_dir), converge.read_ledger(workflow_dir),
                              converge.open_bindings(workflow_dir))
@@ -1080,12 +1080,59 @@ def monitor_saw_a_stall(workflow_dir):
     if not isinstance(rec, dict) or rec.get("state") != "stalled":
         return False
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        _own_dir_on_path()
         import drive
         now = drive.fingerprint(workflow_dir)
     except Exception:                              # noqa: BLE001
         return False
     return bool(now) and rec.get("fingerprint") == now
+
+
+def _own_dir_on_path():
+    """Make this directory importable, ONCE. The three lazy imports below each used to
+    `sys.path.insert(0, ...)` on every call, and `steer_floor` calls two of them — so a long-lived
+    process (or a test suite) grew `sys.path` without bound and every subsequent import scanned a
+    longer list. Idempotent by construction; the lazy imports themselves stay lazy, because a
+    module that fails to parse must not be able to stop the bus from starting.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+
+
+def ticket_blocks(rec):
+    """Does this parked ticket hold the MACHINE, or only its own item? -> bool.
+
+    ABSENT READS AS BLOCKING, and the asymmetry is deliberate: every kind but a deferred `qa` is
+    by nature *answer before proceeding* (approve a sandbox, confirm a reconstruction, perform a
+    setup, approve a chain, apply a spec delta, steer a stopped drive), and a record that cannot
+    be read must not be able to release a gate.
+
+    **Deferred qa is the one exception, and it is a question of IRREVERSIBILITY rather than
+    importance.** A qa whose answer need not precede the commit lets the item document, commit and
+    close; the question waits for the human instead of the machine waiting for the human, and a
+    late `no` returns as an ordinary correction. `planner` reads it off the plan's own
+    `risk_class` — `data-destructive` / `prod-touching` block, everything else defers.
+    """
+    req = ((rec or {}).get("checkpoint") or {}).get("request") or {}
+    return req.get("blocking") is not False
+
+
+def open_blocking_parks(paths):
+    """How many parked tickets are holding the machine. `None` when it cannot be told."""
+    try:
+        if not os.path.isdir(paths.runtime):
+            return None
+        n = 0
+        for name in os.listdir(paths.parked):
+            if not name.endswith(".json"):
+                continue
+            n += 1 if ticket_blocks(read_json(os.path.join(paths.parked, name))) else 0
+        return n
+    except FileNotFoundError:
+        return 0
+    except (Exception, SystemExit):
+        return None
 
 
 def supervisor_is_gone(workflow_dir):
@@ -1104,7 +1151,7 @@ def supervisor_is_gone(workflow_dir):
     make this floor permissive by default, which is precisely what it exists not to be.
     """
     try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        _own_dir_on_path()
         import supervisor
         return supervisor.alive(workflow_dir).get("state") == "gone"
     except Exception:                              # noqa: BLE001 — never block the ask on this

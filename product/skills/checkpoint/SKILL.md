@@ -11,7 +11,13 @@ person to confirm the live app, the real "does it work" signal in MVP (autonomou
 ## Kinds
 Two boundary types. **Judgment** — the human gives an opinion:
 - **demo** — approve a `create-demo` sandbox.
-- **qa** — test a built feature against its acceptance criteria.
+- **qa** — test a built feature against its acceptance criteria. **The only kind that can be DEFERRED**
+  (`blocking: false`): the item documents, commits and closes, and the question waits for the human instead of
+  the machine waiting for the human. `planner` decides it per criterion, on **irreversibility rather than
+  importance** — `risk_class` `data-destructive`/`prod-touching` block, everything else defers — and a late
+  `no` comes back as an ordinary correction (`debug` → `refine`). A deferred ticket **holds nothing**: neither
+  the turn ladder nor the context-reset gate counts it (`bus.ticket_blocks` is the one owner of that reading,
+  and an unreadable record still counts as blocking).
 - **reconcile** — confirm a brownfield-reconstructed `spec` before the build loop starts (from `ingest`).
 - **forecast** — approve the chain of events the loop proposes to walk for a change, before it walks it (from
   `create-forecast`). Where `demo` de-risks the **product** question ("did we agree *what* to build?"), this
@@ -30,7 +36,12 @@ Two boundary types. **Judgment** — the human gives an opinion:
   plan's foreseeable setups into one checkpoint at first-setup-contact.
 
 ## Inputs
-A `checkpoint.request` `{ kind: demo|qa|setup|reconcile|forecast|steer|spec, what, expected, how?(←setup-guide), tasks?[], blocking: true }`.
+A `checkpoint.request` `{ kind: demo|qa|setup|reconcile|forecast|steer|spec, what, expected, how?(←setup-guide), tasks?[], blocking }`.
+**`blocking` is `true` for every kind but a deferred `qa`** — the other six are *answer before proceeding* by
+nature (approve a sandbox, confirm a reconstruction, perform a setup, approve a chain, apply a spec delta,
+steer a stopped drive) — and **absent reads as `true`**, because a record nobody can read must not release a
+gate. **Never park a `qa` whose criterion carries no `why_human`**: if nothing about the product could change,
+it is not a checkpoint at all (`shared/schemas.md § acceptance_criteria`, the three questions).
 **A `setup` `tasks[]` entry is `{ id, what, secrets?[], provides?[] }`** — `secrets[]` naming the credential **key
 names** that task will hand back (`POLAR_WEBHOOK_SECRET`), never values. Fill it whenever the task returns a
 credential: it is what makes the console render a labelled input per key instead of asking a human to hand-compose a
