@@ -533,3 +533,26 @@ def test_a_DEFERRED_qa_does_not_block_the_RESET(tmp_path):
         json.dump({"ticket_id": "gap-9-demo",
                    "checkpoint": {"kind": "demo", "request": {"blocking": True}}}, fh)
     assert cb._parked_open(wf) == 1, "every other kind is answer-before-proceeding"
+
+
+# --- the arithmetic's own verdict, reported even when it is overruled -------------------
+
+def test_the_band_reports_its_OWN_verdict_under_an_operator_ceiling():
+    """The ceiling outranks the arithmetic; it must not ERASE it. Without this the only surface
+    that could caption the runway figure would have to re-derive `RESERVE_NODES` itself, which
+    is a second copy of the threshold — and a copy is what drifts."""
+    v = cb.band(*_at(55), warn_pct=33)            # 55 nodes left on a 1M window is ~34% used
+    assert v["verdict"] == "handoff-now"
+    assert v["operator_ceiling"] == 33
+    assert v["band_verdict"] == "hold", v
+
+
+def test_the_two_verdicts_AGREE_when_both_rules_say_go():
+    v = cb.band(*_at(0.4), warn_pct=33)
+    assert v["verdict"] == "handoff-now" and v["band_verdict"] == "handoff-now"
+
+
+def test_the_band_verdict_is_present_with_no_ceiling_at_all():
+    assert cb.band(*_at(20))["band_verdict"] == "hold"
+    assert cb.band(*_at(3))["band_verdict"] == "handoff-at-boundary"
+    assert cb.band(*_at(1))["band_verdict"] == "handoff-now"

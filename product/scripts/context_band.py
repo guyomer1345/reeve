@@ -209,6 +209,19 @@ def band(used_tokens, window_tokens, warn_pct=None):
            "runway_nodes": round(runway, 1), "reserve": RESERVE_NODES,
            "comfortable": COMFORTABLE_NODES}
 
+    # THE ARITHMETIC'S OWN VERDICT, computed first and reported WHATEVER the ceiling decides.
+    # It exists because the two can disagree loudly and the disagreement was unreadable: at 33%
+    # of a 1M window the ceiling says hand off NOW while 55 nodes of runway remain -- 27x the
+    # reserve -- and a reader shown only the figure and only the banner cannot tell which rule
+    # is in charge. Naming the governor is cheaper than hiding either number, and a surface that
+    # has to re-derive `RESERVE_NODES` to caption itself is a second copy of this threshold.
+    if runway < RESERVE_NODES:
+        out["band_verdict"] = "handoff-now"
+    elif runway > COMFORTABLE_NODES:
+        out["band_verdict"] = "hold"
+    else:
+        out["band_verdict"] = "handoff-at-boundary"
+
     if isinstance(warn_pct, (int, float)) and 0 < warn_pct <= 100 and pct >= warn_pct:
         out["verdict"] = "handoff-now"
         out["operator_ceiling"] = warn_pct

@@ -212,7 +212,19 @@ def main():
             lines.append(line)
         runway = verdict.get("runway_nodes")
         if runway is not None and pct is not None:
-            lines[0] = lines[0] + " · ~%.0f nodes left" % runway
+            # NAME THE RULE THAT IS IN CHARGE when it is not the arithmetic. `~55 nodes left`
+            # beside a red `hand off NOW`, with a reserve of 2, reads as a contradiction and
+            # teaches a reader to distrust the line -- the banner's reason says which rule won,
+            # the base line did not. The figure STAYS: it is the only thing on screen saying how
+            # much of a paid-for window each cycle leaves unused, which is the under-use half of
+            # the band's own argument.
+            ceiling = verdict.get("operator_ceiling")
+            if ceiling is not None:
+                lines[0] = lines[0] + (" · ceiling %g%% · ~%.0f nodes runway (band: %s)"
+                                       % (ceiling, runway,
+                                          verdict.get("band_verdict") or "unknown"))
+            else:
+                lines[0] = lines[0] + " · ~%.0f nodes left" % runway
 
     sup = _supervision(project_dir)
     if sup:

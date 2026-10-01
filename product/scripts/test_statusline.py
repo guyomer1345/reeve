@@ -228,3 +228,43 @@ def test_a_LIVE_supervisor_is_a_quiet_mark_on_the_base_line(tmp_path):
         assert "⛨ supervised" in out.splitlines()[0]
     finally:
         proc.kill(), proc.wait()
+
+
+# --- which rule is in charge, said on the base line ------------------------------------
+#
+# `~55 nodes left` beside a red `hand off NOW`, with a reserve of 2, is not a contradiction —
+# the operator's ceiling outranks the arithmetic by design — but the base line did not say so,
+# and a figure 27x the safe threshold printed next to an alarm teaches a reader to distrust the
+# line. Observed on a live 1M-window project at 34%. The figure stays; the governor is named.
+
+def _ceiling(tmp_path, pct):
+    root = _wf(tmp_path)
+    (root / ".workflow" / "config.json").write_text(json.dumps({"context": {"warn_pct": pct}}))
+    return root
+
+
+def test_the_base_line_NAMES_the_rule_in_charge_when_the_ceiling_fires(tmp_path):
+    root = _ceiling(tmp_path, 33)
+    r = _run(_status(tokens=357_000, size=1_000_000, project_dir=str(root)), root)
+    assert "ceiling 33%" in r.stdout, r.stdout
+    # The band's OWN verdict, which is what makes the big number legible rather than alarming.
+    assert "(band: hold)" in r.stdout, r.stdout
+    assert "~54 nodes runway" in r.stdout, r.stdout
+    # The alarm is still an alarm — this is a caption, not a downgrade.
+    assert "hand off NOW" in r.stdout
+
+
+def test_the_base_line_is_UNCHANGED_when_the_band_itself_governs(tmp_path):
+    """No ceiling set ⇒ the arithmetic is the only rule, and there is nothing to disambiguate."""
+    root = _wf(tmp_path)
+    r = _run(_status(tokens=100_000, size=1_000_000, project_dir=str(root)), root)
+    assert "nodes left" in r.stdout
+    assert "ceiling" not in r.stdout and "band:" not in r.stdout
+
+
+def test_the_caption_does_not_claim_HOLD_when_the_arithmetic_also_says_go(tmp_path):
+    """Both rules agreeing must read as agreement. A caption that said `band: hold` at 99% full
+    would be the same unreadable disagreement pointing the other way."""
+    root = _ceiling(tmp_path, 33)
+    r = _run(_status(tokens=995_000, size=1_000_000, project_dir=str(root)), root)
+    assert "(band: handoff-now)" in r.stdout, r.stdout

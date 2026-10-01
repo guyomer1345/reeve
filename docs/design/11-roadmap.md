@@ -1529,6 +1529,19 @@ locally-edited package files unless they are in `CONFIRM_REQUIRED` (`settings.js
 capability/disclosure stall-counter fix — both measured, both still un-back-ported, which is why those two
 projects were refreshed surgically and `/update` is unsafe in them until the back-port lands.
 
+#### The statusline's two rules — CLOSED 2026-10-01 (`D253`). `[no ask — the maintainer's opening question]`
+*"i clear a repo with it saying X nodes left, after i clear sudenly its X + 20 nodes left, does it make sense?"*
+It does — ~340k→~46k of a 1M window is ~24 nodes, five times over in `consumer`'s own transcripts, and the
+~46k is the re-injection floor (CLAUDE.md, handoff, tool and skill schemas). **What did not make sense was the
+line:** `~55 nodes left` printed beside a red `hand off NOW` with `RESERVE_NODES = 2`. Both true — an explicit
+`warn_pct` outranks the arithmetic by `D206`'s design — but only the banner said so, and a figure 27x the safe
+threshold next to an alarm teaches a reader to distrust the whole line. `band()` now reports `band_verdict`
+alongside its verdict and the base line reads `· ceiling 33% · ~54 nodes runway (band: hold)`.
+**Its residual is the real one and it is NOT closed:** `RESERVE_NODES`/`COMFORTABLE_NODES` are *reasoned, not
+measured* (`07` says so), and as ABSOLUTE counts they mean 97.6% of a 1M window against 88% of a 200k one — so
+on any large-window project with a ceiling set the band **can never be the rule that fires**, and the figure is
+decoration, now honestly labelled. That measurement is still owed.
+
 #### ▶ NEXT — a night, and then read what it wrote. `[the periodic anchor is BUILT; what is left is the measurement]`
 **`reckon` is BUILT (`D250`) — every `config.reckon.every_n_commits` commits (default 5) the loop stops driving
 and asks whether the window moved the goal, and whether the goal is reachable at all.** Its clock is a plain

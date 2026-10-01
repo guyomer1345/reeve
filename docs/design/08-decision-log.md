@@ -9918,3 +9918,55 @@ down: a digest that gates a turn may only carry terms every caller computes alik
 contract and its budget), **D214**'s rule that an obligation with no durable owner goes missing silently —
 which is what happened here, one level up: the trigger had an owner and no surface.
 → `product/scripts/status_report.py`, `product/scripts/test_status_report.py`, `11`.
+
+## D253 — the statusline says WHICH RULE is in charge, because the two disagree by 27x and it never said **[BUILT 2026-10-01 — no ask; the maintainer's opening question of the session, and the last loose thread in it]**
+**The observation, his:** *"i noticed a lot of times i clear a repo with it saying X nodes left, after i clear
+sudenly its X + 20 nodes left, does it make sense?"* It does, and the arithmetic was never the problem.
+Measured off `consumer`'s own transcripts (the statusline's `total_input_tokens` is reproducible from them —
+118318 read back exactly): sessions ended at ~340k of a 1M window → **~55 nodes**, and a fresh session starts
+at a floor of **~46k** of re-injected CLAUDE.md, handoff, tool and skill schemas → **~79 nodes**. The jump is
+~24, every time, across five consecutive resets. **What is wrong is what the line SAYS while that is true:**
+
+    Opus 5.5 · consumer · ctx 34% · ~55 nodes left · ⛨ supervised
+    ⚠ hand off NOW — context 34% is at or past the ceiling you set (warn_pct = 33%) …
+
+**`RESERVE_NODES` is 2.** So the base line advertises **27x the threshold the band considers safe**, one line
+above a red alarm. Both are true — an explicit `warn_pct` is a standing operator instruction that outranks the
+arithmetic, which `D206` settled on purpose — and the banner's own reason says so. **The base line did not**,
+and a figure that large printed beside an alarm is how a reader learns to distrust the whole line. Observed
+live, on screen, on a project that was mid-drive.
+
+**THE CALL: caption it, do not hide it.** `band()` now reports `band_verdict` — what the runway arithmetic
+alone would say — whatever the ceiling decides, and the base line renders
+`· ceiling 33% · ~54 nodes runway (band: hold)`. The figure stays because it is the only thing on screen
+saying **how much of a paid-for window each cycle leaves unused**, which is the under-use half of the band's
+own argument (*"handing off here pays a cold rebuild for a window that still has work in it"*) — at a 33%
+ceiling on 1M, two thirds of the window is recycled unused, five times a day.
+
+**WHY `band_verdict` LIVES IN THE BAND AND NOT IN THE RENDERER.** The caption needs to know what the
+arithmetic would have said, and the only other way to get it is for the status line to compare `runway_nodes`
+against `RESERVE_NODES` itself — a second copy of the threshold, in the one surface that must not drift from
+the thing it is captioning. One owner, two readers, same answer.
+
+*Rejected:* **suppressing the figure when the ceiling fires** (shortest line, no contradiction — and it drops
+the only indicator of unused window, which is a real signal and the one this entry's own evidence rests on) ·
+**leaving it alone** (the reason text already carries it, so the information is technically present — but a
+base line is what gets read at a glance, and this one reads as an error) · **making `RESERVE_NODES` /
+`COMFORTABLE_NODES` window-relative so the two rules cannot disagree** (the real fix to the underlying
+calibration, and far out of scope here: it changes reset behaviour on every project, and `07` already holds
+it as an open measurement) · **downgrading the alarm when the band says hold** (the ceiling is the operator's
+instruction; a surface that second-guesses it reproduces the failure the directive channel exists to stop).
+*Residual, and it is the substantive one:* **this makes the disagreement LEGIBLE, it does not resolve it.**
+`RESERVE_NODES = 2` and `COMFORTABLE_NODES = 5` are *reasoned, not measured* — `07` says so in terms — and as
+ABSOLUTE node counts they mean 97.6% of a 1M window and 88% of a 200k one. So on any large-window project with
+a ceiling set, **the band can never be the rule that fires**, and `hold` is true at every reading right up to
+the reset. The node figure is decoration there, now honestly labelled as such. **This entry does NOT settle
+that `07` question** — it is still open, and still wants the measurement it asks for.
+*Evidence:* the five-reset table from `consumer`'s transcripts (340k→46k, +24 nodes, reproducible against
+`.workflow/context.json`); the live screen capture above; six new tests, five confirmed to FAIL against the
+old sources by stashing them.
+**Builds on:** **D206** (the band, the ceiling that outranks it, and the nodes-of-runway unit), **D215** (the
+acting half), and `statusline.py`'s own standing rule that a line which always says something is a line
+nobody reads — applied here to a number rather than to a banner.
+→ `product/scripts/{context_band.py,statusline.py}`,
+`product/scripts/test_{context_band,statusline}.py`, `11`.
