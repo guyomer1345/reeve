@@ -196,6 +196,17 @@ nothing about WHICH pane it drives.
 `REEVE_SUPERVISE` is in the environment, which is proof the session was *launched* supervised). `turn_gate.py`
 parks `steer-supervisor-gone` — once, guarded by the ticket's existence, because `write_park` restamps the
 alert-dedup key. `loop.sh --supervise`'s preflight REFUSES to arm a second supervisor over a live one.
+**`pane` IS NOT THE IDENTITY, and this record is not where the identity lives.** A pane id belongs to
+the tmux server and the next server hands out `%0` again, so the field says which target this supervisor was
+armed against and proves nothing about whether that target is still the same session. The identity is a CLAIM
+stamped on the pane itself (`@reeve_token` = pid:starttime, plus `@reeve_project`), re-read before every
+keystroke; and because this record is per-project while a recycled pane id is machine-wide, `preflight` also
+scans `/proc` for every live `supervise.sh` and refuses a pane another one already holds — a check `alive()`
+structurally cannot make.
+**"Retire on every exit" is load-bearing and was briefly a lie in the worst direction.** `INT`/`TERM` were
+trapped by a handler that retired the record and then RESUMED the loop, because bash does not exit on its own
+after a signal trap. A `kill` therefore produced the one state this record exists to make impossible: `none`
+— nothing was ever armed here — read off a live supervisor still sending keystrokes. The handlers exit now.
 **`--once` publishes nothing**, deliberately: a cron-style driver that announced itself for a second and
 vanished would leave every reader flapping between `running` and `gone`.
 

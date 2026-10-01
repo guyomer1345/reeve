@@ -89,6 +89,48 @@ def _process_is_a_supervisor(pid):
         return None                       # no /proc, or it vanished between the two reads
 
 
+def pane_holders():
+    """Every LIVE `supervise.sh` on this machine, whatever project it belongs to.
+    -> [{"pid", "pane", "cwd"}] | None when the platform cannot be scanned.
+
+    WHY THIS EXISTS, and why `alive()` above could never have answered it. `alive()` reads
+    THIS project's record, so "a supervisor is already running" has always meant "...for this
+    project". The hazard is not project-shaped. A tmux pane id is assigned by the server and
+    recycled from `%0` on every new server, so the supervisor that will type into the pane you
+    are about to arm may belong to a DIFFERENT repository entirely -- and no per-project record
+    can see it. OBSERVED 2026-09-22: three live supervisors pinned to `%0`, two projects
+    between them, the oldest orphaned for a day and a half.
+
+    `None`, not `[]`, where there is no `/proc`: "nothing is holding that pane" and "I could
+    not look" are different answers, and the caller downgrades the second to a warning rather
+    than refusing a run over a platform it cannot read.
+    """
+    if not os.path.isdir("/proc"):
+        return None
+    out = []
+    for name in os.listdir("/proc"):
+        if not name.isdigit():
+            continue
+        try:
+            with open("/proc/%s/cmdline" % name, "rb") as fh:
+                argv = [a.decode("utf-8", "replace") for a in fh.read().split(b"\0") if a]
+        except OSError:
+            continue                      # it exited between listdir and open -- not a holder
+        if not any(a.endswith("supervise.sh") for a in argv):
+            continue
+        pane = None
+        for i, a in enumerate(argv):
+            if a == "--pane" and i + 1 < len(argv):
+                pane = argv[i + 1]
+                break
+        try:
+            cwd = os.readlink("/proc/%s/cwd" % name)
+        except OSError:
+            cwd = None
+        out.append({"pid": int(name), "pane": pane, "cwd": cwd})
+    return sorted(out, key=lambda h: h["pid"])
+
+
 def alive(workflow_dir):
     """-> {state, pid, pane, since, why}. `state` ∈ running | gone | none | unknown.
 
@@ -230,6 +272,40 @@ def preflight(project_root, pane=None, workflow_dir=None):
         out["warn"].append("no operator ceiling is set (`config.context.warn_pct`); the context "
                            "BAND governs resets, measured in nodes of runway")
 
+    # THE MACHINE-WIDE CHECK. Everything above this line is about this project; a pane is not.
+    holders = pane_holders()
+    out["armed"]["supervisors_on_this_machine"] = holders
+    mine = os.path.abspath(project_root)
+    if holders is None:
+        out["warn"].append(
+            "this platform has no /proc, so supervisors belonging to OTHER projects could not "
+            "be checked. A tmux pane id is recycled from %0 by every new server, so one of them "
+            "may already hold the pane about to be armed — look for it with "
+            "`pgrep -af 'supervise.sh --pane'` before leaving this run alone.")
+    else:
+        if pane:
+            clash = [h for h in holders if h["pane"] == pane]
+            if clash:
+                out["fatal"].append(
+                    "pane %s is ALREADY held by %s. Two supervisors on one pane send `/clear` "
+                    "into one conversation on two schedules — and because a pane id is recycled "
+                    "from %%0 by every new tmux server, the other one need not even belong to "
+                    "this project. Stop it first, or arm this project in its own tmux session."
+                    % (pane, ", ".join("pid %d (%s)" % (h["pid"], h["cwd"] or "unknown project")
+                                       for h in clash)))
+                out["ready"] = False
+        strangers = [h for h in holders
+                     if h["cwd"] and os.path.abspath(h["cwd"]) != mine]
+        if strangers:
+            out["warn"].append(
+                "%d supervisor(s) for OTHER projects are running on this machine: %s. That is "
+                "legitimate — one per project is the design — but each one is pinned to a pane "
+                "id, and ids are recycled; if any of those projects' sessions have ended, stop "
+                "their supervisors rather than leaving them polling."
+                % (len(strangers), ", ".join("pid %d on %s (%s)"
+                                             % (h["pid"], h["pane"] or "?", h["cwd"])
+                                             for h in strangers)))
+
     trusted = _trusted(project_root)
     out["armed"]["trusted"] = trusted
     if trusted is False:
@@ -262,6 +338,13 @@ def render(res):
                                         else "none set — the band governs"))
     lines.append("   trusted     %s" % {True: "yes", False: "NO", None: "could not tell"}[
         a.get("trusted")])
+    others = a.get("supervisors_on_this_machine")
+    if others is None:
+        lines.append("   elsewhere   could not check (no /proc)")
+    else:
+        lines.append("   elsewhere   %s" % (", ".join(
+            "pid %d on %s" % (h["pid"], h["pane"] or "?") for h in others)
+            or "no other supervisor is running on this machine"))
     return "\n".join(lines)
 
 

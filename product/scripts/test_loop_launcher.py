@@ -34,9 +34,13 @@ LOOP = HERE / "loop.sh"
 NEEDED = ("bash", "sh", "dirname", "mkdir", "cat")
 
 
-def _sandbox(tmp_path, *, with_flock):
-    """A project + a PATH holding only what loop.sh needs (optionally including flock)."""
-    binv, proj = tmp_path / "bin", tmp_path / "proj"
+def _sandbox(tmp_path, *, with_flock, name="proj"):
+    """A project + a PATH holding only what loop.sh needs (optionally including flock).
+
+    `name` is the project DIRECTORY's name, and it is a parameter because the supervised tmux
+    session is named after it — so the directory is an input to what is under test, not scenery.
+    """
+    binv, proj = tmp_path / "bin", tmp_path / name
     (proj / ".workflow").mkdir(parents=True)
     binv.mkdir()
 
@@ -63,7 +67,7 @@ def _sandbox(tmp_path, *, with_flock):
     return binv, proj, lock
 
 
-def _supervise_sandbox(tmp_path, *, tmux=True, preflight_ok=True):
+def _supervise_sandbox(tmp_path, *, tmux=True, preflight_ok=True, name="proj"):
     """The `--supervise` bootstrap, with tmux and the preflight both standing in.
 
     The python3 stub has to answer TWO callers now — the Paths resolution and
@@ -71,7 +75,7 @@ def _supervise_sandbox(tmp_path, *, tmux=True, preflight_ok=True):
     on. A stub that always exited 0 would make the refusal test vacuous, which is the same trap
     `test_the_harness_can_actually_hide_flock` exists to guard.
     """
-    binv, proj, lock = _sandbox(tmp_path, with_flock=True)
+    binv, proj, lock = _sandbox(tmp_path, with_flock=True, name=name)
     (binv / "supervisor.py").write_text("# stood in for by the python3 stub\n")
     (binv / "python3").write_text(
         '#!/bin/sh\n'
@@ -167,7 +171,11 @@ def test_supervise_outside_tmux_PUTS_ITSELF_in_tmux(tmp_path):
     binv, proj = _supervise_sandbox(tmp_path)
     r = _run_supervise(binv, proj)
     argv = (proj / "tmux.argv").read_text()
-    assert "new-session" in argv and "-s reeve" in argv, argv
+    # The name is DERIVED FROM THE PROJECT, not a flat `reeve`. A single global name made the
+    # second supervised project on a machine impossible to start (the has-session guard refused
+    # it) while saying nothing about what was in the pane. Asserted as the whole token, because
+    # `-s reeve` is a substring of `-s reeve-proj` and would pass either way.
+    assert "new-session" in argv and "-s reeve-%s " % proj.name in argv + " ", argv
     # Re-entered under a DIFFERENT flag, so the inner instance cannot bootstrap a second time.
     assert "--supervise-inner" in argv
     assert r.returncode == 0
@@ -207,3 +215,28 @@ def test_an_EXISTING_tmux_session_is_never_reused_by_guess(tmp_path):
     assert r.returncode == 1
     assert "already exists" in r.stderr and "REEVE_TMUX_SESSION" in r.stderr
     assert not (proj / "tmux.argv").exists()
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock unavailable")
+def test_two_projects_get_two_DIFFERENT_tmux_sessions(tmp_path):
+    """The reported failure, from the launcher's side: two repos supervised on one machine used
+    to contend for one session name. One supervisor per project against its own `.workflow/` is
+    the design — two projects are two designs, not two orchestrators on one."""
+    names = []
+    for dirname in ("alpha", "beta"):
+        binv, proj = _supervise_sandbox(tmp_path / dirname, name=dirname)
+        _run_supervise(binv, proj)
+        argv = (proj / "tmux.argv").read_text()
+        names.append(argv.split("-s ")[1].split()[0])
+    assert names == ["reeve-alpha", "reeve-beta"], names
+
+
+@pytest.mark.skipif(shutil.which("flock") is None, reason="flock unavailable")
+def test_a_project_name_tmux_cannot_take_is_sanitised(tmp_path):
+    """`.` and `:` are tmux's own target separators, so a directory called `my.app` would make a
+    session name that cannot be addressed. Builtins only — the launcher decides its own name
+    before the PATH has been vouched for."""
+    binv, proj = _supervise_sandbox(tmp_path, name="my.app v2")
+    _run_supervise(binv, proj)
+    argv = (proj / "tmux.argv").read_text()
+    assert "-s reeve-my-app-v2 " in argv + " ", argv

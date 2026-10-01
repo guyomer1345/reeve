@@ -11,6 +11,8 @@ import os
 import subprocess
 import time
 
+import pytest
+
 import supervisor
 
 # A pid high enough to be free on any machine this runs on. `os.kill(pid, 0)` raises
@@ -32,15 +34,18 @@ def project(tmp_path, goal=True, parked=(), warn_pct=None):
     return str(wf)
 
 
-def a_real_supervisor(tmp_path):
+def a_real_supervisor(tmp_path, pane=None, cwd=None):
     """A live process whose command line really says `supervise.sh`.
 
     Not a stand-in for convenience: pid reuse is why the liveness check reads `/proc` at all, so
-    a test that only proved "some pid exists" would pass against the bug.
+    a test that only proved "some pid exists" would pass against the bug. `pane` and `cwd` make
+    it findable by `pane_holders()` the same way a real one is — through its argv and its
+    working directory, which is all another project can ever see of it.
     """
     script = tmp_path / "supervise.sh"
     script.write_text("#!/usr/bin/env bash\nsleep 60\n")
-    return subprocess.Popen(["bash", str(script)])
+    argv = ["bash", str(script)] + (["--pane", pane] if pane else [])
+    return subprocess.Popen(argv, cwd=str(cwd) if cwd else None)
 
 
 # --- is a supervisor alive here ----------------------------------------------
@@ -177,3 +182,81 @@ def test_publish_stamps_a_start_time(tmp_path):
     before = time.time()
     supervisor.publish(wf, DEAD_PID, "reeve:0.0")
     assert supervisor.alive(wf)["since"] >= before
+
+
+# --- the machine-wide check: a pane is not project-shaped ---------------------
+#
+# `alive()` answers "is a supervisor running FOR THIS PROJECT", which is the only question this
+# module used to ask — and the hazard does not respect that boundary. A tmux pane id belongs to
+# the server and is handed out again from %0 by the next one, so the supervisor about to type
+# into the pane being armed may belong to a different repository entirely. OBSERVED 2026-09-22:
+# three live supervisors pinned to %0, two projects between them, the oldest orphaned for a day
+# and a half, and every per-project check on this machine said everything was fine.
+
+def test_pane_holders_finds_a_supervisor_by_its_argv_and_cwd(tmp_path):
+    elsewhere = tmp_path / "another-project"
+    elsewhere.mkdir()
+    proc = a_real_supervisor(tmp_path, pane="%99", cwd=elsewhere)
+    try:
+        holders = supervisor.pane_holders()
+        if holders is None:                     # pragma: no cover - platform floor
+            pytest.skip("no /proc on this platform")
+        mine = [h for h in holders if h["pid"] == proc.pid]
+        assert mine, "a live supervise.sh was not found"
+        assert mine[0]["pane"] == "%99"
+        assert os.path.realpath(mine[0]["cwd"]) == os.path.realpath(str(elsewhere))
+    finally:
+        proc.kill(), proc.wait()
+
+
+def test_a_pane_held_by_ANOTHER_PROJECTS_supervisor_refuses(tmp_path):
+    """The reported failure, at the point it could have been caught: two repos, one pane id, and
+    a per-project record that cannot see across the boundary."""
+    if supervisor.pane_holders() is None:       # pragma: no cover - platform floor
+        pytest.skip("no /proc on this platform")
+    project(tmp_path)
+    elsewhere = tmp_path / "another-project"
+    elsewhere.mkdir()
+    pane = "%%test-%d" % os.getpid()            # unique, so no real supervisor can hold it
+    proc = a_real_supervisor(tmp_path, pane=pane, cwd=elsewhere)
+    try:
+        res = supervisor.preflight(str(tmp_path), pane=pane)
+        assert not res["ready"], res
+        fatal = " ".join(res["fatal"])
+        assert "ALREADY held" in fatal and str(proc.pid) in fatal
+        # It must name the OTHER project, or the operator cannot go and stop the right thing.
+        assert "another-project" in fatal
+    finally:
+        proc.kill(), proc.wait()
+
+
+def test_another_projects_supervisor_on_a_DIFFERENT_pane_only_warns(tmp_path):
+    """One supervisor per project is the design, so several on one machine is normal. What is
+    reported is that they exist and are pinned to ids that get recycled — not that they are
+    wrong."""
+    if supervisor.pane_holders() is None:       # pragma: no cover - platform floor
+        pytest.skip("no /proc on this platform")
+    project(tmp_path)
+    elsewhere = tmp_path / "another-project"
+    elsewhere.mkdir()
+    proc = a_real_supervisor(tmp_path, pane="%%elsewhere-%d" % os.getpid(), cwd=elsewhere)
+    try:
+        res = supervisor.preflight(str(tmp_path), pane="%%mine-%d" % os.getpid())
+        assert res["ready"], res
+        assert any(str(proc.pid) in w for w in res["warn"]), res["warn"]
+    finally:
+        proc.kill(), proc.wait()
+
+
+def test_a_supervisor_for_THIS_project_is_not_reported_as_a_stranger(tmp_path):
+    """The warning must stay readable. A project's own supervisor showing up in a list of other
+    people's is how an operator learns to skim past it."""
+    if supervisor.pane_holders() is None:       # pragma: no cover - platform floor
+        pytest.skip("no /proc on this platform")
+    project(tmp_path)
+    proc = a_real_supervisor(tmp_path, pane="%%own-%d" % os.getpid(), cwd=tmp_path)
+    try:
+        res = supervisor.preflight(str(tmp_path), pane="%%other-%d" % os.getpid())
+        assert not any(str(proc.pid) in w for w in res["warn"]), res["warn"]
+    finally:
+        proc.kill(), proc.wait()

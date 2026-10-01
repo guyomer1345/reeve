@@ -54,10 +54,27 @@ if [ "${1:-}" = "--supervise" ] && [ -z "${TMUX:-}" ]; then
     echo "         cannot put keystrokes into a running session's stdin without one." >&2
     exit 69
   fi
-  SESSION="${REEVE_TMUX_SESSION:-reeve}"
-  if tmux has-session -t "$SESSION" 2>/dev/null; then
-    echo "loop.sh --supervise: a tmux session named '$SESSION' already exists. Attach to it" >&2
-    echo "         (tmux attach -t $SESSION) — or pick another name:" >&2
+  # THE SESSION NAME IS PER-PROJECT, and a flat `reeve` was wrong in both directions. It made
+  # the SECOND supervised project on a machine impossible to start at all (the guard below
+  # refused it), which is not a hazard being prevented — one supervisor per project against its
+  # own `.workflow/` is the design, and two projects are two designs, not two orchestrators on
+  # one. And it made the name useless as an identity: `reeve` says nothing about what is in the
+  # pane. Derived from the project directory, sanitised to what tmux accepts as a name (no `.`
+  # and no `:`, which are its target separators).
+  # Builtins only, deliberately: this runs before the PATH has been vouched for, and a launcher
+  # that needs `basename`, `tr` and `sed` to decide its own session name is three more ways to
+  # fail on a thin environment than it has any reason to be.
+  _dir="$(pwd -P)"; _slug="${_dir##*/}"
+  _slug="${_slug//[^A-Za-z0-9_-]/-}"
+  while [ "${_slug//--/-}" != "$_slug" ]; do _slug="${_slug//--/-}"; done
+  _slug="${_slug#-}"; _slug="${_slug%-}"
+  SESSION="${REEVE_TMUX_SESSION:-reeve-${_slug:-project}}"
+  # `=` forces an EXACT match. Without it tmux resolves a target by prefix, so `reeve` would
+  # match `reeve-consumer` and this guard would refuse a project it has nothing to do with.
+  if tmux has-session -t "=$SESSION" 2>/dev/null; then
+    echo "loop.sh --supervise: a tmux session named '$SESSION' already exists — so this" >&2
+    echo "         project is very likely already running supervised. Attach to it" >&2
+    echo "         (tmux attach -t $SESSION) — or, if you know it is stale, pick another name:" >&2
     echo "             REEVE_TMUX_SESSION=other .claude/scripts/loop.sh --supervise" >&2
     echo "         Refusing to guess: starting a second orchestrator against one .workflow/" >&2
     echo "         is the hazard this launcher exists to prevent." >&2

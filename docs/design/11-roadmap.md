@@ -1147,7 +1147,7 @@ update every repo i use this plugin on."*
 An ask whose only delivery is a rule written in prose is an ask that has not been delivered — that is the
 finding the Phase-12 ledger exists to record, and neither of these gets to repeat it.
 
-### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next entry is `#### ▶ NEXT — a night, and then read what it wrote`: the unattended-drive bundle below it is CLOSED (**fourteen items**, labels are stable ids, not the order) and the periodic anchor `reckon` is BUILT (`D250`), so what is outstanding is a real drive rather than another slice. Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **THE QUEUE IS BUILT OUT as of 2026-09-21 (`D242`–`D249`): all of G1 (`4e` `4f` `4h` `4l` `4c` `4i` `4d` `4g`), all of G3 (`3` `4` `4b`), and all of G2's buildable half (`2`; `4k`, the `charter` skill; `4j`, the qa gate). Only `5` remains and it is EXCLUDED by the standing orders — a design question that wants a conversation. WHAT IS LEFT IS NOT A FIX, IT IS A MEASUREMENT: a night. Nothing here has been exercised by a real unattended run, and the two items that change what the package IS (`4k`, `4j`) have no drive behind them at all. The next session's job is to run one and harvest it — and before any release the smoke receipt is void, because every edit to `product/` throws it away.** The standing queue below this one is CLOSED**)
+### The ordered build sequence  ·  ▶ START HERE (**Phase 12 is CLOSED and its residual is closed too (`D222`). Phase 13's two asks are discharged AND validated end to end: the two named residuals are closed (`D230`/`D231`, plus `D232` found on the way) and the full smoke run is GREEN — 26 seams, 0 failures, both modes on one package digest, 2026-09-18. The next entry is `#### ▶ NEXT — a night, and then read what it wrote`: the unattended-drive bundle below it is CLOSED (**fourteen items**, labels are stable ids, not the order) and the periodic anchor `reckon` is BUILT (`D250`), so what is outstanding is a real drive rather than another slice. Items `0` and `1` are closed and `0`'s harvest is DISCHARGED — two nights of real unattended running produced everything from `4c` to `4l`, and the two-project contrast of 2026-09-20 (`demands: 0` / 23 self-resets against `demands: 53` / 0) is the most useful measurement this repo has taken. **THE QUEUE IS BUILT OUT as of 2026-09-21 (`D242`–`D249`): all of G1 (`4e` `4f` `4h` `4l` `4c` `4i` `4d` `4g`), all of G3 (`3` `4` `4b`), and all of G2's buildable half (`2`; `4k`, the `charter` skill; `4j`, the qa gate). Only `5` remains and it is EXCLUDED by the standing orders — a design question that wants a conversation. WHAT IS LEFT IS NOT A FIX, IT IS A MEASUREMENT: a night. Nothing here has been exercised by a real unattended run, and the two items that change what the package IS (`4k`, `4j`) have no drive behind them at all. The next session's job is to run one and harvest it — and before any release the smoke receipt is void, because every edit to `product/` throws it away.** The standing queue below this one is CLOSED. **One entry has landed SINCE the queue closed and it came from USE, not from a slice: `#### The supervisor's identity` (`D251`, 2026-09-22) — running two supervised repos at once exposed four ways a supervisor outlived its session, including a trapped signal that made `kill` a no-op. It is the first real-use harvest of `D247` and it does NOT discharge the measurement below: a night is still owed.**)
 **This is the live work order and its single owner.** Everything open sits in it, in the order it is to be
 built, with the dependency that fixes each position stated rather than implied.
 
@@ -1508,6 +1508,26 @@ including the two things it leaves open: `research.md` reaching for `curl` when 
 defect and is **not fixed** (it is now a tool-choice issue, not a drive-stopper), and the general form — **an
 `ask` in an unattended drive is a STOP, not a tripwire** — wants an outbox deferral, which is recorded and
 not built.
+
+#### The supervisor's identity — CLOSED 2026-09-22 (`D251`). `[no ask — found by RUNNING it on two repos at once]`
+**The first harvest from real use of `D247`'s one command, and what it harvested is that the command armed
+something that outlived what it was armed for.** Reported as a tmux session-name collision (*"the 2nd killed
+the 1st"*); the name was the least of it. Four live supervisors were measured on the maintainer's machine,
+**three pinned to `%0` across two projects**, the oldest orphaned for a day and a half — because a pane id
+belongs to the tmux SERVER and the next server hands out `%0` again, while nothing reaped a supervisor whose
+pane had vanished (`pane %0 is gone; holding`, forever). Fixed four ways: the supervisor CLAIMS its pane
+(`@reeve_token`, re-read before every keystroke, checked at the top of `tick()` so the heartbeat's nudge is
+covered too) · it EXITS once its pane is gone for good · preflight scans `/proc` for every live `supervise.sh`
+on the machine, because `alive()` is per-project and the hazard is not · and signal handlers now EXIT, which
+they never did — `trap retire_self EXIT INT TERM` ran and resumed, so the supervisor was un-killable by
+`pkill` and had deleted its own record on the way, leaving `alive()` reporting `none` over a live process
+still typing. The session name is now `reeve-<project>`: a flat `reeve` made the second supervised project on
+a machine impossible to start, which is not a hazard being prevented.
+**Its residual is in a different file and is live:** `update_reconcile.py apply` silently overwrites
+locally-edited package files unless they are in `CONFIRM_REQUIRED` (`settings.json` + the brief only). A full
+`/update` on either live project today would destroy `consumer`'s `gh api` write gate and `agentic cyber`'s
+capability/disclosure stall-counter fix — both measured, both still un-back-ported, which is why those two
+projects were refreshed surgically and `/update` is unsafe in them until the back-port lands.
 
 #### ▶ NEXT — a night, and then read what it wrote. `[the periodic anchor is BUILT; what is left is the measurement]`
 **`reckon` is BUILT (`D250`) — every `config.reckon.every_n_commits` commits (default 5) the loop stops driving

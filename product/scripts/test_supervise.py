@@ -45,7 +45,9 @@ def _project(tmp_path, runway_nodes=0.5, window=1_000_000, anchor=True, idle=Tru
     wf.mkdir(parents=True, exist_ok=True)
     scripts = p / ".claude" / "scripts"
     scripts.mkdir(parents=True, exist_ok=True)
-    for name in ("context_band.py", "bus.py"):
+    # `supervisor.py` too: the long-running path publishes and retires its record through it,
+    # so a fixture without it cannot see whether a killed supervisor cleaned up after itself.
+    for name in ("context_band.py", "bus.py", "supervisor.py"):
         shutil.copy(HERE / name, scripts / name)
     cb.publish(str(wf), window - runway_nodes * M, window, time.monotonic())
     (wf / "handoff.md").write_text(ANCHOR)
@@ -302,3 +304,164 @@ def test_a_project_without_the_monitor_INSTALLED_still_supervises(tmp_path):
     (p / ".claude" / "scripts" / "monitor.py").unlink()
     r = _once(p, "nosuchpane")
     assert r.returncode == 1 and "holding" in r.stderr
+
+
+# --- the pane claim: a pane id is not an identity ----------------------------------------
+#
+# `--pane %0` was read as naming the session this supervisor was armed against. It does not.
+# Pane ids belong to the tmux SERVER, and the next server after this one dies starts numbering
+# at `%0` again — so an orphaned supervisor eventually finds its "own" pane occupied by a
+# different project's brand-new session and clears it. These pin the three outcomes apart:
+# ours (proceed), gone (exit, do not wait forever), not-ours (stand down at once).
+
+DEAD_PID = 4_000_000          # high enough to be free; `kill -0` fails, which is the point
+
+
+def _pane(tmp_path, tag):
+    """A real tmux session whose pane records every line typed into it. Returns (name, sink)."""
+    sink = tmp_path / ("sink-%s.txt" % tag)
+    reader = tmp_path / ("reader-%s.sh" % tag)
+    reader.write_text('while IFS= read -r line; do echo "$line" >> "%s"; done\n' % sink)
+    session = "reeve-%s-%d" % (tag, os.getpid())
+    subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
+    subprocess.run(["tmux", "new-session", "-d", "-s", session, "bash %s" % reader],
+                   check=True, capture_output=True)
+    return session, sink
+
+
+def _stamp(session, token):
+    subprocess.run(["tmux", "set-option", "-p", "-t", session, "@reeve_token", token],
+                   check=True, capture_output=True)
+
+
+def _token(session):
+    r = subprocess.run(["tmux", "show-options", "-pv", "-t", session, "@reeve_token"],
+                       capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def test_a_RECYCLED_pane_id_makes_it_STAND_DOWN_rather_than_type(tmp_path):
+    """The failure itself, reproduced: the supervisor claims its pane, the pane's identity then
+    changes underneath it (which is exactly what a new tmux server handing out `%0` again looks
+    like), and it must exit rather than keep polling something that is no longer its session."""
+    p = _project(tmp_path, runway_nodes=cb.COMFORTABLE_NODES + 10)   # the gate HOLDS throughout
+    session, sink = _pane(tmp_path, "recycle")
+    try:
+        proc = subprocess.Popen(
+            ["bash", str(SUP), "--pane", session, "--project", str(p), "--interval", "1"],
+            stderr=subprocess.PIPE, text=True)
+        deadline = time.time() + 20
+        while time.time() < deadline and not _token(session):
+            time.sleep(0.2)
+        assert _token(session), "the supervisor never claimed its pane"
+        _stamp(session, "1:1")                       # a different session now wears this id
+        try:
+            rc = proc.wait(timeout=30)
+        except subprocess.TimeoutExpired:            # pragma: no cover - the bug being fixed
+            proc.kill()
+            raise AssertionError("it kept polling a pane that is not its own")
+        err = proc.stderr.read()
+        assert rc == 3, err
+        assert "STANDING DOWN" in err and "recycled" in err
+        assert not sink.exists() or not sink.read_text().strip(), "it typed into a stranger"
+    finally:
+        subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
+
+
+def test_it_EXITS_once_its_pane_is_gone_for_good(tmp_path):
+    """`pane is gone; holding` held FOREVER, which is how a finished supervisor became the next
+    project's hazard. A missing pane is already proof the session is over; the only reason to
+    wait at all is tmux being briefly unreachable."""
+    p = _project(tmp_path, runway_nodes=cb.COMFORTABLE_NODES + 10)
+    proc = subprocess.Popen(
+        ["bash", str(SUP), "--pane", "definitely-not-a-session", "--project", str(p),
+         "--interval", "1"],
+        stderr=subprocess.PIPE, text=True,
+        env={**os.environ, "REEVE_SUPERVISE_MAX_PANE_MISSING": "2"})
+    try:
+        rc = proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:                # pragma: no cover - the bug being fixed
+        proc.kill()
+        raise AssertionError("it held a vanished pane forever")
+    err = proc.stderr.read()
+    assert rc == 3, err
+    assert "STANDING DOWN" in err and "gone for 2 consecutive checks" in err
+
+
+def test_a_pane_ALREADY_CLAIMED_by_a_live_supervisor_refuses(tmp_path):
+    """The check `supervisor.py preflight` structurally cannot make: its record is per-project,
+    and the supervisor holding this pane may belong to another repository entirely."""
+    p = _project(tmp_path)
+    session, sink = _pane(tmp_path, "claimed")
+    other = tmp_path / "supervise.sh"
+    other.write_text("#!/usr/bin/env bash\nsleep 60\n")
+    holder = subprocess.Popen(["bash", str(other)])
+    try:
+        _stamp(session, "%d:1" % holder.pid)
+        r = _once(p, session)
+        assert r.returncode == 75, r.stderr
+        assert "already claimed by supervisor pid %d" % holder.pid in r.stderr
+        assert not sink.exists() or not sink.read_text().strip()
+    finally:
+        holder.kill()
+        holder.wait()
+        subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
+
+
+def test_a_STALE_claim_from_a_DEAD_supervisor_is_taken_over(tmp_path):
+    """The other half, and the reason the refusal checks liveness rather than mere presence: a
+    supervisor killed without retiring leaves its stamp behind, and a pane nobody is driving
+    must not be un-armable forever."""
+    p = _project(tmp_path)
+    session, sink = _pane(tmp_path, "stale")
+    try:
+        _stamp(session, "%d:1" % DEAD_PID)
+        r = subprocess.run(
+            ["bash", str(SUP), "--pane", session, "--project", str(p), "--once"],
+            capture_output=True, text=True,
+            env={**os.environ, "REEVE_SUPERVISE_SETTLE": "1"})
+        assert r.returncode == 0, r.stderr
+        assert "taking it over" in r.stderr
+        deadline = time.time() + 20
+        got = ""
+        while time.time() < deadline and "continue" not in got:
+            got = sink.read_text() if sink.exists() else ""
+            time.sleep(0.5)
+        assert [l for l in got.splitlines() if l.strip()] == ["/clear", "continue"], got
+    finally:
+        subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True)
+
+
+# --- a trapped signal must still kill ----------------------------------------------------
+#
+# `trap retire_self EXIT INT TERM` ran the handler and RESUMED: bash does not exit on its own
+# after a signal trap. So `kill`/`pkill` retired the record and left the poller running — the
+# supervisor was un-killable by the one command an operator reaches for, and it had just deleted
+# the evidence it existed, so `alive()` reported `none` over a live process still typing. Found
+# by a `pkill` that did not work (2026-09-22): two of four orphans survived it.
+
+def test_SIGTERM_actually_stops_it_and_retires_the_record(tmp_path):
+    p = _project(tmp_path, runway_nodes=cb.COMFORTABLE_NODES + 10)     # the gate holds; it polls
+    proc = subprocess.Popen(
+        ["bash", str(SUP), "--pane", "definitely-not-a-session", "--project", str(p),
+         "--interval", "300"],                 # long, so the signal lands inside the sleep
+        stderr=subprocess.DEVNULL,
+        env={**os.environ, "REEVE_SUPERVISE_MAX_PANE_MISSING": "9999"})
+    try:
+        record = p / ".workflow" / "supervisor.json"
+        deadline = time.time() + 20
+        while time.time() < deadline and not record.exists():
+            time.sleep(0.2)
+        assert record.exists(), "it never published itself, so this proves nothing"
+        proc.terminate()
+        try:
+            rc = proc.wait(timeout=20)         # NOT 300: the signal must not wait out the sleep
+        except subprocess.TimeoutExpired:      # pragma: no cover - the bug being fixed
+            proc.kill()
+            raise AssertionError("SIGTERM was trapped and the poller carried on")
+        assert rc == 143, rc
+        assert not record.exists(), "it died without retiring its record"
+    finally:
+        if proc.poll() is None:                # pragma: no cover - belt and braces
+            proc.kill()
+            proc.wait()

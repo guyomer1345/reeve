@@ -9752,3 +9752,95 @@ and `converge.py`'s acceptance-derived law, which it reuses rather than replaces
 → `product/scripts/reckon.py` (NEW), `product/skills/reckon/SKILL.md` (NEW),
 `product/skills/prioritize/SKILL.md`, `product/shared/{schemas.md,schemas-config.md}`,
 `product/hooks/verify_check.py`, `product/templates/loop.md`, `product/MANIFEST.json`, `README.md`, `10`, `11`.
+
+## D251 — a pane id is not an identity: four ways one supervisor outlived its job, and the one that made `kill` a no-op **[BUILT 2026-09-22 — no ask. REPORTED as a tmux session-name collision; the name was the least of it. The first real-use harvest of `D247`]**
+**The report:** *"this creates a tmux session named reeve regardless of the repo you are on, as such when I did
+it on 2 repos, the 2nd killed the 1st."* **The name was a real defect and not the one that was clobbering
+sessions.** `loop.sh` already refused a duplicate `reeve` (`has-session`), so two SIMULTANEOUS runs could not
+collide. What the report had actually hit was the SEQUENTIAL case, which nothing checked.
+
+**MEASURED ON HIS MACHINE before a line was changed**, which is why this entry exists at all:
+
+| pid | started | project | pinned pane |
+|---|---|---|---|
+| 1019021 | 09-21 01:02 (**1d 11h**) | `consumer` | `%0` |
+| 1019615 | 09-21 01:04 | `agentic cyber` | `%1` |
+| 2562086 | 09-22 10:09 | `agentic cyber` | `%0` |
+| 2717204 | 09-22 11:30 | `consumer` | `%0` |
+
+Four live supervisors, **three pinned to `%0` across two different projects**, the oldest orphaned for a day
+and a half — and every per-project check on that machine reported everything fine.
+
+**THE MECHANISM, verified rather than reasoned about.** Pane ids belong to the tmux SERVER. Start a session,
+kill the server, start another: the new pane is `%0` again (`reevetest1 %0` → kill-server → `reevetest2 %0`).
+So: project A arms a supervisor on `%0` · A's session ends and the server dies · **the supervisor does not**,
+because `reset_session` logged `pane %0 is gone; holding` and held forever · project B starts, gets a fresh
+server, and its pane is `%0` · A's orphan wakes, sees `%0`, and sends `/clear` + `continue` into B's
+brand-new session, gated on **A's** context reading and **A's** anchor. The reported symptom seen from the
+other side.
+
+**FOUR DEFECTS, and the fourth was found by the operator's own `pkill` not working.**
+1. **Identity.** `--pane %0` was read as naming the session it was armed against. It names a target tmux is
+   free to hand to somebody else. Fixed by a CLAIM: the supervisor stamps `@reeve_token` (its pid and start
+   time) plus `@reeve_project` on the pane and re-reads it before every keystroke. Three decidable outcomes —
+   `ours` proceed · `gone` exit · `theirs` stand down at once. The check sits at the TOP of `tick()`, because
+   the heartbeat's nudge is a second keystroke path and was guarded by nothing but `has-session`.
+2. **No reaping.** A missing pane is already proof the session is over; the only slack wanted is for tmux
+   being briefly unreachable. Three ticks, then exit.
+3. **A project-scoped check over a machine-wide hazard.** `alive()` reads THIS project's record, so *"a
+   supervisor is already running"* always meant *"...for this project"*. `pane_holders()` now scans `/proc` for
+   every live `supervise.sh` with its `--pane` and cwd; preflight is FATAL on a pane another process holds
+   (naming the pid and its project) and warns about the rest. The claim enforces the same thing at the
+   transport, where it cannot be skipped.
+4. **A trapped signal that did not kill.** `trap retire_self EXIT INT TERM` ran the handler and **resumed the
+   loop** — bash does not exit on its own after a signal trap. So the supervisor was un-killable by the one
+   command an operator reaches for, and it had just deleted the only evidence it existed: `alive()` read
+   `none` over a live process still typing. Two of the four orphans above survived a `pkill` and needed `-9`.
+   Handlers now exit (130/143) with `EXIT` kept separate, and the poll `sleep` is backgrounded and waited on,
+   because bash defers a trap until the running foreground command returns — a `kill` that appears to do
+   nothing for a minute is one an operator repeats and then escalates past the handler.
+
+**THE SESSION NAME WAS WRONG IN BOTH DIRECTIONS, which is why it changed too.** A flat `reeve` made the SECOND
+supervised project on a machine impossible to start — and that is not a hazard being prevented. One supervisor
+per project against its own `.workflow/` is the design; two projects are two designs, not two orchestrators on
+one. It also said nothing about what was in the pane. Now `reeve-<project>`, derived with builtins only (the
+launcher must not need `basename`/`tr`/`sed` before its PATH has been vouched for), and `has-session -t
+"=$SESSION"` forces an EXACT match — without it tmux resolves by prefix and `reeve` matches `reeve-consumer`.
+
+**IT RETIRES A RISK `D245` ACCEPTED, AND THE REASON IT WAS ACCEPTED WAS THE MISPRICING.** `4i` stated it
+plainly: *"a session that DIED leaves its idle flag behind, so its last reading is honoured indefinitely and
+the supervisor may type into a pane whose session is gone. That costs keystrokes a dead pane ignores, capped
+by `MAX_RESETS`."* The cost was priced as **keystrokes nobody receives** — and that is exactly what a pane id
+is not. A dead pane's id is REUSED, so those keystrokes land in whatever live session next holds it, and
+`MAX_RESETS` does not cap them because the gate's reading genuinely collapses when the `/clear` lands — in
+somebody else's window. The accepted risk was real and its damage estimate was off by the whole defect. The
+claim closes it: a stale reading can still fire, and the stamp check means the send goes nowhere.
+
+*Rejected:* **the per-project session name as the whole fix** (it answers the collision that was reported and
+not the one that was happening — an orphan from a dead server still finds `%0`) · **the session NAME as the
+identity** (a relaunch of the same project recreates the name, so the orphan would clobber its successor) ·
+**`pane_current_path`** (a cwd moves) · **a lock file** (the fact is about the pane, and whoever next owns that
+pane cannot read someone else's file) · **refusing to start when the pane does not exist yet** (`--once`
+drivers and the tests arm against an absent target, and the tick loop already has the considered answer) ·
+**a longer hold on a missing pane** (holding is what produced the orphans; the duration was never the issue) ·
+**assuming a stale stamp is free to take** (liveness is checked, or a supervisor killed without retiring would
+make its pane un-armable forever).
+*Residual — and the sharpest one is not in this slice's files.* **`update_reconcile.py apply` silently
+overwrites locally-edited package files** unless they are in `CONFIRM_REQUIRED`, which is only
+`{settings.json, brief}`. Measured while shipping this: a full `/update` would have destroyed `consumer`'s
+`gh api` write gate and `agentic cyber`'s capability/disclosure stall-counter fix with no prompt. Both projects
+were updated SURGICALLY instead (the three scripts, verified byte-identical, every local edit intact) and the
+gate is unfixed. **Two field improvements are therefore un-back-ported** and are the reason `/update` is unsafe
+in those projects today. Also: `05-shared-state.md`'s catalogue has no `supervisor.json` row at all; and on a
+platform without `/proc`, `pane_holders()` returns `None` (a warning, never a refusal) and the stale-claim
+check can only test existence — the cautious direction, which refuses.
+*Evidence:* the four-process table above, read off `ps` with `/proc/<pid>/cwd`; the empirical pane-id recycle;
+the `pkill` that left two survivors with their records already deleted; five new tests, each confirmed to FAIL
+against the old code by stashing the sources and re-running (recycled id · pane gone · pane already claimed ·
+stale claim taken over · SIGTERM); 1557 product tests, 199 meta tests and all four coherence gates green.
+**Builds on:** **D247** (one command to a supervised run — this is its first harvest from real use, and the
+harvest is that the command armed something that outlived what it was armed for), **D218**/**D217** (the
+supervisor and the transport probe that established keystroke injection), **D246** (a give-up is a FACT about
+the process, which is the shape `stand_down` follows), and **D243** (the park stops the item, not the machine).
+→ `product/scripts/{supervise.sh,supervisor.py,loop.sh}`,
+`product/scripts/test_{supervise,supervisor,loop_launcher}.py`, `product/shared/schemas-drive.md`, `11`.
