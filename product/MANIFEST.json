@@ -162,6 +162,10 @@
    "dest": ".claude/hooks/verify_check.py"
   },
   {
+   "src": "hooks/ask_guard.py",
+   "dest": ".claude/hooks/ask_guard.py"
+  },
+  {
    "src": "hooks/dispatch_guard.py",
    "dest": ".claude/hooks/dispatch_guard.py"
   },

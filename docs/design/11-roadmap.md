@@ -1542,6 +1542,24 @@ measured* (`07` says so), and as ABSOLUTE counts they mean 97.6% of a 1M window 
 on any large-window project with a ceiling set the band **can never be the rule that fires**, and the figure is
 decoration, now honestly labelled. That measurement is still owed.
 
+#### Safe to leave, and safe to update — CLOSED 2026-10-01 (`D254` · `D255`). `[no ask — both found by RUNNING it]`
+**`D254` — an unattended drive may not stop to ask.** *"pop up questions keep coming up instead of resolving by
+decision engineer."* The rule was written in three places (`execute` is zero-decision, `decision-engineer` is
+the authority of last resort, `D249` settles who owns which call) and `grep AskUserQuestion product/` returned
+**nothing**. An unanswered dialog is the worst halt here: it blocks every reset, the heartbeat reads it as *a
+human owes an answer* and goes quiet, and the away channel only alerts on checkpoints — so the drive stops and
+nothing says so. `hooks/ask_guard.py` denies it when `REEVE_SUPERVISE` is in the environment and names the two
+routes (build decision → `decision-engineer`; product-owner decision → `checkpoint`). Interactive sessions are
+untouched. **It is the orchestrator that does this** — every leaf's tool list already excludes the tool.
+**`D255` — `/update` preserves a local edit instead of eating it**, closing `D251`'s residual. `apply` silently
+overwrote any locally-edited package file outside `{settings.json, brief}`; on the two live projects that was a
+`gh api` write gate in `hooks/guard.sh` and a stall-counter fix in `scripts/converge.py`. Confirmation is now
+required for EVERY local edit, and — because widening alone would have made the safe branch unusable — apply
+refreshes what it can prove, **skips what it cannot, and reports it** (exit `3`) instead of refusing wholesale.
+The preserved path keeps its OLD ledger hash, or the next update would read its own handiwork and take it.
+**Still owed:** the back-port of those two field edits. Until it lands they are stale-but-safe, and whether
+`converge`'s acceptance `kind` belongs in the package is a schema decision, not an update's side effect.
+
 #### ▶ NEXT — a night, and then read what it wrote. `[the periodic anchor is BUILT; what is left is the measurement]`
 **`reckon` is BUILT (`D250`) — every `config.reckon.every_n_commits` commits (default 5) the loop stops driving
 and asks whether the window moved the goal, and whether the goal is reachable at all.** Its clock is a plain

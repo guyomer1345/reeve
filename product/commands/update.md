@@ -27,7 +27,7 @@ follows from that one question.
 
 | | What | What happens |
 |---|---|---|
-| **(a) package-owned** | manifest `install[]` scripts + hooks; the copied `loop.md`, `checks.sh`, `settings.json`; the orchestrator brief's **managed block** | **refreshed** from the new package |
+| **(a) package-owned** | manifest `install[]` scripts + hooks; the copied `loop.md`, `checks.sh`, `settings.json`; the orchestrator brief's **managed block** | **refreshed** from the new package — unless the file holds a local edit, which is **preserved and reported** (exit `3`) rather than overwritten |
 | **(b) target-owned** | `[D]` bodies (`# Sessions` / `Purpose` / edge-`why`), adopted docs, the spec, decision records, human-set `config.json` knobs, `checks.env`, `codemap.sh`, and all live loop state (`backlog` · `handoff` · `state` · `items` · `parked` · `outbox` · `inbox` · `secrets`) | **never touched** |
 | **(b′) seeded-then-owned** | `.workflow/directives.md` — the package ships its starting content, the **operator** grows it | **created if absent, never refreshed** |
 | **(c) regenerate-from-code** | `docs/knowledge/graph.json` + the `[G]` node frontmatter | **regenerated** by `codemap.sh`; `[D]` bodies preserved and re-attached |
@@ -110,8 +110,22 @@ never writes it, and the customization then survives every future update.
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/update_reconcile.py" apply \
   --plugin-root "${CLAUDE_PLUGIN_ROOT}" --project-root "${CLAUDE_PROJECT_DIR}"
 ```
-Add `--confirm-overwrite` only after the human has seen the diffs and agreed. Exit `2` means it
-refused for exactly that reason — do not work around it by copying files yourself.
+Add `--confirm-overwrite` only after the human has seen the diffs and agreed.
+
+**Exit `3` means it PRESERVED something** — it refreshed every package file whose provenance it
+could prove, skipped the ones holding local edits, and listed them. Read that list out: each
+skipped file is now **stale** against this package version, and the ledger still records it as
+edited, so the next update will report it again rather than quietly taking it. Resolve each one
+with the human — keep the edit (and consider back-porting it into the package if it is worth
+keeping), or `diff -u` it against the package file, agree to lose it, and re-run with
+`--confirm-overwrite`. **Do not copy files yourself to work around it**, and do not reach for
+`--confirm-overwrite` to make the message go away: the exit code is the point.
+
+*(The old behaviour was exit `2` — refused, wrote nothing. It was replaced because it made the
+safe branch unusable: one edited hook and a project could not be updated at all except by
+overwriting everything, so `--confirm-overwrite` became the habitual answer. Confirmation is
+now required for EVERY local edit, not just the two human-facing paths, which is only tolerable
+because a refusal no longer takes the whole update hostage.)*
 
 Apply writes the package files, **creates any absent seed** (and touches no present one), removes proven orphans, stamps
 `.workflow/config.json` → `workflow_version`, and rewrites `.workflow/install-set.json` (the

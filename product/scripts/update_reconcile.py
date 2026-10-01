@@ -99,9 +99,27 @@ SEEDS = [
     (os.path.join("templates", "directives.md"), os.path.join(".workflow", "directives.md")),
 ]
 
-# Package-owned but HUMAN-FACING: an overwrite that would discard local edits blocks until
-# confirmed, rather than trusting the driver to remember to ask.
+# Package-owned but HUMAN-FACING: these two are where an operator is EXPECTED to have edited,
+# so they were the only paths whose overwrite ever needed confirming.
+#
+# THAT SET WAS THE WRONG SHAPE AND A REAL `/update` PROVED IT. The expectation is not the
+# hazard; a local edit is, wherever it turns up. Measured 2026-10-01 on the maintainer's two
+# live projects: `apply` would have silently destroyed a `gh api` write gate added to
+# `hooks/guard.sh` and a capability/disclosure fix to `scripts/converge.py` -- neither path on
+# this list, neither edit expected, both real work, and nothing would have said a word. **Every
+# `LOCAL-EDIT` and `REFRESH?` now needs confirmation**, and this set survives only to say which
+# two are human-facing by DESIGN (see `_confirm_kind`).
 CONFIRM_REQUIRED = {os.path.join(".claude", "settings.json"), BRIEF_KEY}
+
+
+def _confirm_kind(kind):
+    """Does this action need the human's word before it overwrites? -> bool.
+
+    One rule, one place. `LOCAL-EDIT` means the file differs from what the package last wrote,
+    which can only be a human; `REFRESH?` means provenance cannot be PROVEN (no ledger), and an
+    unprovable file is not a pristine one. Both are things to ask about.
+    """
+    return kind in ("LOCAL-EDIT", "REFRESH?")
 
 EXEC_BITS = {os.path.join(".workflow", "checks.sh")}
 
@@ -339,17 +357,39 @@ def load_ledger(project_root):
     return _read_json(os.path.join(project_root, LEDGER_REL))
 
 
-def build_ledger(project_root, dests, version, plugin):
-    """Hash what is on disk NOW at each package-owned path."""
+def build_ledger(project_root, dests, version, plugin, keep=None):
+    """Hash what is on disk NOW at each package-owned path.
+
+    `keep` IS WHAT STOPS A PRESERVED EDIT BEING LAUNDERED, and without it preserving would be
+    worse than overwriting. This ledger means *what the package last wrote here*; it is what
+    the NEXT plan compares against to recognise a human's edit. Hash a file we deliberately did
+    not write and the edit becomes indistinguishable from our own output -- so the next update
+    reads `SAME`/`REFRESH`, asks nobody, and destroys it quietly. For a preserved path the
+    PREVIOUS recorded hash is carried forward (so it still reads `LOCAL-EDIT`), and a path with
+    no previous hash is omitted entirely (so it still reads `REFRESH?` -- unprovable, which is
+    the truth).
+    """
+    keep = keep or {}
     files = {}
     for dest in sorted(dests):
+        if dest in keep:
+            files[dest] = keep[dest]
+            continue
+        if dest in _PRESERVED_UNRECORDED:
+            continue
         h = _sha(os.path.join(project_root, dest))
         if h:
             files[dest] = h
     body, found = read_brief_block(project_root)
-    if found:
-        files[BRIEF_KEY] = _sha_text(body)
+    if found and BRIEF_KEY not in _PRESERVED_UNRECORDED:
+        files[BRIEF_KEY] = keep.get(BRIEF_KEY) or _sha_text(body)
     return {"plugin": plugin, "workflow_version": version, "files": files}
+
+
+# Paths this run preserved that had NO recorded hash to carry forward. Module-level because
+# `build_ledger`'s signature is a published one (`record` calls it too) and a second positional
+# would be a worse contract than a box the one caller that needs it sets.
+_PRESERVED_UNRECORDED = set()
 
 
 def write_ledger(project_root, ledger):
@@ -443,8 +483,7 @@ def compute_plan(plugin_root, project_root):
             kind = "REFRESH?"        # unknown provenance (no ledger) => cannot prove pristine
         else:
             kind = "REFRESH"
-        actions.append({"kind": kind, "path": dest,
-                        "confirm": dest in CONFIRM_REQUIRED and kind in ("LOCAL-EDIT", "REFRESH?")})
+        actions.append({"kind": kind, "path": dest, "confirm": _confirm_kind(kind)})
 
     # Seeds: present is the terminal state. `SEEDED` is rendered as a no-op like `SAME`, because
     # "the operator's directives file is where they left it" is not news; `SEED` says a file the
@@ -476,8 +515,7 @@ def compute_plan(plugin_root, project_root):
             kind = "REFRESH?"
         else:
             kind = "REFRESH"
-        actions.append({"kind": kind, "path": BRIEF_KEY,
-                        "confirm": kind in ("LOCAL-EDIT", "REFRESH?")})
+        actions.append({"kind": kind, "path": BRIEF_KEY, "confirm": _confirm_kind(kind)})
 
     # Orphans: only what WE recorded and no longer ship is provable.
     expected_keys = set(expected) | {BRIEF_KEY}
@@ -537,21 +575,35 @@ def render_plan(plan):
 # ---------------------------------------------------------------- apply
 
 def do_apply(plugin_root, project_root, confirm):
+    """Write the package over the project. -> 0 clean, 3 clean but something was PRESERVED.
+
+    IT PRESERVES RATHER THAN BLOCKING, and that replaces an all-or-nothing refusal that made
+    the safe answer unusable. The old shape was: any file needing confirmation → print them,
+    write NOTHING, exit 2. Combined with confirmation now being needed for every local edit
+    (not just the two human-facing paths), that would have meant a project with one edited hook
+    could not be updated AT ALL short of `--confirm-overwrite`, which overwrites the lot. The
+    operator's only two options would have been "stay stale forever" and "lose the edit" — and
+    a gate whose safe branch is unusable is a gate that gets passed `--confirm-overwrite` out
+    of habit.
+
+    So: refresh everything whose provenance is proven, SKIP what is not, and say exactly what
+    was skipped and why. A skipped file stays stale, which is a real cost and the reason the
+    report names each one — but it is the operator's edit, and stale is recoverable where
+    destroyed is not. `--confirm-overwrite` still exists for when they have seen the diff and
+    want the package's version.
+    """
     plan = compute_plan(plugin_root, project_root)
-    blocked = [a for a in plan["actions"] if a["confirm"] and not confirm]
-    if blocked:
-        print("BLOCKED — these package-owned files hold local edits (or cannot be proven "
-              "pristine) and would be overwritten. Show the human the diff, then re-run with "
-              "--confirm-overwrite:")
-        for a in blocked:
-            print("  %s  %s" % (a["kind"], a["path"]))
-        return 2
+    preserved = [a for a in plan["actions"] if a["confirm"] and not confirm]
+    skip = {a["path"] for a in preserved}
+    recorded = (load_ledger(project_root) or {}).get("files") or {}
+    _PRESERVED_UNRECORDED.clear()
+    _PRESERVED_UNRECORDED.update(p for p in skip if p not in recorded)
 
     expected = expected_files(plugin_root, project_root)
     written, removed = [], []
     for a in plan["actions"]:
         kind, dest = a["kind"], a["path"]
-        if dest == BRIEF_KEY:
+        if dest == BRIEF_KEY or dest in skip:
             continue
         if kind in ("ADD", "REFRESH", "REFRESH?", "LOCAL-EDIT"):
             src = expected[dest]
@@ -579,7 +631,8 @@ def do_apply(plugin_root, project_root, confirm):
                 print("WARN could not remove orphan %s: %s" % (dest, exc))
 
     brief_action = next((a for a in plan["actions"] if a["path"] == BRIEF_KEY), None)
-    if brief_action and brief_action["kind"] in ("REFRESH", "REFRESH?", "LOCAL-EDIT"):
+    if (brief_action and BRIEF_KEY not in skip
+            and brief_action["kind"] in ("REFRESH", "REFRESH?", "LOCAL-EDIT")):
         write_brief_block(project_root, render_brief(plugin_root, project_root))
         written.append(BRIEF_KEY)
 
@@ -596,14 +649,28 @@ def do_apply(plugin_root, project_root, confirm):
     cfg["workflow_version"] = plan["new_version"]
     _atomic_write(cfg_path, json.dumps(cfg, indent=2) + "\n")
 
-    write_ledger(project_root, build_ledger(project_root, expected.keys(),
-                                            plan["new_version"], _plugin_name(plugin_root)))
+    write_ledger(project_root, build_ledger(
+        project_root, expected.keys(), plan["new_version"], _plugin_name(plugin_root),
+        keep={d: recorded[d] for d in skip if d in recorded}))
     for p in written:
         print("wrote   %s" % p)
     for p in removed:
         print("removed %s  (proven orphan)" % p)
     print("stamped workflow_version = %s; ledger written (%d files)"
           % (plan["new_version"], len(expected) + 1))
+    if preserved:
+        print("")
+        print("PRESERVED — %d package-owned file(s) hold local edits (or cannot be proven "
+              "pristine) and were NOT overwritten:" % len(preserved))
+        for a in preserved:
+            print("  %-12s %s" % (a["kind"], a["path"]))
+        print("  They are now STALE against this package version, and the ledger still records "
+              "them as edited, so the next update will report them again rather than quietly "
+              "taking them.")
+        print("  Resolve each one: keep the edit (and back-port it into the package if it is "
+              "worth keeping), or `diff -u` it against the package file, agree to lose it, and "
+              "re-run with --confirm-overwrite.")
+        return 3
     return 0
 
 

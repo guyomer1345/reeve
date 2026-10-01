@@ -236,31 +236,61 @@ def test_no_ledger_means_unknown_old_flag_only(tmp_path):
 
 # ---------------------------------------------------------------- the confirm gate
 
-def test_locally_edited_settings_blocks_apply(tmp_path, env):
+def test_a_locally_edited_settings_is_PRESERVED_and_the_rest_still_refreshes(tmp_path, env):
+    """It used to BLOCK the whole apply and write nothing. That made the safe branch unusable:
+    one edited file and the project could not be updated at all short of `--confirm-overwrite`,
+    which overwrites everything. Now it refreshes what it can and skips what it must."""
     _t, _old, project = env
     (project / ".claude" / "settings.json").write_text('{"permissions": {"allow": ["Bash", "MY_OWN"]}}')
     new = _plugin(tmp_path / "pkg_new", version="0.2.0")
     plan = ur.compute_plan(str(new), str(project))
     assert _kinds(plan)[os.path.join(".claude", "settings.json")] == "LOCAL-EDIT"
     rc = ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project)])
-    assert rc == 2, "an unconfirmed overwrite of an edited settings.json must BLOCK"
+    assert rc == 3, "a preserved file is reported with its own exit code, not a refusal"
     assert "MY_OWN" in (project / ".claude" / "settings.json").read_text()
+    # ...and the update actually happened for everything whose provenance is proven.
+    assert "bus v0.2.0" in (project / ".claude" / "scripts" / "bus.py").read_text()
     rc = ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project),
                   "--confirm-overwrite"])
     assert rc == 0
     assert "MY_OWN" not in (project / ".claude" / "settings.json").read_text()
 
 
-def test_edited_package_script_refreshes_without_confirmation(tmp_path, env):
-    # Only the two human-facing files gate on confirmation; a patched package script is
-    # surfaced as LOCAL-EDIT and overwritten (it is package code, restored from the package).
+def test_an_edited_package_SCRIPT_is_preserved_too_not_silently_restored(tmp_path, env):
+    """THE DEFECT THIS INVERTS, and the old test asserted it as intended behaviour: only the two
+    human-facing paths gated on confirmation, so a patched package script was overwritten with
+    no prompt. Measured on two live projects — a `gh api` write gate added to `hooks/guard.sh`
+    and a stall-counter fix in `scripts/converge.py`, both real work, neither path on the list,
+    and `apply` would have taken both without a word. The expectation is not the hazard; a local
+    edit is, wherever it turns up."""
     _t, _old, project = env
     (project / ".claude" / "scripts" / "bus.py").write_text("# patched\n")
     new = _plugin(tmp_path / "pkg_new", version="0.2.0")
     plan = ur.compute_plan(str(new), str(project))
     assert _kinds(plan)[os.path.join(".claude", "scripts", "bus.py")] == "LOCAL-EDIT"
-    assert ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project)]) == 0
+    assert ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project)]) == 3
+    assert (project / ".claude" / "scripts" / "bus.py").read_text() == "# patched\n"
+    # And it is still overwritable once the human has seen it and said so.
+    assert ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project),
+                    "--confirm-overwrite"]) == 0
     assert "bus v0.2.0" in (project / ".claude" / "scripts" / "bus.py").read_text()
+
+
+def test_a_preserved_edit_is_NOT_laundered_into_the_ledger(tmp_path, env):
+    """The half that makes preserving safe rather than worse. The ledger means *what the package
+    last wrote here*, and it is what the NEXT plan compares against to recognise a human's edit.
+    Hash a file we deliberately did not write and the edit becomes indistinguishable from our
+    own output — so the next update reads SAME/REFRESH, asks nobody, and destroys it quietly."""
+    _t, _old, project = env
+    edited = project / ".claude" / "scripts" / "bus.py"
+    edited.write_text("# patched\n")
+    new = _plugin(tmp_path / "pkg_new", version="0.2.0")
+    assert ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project)]) == 3
+    # The SECOND update must still see a human's edit, not its own handiwork.
+    again = ur.compute_plan(str(new), str(project))
+    assert _kinds(again)[os.path.join(".claude", "scripts", "bus.py")] == "LOCAL-EDIT", again
+    assert ur.main(["apply", "--plugin-root", str(new), "--project-root", str(project)]) == 3
+    assert edited.read_text() == "# patched\n"
 
 
 # ---------------------------------------------------------------- the brief block

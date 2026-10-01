@@ -9970,3 +9970,108 @@ acting half), and `statusline.py`'s own standing rule that a line which always s
 nobody reads — applied here to a number rather than to a banner.
 → `product/scripts/{context_band.py,statusline.py}`,
 `product/scripts/test_{context_band,statusline}.py`, `11`.
+
+## D254 — an unattended drive may not stop to ask: `AskUserQuestion` is gated and routed **[BUILT 2026-10-01 — the maintainer's report. The fourth sensor-without-actuator in this package, and the only one whose rule was already written in three places]**
+**The report:** *"pop up questions (like the askuserquestion of claude) keep coming up instead of resolving by
+decision engineer."* **The rule was already written and well argued, in three places.** `execute` is
+zero-decision by construction (*"a choice the plan didn't make is a blocker, not a judgement call"*),
+`decision-engineer` is *"the project's decision authority of last resort"*, and `D249`'s autonomy floor settles
+who owns which kind of call. `grep -rn AskUserQuestion product/` returned **nothing**. Three statements of the
+rule and no enforcement against the one tool that routes around all three.
+
+**WHAT AN UNANSWERED DIALOG COSTS, traced rather than assumed, and it is the worst halt here:**
+1. `hooks/awaiting_input.py` records it → `awaiting-input.json`.
+2. `clear_safe` requires no open dialog ⇒ **the supervisor never resets that session.**
+3. `monitor.py`'s ladder returns `state=waiting, action=none` on a dialog — deliberately, because a human
+   owes an answer ⇒ **the heartbeat stops escalating.**
+4. The away channel alerts on CHECKPOINTS. **A dialog is not a checkpoint** ⇒ nobody is told.
+So the drive stops, the supervisor holds, the monitor goes quiet, and nothing anywhere says so — the
+eleven-hour failure of 2026-09-19 reopened through a different door. **Measured live the same day:** both of
+his projects carried an open dialog flag, one twenty-one minutes old, while he watched one refuse to reset.
+
+**IT IS THE ORCHESTRATOR, NOT A LEAF, and that is why only a hook can gate it.** Every shipped agent's tool
+list already excludes `AskUserQuestion` — `execute`, `planner`, `document`, `create-demo` get
+`Read, Write, Edit, Grep, Glob, Bash`; `review` less. The leaves *cannot* ask. The tool is reachable only from
+the session that is driving, which is the one session no file in `.workflow/` constrains.
+
+**GATED ON ABSENCE, NOT ON DIALOGS.** `REEVE_SUPERVISE` is exported by `loop.sh --supervise` into the session
+it starts, so the environment is PROOF — the same evidence `statusline.py` uses for its supervision segment.
+Interactive sessions are untouched, because a human sitting there is exactly who should be asked.
+
+**IT DENIES WITH A ROUTE**, on `guard.sh`'s shape — a block that only says no teaches nothing and gets worked
+around. Two routes, chosen by **who owns the call**, which is the floor's question and not the hook's: a BUILD
+decision (stack, library, architecture) → `decision-engineer`, a dispatch rather than a wait; a PRODUCT-OWNER
+decision (goal acceptance, scope, a spec change, approving a demo) → a `checkpoint`, which parks durably,
+survives a `/clear`, and reaches the away channel so it can be answered from a phone. A third case is named
+because conflating it is how the tool gets reached for: wanting a FACT is not wanting a decision — that is
+`research`, or the spec and the decision record.
+
+*Rejected:* **allowing it with a parked fallback** (considered and put to the maintainer, who chose the hard
+deny: *"we can go with 1"*. A dialog that parks on timeout still stops the drive for the length of the timeout,
+and the two real routes already cover every case) · **blocking on the dialog NOTIFICATION instead** (too late
+— the dialog is already open and the session already stopped; `PreToolUse` is the only point where it has not
+happened yet) · **removing `AskUserQuestion` from the orchestrator's tool list** (not ours to set — the
+orchestrator is the human's own session, and the same session is interactive half the time) · **a warning
+rather than a deny** (the failure mode being guarded is precisely that the advisory rule was not followed —
+`dispatch_guard.py`'s own argument, in the same position).
+*Residual:* the gate is **per-tool, not per-behaviour.** Nothing stops the orchestrator stopping its turn with
+a question in PROSE and waiting, which no hook sees at all — the turn gate catches a stop that moved nothing,
+but a stop that asks a question has moved something. That is a different mechanism and wants its own look.
+*Evidence:* `grep` returning nothing across `product/`; the four-step trace through `awaiting_input.py`,
+`context_band`'s `clear_safe`, `monitor.py:277` and the away channel's checkpoint-only alerting; both
+projects' live `awaiting-input.json`; nine tests, including the two opposite-failure controls (an interactive
+session asks freely; an unreadable payload fails open).
+**Builds on:** **D249** (who owns which call — this routes by that rule), **D243** (a park stops the item, not
+the machine, which is what makes the checkpoint route cheap), **D218**/**D217** (the dialog as a `clear_safe`
+blocker, found by probing), and `guard.sh`'s block-with-a-route shape.
+→ `product/hooks/ask_guard.py` (NEW), `product/templates/settings.json`, `product/MANIFEST.json`,
+`product/scripts/test_ask_guard.py` (NEW), `11`.
+
+## D255 — `/update` PRESERVES a local edit instead of eating it, and stops taking the whole update hostage **[BUILT 2026-10-01 — `D251`'s stated residual, closed because the maintainer was about to run the command it breaks]**
+**`D251` named this and did not fix it:** `update_reconcile.py apply` silently overwrote any locally-edited
+package file that was not in `CONFIRM_REQUIRED` — and that set was only `{settings.json, brief}`. **Measured
+on his two live projects:** a full `/update` would have destroyed a `gh api` write gate added to
+`hooks/guard.sh` (blocks POST/PUT/PATCH/DELETE and the inferred-POST field flags, routes them to `outbox/`)
+and a capability/disclosure stall-counter fix in `scripts/converge.py` (whose own comment records the
+measurement: the counter stood at 3 of 5 and one pure-disclosure item reset it to 0, hiding seven days of no
+capability progress). Both real work, neither path on the list, no prompt.
+
+**THE EXPECTATION WAS THE WRONG THING TO GATE ON.** `CONFIRM_REQUIRED` encoded *where an operator is expected
+to edit*. A local edit is the hazard wherever it turns up, and the field found two places nobody expected. So
+**every `LOCAL-EDIT` and `REFRESH?` now needs confirmation**, and that set survives only to record which two
+are human-facing by design.
+
+**WHICH FORCED THE SECOND HALF, because widening alone would have made the command unusable.** `apply` was
+all-or-nothing: anything needing confirmation → print the list, write **nothing**, exit 2. With confirmation
+required for every local edit, one patched hook would mean a project could not be updated at all except by
+`--confirm-overwrite`, which overwrites the lot. The operator's only choices would be *stay stale forever* and
+*lose the edit* — and a gate whose safe branch is unusable is a gate that gets `--confirm-overwrite` out of
+habit, which is worse than the silence it replaced. So apply now **refreshes everything whose provenance is
+proven, SKIPS what is not, and reports it** (exit `3`). A skipped file stays stale — a real cost, which is why
+the report names each one — but stale is recoverable and destroyed is not.
+
+**THE LEDGER IS WHAT MAKES PRESERVING SAFE RATHER THAN WORSE, and missing this would have inverted the fix.**
+`install-set.json` means *what the package last wrote here*; it is what the NEXT plan compares against to
+recognise a human's edit. `build_ledger` hashes what is on disk — so hashing a file we deliberately did not
+write would launder the edit into our own output, the next update would read `SAME`/`REFRESH`, ask nobody, and
+destroy it quietly. A preserved path now carries its PREVIOUS recorded hash forward (still reads
+`LOCAL-EDIT`), and one with no previous hash is omitted (still reads `REFRESH?` — unprovable, which is true).
+A test pins the second update, because that is where the laundering would show.
+
+*Rejected:* **back-porting the two field edits and keeping the old overwrite** (fixes these two files and not
+the mechanism — and whether `converge`'s acceptance `kind` belongs in the package is a schema decision that is
+the maintainer's, not a side effect of an update) · **keeping the hard block and widening the set** (the
+unusable-safe-branch trap above) · **overwriting but writing a `.bak`** (a backup nobody is told about is a
+file nobody finds; the exit code and the list are the point) · **exit 0 with a printed warning** (a script
+cannot branch on prose, and `/update` is driven by a skill).
+*Residual:* a preserved file is **stale and stays stale** until someone resolves it. The report says so and the
+ledger keeps reporting it, but nothing escalates — a project could run for months on a hook the package has
+moved past. The back-port of those two specific edits is still owed and is NOT done here.
+*Evidence:* the two live projects' `plan` output naming `guard.sh` and `converge.py` as `LOCAL-EDIT` with no
+`[CONFIRM]` flag; the test that asserted the defect as intended behaviour
+(`test_edited_package_script_refreshes_without_confirmation`, now inverted); 45 tests in that file green,
+three of them new.
+**Builds on:** **D251** (which stated this residual), and `/update`'s ownership taxonomy, whose
+*"the project's build state is sacred"* rule this makes true for a row it did not previously cover.
+→ `product/scripts/update_reconcile.py`, `product/scripts/test_update_reconcile.py`,
+`product/commands/update.md`, `11`.
