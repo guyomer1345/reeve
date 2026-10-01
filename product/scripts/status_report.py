@@ -439,6 +439,31 @@ def parked(workflow, now):
     return out
 
 
+def _reckon(repo):
+    """Is a reckon owed, and how far past due. -> {owed, commits, every}.
+
+    `owed: None` IS A THIRD ANSWER and not a quiet `False`. An uninstalled `reckon.py`, or a
+    tree git cannot read, must never render as "nothing owed" -- that is the one wrong direction
+    here, because the whole purpose of the line is to stop an obligation going unnoticed.
+    """
+    blank = {"owed": None, "commits": None, "every": None}
+    if repo is None:
+        return blank
+    try:
+        import reckon
+        owed, commits, every = reckon.due(repo)
+    except Exception:                 # noqa: BLE001 -- not installed, or an import that raised
+        return blank
+    # `due()` RETURNS `False` WHEN IT CANNOT TELL, and that is right for its own consumer:
+    # `prioritize` branches on the exit code and must not inject an item on an unknown. This
+    # consumer needs the opposite care -- it must not CLAIM nothing is owed -- and `commits is
+    # None` is the signal `due()` already carries for "nothing to measure from". Read here
+    # rather than changed there: two consumers, two correct fail directions, one contract.
+    if commits is None:
+        return {"owed": None, "commits": None, "every": every}
+    return {"owed": bool(owed), "commits": commits, "every": every}
+
+
 def build(workflow, now=None, repo=None, docs_root=None):
     """The whole report as one dict. Every number in it comes from `converge.py` or a file."""
     import time
@@ -468,6 +493,15 @@ def build(workflow, now=None, repo=None, docs_root=None):
 
     status = m.get("status") or {}
     return {
+        # IS A RECKON OWED -- the periodic anchor's obligation, carried where the loop cannot
+        # miss it. Its trigger lives in `prioritize` as an INSTRUCTION, which makes it a
+        # consultation the loop may pass over, and it duly did: measured on two live projects,
+        # `due` was true at 19 and 8 commits against a clock of 5 and neither had ever run one.
+        # This report is demanded at the end of EVERY turn by `hooks/report_gate.py`, so stating
+        # it here is what turns a step that can be skipped into a fact the loop is handed
+        # continuously. NOT A GATE, deliberately: halting a drive over a maintenance obligation
+        # is worse than the drift it watches, so this is the strongest thing short of a veto.
+        "reckon": _reckon(repo),
         "goal": {
             "id": m.get("goal"),
             "statement": name_ids_in_prose((goal or {}).get("statement", ""), known),
@@ -515,6 +549,16 @@ def digest(report):
         "left": sorted((l["id"], l["state"]) for l in report.get("left") or []),
         "head": (report.get("loop") or {}).get("head"),
     }
+    # THE RECKON OBLIGATION IS DELIBERATELY NOT IN HERE, and the reason is a second rule this
+    # digest obeys beside "exclude what moves on its own": **every term must be computable
+    # IDENTICALLY BY EVERY CALLER**, because this digest gates a turn. `owed` is not --
+    # `_reckon` degrades to `None` where `reckon.py` cannot be imported, so an incomplete
+    # install would have the in-process caller and the `Stop` hook derive two different digests
+    # from one state, and the gate would demand a report forever and reject every one it got.
+    # FOUND BY A TEST, not by reasoning: the turn-gate fixture copies five scripts and not
+    # `reckon.py`, which is exactly the shape of a partial install. The report still SAYS the
+    # obligation; the digest stays a fingerprint of material state. A gate that can deadlock on
+    # a missing optional file is worse than a digest that is one term less complete.
     blob = json.dumps(material, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:12]
 
@@ -546,6 +590,17 @@ def render(report, limit=MAX_LINES):
                                          % g.get("streak") if g["stalled"] else "moving")
         lines.append("GOAL — %s  ·  %s  ·  %s" % (g.get("statement") or g["id"],
                                                   g.get("progress"), moving))
+        # A CONTINUATION OF THE GOAL BLOCK, not a fifth field: whether the goal's progress has
+        # been audited this window is a fact about the goal. Rendered ONLY when owed, on this
+        # file's own rule -- a line that usually says nothing teaches the eye to skip it, and
+        # then it is skipped on the one turn it matters. Suppressed with no goal set, where the
+        # answer is to mint one rather than to audit progress against nothing.
+        r = report.get("reckon") or {}
+        if r.get("owed"):
+            lines.append("       RECKON OWED — %s commit(s) since the last reckon (every %s). "
+                         "Inject the item at the next prioritize: every other progress signal "
+                         "is computed against a goal it assumes is sound."
+                         % (r.get("commits"), r.get("every")))
     # FIRST when non-empty, ABSENT when not. A section that usually says nothing teaches the eye
     # to skip it, and then it is skipped on the one day it matters.
     if report["decisions"]:

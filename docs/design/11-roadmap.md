@@ -1535,10 +1535,13 @@ and asks whether the window moved the goal, and whether the goal is reachable at
 commit counter *on purpose*: every other progress signal is computed against a goal it assumes is sound, so
 none of them can report a goal that is itself the broken thing. The default is measured off two live projects
 (1.56 and 1.60 commits per closed item; a five-item drift run corrected by hand).
-**Its own stated residual (`D250`): the trigger is a consultation, not a gate** — `prioritize` is a skill, so
-injecting the item is an instruction the loop may skip, exactly like the three sibling triggers beside it. The
-cheapest real enforcement is one line in the **status report**, which the turn gate already demands every turn;
-that is the obvious next slice and it is not built.
+**Its own stated residual (`D250`) — the trigger is a consultation, not a gate — is now CLOSED (`D252`,
+2026-10-01), and it was closed because the residual CAME TRUE.** `prioritize` is a skill, so injecting the
+item was an instruction the loop could skip, and on both live projects it did: `reckon due` read true at
+**19 and 8 commits against a clock of 5, and neither had ever run one**. The enforcement `D250` itself named
+is built — one line in the **status report**, which `report_gate.py` demands at the end of every turn — so
+the obligation is now handed to the loop continuously instead of waiting at a step it can pass over. Still
+not a veto, deliberately: halting a drive over a maintenance obligation is worse than the drift it watches.
 **What it has NOT had, and it is the same gap the bundle below has:** a real drive. It is validated against
 both projects' current state — both return `goal-unreachable` and name the criteria — but no drive has yet
 injected it, staged its receipt, and had the next window measured from it. **That is the one thing left: a

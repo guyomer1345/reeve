@@ -396,3 +396,113 @@ def test_with_NO_index_at_all_the_lint_is_unchanged(tmp_path):
     """`known is None` means the caller could not build an index — which is not evidence that
     nothing is an id, so the old behaviour stands."""
     assert [i for i, _ in sr.bare_ids("a UTF-8 file")] == ["UTF-8"]
+
+
+# --- the reckon obligation: the report is where the loop cannot miss it ---------------
+#
+# `reckon`'s trigger lives in `prioritize` as an INSTRUCTION, which makes it a consultation the
+# loop may pass over — and it did. Measured on two live projects: `due` true at 19 and 8 commits
+# against a clock of 5, and neither had ever run one. This report is demanded at the end of every
+# turn, so the obligation belongs here. These pin the three answers apart, because the dangerous
+# one is the quiet middle: "I could not tell" must never render as "nothing owed".
+
+GIT_ENV = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+           "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+
+
+def _git_project(tmp_path, commits=0, receipt_at_head=False, **kw):
+    """`project()` inside a real git repo — reckon's window is measured from commits, so a
+    fixture without one can only ever exercise the `None` path."""
+    import subprocess
+    wf = project(tmp_path, **kw)
+    (tmp_path / ".workflow" / "maintenance").mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+
+    def commit(msg):
+        subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", msg, "--allow-empty"],
+                       check=True, env=dict(os.environ, **GIT_ENV))
+
+    commit("root")
+    if receipt_at_head:
+        (tmp_path / ".workflow" / "maintenance" / "reckon-1.json").write_text(
+            json.dumps({"verdict": "progressing"}))
+        commit("chore: reckon receipt")
+    for n in range(commits):
+        commit("feat: commit %d" % n)
+    return wf
+
+
+def test_a_reckon_OWED_is_stated_in_the_GOAL_block(tmp_path):
+    wf = _git_project(tmp_path, commits=6)
+    report = sr.build(wf)
+    assert report["reckon"]["owed"] is True, report["reckon"]
+    block = sr.render(report)
+    assert "RECKON OWED" in block
+    # It must say the numbers and what to DO; "a reckon is owed" with no action is a notification.
+    assert "every %s" % report["reckon"]["every"] in block
+    assert "next prioritize" in block
+    # And it belongs to the GOAL block — not a fifth field, which the report's own contract
+    # ("four fields") would then be lying about.
+    assert block.splitlines()[1].strip().startswith("RECKON OWED")
+
+
+def test_NOTHING_is_said_when_no_reckon_is_owed(tmp_path):
+    """The rule this file already runs on: a line that usually says nothing teaches the eye to
+    skip it, and then it is skipped on the one turn it matters."""
+    wf = _git_project(tmp_path, receipt_at_head=True)
+    report = sr.build(wf)
+    assert report["reckon"]["owed"] is False, report["reckon"]
+    assert "RECKON" not in sr.render(report)
+
+
+def test_an_UNREADABLE_reckon_is_never_rendered_as_nothing_owed(tmp_path):
+    """The dangerous middle. No git tree (or no `reckon.py`) means the obligation is UNKNOWN, and
+    a `False` there would quietly retire a question nobody asked again."""
+    wf = project(tmp_path)                      # deliberately not a git repo
+    report = sr.build(wf)
+    assert report["reckon"]["owed"] is None, report["reckon"]
+    assert "RECKON" not in sr.render(report)
+
+
+def test_the_owed_line_is_SUPPRESSED_when_no_goal_is_set(tmp_path):
+    """With no goal the answer is to mint one, not to audit progress against nothing — and the
+    no-goal branch already says exactly that."""
+    import subprocess
+    wf = _git_project(tmp_path, commits=6)
+    os.remove(os.path.join(wf, "goal.json"))
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "drop the goal"],
+                   check=True, env=dict(os.environ, **GIT_ENV))
+    block = sr.render(sr.build(wf))
+    assert "GOAL — none set" in block
+    assert "RECKON OWED" not in block
+
+
+def test_the_digest_is_INDIFFERENT_to_the_reckon_obligation(tmp_path):
+    """THE GATE MUST NOT BE DESTABILISABLE BY THIS LINE. The digest gates a turn, so every term
+    in it has to be computable identically by every caller — and `owed` is not: it degrades to
+    `None` wherever `reckon.py` cannot be imported. An incomplete install would then have the
+    in-process caller and the `Stop` hook derive two digests from one state, and the gate would
+    demand a report forever and reject every one it was given. Found by the turn-gate suite,
+    whose fixture copies five scripts and not `reckon.py` — the shape of a partial install.
+
+    The obligation flips here without a commit (by moving the clock), so this isolates the
+    reckon term from `head`, which legitimately does move the digest.
+    """
+    wf = _git_project(tmp_path, commits=2)
+    assert sr.build(wf)["reckon"]["owed"] is False
+    before = sr.digest(sr.build(wf))
+    cfg = os.path.join(wf, "config.json")
+    with open(cfg, "w") as fh:
+        json.dump({"project_root": ".", "reckon": {"every_n_commits": 1}}, fh)
+    assert sr.build(wf)["reckon"]["owed"] is True, "the fixture did not actually flip"
+    assert sr.digest(sr.build(wf)) == before
+    # ...and the report still SAYS it. Out of the digest is not out of the report.
+    assert "RECKON OWED" in sr.render(sr.build(wf))
+
+
+def test_the_digest_still_ignores_TIME_with_the_reckon_field(tmp_path):
+    """The guard on the addition: whatever it carries must not reintroduce a clock."""
+    wf = _git_project(tmp_path, commits=6)
+    assert sr.digest(sr.build(wf, now=1_000_000)) == sr.digest(sr.build(wf, now=1_086_400))

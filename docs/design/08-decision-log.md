@@ -9844,3 +9844,77 @@ supervisor and the transport probe that established keystroke injection), **D246
 the process, which is the shape `stand_down` follows), and **D243** (the park stops the item, not the machine).
 → `product/scripts/{supervise.sh,supervisor.py,loop.sh}`,
 `product/scripts/test_{supervise,supervisor,loop_launcher}.py`, `product/shared/schemas-drive.md`, `11`.
+
+## D252 — the reckon obligation moves into the report the turn gate already demands **[BUILT 2026-10-01 — no ask. `D250`'s own stated residual, closed because it CAME TRUE on both live projects within ten days]**
+**`D250` wrote its own epitaph and I quoted it back:** *"the trigger is a consultation, not a gate.
+`prioritize` is a skill, so 'inject a `reckon` when it is due' is an instruction the loop may skip — exactly
+what was just said about `prioritize` step 3's unbound check. The cheapest real enforcement is the status
+report, which the turn gate already demands every turn."* It then shipped without it.
+
+**MEASURED 2026-10-01, which is why this is a slice and not a nicety.** The maintainer asked whether his two
+repos would evaluate progress toward their goal on schedule. They would not:
+
+| | `reckon due` | clock | receipts ever staged |
+|---|---|---|---|
+| `consumer` | **true**, 19 commits (40 by the end of the session) | 5 | **0** |
+| `agentic cyber` | **true**, 8 commits | 5 | **0** |
+
+Both overdue, neither had ever run one, and the condition had been true and ignored for as long as the
+capability had existed. **The residual was not a theoretical weakness; it was the observed behaviour.**
+
+**THE CHANGE IS ONE LINE IN `status_report.py`, and the placement is the argument.** `hooks/report_gate.py`
+demands a current report at the end of EVERY turn — it is the one surface the loop cannot pass over — so the
+obligation is stated there and the loop is handed it continuously rather than meeting it at a step it may
+skip. Rendered **only when owed**, on the file's own standing rule: *a section that usually says nothing
+teaches the eye to skip it, and then it is skipped on the one day it matters.*
+
+**IT IS A CONTINUATION OF THE `GOAL` BLOCK, NOT A FIFTH FIELD.** Whether the goal's progress has been audited
+this window is a fact about the goal, and the report's own contract says *four fields* — a new field would
+have made that contract a lie in the same breath as the fix. Suppressed entirely when no goal is set, where
+the answer is to mint one rather than to audit progress against nothing.
+
+**`None` IS A THIRD ANSWER AND A TEST FOUND THAT I HAD GOT IT WRONG.** `reckon.due()` returns `False` when it
+cannot tell (no git tree, nothing to measure from) and **that is correct for its own consumer** — `prioritize`
+branches on the exit code and must not inject an item on an unknown. This consumer needs the opposite care:
+it must never CLAIM nothing is owed. My first version passed `due()`'s boolean straight through and produced
+exactly the quiet `False` this entry argues against; the negative control caught it. The fix reads the signal
+`due()` already carries (`commits is None`) rather than changing `due()` — **two consumers, two correct fail
+directions, one contract.**
+
+**IT IS DELIBERATELY *NOT* IN THE DIGEST, AND I HAD IT THE OTHER WAY ROUND UNTIL A TEST SAID SO.** The
+reasoning that put it in was the digest's stated rule — *what the report SAYS* — and it is incomplete. The
+digest **gates a turn**, so it carries a second requirement that rule does not mention: **every term must be
+computable identically by every caller.** `owed` is not. `_reckon` degrades to `None` wherever `reckon.py`
+cannot be imported, so on an incomplete install the in-process caller and the `Stop` hook derive two
+different digests from one state — and the gate then demands a report forever and rejects every one it is
+handed. **The turn-gate suite found it immediately**, because its fixture copies five scripts and not
+`reckon.py`, which is precisely the shape of a partial install. A gate that can deadlock on a missing
+optional file is worse than a digest that is one term less complete. The report still SAYS the obligation;
+the digest stays a fingerprint of material state, and a test now pins the indifference by flipping `owed`
+through the CLOCK rather than a commit, isolating it from `head`.
+
+*Rejected:* **a `Stop`-hook veto that blocks the turn until a reckon runs** (`D250` settled this: a gate that
+could halt a drive over a maintenance obligation is worse than the drift it watches — this is the strongest
+thing short of a veto, and deliberately stops there) · **a new `RECKON` field** (breaks the four-field
+contract to announce a one-line fact) · **rendering `not owed` when it is not** (the section-that-says-nothing
+failure, which this file already legislates against) · **changing `reckon.due()` to return `None`** (its
+`False` is right for the injector; the caller that needs more care should take more care) · **moving the
+trigger out of `prioritize`** (injection is still its job; this adds a second surface that STATES the
+obligation, it does not take ownership of acting on it) · **a louder line when badly overdue** (a format that
+escalates on its own is one the reader learns to wait for).
+*Residual:* **stating it is not doing it.** The loop is now told every turn and may still not inject; what
+this buys is that skipping it is now visible in the artifact a human reads, rather than invisible in a step
+nobody watches. The real proof is a receipt staged by a drive, and neither project has produced one — which
+is the same measurement the roadmap has been owed since `D250`. Also: both live projects carry this only
+after their next refresh, and `/update` is still unsafe in them (`D251`'s residual).
+*Evidence:* the two-project table above, read off `reckon.py due --json` in each; the new line rendered
+against `consumer`'s real `.workflow` (`RECKON OWED — 40 commit(s) since the last reckon (every 5)`); six new
+tests, four confirmed to FAIL against the old renderer by stashing it. **Two of this slice's own errors were
+caught by tests rather than by review** — the quiet `False` (negative control) and the digest term that could
+deadlock the turn gate (the turn-gate suite, which went red on an unrelated-looking assertion). Both are
+recorded above rather than quietly fixed, because the second one is a rule this repo did not have written
+down: a digest that gates a turn may only carry terms every caller computes alike.
+**Builds on:** **D250** (the capability, and the residual this closes), **D224** (the report, its four-field
+contract and its budget), **D214**'s rule that an obligation with no durable owner goes missing silently —
+which is what happened here, one level up: the trigger had an owner and no surface.
+→ `product/scripts/status_report.py`, `product/scripts/test_status_report.py`, `11`.
